@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
+import { StatusGlyph } from "../components/StatusGlyph";
+import { CapsuleTag } from "../components/CapsuleTag";
 import {
   useGetProject,
   useListSessions,
@@ -395,29 +397,32 @@ function AssistantBubble({
 // ── Ledger tab content ───────────────────────────────────────────────────────
 function LedgerEntry({ entry }: { entry: Entry }) {
   const committed = entry.status === "committed";
+  const severity = entry.severity as "blocker" | "parked" | "committed" | "neutral";
   return (
     <div
       style={{
         padding: "9px 11px", borderRadius: 8, marginBottom: 5,
-        background: committed ? "rgba(201,162,76,0.04)" : "rgba(28,25,23,0.4)",
-        border: `1px solid ${committed ? "rgba(201,162,76,0.18)" : "rgba(37,34,32,0.7)"}`,
+        background: committed ? "rgba(6,182,212,0.03)" : "rgba(28,25,23,0.4)",
+        border: `1px solid ${committed ? "rgba(6,182,212,0.16)" : "rgba(37,34,32,0.7)"}`,
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-        <div
-          style={{
-            width: 5, height: 5, borderRadius: "50%", marginTop: 4, flexShrink: 0,
-            background: committed ? "var(--atlas-gold)" : "rgba(120,113,108,0.4)",
-          }}
-        />
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+        <div style={{ paddingTop: 1, flexShrink: 0 }}>
+          <StatusGlyph severity={severity} verb={entry.verb} size={13} />
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 500, color: committed ? "rgba(231,229,228,0.88)" : "rgba(231,229,228,0.45)", lineHeight: 1.4 }}>
-            {entry.title}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const, marginBottom: 1 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: committed ? "rgba(231,229,228,0.88)" : "rgba(231,229,228,0.45)", lineHeight: 1.4 }}>
+              {entry.title}
+            </span>
+            {committed && (
+              <CapsuleTag severity="committed" size="xs">LOCKED</CapsuleTag>
+            )}
           </div>
           {entry.summary && (
             <div
               style={{
-                fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.5, marginTop: 3,
+                fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.5, marginTop: 2,
                 display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden",
               }}
             >
