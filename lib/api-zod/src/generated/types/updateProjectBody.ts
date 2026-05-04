@@ -14,4 +14,6 @@ export interface UpdateProjectBody {
   status?: UpdateProjectBodyStatus;
   /** @nullable */
   memory?: string | null;
+  /** @nullable */
+  previewUrl?: string | null;
 }

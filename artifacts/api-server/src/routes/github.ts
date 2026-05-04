@@ -283,4 +283,88 @@ ${fileBlock}`;
   }
 });
 
+// GET /api/github/deployment — auto-detect live deployment URL from repo
+router.get("/github/deployment", async (req, res): Promise<void> => {
+  const token = req.headers["x-github-token"] as string | undefined;
+  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+
+  const { repo } = req.query as { repo?: string };
+  if (!repo) { res.status(400).json({ error: "Missing repo param" }); return; }
+
+  const headers = ghHeaders(token);
+  const results: Array<{ url: string; platform: string; confidence: "high" | "medium" }> = [];
+
+  // 1. Check GitHub Pages
+  try {
+    const pagesResp = await fetch(`${GH_API}/repos/${repo}/pages`, { headers });
+    if (pagesResp.ok) {
+      const pages = await pagesResp.json() as any;
+      if (pages.html_url) {
+        results.push({ url: pages.html_url, platform: "GitHub Pages", confidence: "high" });
+      }
+    }
+  } catch {}
+
+  // 2. Fetch repo tree (shallow) to scan for config files
+  let treePaths: string[] = [];
+  try {
+    const repoResp = await fetch(`${GH_API}/repos/${repo}`, { headers });
+    if (repoResp.ok) {
+      const repoData = await repoResp.json() as any;
+      const branch = repoData.default_branch || "main";
+      const treeResp = await fetch(`${GH_API}/repos/${repo}/git/trees/${branch}?recursive=1`, { headers });
+      if (treeResp.ok) {
+        const treeData = await treeResp.json() as any;
+        treePaths = (treeData.tree || []).map((f: any) => f.path as string);
+      }
+    }
+  } catch {}
+
+  // 3. Check for Vercel config — try to read vercel.json or .vercel/project.json
+  if (treePaths.includes("vercel.json") || treePaths.includes(".vercel/project.json")) {
+    // Derive Vercel URL from repo name
+    const repoName = repo.split("/")[1] || repo;
+    const owner = repo.split("/")[0] || "";
+    results.push({
+      url: `https://${repoName}.vercel.app`,
+      platform: "Vercel",
+      confidence: "medium",
+    });
+    // Also try owner-prefixed
+    results.push({
+      url: `https://${repoName}-${owner.toLowerCase()}.vercel.app`,
+      platform: "Vercel",
+      confidence: "medium",
+    });
+  }
+
+  // 4. Check for Netlify
+  if (treePaths.includes("netlify.toml") || treePaths.some(p => p.includes(".netlify"))) {
+    const repoName = repo.split("/")[1] || repo;
+    results.push({
+      url: `https://${repoName}.netlify.app`,
+      platform: "Netlify",
+      confidence: "medium",
+    });
+  }
+
+  // 5. Check for Replit deployment (replit.nix or .replit)
+  if (treePaths.includes(".replit") || treePaths.includes("replit.nix")) {
+    results.push({
+      url: `https://${(repo.split("/")[1] || repo).toLowerCase()}.replit.app`,
+      platform: "Replit",
+      confidence: "medium",
+    });
+  }
+
+  // 6. Always provide common patterns as fallback suggestions
+  const repoName = repo.split("/")[1] || repo;
+  const suggestions = results.length === 0 ? [
+    { url: `https://${repoName}.vercel.app`, platform: "Vercel", confidence: "medium" as const },
+    { url: `https://${repoName}.netlify.app`, platform: "Netlify", confidence: "medium" as const },
+  ] : results;
+
+  res.json({ detected: results, suggestions });
+});
+
 export default router;

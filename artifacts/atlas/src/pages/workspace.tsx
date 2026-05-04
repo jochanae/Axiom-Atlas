@@ -1830,134 +1830,309 @@ function FilesTab({
 
 // ── Preview tab ──────────────────────────────────────────────────────────────
 function PreviewTab({ projectId }: { projectId: number }) {
+  const queryClient = useQueryClient();
+  const { data: project } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
+  const updateProject = useUpdateProject();
+
+  // DB is source of truth; localStorage is legacy fallback for existing users
   const storageKey = `atlas-preview-${projectId}`;
-  const [urlInput, setUrlInput] = useState(() => {
-    try { return localStorage.getItem(storageKey) || ""; } catch { return ""; }
-  });
-  const [liveUrl, setLiveUrl] = useState<string>(() => {
-    try { return localStorage.getItem(storageKey) || ""; } catch { return ""; }
-  });
+  const [urlInput, setUrlInput] = useState("");
+  const [liveUrl, setLiveUrl] = useState("");
   const [iframeError, setIframeError] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [detectResults, setDetectResults] = useState<Array<{ url: string; platform: string; confidence: string }>>([]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [savedIndicator, setSavedIndicator] = useState(false);
 
-  // Re-sync when project changes (in case component stays mounted)
+  // Sync from DB on project load / switch
   useEffect(() => {
-    const saved = localStorage.getItem(`atlas-preview-${projectId}`) || "";
-    setUrlInput(saved);
-    setLiveUrl(saved);
+    const dbUrl = project?.previewUrl ?? "";
+    const legacyUrl = (() => { try { return localStorage.getItem(storageKey) || ""; } catch { return ""; } })();
+    const resolved = dbUrl || legacyUrl;
+    setUrlInput(resolved);
+    setLiveUrl(resolved);
     setIframeError(false);
-  }, [projectId]);
+    setIframeLoading(!!resolved);
+    setDetectResults([]);
+  }, [projectId, project?.previewUrl]);
 
-  const handleGo = () => {
-    const raw = urlInput.trim();
-    if (!raw) return;
-    const normalized = raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
+  const linkedRepo = (() => {
+    try {
+      const raw = localStorage.getItem(`atlas-gh-linked-${projectId}`);
+      return raw ? JSON.parse(raw) as { fullName: string } : null;
+    } catch { return null; }
+  })();
+  const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
+
+  const normalize = (raw: string) =>
+    raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
+
+  const applyUrl = (url: string) => {
+    const u = normalize(url);
+    setUrlInput(u);
+    setLiveUrl(u);
     setIframeError(false);
-    setLiveUrl(normalized);
-    try { localStorage.setItem(storageKey, normalized); } catch {}
+    setIframeLoading(true);
+    setReloadKey((k) => k + 1);
+    try { localStorage.setItem(storageKey, u); } catch {}
+  };
+
+  const handleGo = () => { if (urlInput.trim()) applyUrl(urlInput.trim()); };
+
+  const handleSaveToProject = () => {
+    if (!liveUrl) return;
+    updateProject.mutate(
+      { id: projectId, data: { previewUrl: liveUrl } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+          setSavedIndicator(true);
+          setTimeout(() => setSavedIndicator(false), 2500);
+        },
+      }
+    );
   };
 
   const handleClear = () => {
-    setLiveUrl("");
-    setUrlInput("");
-    setIframeError(false);
+    setLiveUrl(""); setUrlInput(""); setIframeError(false); setIframeLoading(false);
+    setDetectResults([]);
     try { localStorage.removeItem(storageKey); } catch {}
+    updateProject.mutate({ id: projectId, data: { previewUrl: null } }, {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) }),
+    });
+  };
+
+  const handleDetect = async () => {
+    if (!linkedRepo || !token) return;
+    setDetecting(true);
+    setDetectResults([]);
+    try {
+      const res = await fetch(`/api/github/deployment?repo=${encodeURIComponent(linkedRepo.fullName)}`, {
+        headers: { "x-github-token": token },
+      });
+      if (res.ok) {
+        const data = await res.json() as { detected: Array<{ url: string; platform: string; confidence: string }>; suggestions: Array<{ url: string; platform: string; confidence: string }> };
+        const all = [...data.detected, ...data.suggestions.filter(s => !data.detected.find(d => d.url === s.url))];
+        setDetectResults(all);
+      }
+    } catch {}
+    setDetecting(false);
+  };
+
+  const sMono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
+  const platformColor = (p: string) => {
+    if (p === "Vercel") return "rgba(255,255,255,0.75)";
+    if (p === "Netlify") return "rgba(110,231,183,0.8)";
+    if (p === "GitHub Pages") return "rgba(147,197,253,0.8)";
+    if (p === "Replit") return "rgba(201,162,76,0.85)";
+    return "var(--atlas-muted)";
   };
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* URL bar */}
-      <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", gap: 6 }}>
-        <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ position: "absolute", left: 8, opacity: 0.3, flexShrink: 0 }}>
-            <circle cx="8" cy="8" r="6" stroke="var(--atlas-fg)" strokeWidth="1.4" />
-            <path d="M8 2c-2 3-2 9 0 12M2 8h12" stroke="var(--atlas-fg)" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-          <input
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleGo()}
-            placeholder="Enter URL to preview…"
-            style={{
-              width: "100%", paddingLeft: 26, paddingRight: 8, paddingTop: 6, paddingBottom: 6,
-              borderRadius: 6, background: "rgba(12,10,9,0.7)",
-              border: "1px solid var(--atlas-border)",
-              color: "var(--atlas-fg)", fontSize: 11,
-              fontFamily: "var(--app-font-mono)", outline: "none",
-              transition: "border-color 160ms ease",
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
-          />
+      <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+          {/* Globe icon */}
+          <div style={{ position: "relative", flex: 1, display: "flex", alignItems: "center" }}>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ position: "absolute", left: 8, opacity: 0.25, flexShrink: 0 }}>
+              <circle cx="8" cy="8" r="6" stroke="var(--atlas-fg)" strokeWidth="1.4" />
+              <path d="M8 2c-2 3-2 9 0 12M2 8h12" stroke="var(--atlas-fg)" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+            <input
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleGo()}
+              placeholder="Paste your deployment URL…"
+              style={{
+                width: "100%", paddingLeft: 26, paddingRight: 8, paddingTop: 5, paddingBottom: 5,
+                borderRadius: 5, background: "rgba(12,10,9,0.7)",
+                border: "1px solid var(--atlas-border)",
+                color: "var(--atlas-fg)", fontSize: 10.5, ...sMono, outline: "none",
+                transition: "border-color 160ms ease",
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+            />
+          </div>
+          <button onClick={handleGo} style={{
+            padding: "5px 10px", borderRadius: 5, background: "var(--atlas-ember)",
+            border: "none", color: "var(--atlas-fg)", fontSize: 10, ...sMono,
+            letterSpacing: "0.08em", cursor: "pointer", flexShrink: 0,
+          }}>Go</button>
+          {liveUrl && (
+            <>
+              {/* Reload */}
+              <button
+                onClick={() => { setIframeError(false); setIframeLoading(true); setReloadKey((k) => k + 1); }}
+                title="Reload"
+                style={{
+                  padding: "5px 7px", borderRadius: 5, background: "transparent",
+                  border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)",
+                  fontSize: 11, cursor: "pointer", flexShrink: 0, lineHeight: 1,
+                  opacity: 0.55, transition: "opacity 160ms ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.55")}
+              >↺</button>
+              {/* Open external */}
+              <a href={liveUrl} target="_blank" rel="noopener noreferrer" title="Open in new tab"
+                style={{
+                  padding: "5px 7px", borderRadius: 5, background: "transparent",
+                  border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)",
+                  fontSize: 10, lineHeight: 1, ...sMono, opacity: 0.55,
+                  textDecoration: "none", flexShrink: 0, transition: "opacity 160ms ease",
+                  display: "flex", alignItems: "center",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.55")}
+              >↗</a>
+              {/* Clear */}
+              <button onClick={handleClear} title="Clear"
+                style={{
+                  padding: "5px 7px", borderRadius: 5, background: "transparent",
+                  border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)",
+                  fontSize: 13, cursor: "pointer", flexShrink: 0, lineHeight: 1,
+                  opacity: 0.4, transition: "opacity 160ms ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.4")}
+              >×</button>
+            </>
+          )}
         </div>
-        <button
-          onClick={handleGo}
-          style={{
-            padding: "6px 11px", borderRadius: 6,
-            background: "var(--atlas-ember)", border: "none",
-            color: "var(--atlas-fg)", fontSize: 10,
-            fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-            cursor: "pointer", flexShrink: 0,
-          }}
-        >
-          Go
-        </button>
-        {liveUrl && (
-          <button
-            onClick={handleClear}
-            title="Clear"
-            style={{
-              padding: "6px 8px", borderRadius: 6,
-              background: "transparent", border: "1px solid var(--atlas-border)",
-              color: "var(--atlas-muted)", fontSize: 12,
-              cursor: "pointer", flexShrink: 0, lineHeight: 1,
-              opacity: 0.55, transition: "opacity 160ms ease",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.55")}
-          >
-            ×
-          </button>
+
+        {/* Action row */}
+        <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
+          {linkedRepo && token ? (
+            <button
+              onClick={handleDetect}
+              disabled={detecting}
+              style={{
+                padding: "4px 10px", borderRadius: 4, fontSize: 9.5, ...sMono,
+                letterSpacing: "0.08em",
+                background: detecting ? "rgba(255,255,255,0.04)" : "rgba(201,162,76,0.08)",
+                border: "1px solid rgba(201,162,76,0.2)",
+                color: detecting ? "var(--atlas-muted)" : "var(--atlas-gold)",
+                cursor: detecting ? "not-allowed" : "pointer", flexShrink: 0,
+              }}
+            >
+              {detecting ? "Detecting…" : "Auto-detect URL"}
+            </button>
+          ) : (
+            <div style={{ fontSize: 9.5, ...sMono, color: "var(--atlas-muted)", opacity: 0.35 }}>
+              Link a repo in Files to auto-detect URL
+            </div>
+          )}
+          {liveUrl && (
+            <button
+              onClick={handleSaveToProject}
+              disabled={savedIndicator || updateProject.isPending}
+              style={{
+                marginLeft: "auto", padding: "4px 10px", borderRadius: 4,
+                fontSize: 9.5, ...sMono, letterSpacing: "0.08em",
+                background: savedIndicator ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${savedIndicator ? "rgba(34,197,94,0.2)" : "var(--atlas-border)"}`,
+                color: savedIndicator ? "rgba(134,239,172,0.8)" : "var(--atlas-muted)",
+                cursor: savedIndicator ? "default" : "pointer", flexShrink: 0,
+                transition: "all 160ms ease",
+              }}
+            >
+              {savedIndicator ? "✓ Saved" : project?.previewUrl === liveUrl ? "Saved to project" : "Save to project"}
+            </button>
+          )}
+        </div>
+
+        {/* Detect results */}
+        {detectResults.length > 0 && (
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontSize: 8.5, ...sMono, color: "var(--atlas-muted)", opacity: 0.4, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Detected / suggested
+            </div>
+            {detectResults.slice(0, 4).map((r) => (
+              <button
+                key={r.url}
+                onClick={() => { applyUrl(r.url); setDetectResults([]); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  padding: "5px 8px", borderRadius: 5, width: "100%", textAlign: "left",
+                  background: "rgba(255,255,255,0.03)", border: "1px solid var(--atlas-border)",
+                  cursor: "pointer", transition: "border-color 120ms ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.3)")}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+              >
+                <span style={{ fontSize: 8.5, ...sMono, color: platformColor(r.platform), opacity: 0.85, flexShrink: 0 }}>
+                  {r.platform}
+                </span>
+                {r.confidence === "high" && (
+                  <span style={{ fontSize: 7.5, ...sMono, color: "rgba(134,239,172,0.6)", flexShrink: 0 }}>✓ confirmed</span>
+                )}
+                <span style={{ flex: 1, fontSize: 9.5, ...sMono, color: "var(--atlas-fg)", opacity: 0.55, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.url}
+                </span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Frame or empty state */}
+      {/* Frame area */}
       {liveUrl && !iframeError ? (
-        <iframe
-          key={liveUrl}
-          src={liveUrl}
-          title="Preview"
-          style={{ flex: 1, border: "none", width: "100%", display: "block", background: "#fff" }}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          onError={() => setIframeError(true)}
-        />
+        <div style={{ flex: 1, position: "relative" }}>
+          {iframeLoading && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: 10,
+              background: "var(--atlas-bg)", zIndex: 2,
+            }}>
+              <div className="atlas-think-dots"><span /><span /><span /></div>
+              <div style={{ fontSize: 9.5, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Loading preview…</div>
+            </div>
+          )}
+          <iframe
+            key={`${liveUrl}-${reloadKey}`}
+            src={liveUrl}
+            title="Preview"
+            style={{ flex: 1, border: "none", width: "100%", height: "100%", display: "block", background: "#fff" }}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+            onLoad={() => setIframeLoading(false)}
+            onError={() => { setIframeError(true); setIframeLoading(false); }}
+          />
+        </div>
       ) : iframeError ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 10 }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" opacity={0.2}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" opacity={0.18}>
             <circle cx="12" cy="12" r="9" stroke="var(--atlas-fg)" strokeWidth="1.4" />
             <path d="M12 8v4M12 16h.01" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.55, textAlign: "center", lineHeight: 1.65 }}>
-            This page can't be embedded.<br />Try opening it in a new tab.
+          <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.5, textAlign: "center", lineHeight: 1.7 }}>
+            This site blocks embedding.<br />Use the arrow to open it in a new tab.
           </div>
           <a
-            href={liveUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ fontSize: 10, color: "var(--atlas-gold)", opacity: 0.75, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em" }}
+            href={liveUrl} target="_blank" rel="noopener noreferrer"
+            style={{
+              padding: "6px 14px", borderRadius: 5, fontSize: 10, ...sMono,
+              background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)",
+              color: "var(--atlas-gold)", textDecoration: "none", letterSpacing: "0.08em",
+            }}
           >
-            Open in new tab →
+            Open in new tab ↗
           </a>
         </div>
       ) : (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 10 }}>
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" opacity={0.15}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" opacity={0.12}>
             <rect x="2" y="5" width="24" height="18" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" />
             <path d="M2 10h24" stroke="var(--atlas-fg)" strokeWidth="1.5" />
             <circle cx="6" cy="7.5" r="1" fill="var(--atlas-fg)" />
             <circle cx="10" cy="7.5" r="1" fill="var(--atlas-fg)" />
           </svg>
-          <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.45, textAlign: "center", lineHeight: 1.65 }}>
-            Enter a deployment URL above.<br />It's saved per project and reloads<br />automatically next time.
+          <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
+            {linkedRepo
+              ? <>Click <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Auto-detect URL</strong> to find<br />your live deployment automatically.</>
+              : <>Paste your deployment URL above,<br />or link a GitHub repo in Files<br />to auto-detect it.</>}
           </div>
         </div>
       )}

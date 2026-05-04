@@ -24,6 +24,8 @@ export interface Project {
   status: ProjectStatus;
   /** @nullable */
   memory?: string | null;
+  /** @nullable */
+  previewUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +51,8 @@ export interface UpdateProjectBody {
   status?: UpdateProjectBodyStatus;
   /** @nullable */
   memory?: string | null;
+  /** @nullable */
+  previewUrl?: string | null;
 }
 
 export interface ProjectSummary {
