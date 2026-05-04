@@ -342,8 +342,10 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
   const [showNewProject, setShowNewProject] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
   const placeholder = useTypewriter(PLACEHOLDERS);
@@ -505,7 +507,7 @@ export default function Home() {
                 fontStyle: "italic",
               }}
             >
-              Your strategic thinking partner.
+              I'm here. What's on your mind?
             </p>
           </div>
 
@@ -525,7 +527,37 @@ export default function Home() {
           </div>
 
           {/* Input shell */}
-          <div className="atlas-input-shell" style={{ padding: "18px 20px" }}>
+          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px" }}>
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.txt,.md,.csv,.json"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setAttachedFile(file);
+                e.target.value = "";
+              }}
+            />
+
+            {/* Attached file pill */}
+            {attachedFile && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6, marginBottom: 8,
+                padding: "4px 10px", borderRadius: 6, width: "fit-content",
+                background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.2)",
+              }}>
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                  <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(201,162,76,0.8)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.7)", letterSpacing: "0.05em", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {attachedFile.name}
+                </span>
+                <button onClick={() => setAttachedFile(null)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 13, lineHeight: 1, padding: "0 0 0 2px" }}>×</button>
+              </div>
+            )}
+
             <div style={{ position: "relative" }}>
               {!hasInput && (
                 <div
@@ -576,32 +608,84 @@ export default function Home() {
               />
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginTop: 12,
-              }}
-            >
-              <span
+            {/* Bottom action bar */}
+            <div style={{ display: "flex", alignItems: "center", marginTop: 12, gap: 2 }}>
+              {/* + button */}
+              <button
+                title="Add context"
                 style={{
-                  fontFamily: "var(--app-font-mono)",
-                  fontSize: 10,
-                  letterSpacing: "0.06em",
-                  color: "var(--atlas-muted)",
-                  opacity: 0.4,
+                  width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none",
+                  color: "rgba(120,113,108,0.45)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "color 160ms ease", flexShrink: 0,
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-fg)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
               >
-                Enter to continue
-              </span>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  <path d="M8 2v12M2 8h12" />
+                </svg>
+              </button>
+
+              {/* Paperclip */}
+              <button
+                title="Attach file"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none",
+                  color: attachedFile ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "color 160ms ease", flexShrink: 0,
+                }}
+                onMouseEnter={(e) => { if (!attachedFile) e.currentTarget.style.color = "var(--atlas-fg)"; }}
+                onMouseLeave={(e) => { if (!attachedFile) e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
+              >
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                  <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+
+              {/* Center hint */}
+              <div style={{ flex: 1, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+                <span style={{
+                  fontFamily: "var(--app-font-mono)", fontSize: 10.5,
+                  letterSpacing: "0.05em", color: "rgba(120,113,108,0.3)",
+                  userSelect: "none",
+                }}>
+                  type / for shortcuts
+                </span>
+              </div>
+
+              {/* Mic + waveform */}
+              <button
+                title="Voice input"
+                style={{
+                  height: 32, borderRadius: 8, background: "transparent", border: "none",
+                  color: "rgba(120,113,108,0.45)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                  padding: "0 8px", transition: "color 160ms ease", flexShrink: 0,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-fg)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="2" width="6" height="11" rx="3" />
+                  <path d="M5 10a7 7 0 0014 0" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+                <div className="atlas-waveform">
+                  <span /><span /><span />
+                </div>
+              </button>
+
+              {/* Send */}
               <button
                 className="atlas-send-btn"
                 onClick={handleSubmit}
                 disabled={loading}
                 style={{
-                  width: 42,
-                  height: 42,
+                  width: 40, height: 40, flexShrink: 0,
                   background: hasInput && !loading ? "var(--atlas-ember)" : "rgba(37,34,32,0.8)",
                   border: hasInput ? "none" : "1px solid var(--atlas-border)",
                   boxShadow: hasInput && !loading ? "0 0 18px -3px rgba(146,64,14,0.55)" : "none",
@@ -609,19 +693,12 @@ export default function Home() {
                 }}
               >
                 {loading ? (
-                  <div className="atlas-think-dots">
-                    <span /><span /><span />
-                  </div>
+                  <div className="atlas-think-dots"><span /><span /><span /></div>
                 ) : (
-                  <svg
-                    viewBox="0 0 20 20"
-                    width={14}
-                    height={14}
+                  <svg viewBox="0 0 20 20" width={13} height={13}
                     fill={hasInput ? "var(--atlas-fg)" : "none"}
                     stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
-                    strokeWidth={1.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
                   >
                     <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
                     <path d="M17 3 9.5 11.5" />
