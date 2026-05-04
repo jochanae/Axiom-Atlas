@@ -230,6 +230,12 @@
 }
 .atlas-resize-handle:hover::after { background: rgba(201, 162, 76, 0.45); }
 
+/* ── Mobile slide-in from right ── */
+@keyframes atlas-slide-in-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
 /* ── Typewriter cursor ── */
 @keyframes atlas-cursor-blink {
   0%, 100% { opacity: 0.7; }

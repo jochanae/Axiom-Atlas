@@ -14,6 +14,7 @@ import {
 import type { Entry } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
+// ── Types ────────────────────────────────────────────────────────────────────
 interface CatchPayload {
   v: number;
   against: { id: string; title: string };
@@ -29,6 +30,20 @@ interface ChatMessage {
   catchResolved?: boolean;
 }
 
+type RightTab = "ledger" | "files" | "preview";
+
+// ── Hooks ────────────────────────────────────────────────────────────────────
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return mobile;
+}
+
+// ── AtlasLogo ────────────────────────────────────────────────────────────────
 function AtlasLogo({ small }: { small?: boolean }) {
   const s = small ? 15 : 18;
   return (
@@ -56,6 +71,7 @@ function AtlasLogo({ small }: { small?: boolean }) {
   );
 }
 
+// ── DecisionCatchCard ────────────────────────────────────────────────────────
 function DecisionCatchCard({
   payload,
   projectId,
@@ -203,6 +219,7 @@ function DecisionCatchCard({
   );
 }
 
+// ── Chat bubbles ─────────────────────────────────────────────────────────────
 function UserBubble({ content }: { content: string }) {
   return (
     <div className="atlas-bubble-in" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
@@ -274,6 +291,7 @@ function AssistantBubble({
   );
 }
 
+// ── Ledger tab content ───────────────────────────────────────────────────────
 function LedgerEntry({ entry }: { entry: Entry }) {
   const committed = entry.status === "committed";
   return (
@@ -299,7 +317,7 @@ function LedgerEntry({ entry }: { entry: Entry }) {
             <div
               style={{
                 fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.5, marginTop: 3,
-                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden",
               }}
             >
               {entry.summary}
@@ -311,7 +329,7 @@ function LedgerEntry({ entry }: { entry: Entry }) {
   );
 }
 
-function RightCanvas({
+function LedgerTab({
   projectId,
   entries,
   activeCatch,
@@ -341,62 +359,12 @@ function RightCanvas({
   };
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "var(--atlas-surface-alt)", borderLeft: "1px solid var(--atlas-border)" }}>
-      {/* Header */}
-      <div
-        style={{
-          padding: "11px 14px", borderBottom: "1px solid var(--atlas-border)",
-          display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <div
-            style={{
-              width: 5, height: 5, borderRadius: "50%",
-              background: "var(--atlas-gold)", opacity: entries.length > 0 ? 0.8 : 0.25,
-            }}
-          />
-          <span
-            style={{
-              fontFamily: "var(--app-font-mono)", fontSize: 9.5,
-              letterSpacing: "0.14em", textTransform: "uppercase",
-              color: "var(--atlas-gold)", opacity: 0.65,
-            }}
-          >
-            Decision Ledger
-          </span>
-          {entries.length > 0 && (
-            <span
-              style={{
-                fontFamily: "var(--app-font-mono)", fontSize: 9,
-                padding: "1px 5px", borderRadius: 3,
-                background: "rgba(201,162,76,0.08)", color: "var(--atlas-gold)", opacity: 0.65,
-              }}
-            >
-              {entries.length}
-            </span>
-          )}
-        </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          style={{
-            fontFamily: "var(--app-font-mono)", fontSize: 9.5,
-            letterSpacing: "0.1em", textTransform: "uppercase",
-            color: "var(--atlas-muted)", background: "transparent", border: "none",
-            cursor: "pointer", opacity: 0.55, transition: "opacity 160ms ease",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.55")}
-        >
-          + Add
-        </button>
-      </div>
-
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Active catch indicator */}
       {activeCatch && (
         <div
           style={{
-            margin: "10px 12px 0", padding: "8px 11px", borderRadius: 7,
+            margin: "10px 12px 0", padding: "8px 11px", borderRadius: 7, flexShrink: 0,
             background: "rgba(146,64,14,0.07)", border: "1px solid rgba(146,64,14,0.28)",
           }}
         >
@@ -411,7 +379,7 @@ function RightCanvas({
 
       {/* Add entry inline */}
       {showAdd && (
-        <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--atlas-border)" }}>
+        <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
           <input
             autoFocus value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
@@ -446,7 +414,7 @@ function RightCanvas({
       )}
 
       {/* Entries list */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px" }} className="scrollbar-none">
         {entries.length === 0 ? (
           <div style={{ textAlign: "center", padding: "36px 12px", color: "var(--atlas-muted)", fontSize: 12, opacity: 0.5, lineHeight: 1.65 }}>
             Decisions made during your session will appear here.
@@ -472,20 +440,529 @@ function RightCanvas({
           </>
         )}
       </div>
+
+      {/* Footer add button */}
+      <div style={{ padding: "8px 12px", borderTop: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+        <button
+          onClick={() => setShowAdd(!showAdd)}
+          style={{
+            width: "100%", padding: "7px", borderRadius: 6,
+            background: "transparent",
+            border: "1px dashed rgba(201,162,76,0.2)",
+            color: "var(--atlas-muted)", fontSize: 11,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            cursor: "pointer", opacity: 0.65,
+            transition: "all 160ms ease",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.65"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.2)"; }}
+        >
+          + Add decision
+        </button>
+      </div>
     </div>
   );
 }
 
+// ── Files tab ────────────────────────────────────────────────────────────────
+interface FileNode {
+  name: string;
+  type: "file" | "folder";
+  ext?: string;
+  children?: FileNode[];
+}
+
+const PLACEHOLDER_TREE: FileNode[] = [
+  {
+    name: "Strategy",
+    type: "folder",
+    children: [
+      { name: "north-star.md", type: "file", ext: "md" },
+      { name: "positioning.md", type: "file", ext: "md" },
+    ],
+  },
+  {
+    name: "Research",
+    type: "folder",
+    children: [
+      { name: "customer-interviews.md", type: "file", ext: "md" },
+    ],
+  },
+  { name: "README.md", type: "file", ext: "md" },
+];
+
+function FileIcon({ ext }: { ext?: string }) {
+  const color = ext === "md" ? "#C9A24C" : ext === "ts" || ext === "tsx" ? "#60a5fa" : "rgba(120,113,108,0.7)";
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke={color} strokeWidth="1.1" />
+      <path d="M10 2v3h3" stroke={color} strokeWidth="1.1" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function FolderIcon({ open }: { open?: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      {open ? (
+        <>
+          <path d="M1 4h5l1.5 1.5H15v8H1V4z" stroke="rgba(201,162,76,0.6)" strokeWidth="1.1" fill="rgba(201,162,76,0.06)" />
+        </>
+      ) : (
+        <path d="M1 4h5l1.5 1.5H15v8H1V4z" stroke="rgba(201,162,76,0.45)" strokeWidth="1.1" />
+      )}
+    </svg>
+  );
+}
+
+function FileTreeNode({
+  node,
+  depth,
+  selected,
+  onSelect,
+}: {
+  node: FileNode;
+  depth: number;
+  selected: string | null;
+  onSelect: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(depth === 0);
+  const isSelected = selected === node.name;
+
+  if (node.type === "folder") {
+    return (
+      <div>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          style={{
+            width: "100%", display: "flex", alignItems: "center",
+            gap: 6, padding: `4px 8px 4px ${8 + depth * 14}px`,
+            background: "transparent", border: "none", cursor: "pointer",
+            borderRadius: 4, transition: "background 120ms ease",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.04)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ flexShrink: 0, opacity: 0.4, transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 140ms ease" }}>
+            <path d="M2 1l4 3-4 3" stroke="var(--atlas-fg)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <FolderIcon open={open} />
+          <span style={{ fontSize: 12, color: "rgba(231,229,228,0.65)", fontFamily: "var(--app-font-sans)" }}>
+            {node.name}
+          </span>
+        </button>
+        {open && node.children?.map((child) => (
+          <FileTreeNode key={child.name} node={child} depth={depth + 1} selected={selected} onSelect={onSelect} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => onSelect(node.name)}
+      style={{
+        width: "100%", display: "flex", alignItems: "center",
+        gap: 6, padding: `4px 8px 4px ${8 + depth * 14}px`,
+        background: isSelected ? "rgba(201,162,76,0.08)" : "transparent",
+        border: "none", cursor: "pointer", borderRadius: 4,
+        transition: "background 120ms ease",
+        borderLeft: isSelected ? "2px solid rgba(201,162,76,0.5)" : "2px solid transparent",
+      }}
+      onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+      onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
+    >
+      <FileIcon ext={node.ext} />
+      <span style={{ fontSize: 12, color: isSelected ? "rgba(231,229,228,0.9)" : "rgba(231,229,228,0.55)", fontFamily: "var(--app-font-sans)", textAlign: "left" }}>
+        {node.name}
+      </span>
+    </button>
+  );
+}
+
+function FilesTab() {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [showPlaceholder] = useState(true);
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {showPlaceholder ? (
+        <>
+          {/* Placeholder tree */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "10px 4px" }} className="scrollbar-none">
+            <div style={{ padding: "0 8px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(120,113,108,0.35)" }}>
+                Project files
+              </span>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", color: "rgba(120,113,108,0.25)", fontStyle: "italic" }}>
+                preview
+              </span>
+            </div>
+            {PLACEHOLDER_TREE.map((node) => (
+              <FileTreeNode key={node.name} node={node} depth={0} selected={selected} onSelect={setSelected} />
+            ))}
+          </div>
+          {/* Footer */}
+          <div style={{ padding: "8px 12px", borderTop: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+            <div style={{ fontSize: 10, color: "rgba(120,113,108,0.4)", fontFamily: "var(--app-font-mono)", textAlign: "center", lineHeight: 1.6 }}>
+              File sync coming soon
+            </div>
+          </div>
+        </>
+      ) : (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" opacity={0.2}>
+            <rect x="2" y="4" width="24" height="20" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" />
+            <path d="M8 10h12M8 14h8" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.5, textAlign: "center", lineHeight: 1.65 }}>
+            No files attached to this project yet.
+          </div>
+          <button
+            style={{
+              padding: "6px 14px", borderRadius: 6,
+              background: "transparent", border: "1px dashed rgba(201,162,76,0.25)",
+              color: "var(--atlas-muted)", fontSize: 11,
+              fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+              textTransform: "uppercase", cursor: "pointer", opacity: 0.6,
+            }}
+          >
+            + Attach file
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Preview tab ──────────────────────────────────────────────────────────────
+function PreviewTab({ projectId }: { projectId: number }) {
+  const storageKey = `atlas-preview-${projectId}`;
+  const [urlInput, setUrlInput] = useState(() => {
+    try { return localStorage.getItem(storageKey) || ""; } catch { return ""; }
+  });
+  const [liveUrl, setLiveUrl] = useState<string>(() => {
+    try { return localStorage.getItem(storageKey) || ""; } catch { return ""; }
+  });
+  const [iframeError, setIframeError] = useState(false);
+
+  const handleGo = () => {
+    const raw = urlInput.trim();
+    if (!raw) return;
+    const normalized = raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
+    setIframeError(false);
+    setLiveUrl(normalized);
+    try { localStorage.setItem(storageKey, normalized); } catch {}
+  };
+
+  const handleClear = () => {
+    setLiveUrl("");
+    setUrlInput("");
+    setIframeError(false);
+    try { localStorage.removeItem(storageKey); } catch {}
+  };
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* URL bar */}
+      <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", gap: 6 }}>
+        <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ position: "absolute", left: 8, opacity: 0.3, flexShrink: 0 }}>
+            <circle cx="8" cy="8" r="6" stroke="var(--atlas-fg)" strokeWidth="1.4" />
+            <path d="M8 2c-2 3-2 9 0 12M2 8h12" stroke="var(--atlas-fg)" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+          <input
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleGo()}
+            placeholder="Enter URL to preview…"
+            style={{
+              width: "100%", paddingLeft: 26, paddingRight: 8, paddingTop: 6, paddingBottom: 6,
+              borderRadius: 6, background: "rgba(12,10,9,0.7)",
+              border: "1px solid var(--atlas-border)",
+              color: "var(--atlas-fg)", fontSize: 11,
+              fontFamily: "var(--app-font-mono)", outline: "none",
+              transition: "border-color 160ms ease",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+          />
+        </div>
+        <button
+          onClick={handleGo}
+          style={{
+            padding: "6px 11px", borderRadius: 6,
+            background: "var(--atlas-ember)", border: "none",
+            color: "var(--atlas-fg)", fontSize: 10,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+            cursor: "pointer", flexShrink: 0,
+          }}
+        >
+          Go
+        </button>
+        {liveUrl && (
+          <button
+            onClick={handleClear}
+            title="Clear"
+            style={{
+              padding: "6px 8px", borderRadius: 6,
+              background: "transparent", border: "1px solid var(--atlas-border)",
+              color: "var(--atlas-muted)", fontSize: 12,
+              cursor: "pointer", flexShrink: 0, lineHeight: 1,
+              opacity: 0.55, transition: "opacity 160ms ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.55")}
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {/* Frame or empty state */}
+      {liveUrl && !iframeError ? (
+        <iframe
+          key={liveUrl}
+          src={liveUrl}
+          title="Preview"
+          style={{ flex: 1, border: "none", width: "100%", display: "block", background: "#fff" }}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          onError={() => setIframeError(true)}
+        />
+      ) : iframeError ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 10 }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" opacity={0.2}>
+            <circle cx="12" cy="12" r="9" stroke="var(--atlas-fg)" strokeWidth="1.4" />
+            <path d="M12 8v4M12 16h.01" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.55, textAlign: "center", lineHeight: 1.65 }}>
+            This page can't be embedded.<br />Try opening it in a new tab.
+          </div>
+          <a
+            href={liveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 10, color: "var(--atlas-gold)", opacity: 0.75, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em" }}
+          >
+            Open in new tab →
+          </a>
+        </div>
+      ) : (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 10 }}>
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" opacity={0.15}>
+            <rect x="2" y="5" width="24" height="18" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" />
+            <path d="M2 10h24" stroke="var(--atlas-fg)" strokeWidth="1.5" />
+            <circle cx="6" cy="7.5" r="1" fill="var(--atlas-fg)" />
+            <circle cx="10" cy="7.5" r="1" fill="var(--atlas-fg)" />
+          </svg>
+          <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.45, textAlign: "center", lineHeight: 1.65 }}>
+            Enter a URL above to preview<br />your product, site, or reference.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── RightPanel (tabbed) ──────────────────────────────────────────────────────
+function RightPanel({
+  projectId,
+  entries,
+  activeCatch,
+  onClose,
+}: {
+  projectId: number;
+  entries: Entry[];
+  activeCatch: CatchPayload | null;
+  onClose?: () => void;
+}) {
+  const [tab, setTab] = useState<RightTab>("ledger");
+
+  const tabs: { id: RightTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    {
+      id: "ledger",
+      label: "Ledger",
+      badge: entries.length || undefined,
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <rect x="2" y="1" width="12" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M5 5h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          <circle cx="3.5" cy="5" r="0.8" fill="currentColor" opacity={0.5} />
+          <circle cx="3.5" cy="8" r="0.8" fill="currentColor" opacity={0.5} />
+          <circle cx="3.5" cy="11" r="0.8" fill="currentColor" opacity={0.5} />
+        </svg>
+      ),
+    },
+    {
+      id: "files",
+      label: "Files",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M1 5h6l2 2h6v7H1V5z" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M1 5V3a1 1 0 011-1h4l2 2" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+      ),
+    },
+    {
+      id: "preview",
+      label: "Preview",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M1 6h14" stroke="currentColor" strokeWidth="1.1" />
+          <circle cx="3.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} />
+          <circle cx="5.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} />
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        height: "100%", display: "flex", flexDirection: "column",
+        background: "var(--atlas-surface-alt)",
+        borderLeft: "1px solid var(--atlas-border)",
+      }}
+    >
+      {/* Tab bar */}
+      <div
+        style={{
+          display: "flex", alignItems: "center",
+          borderBottom: "1px solid var(--atlas-border)",
+          flexShrink: 0,
+          paddingLeft: 4,
+        }}
+      >
+        {tabs.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                padding: "10px 12px",
+                background: "transparent", border: "none",
+                borderBottom: `2px solid ${active ? "var(--atlas-gold)" : "transparent"}`,
+                cursor: "pointer",
+                color: active ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                opacity: active ? 1 : 0.55,
+                transition: "all 160ms ease",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 9.5,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                marginBottom: -1,
+              }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.opacity = "0.8"; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.opacity = "0.55"; }}
+            >
+              {t.icon}
+              {t.label}
+              {t.badge !== undefined && (
+                <span
+                  style={{
+                    padding: "1px 4px", borderRadius: 3,
+                    background: active ? "rgba(201,162,76,0.15)" : "rgba(120,113,108,0.15)",
+                    fontSize: 8.5,
+                  }}
+                >
+                  {t.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+
+        {/* Close button (mobile only) */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            style={{
+              marginLeft: "auto", marginRight: 6,
+              width: 28, height: 28, borderRadius: 6,
+              background: "transparent", border: "none",
+              color: "var(--atlas-muted)", fontSize: 16, lineHeight: 1,
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              opacity: 0.5, transition: "opacity 160ms ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {/* Tab content */}
+      {tab === "ledger" && (
+        <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} />
+      )}
+      {tab === "files" && <FilesTab />}
+      {tab === "preview" && <PreviewTab projectId={projectId} />}
+    </div>
+  );
+}
+
+// ── Mobile FAB ───────────────────────────────────────────────────────────────
+function MobileFAB({ onClick, activeTab, entryCount }: { onClick: () => void; activeTab?: RightTab; entryCount: number }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      aria-label="Open workspace panel"
+      style={{
+        position: "fixed", bottom: 90, right: 16, zIndex: 40,
+        width: 48, height: 48, borderRadius: 14,
+        background: hov ? "rgba(201,162,76,0.22)" : "rgba(28,25,23,0.92)",
+        border: "1px solid rgba(201,162,76,0.32)",
+        backdropFilter: "blur(16px)",
+        boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 180ms ease",
+      }}
+    >
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+        <rect x="2" y="2" width="16" height="16" rx="2" stroke="#C9A24C" strokeWidth="1.3" />
+        <path d="M9 2v16" stroke="#C9A24C" strokeWidth="1.1" strokeDasharray="1.5 2" />
+        <path d="M12 7h4M12 10h4M12 13h3" stroke="#C9A24C" strokeWidth="1.1" strokeLinecap="round" />
+      </svg>
+      {entryCount > 0 && (
+        <div
+          style={{
+            position: "absolute", top: -4, right: -4,
+            width: 16, height: 16, borderRadius: "50%",
+            background: "var(--atlas-ember)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 8.5, fontFamily: "var(--app-font-mono)",
+            color: "var(--atlas-fg)", fontWeight: 600,
+          }}
+        >
+          {entryCount > 9 ? "9+" : entryCount}
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ── Workspace ────────────────────────────────────────────────────────────────
 export default function Workspace() {
   const { projectId } = useParams();
   const [, setLocation] = useLocation();
   const id = Number(projectId);
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
+  const [rightOpen, setRightOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(() => {
     try { return parseInt(localStorage.getItem("atlas-chat-w") || "0") || 520; } catch { return 520; }
   });
@@ -495,6 +972,7 @@ export default function Workspace() {
   const resizing = useRef(false);
   const lastX = useRef(0);
   const initialSent = useRef(false);
+  const touchStartX = useRef(0);
 
   const { data: project } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
   const { data: sessions, isLoading: sessionsLoading } = useListSessions(id, {
@@ -565,6 +1043,11 @@ export default function Workspace() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sendMessage.isPending]);
 
+  // Close mobile panel on mobile→desktop resize
+  useEffect(() => {
+    if (!isMobile) setRightOpen(false);
+  }, [isMobile]);
+
   const autoResize = () => {
     const el = textareaRef.current;
     if (!el) return;
@@ -626,6 +1109,7 @@ export default function Workspace() {
   }, []);
 
   const hasInput = input.trim().length > 0;
+  const entryCount = entries?.length ?? 0;
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden" }}>
@@ -667,18 +1151,22 @@ export default function Workspace() {
       </div>
 
       {/* ── Two-pane body ── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
 
         {/* Left: Chat */}
         <div
           style={{
-            width: chatWidth, minWidth: 300, flexShrink: 0,
-            display: "flex", flexDirection: "column",
-            background: "var(--atlas-bg)", overflow: "hidden",
+            width: isMobile ? "100%" : chatWidth,
+            minWidth: isMobile ? 0 : 300,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column",
+            background: "var(--atlas-bg)",
+            overflow: "hidden",
           }}
         >
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px" }} className="scrollbar-none">
             {messages.length === 0 && !sendMessage.isPending && (
               <div style={{ textAlign: "center", padding: "72px 20px" }}>
                 <div style={{ fontSize: 22, fontWeight: 300, color: "rgba(231,229,228,0.3)", marginBottom: 8, letterSpacing: "-0.01em" }}>
@@ -752,7 +1240,7 @@ export default function Workspace() {
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
                 <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "var(--atlas-muted)", opacity: 0.3 }}>
-                  Enter · Shift+Enter for newline
+                  {isMobile ? "Tap to send" : "Enter · Shift+Enter for newline"}
                 </span>
                 <button
                   className="atlas-send-btn"
@@ -779,19 +1267,72 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* Resize handle */}
-        <div
-          className="atlas-resize-handle"
-          onMouseDown={onResizeMouseDown}
-          onDoubleClick={() => setChatWidth(Math.floor(window.innerWidth * 0.5))}
-          title="Drag · double-click for 50/50"
-        />
+        {/* Desktop: resize handle + right panel */}
+        {!isMobile && (
+          <>
+            <div
+              className="atlas-resize-handle"
+              onMouseDown={onResizeMouseDown}
+              onDoubleClick={() => setChatWidth(Math.floor(window.innerWidth * 0.5))}
+              title="Drag · double-click for 50/50"
+            />
+            <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
+              <RightPanel
+                projectId={id}
+                entries={entries || []}
+                activeCatch={activeCatch}
+              />
+            </div>
+          </>
+        )}
 
-        {/* Right: Living canvas */}
-        <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
-          <RightCanvas projectId={id} entries={entries || []} activeCatch={activeCatch} />
-        </div>
+        {/* Mobile: overlay panel */}
+        {isMobile && rightOpen && (
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", justifyContent: "flex-end" }}
+          >
+            {/* Backdrop */}
+            <div
+              onClick={() => setRightOpen(false)}
+              style={{
+                position: "absolute", inset: 0,
+                background: "rgba(0,0,0,0.6)",
+                backdropFilter: "blur(2px)",
+              }}
+            />
+            {/* Sheet — slide in from right */}
+            <div
+              onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+              onTouchEnd={(e) => {
+                const dx = e.changedTouches[0].clientX - touchStartX.current;
+                if (dx > 60) setRightOpen(false);
+              }}
+              style={{
+                position: "relative", zIndex: 1,
+                width: "88vw", maxWidth: 420,
+                height: "100%",
+                animation: "atlas-slide-in-right 220ms cubic-bezier(0.4,0,0.2,1) both",
+              }}
+            >
+              <RightPanel
+                projectId={id}
+                entries={entries || []}
+                activeCatch={activeCatch}
+                onClose={() => setRightOpen(false)}
+              />
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Mobile FAB */}
+      {isMobile && !rightOpen && (
+        <MobileFAB
+          onClick={() => setRightOpen(true)}
+          activeTab="ledger"
+          entryCount={entryCount}
+        />
+      )}
     </div>
   );
 }
