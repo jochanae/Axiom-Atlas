@@ -3467,7 +3467,10 @@ export default function Workspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       })
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
         .then((res) => {
           const cp = res.catchPayload as CatchPayload | null;
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
@@ -3520,8 +3523,10 @@ export default function Workspace() {
     if (initial) {
       sessionStorage.removeItem(key);
       initialSent.current = true;
-      setInput(initial);
-      setTimeout(() => doSend(initial, sessionId, []), 80);
+      setTimeout(() => {
+        setInput("");
+        doSend(initial, sessionId, []);
+      }, 80);
     }
   }, [sessionId, id, doSend]);
 

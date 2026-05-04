@@ -6,9 +6,150 @@ import { eq, sql } from "drizzle-orm";
 const router: IRouter = Router();
 
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
+// ── Five-Tier Memory System ───────────────────────────────────────────────────
+interface MemoryEntry {
+  tier: 1 | 2 | 3 | 4 | 5;
+  text: string;
+  createdAt: string;
+  retrievalCount: number;
+  lastRetrievedAt: string | null;
+}
+
+interface MemoryStore {
+  v: 2;
+  entries: MemoryEntry[];
+}
+
+const TIER_CONFIG: Record<
+  number,
+  { label: string; decayDays: number | null; weight: number; protect: boolean }
+> = {
+  1: { label: "FOUNDATIONAL", decayDays: null, weight: 100, protect: true },
+  2: { label: "IDENTITY",     decayDays: 180,  weight: 50,  protect: false },
+  3: { label: "EPISODIC",     decayDays: 90,   weight: 30,  protect: true },
+  4: { label: "CONTEXTUAL",   decayDays: 30,   weight: 20,  protect: false },
+  5: { label: "TRANSIENT",    decayDays: 7,    weight: 10,  protect: false },
+};
+
+const MEMORY_TAG_RE = /^MEMORY_T([1-5]):\s*(.+)$/;
+
+function parseMemoryStore(raw: string | null): MemoryStore {
+  if (!raw) return { v: 2, entries: [] };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.v === 2 && Array.isArray(parsed.entries)) return parsed as MemoryStore;
+    // Migrate flat text format → v2 (treat every line as T3 episodic)
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    const migrated: MemoryEntry[] = lines.map((line) => ({
+      tier: 3 as const,
+      text: line.replace(/^\[\d{4}-\d{2}-\d{2}\]\s*/, ""),
+      createdAt: new Date().toISOString(),
+      retrievalCount: 0,
+      lastRetrievedAt: null,
+    }));
+    return { v: 2, entries: migrated };
+  } catch {
+    return { v: 2, entries: [] };
+  }
+}
+
+function isExpired(entry: MemoryEntry, now: Date): boolean {
+  const cfg = TIER_CONFIG[entry.tier];
+  if (!cfg.decayDays) return false;
+  const age = (now.getTime() - new Date(entry.createdAt).getTime()) / 86_400_000;
+  return age > cfg.decayDays;
+}
+
+function scoreEntry(entry: MemoryEntry): number {
+  const cfg = TIER_CONFIG[entry.tier];
+  return cfg.weight + entry.retrievalCount * 2;
+}
+
+function consolidateIfNeeded(store: MemoryStore, now: Date): MemoryStore {
+  const active = store.entries.filter((e) => !isExpired(e, now));
+  if (active.length <= 150) return { ...store, entries: active };
+
+  // Protect committed decisions (T1) and session milestones (T3)
+  const protected_ = active.filter((e) => TIER_CONFIG[e.tier].protect);
+  const routine = active.filter((e) => !TIER_CONFIG[e.tier].protect);
+
+  // Keep top-scored routine entries to stay under 120 non-protected
+  const sorted = routine.sort((a, b) => scoreEntry(b) - scoreEntry(a));
+  const kept = sorted.slice(0, 80);
+
+  // Summarize the rest into one T3 episodic entry
+  if (sorted.length > 80) {
+    const dropped = sorted.slice(80);
+    const summary: MemoryEntry = {
+      tier: 3,
+      text: `Consolidated ${dropped.length} routine memories from earlier sessions.`,
+      createdAt: now.toISOString(),
+      retrievalCount: 0,
+      lastRetrievedAt: null,
+    };
+    return { v: 2, entries: [...protected_, ...kept, summary] };
+  }
+
+  return { v: 2, entries: [...protected_, ...kept] };
+}
+
+function buildMemoryContext(store: MemoryStore): { text: string; retrievedIds: number[] } {
+  const now = new Date();
+  const active = store.entries
+    .map((e, i) => ({ e, i, score: isExpired(e, now) ? -1 : scoreEntry(e) }))
+    .filter(({ score }) => score >= 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (active.length === 0) return { text: "", retrievedIds: [] };
+
+  const sections: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [], 5: [] };
+  const retrievedIds: number[] = [];
+
+  for (const { e, i } of active) {
+    sections[e.tier].push(`• ${e.text}`);
+    retrievedIds.push(i);
+  }
+
+  const lines: string[] = [];
+  for (const tier of [1, 2, 3, 4, 5] as const) {
+    if (sections[tier].length === 0) continue;
+    const { label } = TIER_CONFIG[tier];
+    lines.push(`[${label}]`);
+    lines.push(...sections[tier]);
+  }
+
+  return { text: lines.join("\n"), retrievedIds };
+}
+
+function incrementRetrievals(store: MemoryStore, ids: number[], now: Date): MemoryStore {
+  const entries = store.entries.map((e, i) =>
+    ids.includes(i)
+      ? { ...e, retrievalCount: e.retrievalCount + 1, lastRetrievedAt: now.toISOString() }
+      : e
+  );
+  return { ...store, entries };
+}
+
+function appendMemoryFacts(
+  store: MemoryStore,
+  facts: Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }>,
+  now: Date
+): MemoryStore {
+  const newEntries: MemoryEntry[] = facts.map(({ tier, text }) => ({
+    tier,
+    text,
+    createdAt: now.toISOString(),
+    retrievalCount: 0,
+    lastRetrievedAt: null,
+  }));
+  return { ...store, entries: [...store.entries, ...newEntries] };
+}
+
+// ── System Prompt ─────────────────────────────────────────────────────────────
 const DEV_SYSTEM_PROMPT = `You are Atlas — a personal AI development environment for a non-technical founder.
 
 Your user works on six web apps (Compani, IntoIQ, CoinsBloom, PresentQ, SanctumIQ, Atlas) built with React, React Router, Tailwind, and Supabase. They are a flight attendant — smart and decisive, but not a programmer. They think clearly about product, but need you to translate that into code.
@@ -34,10 +175,15 @@ Stack you're optimizing for: React, React Router, Tailwind CSS, Supabase (auth +
 You may also generate UI sketches or product concept images when asked — the user uses this to think visually about their product ideas.
 
 Memory protocol:
-When you learn something durable about this project — a bug pattern, a component relationship, a decision, a tech fact specific to their setup — write it on its own line at the END of your response in this exact format:
-PROJECT_MEMORY: [one plain-English sentence]
+When you learn something durable about this project, write it at the END of your response on its own line using exactly ONE of these formats:
 
-Only use PROJECT_MEMORY when you've confirmed something that will still be true next session. Skip it for observations, questions, or things already in the project memory above. Maximum one PROJECT_MEMORY line per response.
+  MEMORY_T1: [core decision, north star, irreversible commitment — never decays]
+  MEMORY_T2: [builder style, communication pattern, how this person thinks — 180 days]
+  MEMORY_T3: [key session moment, major pivot, breakthrough — 90 days]
+  MEMORY_T4: [current project state, active sprint, recent decision — 30 days]
+  MEMORY_T5: [passing thought, exploratory idea not yet committed — 7 days]
+
+Only write a memory when you've confirmed something durable. Skip for observations or questions. Maximum one MEMORY_Tn line per response.
 
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub):
 When the user asks you to fix or build something AND a complete file is in context, output the corrected complete file(s) at the very END of your response using this EXACT format — one block per file:
@@ -58,6 +204,7 @@ Critical rules for FILE_EDIT:
 - Do NOT emit FILE_EDIT for: explanations only, debugging questions, when file is truncated, when no file is in context.
 - The FILE_EDIT blocks are invisible to the user in chat — they see a "Code ready" button instead.`;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function detectMemoryChips(content: string): { content: string; memoryChips: string[] } {
   const marker = "MEMORY_CHIPS:";
   const idx = content.lastIndexOf(marker);
@@ -73,27 +220,25 @@ function detectMemoryChips(content: string): { content: string; memoryChips: str
   return { content, memoryChips: [] };
 }
 
-function extractProjectMemoryLines(content: string): { content: string; newFacts: string[] } {
+function extractMemoryLines(content: string): {
+  content: string;
+  newFacts: Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }>;
+} {
   const lines = content.split("\n");
-  const newFacts: string[] = [];
+  const newFacts: Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }> = [];
   const kept: string[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed.startsWith("PROJECT_MEMORY:")) {
-      const fact = trimmed.slice("PROJECT_MEMORY:".length).trim();
-      if (fact) newFacts.push(fact);
+    const match = trimmed.match(MEMORY_TAG_RE);
+    if (match) {
+      const tier = parseInt(match[1], 10) as 1 | 2 | 3 | 4 | 5;
+      const text = match[2].trim();
+      if (text) newFacts.push({ tier, text });
     } else {
       kept.push(line);
     }
   }
   return { content: kept.join("\n").trim(), newFacts };
-}
-
-function appendToMemory(existing: string | null, newFacts: string[]): string {
-  const now = new Date().toISOString().slice(0, 10);
-  const lines = newFacts.map((f) => `[${now}] ${f}`);
-  if (!existing || !existing.trim()) return lines.join("\n");
-  return existing.trim() + "\n" + lines.join("\n");
 }
 
 interface FileEdit {
@@ -108,8 +253,6 @@ function extractAllFileEdits(content: string): { visibleContent: string; fileEdi
   const contentMarker = "FILE_EDIT_CONTENT";
 
   const fileEdits: FileEdit[] = [];
-
-  // Everything before the first FILE_EDIT_START is the visible explanation
   const firstStart = content.indexOf(startMarker);
   const visibleContent = firstStart !== -1 ? content.slice(0, firstStart).trim() : content;
 
@@ -158,6 +301,7 @@ function matchEntryChips(
     .slice(0, 5);
 }
 
+// ── Route ─────────────────────────────────────────────────────────────────────
 router.post("/chat", async (req, res): Promise<void> => {
   const body = req.body as {
     sessionId: number;
@@ -170,45 +314,82 @@ router.post("/chat", async (req, res): Promise<void> => {
     userProfile?: string;
     imageData?: { base64: string; mediaType: string };
   };
+
   if (!body.sessionId || !body.projectId || !body.message) {
     res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
     return;
   }
 
-  const { sessionId, projectId, message, mode, history = [], entries = [] } = body;
-
+  const { sessionId, projectId, message, history = [], entries = [] } = body;
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const imageData = body.imageData;
+  const now = new Date();
 
   // Load project memory from DB
-  const [project] = await db.select({ memory: projectsTable.memory }).from(projectsTable).where(eq(projectsTable.id, projectId));
-  const projectMemory = project?.memory ?? "";
+  const [project] = await db
+    .select({ memory: projectsTable.memory })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId));
+
+  // Parse 5-tier memory store
+  let store = parseMemoryStore(project?.memory ?? null);
+  store = consolidateIfNeeded(store, now);
+
+  // Build memory context + increment retrieval counts
+  const { text: memoryText, retrievedIds } = buildMemoryContext(store);
+  if (retrievedIds.length > 0) {
+    store = incrementRetrievals(store, retrievedIds, now);
+  }
 
   // Build layered system prompt
   let systemPrompt = DEV_SYSTEM_PROMPT;
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
   }
-  if (projectMemory) {
-    systemPrompt += `\n\n--- PROJECT MEMORY (what you already know about this project) ---\n${projectMemory}\n--- END PROJECT MEMORY ---`;
+  if (memoryText) {
+    systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
   }
   if (fileContext) {
     systemPrompt += `\n\n--- CODE CONTEXT ---\n${fileContext}\n--- END CODE CONTEXT ---`;
   }
 
   type TextBlock = { type: "text"; text: string };
-  type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
+  type ImageBlock = {
+    type: "image";
+    source: {
+      type: "base64";
+      media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+      data: string;
+    };
+  };
 
   const userContent: string | Array<TextBlock | ImageBlock> = imageData
     ? [
-        { type: "image", source: { type: "base64", media_type: imageData.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData.base64 } },
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: imageData.mediaType as
+              | "image/jpeg"
+              | "image/png"
+              | "image/gif"
+              | "image/webp",
+            data: imageData.base64,
+          },
+        },
         { type: "text", text: message },
       ]
     : message;
 
-  const messages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = [
-    ...(history || []).map((h: { role: string; content: string }) => ({ role: h.role as "user" | "assistant", content: h.content })),
+  const messages: Array<{
+    role: "user" | "assistant";
+    content: string | Array<TextBlock | ImageBlock>;
+  }> = [
+    ...(history || []).map((h: { role: string; content: string }) => ({
+      role: h.role as "user" | "assistant",
+      content: h.content,
+    })),
     { role: "user", content: userContent },
   ];
 
@@ -216,7 +397,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     sessionId,
     role: "user",
     content: message,
-    intentType: mode,
+    intentType: body.mode ?? null,
   });
 
   const response = await anthropic.messages.create({
@@ -226,30 +407,42 @@ router.post("/chat", async (req, res): Promise<void> => {
     messages,
   });
 
-  const rawContent = response.content[0]?.type === "text" ? response.content[0].text : "";
+  const rawContent =
+    response.content[0]?.type === "text" ? response.content[0].text : "";
 
-  // Parse in order: all FILE_EDITs → PROJECT_MEMORY → MEMORY_CHIPS
+  // Parse: FILE_EDITs → MEMORY_Tn → MEMORY_CHIPS
   const { visibleContent, fileEdits } = extractAllFileEdits(rawContent);
-  const { content: afterMemory, newFacts } = extractProjectMemoryLines(visibleContent);
+  const { content: afterMemory, newFacts } = extractMemoryLines(visibleContent);
   const { content: finalContent, memoryChips: aiMemoryChips } = detectMemoryChips(afterMemory);
 
   // Auto-match ledger entries referenced in the response
-  const entryChips = matchEntryChips(finalContent, entries as Array<{ id: number; title: string; status: string }>);
+  const entryChips = matchEntryChips(
+    finalContent,
+    entries as Array<{ id: number; title: string; status: string }>
+  );
   const allChips = [...new Set([...aiMemoryChips, ...entryChips])].slice(0, 6);
 
-  // Persist new memory facts to DB
-  if (newFacts.length > 0) {
-    const updatedMemory = appendToMemory(project?.memory ?? null, newFacts);
-    await db.update(projectsTable).set({ memory: updatedMemory }).where(eq(projectsTable.id, projectId));
+  // Persist updated memory to DB
+  if (newFacts.length > 0 || retrievedIds.length > 0) {
+    const updatedStore = newFacts.length > 0
+      ? appendMemoryFacts(store, newFacts, now)
+      : store;
+    await db
+      .update(projectsTable)
+      .set({ memory: JSON.stringify(updatedStore) })
+      .where(eq(projectsTable.id, projectId));
   }
 
-  const [savedMsg] = await db.insert(chatMessagesTable).values({
-    sessionId,
-    role: "assistant",
-    content: finalContent,
-    intentType: null,
-    catchPayload: undefined,
-  }).returning();
+  const [savedMsg] = await db
+    .insert(chatMessagesTable)
+    .values({
+      sessionId,
+      role: "assistant",
+      content: finalContent,
+      intentType: null,
+      catchPayload: undefined,
+    })
+    .returning();
 
   await db
     .update(sessionsTable)
@@ -264,7 +457,6 @@ router.post("/chat", async (req, res): Promise<void> => {
     messageId: savedMsg.id,
     memoryUpdated: newFacts.length > 0,
     fileEdits: fileEdits.length > 0 ? fileEdits : undefined,
-    // Keep backward-compat single fileEdit field
     fileEdit: fileEdits.length > 0 ? fileEdits[0] : undefined,
   });
 });
