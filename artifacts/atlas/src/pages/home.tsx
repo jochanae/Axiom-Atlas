@@ -163,6 +163,9 @@ function SettingsBtn() {
 // ── UserAvatar ───────────────────────────────────────────────────────────────
 function UserAvatar() {
   const [hov, setHov] = useState(false);
+  const photoUrl = (() => {
+    try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).photoUrl ?? "" : ""; } catch { return ""; }
+  })();
   return (
     <button
       title="Account"
@@ -172,7 +175,7 @@ function UserAvatar() {
         width: 30,
         height: 30,
         borderRadius: "50%",
-        background: hov ? "rgba(201,162,76,0.18)" : "rgba(201,162,76,0.08)",
+        background: photoUrl ? "transparent" : hov ? "rgba(201,162,76,0.18)" : "rgba(201,162,76,0.08)",
         border: `1px solid ${hov ? "rgba(201,162,76,0.42)" : "rgba(201,162,76,0.2)"}`,
         display: "flex",
         alignItems: "center",
@@ -180,12 +183,18 @@ function UserAvatar() {
         cursor: "pointer",
         transition: "all 160ms ease",
         flexShrink: 0,
+        overflow: "hidden",
+        padding: 0,
       }}
     >
-      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
-        <circle cx="10" cy="7.5" r="3.2" stroke="#C9A24C" strokeWidth="1.2" />
-        <path d="M3 18.5c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#C9A24C" strokeWidth="1.2" strokeLinecap="round" />
-      </svg>
+      {photoUrl ? (
+        <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
+          <circle cx="10" cy="7.5" r="3.2" stroke="#C9A24C" strokeWidth="1.2" />
+          <path d="M3 18.5c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#C9A24C" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      )}
     </button>
   );
 }
@@ -429,7 +438,28 @@ export default function Home() {
           flexShrink: 0,
         }}
       >
-        <AtlasLogo />
+        {/* Left side: layout icon + logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            title="Navigation"
+            style={{
+              width: 28, height: 28, borderRadius: 7,
+              background: "transparent", border: "none",
+              color: "rgba(120,113,108,0.45)", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "color 160ms ease", flexShrink: 0,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
+          >
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+              <rect x="2" y="2" width="16" height="16" rx="2.5" />
+              <path d="M7 2v16" />
+              <path d="M10 7h5M10 10h5M10 13h4" />
+            </svg>
+          </button>
+          <AtlasLogo />
+        </div>
 
         {/* Right side: timestamp + settings + avatar */}
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -446,7 +476,7 @@ export default function Home() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "60px 24px 80px",
+          padding: "60px 24px 144px",
         }}
       >
         <div style={{ width: "100%", maxWidth: 560 }}>

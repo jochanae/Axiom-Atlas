@@ -86,6 +86,7 @@ interface UserProfile {
   stack: string;
   projects: string;
   notes: string;
+  photoUrl?: string;
 }
 
 function loadProfile(): UserProfile {
@@ -93,7 +94,7 @@ function loadProfile(): UserProfile {
     const raw = localStorage.getItem("atlas-user-profile");
     if (raw) return JSON.parse(raw);
   } catch {}
-  return { name: "", stack: "React, React Router, Tailwind CSS, Supabase", projects: "Compani, IntoIQ, CoinsBloom, PresentQ, SanctumIQ, Atlas", notes: "" };
+  return { name: "", stack: "React, React Router, Tailwind CSS, Supabase", projects: "Compani, IntoIQ, CoinsBloom, PresentQ, SanctumIQ, Atlas", notes: "", photoUrl: "" };
 }
 
 function saveProfile(p: UserProfile) {
@@ -3110,6 +3111,34 @@ function UserProfilePanel({ onClose }: { onClose: () => void }) {
             This gets injected into every conversation so Atlas always knows who you are and what you're building.
           </div>
           {field("Your name", "name", "e.g. Jane")}
+          {/* Photo URL */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>
+              Photo URL
+            </label>
+            {profile.photoUrl && (
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 6 }}>
+                <img src={profile.photoUrl} alt="" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(201,162,76,0.25)" }} />
+              </div>
+            )}
+            <input
+              type="text"
+              value={profile.photoUrl ?? ""}
+              onChange={(e) => setProfile((p) => ({ ...p, photoUrl: e.target.value }))}
+              placeholder="Paste your Google profile photo URL"
+              style={{
+                width: "100%", padding: "8px 10px", borderRadius: 6,
+                background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)",
+                color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
+                outline: "none", boxSizing: "border-box",
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
+              onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+            />
+            <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.35, lineHeight: 1.5 }}>
+              Right-click your Google photo → Copy image address
+            </div>
+          </div>
           {field("Stack", "stack", "React, Tailwind, Supabase…")}
           {field("Projects", "projects", "Compani, IntoIQ, CoinsBloom…")}
           {field("Notes for Atlas", "notes", "Anything you want it to always know…", true)}
@@ -3387,6 +3416,11 @@ export default function Workspace() {
   const createSession = useCreateSession();
   const createEntry = useCreateEntry();
 
+  // Persist last visited project for footer LEDGER shortcut
+  useEffect(() => {
+    if (id) { try { localStorage.setItem("atlas-last-project", String(id)); } catch {} }
+  }, [id]);
+
   useEffect(() => {
     if (sessionsLoading) return;
     if (sessions && sessions.length > 0) {
@@ -3405,7 +3439,7 @@ export default function Workspace() {
   }, [sessions, sessionsLoading, id]);
 
   const doSend = useCallback(
-    (text: string, sid: number, currentMessages: ChatMessage[], ctx?: string | null) => {
+    (text: string, sid: number, currentMessages: ChatMessage[], ctx?: string | null, imageData?: { base64: string; mediaType: string }) => {
       const userMsg: ChatMessage = { role: "user", content: text, sentAt: new Date().toISOString() };
       const history = currentMessages.map((m) => ({ role: m.role, content: m.content }));
       const ledgerEntries = (entries || []).map((e: Entry) => ({ id: e.id, title: e.title, status: e.status }));
@@ -3425,6 +3459,7 @@ export default function Workspace() {
         entries: ledgerEntries,
         ...(activeCtx ? { fileContext: activeCtx } : {}),
         ...(userProfileStr ? { userProfile: userProfileStr } : {}),
+        ...(imageData ? { imageData } : {}),
       };
 
       fetch("/api/chat", {
@@ -3509,12 +3544,25 @@ export default function Workspace() {
   const handleSend = () => {
     const text = input.trim();
     if (!text || !sessionId || chatPending) return;
-    const messageText = attachedFile ? `${text}\n[Attached: ${attachedFile.name}]` : text;
     const current = messages;
+    const file = attachedFile;
     setInput("");
     setAttachedFile(null);
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
-    doSend(messageText, sessionId, current);
+
+    if (file && file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(",")[1];
+        doSend(text, sessionId, current, undefined, { base64, mediaType: file.type });
+      };
+      reader.onerror = () => doSend(text, sessionId, current);
+      reader.readAsDataURL(file);
+    } else {
+      const messageText = file ? `${text}\n[Attached: ${file.name}]` : text;
+      doSend(messageText, sessionId, current);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -3692,17 +3740,22 @@ export default function Workspace() {
             title="Your profile"
             style={{
               width: 28, height: 28, borderRadius: "50%",
-              background: "rgba(201,162,76,0.1)",
+              background: loadProfile().photoUrl ? "transparent" : "rgba(201,162,76,0.1)",
               border: "1px solid rgba(201,162,76,0.2)",
               color: "var(--atlas-gold)", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 600,
               flexShrink: 0, transition: "all 160ms ease",
+              overflow: "hidden", padding: 0,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.18)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.1)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.2)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.2)"; }}
           >
-            {(() => { const n = loadProfile().name; return n ? n[0].toUpperCase() : "P"; })()}
+            {(() => {
+              const p = loadProfile();
+              if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
+              return p.name ? p.name[0].toUpperCase() : "P";
+            })()}
           </button>
         </div>
       </div>
@@ -3820,6 +3873,7 @@ export default function Workspace() {
             <input
               ref={fileInputRef}
               type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.txt,.md,.csv,.json,.js,.ts,.tsx,.jsx"
               style={{ display: "none" }}
               onChange={(e) => {
                 const file = e.target.files?.[0] ?? null;
