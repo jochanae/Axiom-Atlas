@@ -24,6 +24,12 @@ interface CatchPayload {
   leadSentence: string;
 }
 
+interface FileEdit {
+  path: string;
+  language: string;
+  content: string;
+}
+
 interface ChatMessage {
   id?: number;
   role: "user" | "assistant";
@@ -31,6 +37,13 @@ interface ChatMessage {
   intentType?: string | null;
   catchPayload?: CatchPayload | null;
   catchResolved?: boolean;
+  fileEdit?: FileEdit;
+}
+
+interface LinkedRepo {
+  fullName: string;
+  defaultBranch: string;
+  name: string;
 }
 
 type RightTab = "ledger" | "files" | "preview" | "memory";
@@ -404,10 +417,348 @@ function UserBubble({ content }: { content: string }) {
   );
 }
 
+// ── GitHubPushModal ───────────────────────────────────────────────────────────
+function GitHubPushModal({
+  fileEdit,
+  linkedRepo,
+  projectId,
+  onClose,
+}: {
+  fileEdit: FileEdit;
+  linkedRepo: LinkedRepo | null;
+  projectId: number;
+  onClose: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const filename = fileEdit.path.split("/").pop() ?? fileEdit.path;
+  const lineCount = fileEdit.content.split("\n").length;
+
+  const [useNewBranch, setUseNewBranch] = useState(true);
+  const [branchName, setBranchName] = useState(`atlas/fix-${today}`);
+  const [commitMsg, setCommitMsg] = useState(`Atlas: update ${filename}`);
+  const [pushing, setPushing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ commitUrl: string; branch: string } | null>(null);
+  const [showCode, setShowCode] = useState(false);
+
+  const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
+
+  const handlePush = async () => {
+    if (!linkedRepo || !token) {
+      setError("No linked repo or GitHub token found. Open the Files tab and link a repo first.");
+      return;
+    }
+    setPushing(true);
+    setError(null);
+    try {
+      const targetBranch = useNewBranch ? branchName : linkedRepo.defaultBranch;
+
+      // Create new branch if needed
+      if (useNewBranch) {
+        const branchRes = await fetch("/api/github/branch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-github-token": token },
+          body: JSON.stringify({ repo: linkedRepo.fullName, branch: branchName, baseBranch: linkedRepo.defaultBranch }),
+        });
+        if (!branchRes.ok) {
+          const d = await branchRes.json().catch(() => ({})) as any;
+          throw new Error(d.error || `Branch creation failed: HTTP ${branchRes.status}`);
+        }
+      }
+
+      // Commit the file
+      const commitRes = await fetch("/api/github/commit", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-github-token": token },
+        body: JSON.stringify({
+          repo: linkedRepo.fullName,
+          branch: targetBranch,
+          path: fileEdit.path,
+          content: fileEdit.content,
+          message: commitMsg,
+        }),
+      });
+      if (!commitRes.ok) {
+        const d = await commitRes.json().catch(() => ({})) as any;
+        throw new Error(d.error || `Commit failed: HTTP ${commitRes.status}`);
+      }
+      const commitData = await commitRes.json() as { commitUrl: string; branch: string };
+      setSuccess({ commitUrl: commitData.commitUrl, branch: targetBranch });
+    } catch (e: any) {
+      setError(e.message ?? "Push failed");
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 1000,
+        background: "rgba(0,0,0,0.72)", backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "20px 16px",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        style={{
+          width: "100%", maxWidth: 560,
+          background: "var(--atlas-surface)",
+          border: "1px solid var(--atlas-border)",
+          borderRadius: 12,
+          boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(201,162,76,0.08)",
+          display: "flex", flexDirection: "column",
+          maxHeight: "90vh", overflow: "hidden",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 7,
+              background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <path d="M8 1C4.13 1 1 4.13 1 8c0 3.09 2 5.71 4.78 6.64.35.06.48-.15.48-.34v-1.2c-1.94.42-2.35-.94-2.35-.94-.32-.81-.78-1.03-.78-1.03-.64-.43.05-.42.05-.42.7.05 1.07.72 1.07.72.62 1.07 1.63.76 2.03.58.06-.45.24-.76.44-.93-1.55-.18-3.18-.77-3.18-3.44 0-.76.27-1.38.72-1.87-.07-.18-.31-.88.07-1.84 0 0 .59-.19 1.92.72A6.6 6.6 0 018 4.82c.59 0 1.19.08 1.74.23 1.33-.9 1.92-.72 1.92-.72.38.96.14 1.66.07 1.84.45.49.72 1.11.72 1.87 0 2.68-1.63 3.26-3.19 3.44.25.22.48.64.48 1.3v1.92c0 .19.13.4.48.33C13 13.71 15 11.09 15 8c0-3.87-3.13-7-7-7z" fill="currentColor" style={{ color: "var(--atlas-gold)" }} />
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)" }}>Push to GitHub</div>
+              {linkedRepo && (
+                <div style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
+                  {linkedRepo.fullName}
+                </div>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 18, lineHeight: 1, padding: "4px 6px", opacity: 0.5 }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}
+          >×</button>
+        </div>
+
+        <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+          {success ? (
+            /* Success state */
+            <div style={{ textAlign: "center", padding: "24px 0" }}>
+              <div style={{ fontSize: 28, marginBottom: 12 }}>✓</div>
+              <div style={{ fontSize: 14, color: "var(--atlas-fg)", marginBottom: 6 }}>Pushed to <strong>{success.branch}</strong></div>
+              <a
+                href={success.commitUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  padding: "6px 14px", borderRadius: 6,
+                  background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)",
+                  color: "var(--atlas-gold)", fontSize: 12,
+                  fontFamily: "var(--app-font-mono)", textDecoration: "none",
+                  marginTop: 8,
+                }}
+              >
+                View commit on GitHub →
+              </a>
+              <div style={{ marginTop: 16 }}>
+                <button
+                  onClick={onClose}
+                  style={{
+                    padding: "6px 16px", borderRadius: 6, fontSize: 12,
+                    background: "transparent", border: "1px solid var(--atlas-border)",
+                    color: "var(--atlas-muted)", cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* File info */}
+              <div style={{
+                padding: "10px 13px", borderRadius: 7,
+                background: "rgba(0,0,0,0.25)", border: "1px solid var(--atlas-border)",
+                marginBottom: 16,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6l-5-5z" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M9 1v5h5" stroke="currentColor" strokeWidth="1.2" />
+                    </svg>
+                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-fg)" }}>
+                      {fileEdit.path}
+                    </span>
+                  </div>
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)" }}>
+                    {lineCount} lines
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowCode((v) => !v)}
+                  style={{
+                    marginTop: 8, background: "none", border: "none", cursor: "pointer",
+                    color: "var(--atlas-muted)", fontSize: 10,
+                    fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                    padding: 0, opacity: 0.6,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.6")}
+                >
+                  {showCode ? "Hide code ↑" : "Review code ↓"}
+                </button>
+                {showCode && (
+                  <pre style={{
+                    marginTop: 10, padding: "10px", borderRadius: 5,
+                    background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.04)",
+                    fontSize: 10.5, fontFamily: "var(--app-font-mono)", lineHeight: 1.6,
+                    color: "rgba(231,229,228,0.7)", overflowX: "auto",
+                    maxHeight: 220, overflowY: "auto",
+                    whiteSpace: "pre",
+                  }}>
+                    {fileEdit.content}
+                  </pre>
+                )}
+              </div>
+
+              {/* Branch option */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", marginBottom: 8 }}>
+                  TARGET BRANCH
+                </div>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <button
+                    onClick={() => setUseNewBranch(true)}
+                    style={{
+                      flex: 1, padding: "7px 10px", borderRadius: 6, fontSize: 12, cursor: "pointer",
+                      background: useNewBranch ? "rgba(201,162,76,0.1)" : "transparent",
+                      border: `1px solid ${useNewBranch ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
+                      color: useNewBranch ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                      transition: "all 160ms ease",
+                    }}
+                  >
+                    New branch (safe)
+                  </button>
+                  <button
+                    onClick={() => setUseNewBranch(false)}
+                    style={{
+                      flex: 1, padding: "7px 10px", borderRadius: 6, fontSize: 12, cursor: "pointer",
+                      background: !useNewBranch ? "rgba(201,162,76,0.1)" : "transparent",
+                      border: `1px solid ${!useNewBranch ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
+                      color: !useNewBranch ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                      transition: "all 160ms ease",
+                    }}
+                  >
+                    {linkedRepo?.defaultBranch ?? "main"} (direct)
+                  </button>
+                </div>
+                {useNewBranch && (
+                  <input
+                    value={branchName}
+                    onChange={(e) => setBranchName(e.target.value)}
+                    placeholder="branch name"
+                    style={{
+                      width: "100%", padding: "8px 11px", borderRadius: 6,
+                      background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)",
+                      color: "var(--atlas-fg)", fontSize: 12,
+                      fontFamily: "var(--app-font-mono)",
+                      outline: "none", boxSizing: "border-box",
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+                  />
+                )}
+              </div>
+
+              {/* Commit message */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", marginBottom: 8 }}>
+                  COMMIT MESSAGE
+                </div>
+                <input
+                  value={commitMsg}
+                  onChange={(e) => setCommitMsg(e.target.value)}
+                  placeholder="describe the change"
+                  style={{
+                    width: "100%", padding: "8px 11px", borderRadius: 6,
+                    background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)",
+                    color: "var(--atlas-fg)", fontSize: 12,
+                    outline: "none", boxSizing: "border-box",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+                />
+              </div>
+
+              {!linkedRepo && (
+                <div style={{
+                  padding: "9px 12px", borderRadius: 6, marginBottom: 14,
+                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+                  fontSize: 12, color: "rgba(252,165,165,0.8)",
+                }}>
+                  No repo linked. Open the Files tab and link a GitHub repo to this project first.
+                </div>
+              )}
+
+              {error && (
+                <div style={{
+                  padding: "9px 12px", borderRadius: 6, marginBottom: 14,
+                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+                  fontSize: 12, color: "rgba(252,165,165,0.8)",
+                }}>
+                  {error}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {!success && (
+          <div style={{
+            padding: "14px 20px",
+            borderTop: "1px solid var(--atlas-border)",
+            display: "flex", gap: 10, justifyContent: "flex-end",
+          }}>
+            <button
+              onClick={onClose}
+              style={{
+                padding: "8px 16px", borderRadius: 6, fontSize: 12,
+                background: "transparent", border: "1px solid var(--atlas-border)",
+                color: "var(--atlas-muted)", cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handlePush}
+              disabled={pushing || !linkedRepo}
+              style={{
+                padding: "8px 18px", borderRadius: 6, fontSize: 12, fontWeight: 600,
+                background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)",
+                color: "var(--atlas-bg)", border: "none",
+                cursor: pushing || !linkedRepo ? "not-allowed" : "pointer",
+                opacity: pushing || !linkedRepo ? 0.5 : 1,
+                transition: "opacity 160ms ease",
+              }}
+            >
+              {pushing ? "Pushing…" : "Push to GitHub"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AssistantBubble({
   message,
   projectId,
   sessionId,
+  linkedRepo,
   onCatchProceed,
   onCatchAdjust,
   onPark,
@@ -416,6 +767,7 @@ function AssistantBubble({
   message: ChatMessage;
   projectId: number;
   sessionId: number;
+  linkedRepo: LinkedRepo | null;
   onCatchProceed: () => void;
   onCatchAdjust: () => void;
   onPark: (content: string) => void;
@@ -424,6 +776,7 @@ function AssistantBubble({
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
+  const [showPushModal, setShowPushModal] = useState(false);
 
   return (
     <div
@@ -445,6 +798,65 @@ function AssistantBubble({
         <div style={{ fontSize: 14, lineHeight: 1.78, color: "var(--atlas-fg)", opacity: 0.9, whiteSpace: "pre-wrap" }}>
           {message.content}
         </div>
+
+        {/* Code ready card */}
+        {message.fileEdit && (
+          <div
+            style={{
+              marginTop: 12, padding: "11px 14px",
+              borderRadius: 8,
+              background: "rgba(201,162,76,0.05)",
+              border: "1px solid rgba(201,162,76,0.2)",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: 6, flexShrink: 0,
+                background: "rgba(201,162,76,0.12)", border: "1px solid rgba(201,162,76,0.25)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 2h8l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="var(--atlas-gold)" strokeWidth="1.2" />
+                  <path d="M11 2v4h4" stroke="var(--atlas-gold)" strokeWidth="1.2" />
+                  <path d="M5 8.5h6M5 11h4" stroke="var(--atlas-gold)" strokeWidth="1.1" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-gold)", marginBottom: 2 }}>
+                  Code ready
+                </div>
+                <div style={{
+                  fontFamily: "var(--app-font-mono)", fontSize: 10,
+                  color: "var(--atlas-muted)",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  {message.fileEdit.path}
+                  <span style={{ opacity: 0.5, marginLeft: 6 }}>
+                    · {message.fileEdit.content.split("\n").length} lines
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowPushModal(true)}
+              style={{
+                flexShrink: 0,
+                padding: "6px 13px", borderRadius: 5, fontSize: 11, fontWeight: 600,
+                fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)",
+                color: "var(--atlas-bg)", border: "none", cursor: "pointer",
+                boxShadow: "0 0 12px -4px color-mix(in oklab, var(--atlas-gold) 50%, transparent)",
+                transition: "opacity 160ms ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            >
+              Review &amp; Push →
+            </button>
+          </div>
+        )}
+
         {message.catchPayload && !message.catchResolved && (
           <DecisionCatchCard
             payload={message.catchPayload}
@@ -503,6 +915,15 @@ function AssistantBubble({
           </button>
         </div>
       </div>
+
+      {showPushModal && message.fileEdit && (
+        <GitHubPushModal
+          fileEdit={message.fileEdit}
+          linkedRepo={linkedRepo}
+          projectId={projectId}
+          onClose={() => setShowPushModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1982,6 +2403,12 @@ export default function Workspace() {
   const [rightFullscreen, setRightFullscreen] = useState(false);
   const [fileContext, setFileContext] = useState<string | null>(null);
   const [chatPending, setChatPending] = useState(false);
+  const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(() => {
+    try {
+      const raw = localStorage.getItem(`atlas-gh-linked-${Number(projectId)}`);
+      return raw ? JSON.parse(raw) as LinkedRepo : null;
+    } catch { return null; }
+  });
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -2047,9 +2474,11 @@ export default function Workspace() {
         .then((r) => r.json())
         .then((res) => {
           const cp = res.catchPayload as CatchPayload | null;
+          const fe = res.fileEdit as FileEdit | undefined;
           setMessages((prev) => [...prev, {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
+            ...(fe ? { fileEdit: fe } : {}),
           }]);
           if (cp) setActiveCatch(cp);
           if (res.memoryChips && res.memoryChips.length > 0) {
@@ -2321,6 +2750,7 @@ export default function Workspace() {
                   message={msg}
                   projectId={id}
                   sessionId={sessionId || 0}
+                  linkedRepo={linkedRepo}
                   onCatchProceed={() => handleCatchProceed(msg.id)}
                   onCatchAdjust={() => handleCatchAdjust(msg.id)}
                   onPark={handlePark}
