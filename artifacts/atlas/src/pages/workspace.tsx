@@ -952,10 +952,14 @@ function GhTreeNodeRow({
 }
 
 function FilesTab({
+  projectId,
   onFileContext,
 }: {
+  projectId: number;
   onFileContext: (ctx: string | null) => void;
 }) {
+  const linkedKey = `atlas-gh-linked-${projectId}`;
+
   const [tokenState, setTokenState] = useState<string | null>(() => {
     try { return localStorage.getItem("atlas-gh-token"); } catch { return null; }
   });
@@ -973,6 +977,18 @@ function FilesTab({
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [view, setView] = useState<"repos" | "tree" | "file">("repos");
+  const autoLoadedRef = useRef(false);
+
+  // Reset auto-load gate when project switches
+  useEffect(() => {
+    autoLoadedRef.current = false;
+    setSelectedRepo(null);
+    setTree([]);
+    setSelectedPath(null);
+    setFileContent(null);
+    setView("repos");
+    onFileContext(null);
+  }, [projectId]);
 
   const saveToken = (t: string) => {
     try { localStorage.setItem("atlas-gh-token", t); } catch {}
@@ -1027,6 +1043,39 @@ function FilesTab({
       setTreeLoading(false);
     }
   }, [ghFetch, onFileContext]);
+
+  // Auto-load linked repo once repos are available
+  useEffect(() => {
+    if (autoLoadedRef.current || repos.length === 0) return;
+    try {
+      const saved = localStorage.getItem(linkedKey);
+      if (!saved) return;
+      const savedRepo = JSON.parse(saved) as GhRepo;
+      const match = repos.find(r => r.fullName === savedRepo.fullName);
+      if (match) {
+        autoLoadedRef.current = true;
+        loadTree(match);
+      }
+    } catch {}
+  }, [repos, linkedKey, loadTree]);
+
+  // Link a repo to this project and load its tree
+  const pickRepo = useCallback((repo: GhRepo) => {
+    try { localStorage.setItem(linkedKey, JSON.stringify(repo)); } catch {}
+    loadTree(repo);
+  }, [linkedKey, loadTree]);
+
+  // Unlink the repo from this project
+  const unlinkRepo = useCallback(() => {
+    try { localStorage.removeItem(linkedKey); } catch {}
+    autoLoadedRef.current = false;
+    setSelectedRepo(null);
+    setTree([]);
+    setSelectedPath(null);
+    setFileContent(null);
+    setView("repos");
+    onFileContext(null);
+  }, [linkedKey, onFileContext]);
 
   const loadFile = useCallback(async (path: string) => {
     if (!selectedRepo) return;
@@ -1114,41 +1163,67 @@ function FilesTab({
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Header breadcrumb */}
-      <div style={{ padding: "7px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ padding: "7px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <button
           onClick={() => { setView("repos"); setSelectedRepo(null); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
-          style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "repos" ? "var(--atlas-fg)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "repos" ? 0.8 : 0.45 }}
+          style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "repos" ? "var(--atlas-fg)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "repos" ? 0.8 : 0.45, flexShrink: 0 }}
         >
           repos
         </button>
         {selectedRepo && (
           <>
-            <span style={{ color: "var(--atlas-border)", fontSize: 10 }}>/</span>
+            <span style={{ color: "var(--atlas-border)", fontSize: 10, flexShrink: 0 }}>/</span>
             <button
               onClick={() => { setView("tree"); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
-              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "tree" ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "tree" ? 1 : 0.5 }}
+              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "tree" ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "tree" ? 1 : 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 }}
             >
               {selectedRepo.name}
             </button>
+            {/* Linked badge + unlink */}
+            <span
+              title="Linked to this project — auto-loads next time"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 3,
+                padding: "1px 5px", borderRadius: 3, flexShrink: 0,
+                background: "rgba(52,211,153,0.07)",
+                border: "0.5px solid rgba(52,211,153,0.2)",
+              }}
+            >
+              <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#34d399", flexShrink: 0 }} />
+              <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "#34d399" }}>linked</span>
+            </span>
           </>
         )}
         {selectedPath && (
           <>
-            <span style={{ color: "var(--atlas-border)", fontSize: 10 }}>/</span>
-            <span style={{ color: "var(--atlas-gold)", fontSize: 10, fontFamily: "var(--app-font-mono)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 100 }}>
+            <span style={{ color: "var(--atlas-border)", fontSize: 10, flexShrink: 0 }}>/</span>
+            <span style={{ color: "var(--atlas-gold)", fontSize: 10, fontFamily: "var(--app-font-mono)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 80 }}>
               {selectedPath.split("/").pop()}
             </span>
           </>
         )}
-        <button
-          onClick={clearToken}
-          title="Disconnect GitHub"
-          style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1, opacity: 0.3, padding: "0 2px", flexShrink: 0 }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.3")}
-        >
-          ×
-        </button>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          {selectedRepo && (
+            <button
+              onClick={unlinkRepo}
+              title="Unlink repo from this project"
+              style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", opacity: 0.35, padding: "2px 4px" }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.35")}
+            >
+              unlink
+            </button>
+          )}
+          <button
+            onClick={clearToken}
+            title="Disconnect GitHub"
+            style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1, opacity: 0.3, padding: "0 2px" }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.3")}
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       {/* Repos list */}
@@ -1164,38 +1239,54 @@ function FilesTab({
               {reposError}
             </div>
           )}
-          {!reposLoading && repos.map((repo) => (
-            <button
-              key={repo.id}
-              onClick={() => loadTree(repo)}
-              style={{
-                width: "100%", display: "flex", flexDirection: "column", gap: 3,
-                padding: "8px 10px", borderRadius: 5, marginBottom: 2,
-                background: "transparent", border: "1px solid transparent",
-                cursor: "pointer", textAlign: "left",
-                transition: "all 120ms ease",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.04)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.12)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 12, color: "rgba(231,229,228,0.75)", fontFamily: "var(--app-font-sans)", fontWeight: 500 }}>{repo.name}</span>
-                {repo.private && (
-                  <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 3, background: "rgba(120,113,108,0.12)", color: "var(--atlas-muted)", border: "0.5px solid rgba(120,113,108,0.2)" }}>
-                    private
-                  </span>
-                )}
-                {repo.language && (
-                  <span style={{ fontSize: 8.5, color: "var(--atlas-muted)", marginLeft: "auto", fontFamily: "var(--app-font-mono)", opacity: 0.55 }}>{repo.language}</span>
-                )}
-              </div>
-              {repo.description && (
-                <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.55, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {repo.description}
+          {!reposLoading && repos.map((repo) => {
+            let linkedFullName: string | null = null;
+            try {
+              const saved = localStorage.getItem(linkedKey);
+              linkedFullName = saved ? JSON.parse(saved).fullName : null;
+            } catch {}
+            const isLinked = linkedFullName === repo.fullName;
+            return (
+              <button
+                key={repo.id}
+                onClick={() => pickRepo(repo)}
+                style={{
+                  width: "100%", display: "flex", flexDirection: "column", gap: 3,
+                  padding: "8px 10px", borderRadius: 5, marginBottom: 2,
+                  background: isLinked ? "rgba(52,211,153,0.04)" : "transparent",
+                  border: `1px solid ${isLinked ? "rgba(52,211,153,0.15)" : "transparent"}`,
+                  cursor: "pointer", textAlign: "left",
+                  transition: "all 120ms ease",
+                }}
+                onMouseEnter={(e) => {
+                  if (!isLinked) { e.currentTarget.style.background = "rgba(201,162,76,0.04)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.12)"; }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isLinked) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {isLinked && (
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", flexShrink: 0 }} />
+                  )}
+                  <span style={{ fontSize: 12, color: isLinked ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.75)", fontFamily: "var(--app-font-sans)", fontWeight: isLinked ? 600 : 500 }}>{repo.name}</span>
+                  {repo.private && (
+                    <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 3, background: "rgba(120,113,108,0.12)", color: "var(--atlas-muted)", border: "0.5px solid rgba(120,113,108,0.2)" }}>
+                      private
+                    </span>
+                  )}
+                  {repo.language && (
+                    <span style={{ fontSize: 8.5, color: "var(--atlas-muted)", marginLeft: "auto", fontFamily: "var(--app-font-mono)", opacity: 0.55 }}>{repo.language}</span>
+                  )}
                 </div>
-              )}
-            </button>
-          ))}
+                {repo.description && (
+                  <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.55, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: isLinked ? 11 : 0 }}>
+                    {repo.description}
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -1279,6 +1370,14 @@ function PreviewTab({ projectId }: { projectId: number }) {
     try { return localStorage.getItem(storageKey) || ""; } catch { return ""; }
   });
   const [iframeError, setIframeError] = useState(false);
+
+  // Re-sync when project changes (in case component stays mounted)
+  useEffect(() => {
+    const saved = localStorage.getItem(`atlas-preview-${projectId}`) || "";
+    setUrlInput(saved);
+    setLiveUrl(saved);
+    setIframeError(false);
+  }, [projectId]);
 
   const handleGo = () => {
     const raw = urlInput.trim();
@@ -1390,7 +1489,7 @@ function PreviewTab({ projectId }: { projectId: number }) {
             <circle cx="10" cy="7.5" r="1" fill="var(--atlas-fg)" />
           </svg>
           <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.45, textAlign: "center", lineHeight: 1.65 }}>
-            Enter a URL above to preview<br />your product, site, or reference.
+            Enter a deployment URL above.<br />It's saved per project and reloads<br />automatically next time.
           </div>
         </div>
       )}
@@ -1567,7 +1666,7 @@ function RightPanel({
       {tab === "ledger" && (
         <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} />
       )}
-      {tab === "files" && <FilesTab onFileContext={onFileContext} />}
+      {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
     </div>
   );
