@@ -1,97 +1,520 @@
-import { useState } from "react";
-import { Link, useLocation } from "wouter";
-import { useListProjects, useCreateSession, useCreateProject } from "@workspace/api-client-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useState, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
+import {
+  useListProjects,
+  useCreateProject,
+  getListProjectsQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import type { Project } from "@workspace/api-client-react";
 
-const MODES = ["Think", "Plan", "Build", "Explore", "Decide", "Audit"];
+const PLACEHOLDERS = [
+  "What are we actually trying to solve here…",
+  "What decision do you keep circling back to…",
+  "Where did the last session leave things…",
+  "What's the constraint you haven't named yet…",
+  "What would have to be true for this to work…",
+];
+
+function InlineTimestamp() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  const day = days[now.getDay()];
+  const mon = months[now.getMonth()];
+  const date = now.getDate();
+  let h = now.getHours();
+  const m = now.getMinutes().toString().padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return (
+    <div
+      aria-hidden
+      style={{
+        fontFamily: "var(--app-font-mono)",
+        fontSize: 10,
+        letterSpacing: "0.18em",
+        color: "rgba(120,113,108,0.5)",
+        userSelect: "none",
+        textTransform: "uppercase",
+      }}
+    >
+      {day} {mon} {date} · {h}:{m} {ampm}
+    </div>
+  );
+}
+
+function AtlasLogo() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
+        <circle cx="10" cy="10" r="8" stroke="#C9A24C" strokeWidth="1.2" />
+        <circle cx="10" cy="10" r="3.2" stroke="#C9A24C" strokeWidth="0.9" />
+        <line x1="10" y1="2" x2="10" y2="18" stroke="#C9A24C" strokeWidth="0.7" strokeDasharray="1.8 2.4" />
+        <line x1="2" y1="10" x2="18" y2="10" stroke="#C9A24C" strokeWidth="0.7" strokeDasharray="1.8 2.4" />
+      </svg>
+      <span
+        style={{
+          fontFamily: "var(--app-font-sans)",
+          fontSize: 13,
+          fontWeight: 500,
+          letterSpacing: "0.14em",
+          color: "var(--atlas-fg)",
+          textTransform: "uppercase",
+          opacity: 0.88,
+        }}
+      >
+        Atlas
+      </span>
+    </div>
+  );
+}
+
+function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => void }) {
+  const [hov, setHov] = useState(false);
+  const date = new Date(project.createdAt).toLocaleDateString("en-US", {
+    month: "short", day: "numeric"
+  });
+  return (
+    <button
+      onClick={onSelect}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: "13px 16px",
+        borderRadius: 10,
+        background: hov ? "rgba(201,162,76,0.04)" : "rgba(28,25,23,0.55)",
+        border: `1px solid ${hov ? "rgba(201,162,76,0.28)" : "rgba(37,34,32,0.9)"}`,
+        cursor: "pointer",
+        transition: "all 180ms var(--ease-cinematic)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+      }}
+    >
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div
+          style={{
+            fontSize: 13,
+            fontWeight: 500,
+            color: hov ? "var(--atlas-fg)" : "rgba(231,229,228,0.78)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            marginBottom: project.description ? 3 : 0,
+            transition: "color 180ms ease",
+          }}
+        >
+          {project.name}
+        </div>
+        {project.description && (
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--atlas-muted)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              opacity: 0.75,
+            }}
+          >
+            {project.description}
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        <span
+          style={{
+            fontFamily: "var(--app-font-mono)",
+            fontSize: 9.5,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "rgba(120,113,108,0.5)",
+          }}
+        >
+          {date}
+        </span>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" opacity={hov ? 0.5 : 0.2} style={{ transition: "opacity 180ms ease" }}>
+          <path d="M4.5 2.5L8.5 6L4.5 9.5" stroke="var(--atlas-gold)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+    </button>
+  );
+}
 
 export default function Home() {
-  const [activeMode, setActiveMode] = useState("Think");
-  const [query, setQuery] = useState("");
+  const [input, setInput] = useState("");
+  const [placeholderIdx, setPlaceholderIdx] = useState(0);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [showNewProject, setShowNewProject] = useState(false);
   const [, setLocation] = useLocation();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const queryClient = useQueryClient();
 
-  const { data: projects } = useListProjects();
-  const createSession = useCreateSession();
+  const { data: projects, isLoading } = useListProjects();
   const createProject = useCreateProject();
 
-  const handleStart = () => {
-    if (!query.trim()) return;
-    
-    // Auto-create a default project if none exists just to keep the flow smooth
-    if (!projects || projects.length === 0) {
-      createProject.mutate({ data: { name: "Default Project" } }, {
-        onSuccess: (p) => {
-          createSession.mutate({ projectId: p.id, data: { title: query.slice(0, 30), mode: activeMode } }, {
-            onSuccess: (s) => setLocation(`/project/${p.id}`)
-          });
-        }
-      });
+  useEffect(() => {
+    const id = setInterval(() => setPlaceholderIdx((i) => (i + 1) % PLACEHOLDERS.length), 4200);
+    return () => clearInterval(id);
+  }, []);
+
+  const navigateToProject = (projectId: number) => {
+    if (input.trim()) {
+      sessionStorage.setItem(`atlas-initial-${projectId}`, input.trim());
+    }
+    setLocation(`/project/${projectId}`);
+  };
+
+  const handleSubmit = () => {
+    const text = input.trim();
+    const firstProject = projects?.[0];
+    if (firstProject) {
+      navigateToProject(firstProject.id);
     } else {
-      const pId = projects[0].id;
-      createSession.mutate({ projectId: pId, data: { title: query.slice(0, 30), mode: activeMode } }, {
-        onSuccess: (s) => setLocation(`/project/${pId}`)
-      });
+      createProject.mutate(
+        { data: { name: "My Project" } },
+        {
+          onSuccess: (p) => {
+            queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+            navigateToProject(p.id);
+          },
+        }
+      );
     }
   };
 
+  const handleNewProject = () => {
+    const name = newProjectName.trim() || "New Project";
+    createProject.mutate(
+      { data: { name } },
+      {
+        onSuccess: (p) => {
+          queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+          setShowNewProject(false);
+          setNewProjectName("");
+          setLocation(`/project/${p.id}`);
+        },
+      }
+    );
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (input.trim()) handleSubmit();
+    }
+  };
+
+  const autoResize = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  };
+
+  const hasInput = input.trim().length > 0;
+  const loading = createProject.isPending;
+
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <div className="max-w-2xl w-full space-y-8">
-        <header className="flex justify-between items-center mb-16">
-          <div className="text-xl font-bold tracking-tight text-primary">ATLAS</div>
-          <Link href="/projects" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-            Projects
-          </Link>
-        </header>
+    <div
+      style={{
+        height: "100vh",
+        background: "var(--atlas-bg)",
+        display: "flex",
+        flexDirection: "column",
+        overflowY: "auto",
+        overflowX: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          position: "sticky",
+          top: 0,
+          height: 50,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 24px",
+          borderBottom: "1px solid var(--atlas-glass-border)",
+          background: "rgba(12,10,9,0.88)",
+          backdropFilter: "blur(16px)",
+          zIndex: 10,
+          flexShrink: 0,
+        }}
+      >
+        <AtlasLogo />
+        <InlineTimestamp />
+      </div>
 
-        <div className="space-y-6">
-          <div className="flex space-x-2 border-b border-border pb-2">
-            {MODES.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setActiveMode(mode)}
-                className={`px-4 py-1 text-sm font-medium transition-colors ${
-                  activeMode === mode ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
+      {/* Main content */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "60px 24px 80px",
+        }}
+      >
+        <div style={{ width: "100%", maxWidth: 560 }}>
 
-          <div className="relative">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleStart()}
-              placeholder={`What do we need to ${activeMode.toLowerCase()}?`}
-              className="text-xl py-6 bg-card border-none ring-1 ring-border focus-visible:ring-primary rounded-sm placeholder:text-muted-foreground"
-            />
-            <Button 
-              onClick={handleStart}
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-sm"
-              disabled={createSession.isPending || !query.trim()}
+          {/* Greeting */}
+          <div style={{ textAlign: "center", marginBottom: 44 }}>
+            <h1
+              style={{
+                fontSize: 30,
+                fontWeight: 300,
+                color: "var(--atlas-fg)",
+                letterSpacing: "-0.025em",
+                lineHeight: 1.2,
+                opacity: 0.85,
+                margin: "0 0 10px",
+              }}
             >
-              Engage
-            </Button>
+              Where were we.
+            </h1>
+            <p
+              style={{
+                fontSize: 13,
+                color: "var(--atlas-muted)",
+                opacity: 0.55,
+                margin: 0,
+                fontStyle: "italic",
+              }}
+            >
+              Your strategic thinking partner.
+            </p>
           </div>
-        </div>
 
-        <div className="mt-16 pt-8 border-t border-border/50">
-          <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-4">Recent Sessions</h2>
-          {projects && projects.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic">No past sessions. The slate is clean.</p>
-          ) : (
-            <div className="grid gap-2">
-              {projects?.slice(0, 3).map(p => (
-                <Link key={p.id} href={`/project/${p.id}`} className="block p-4 bg-card hover:bg-muted/50 border border-border transition-colors rounded-sm flex justify-between items-center">
-                  <span className="font-medium">{p.name}</span>
-                  <span className="text-xs text-muted-foreground">{p.status}</span>
-                </Link>
-              ))}
+          {/* Input shell */}
+          <div className="atlas-input-shell" style={{ padding: "18px 20px" }}>
+            <div style={{ position: "relative" }}>
+              {!hasInput && (
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    right: 44,
+                    color: "var(--atlas-muted)",
+                    fontSize: 15,
+                    lineHeight: 1.55,
+                    opacity: 0.65,
+                    pointerEvents: "none",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    fontFamily: "var(--app-font-sans)",
+                  }}
+                >
+                  {PLACEHOLDERS[placeholderIdx]}
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => { setInput(e.target.value); autoResize(); }}
+                onKeyDown={handleKeyDown}
+                rows={2}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  color: "var(--atlas-fg)",
+                  fontSize: 15,
+                  lineHeight: 1.6,
+                  resize: "none",
+                  fontFamily: "var(--app-font-sans)",
+                  position: "relative",
+                  zIndex: 1,
+                  minHeight: 52,
+                  maxHeight: 160,
+                  overflowY: "hidden",
+                  display: "block",
+                }}
+              />
             </div>
-          )}
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 12,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 10,
+                  letterSpacing: "0.06em",
+                  color: "var(--atlas-muted)",
+                  opacity: 0.4,
+                }}
+              >
+                Enter to continue
+              </span>
+              <button
+                className="atlas-send-btn"
+                onClick={handleSubmit}
+                disabled={loading}
+                style={{
+                  width: 42,
+                  height: 42,
+                  background: hasInput && !loading ? "var(--atlas-ember)" : "rgba(37,34,32,0.8)",
+                  border: hasInput ? "none" : "1px solid var(--atlas-border)",
+                  boxShadow: hasInput && !loading ? "0 0 18px -3px rgba(146,64,14,0.55)" : "none",
+                  opacity: loading ? 0.5 : 1,
+                }}
+              >
+                {loading ? (
+                  <div className="atlas-think-dots">
+                    <span /><span /><span />
+                  </div>
+                ) : (
+                  <svg viewBox="0 0 20 20" width={14} height={14}
+                    fill={hasInput ? "var(--atlas-fg)" : "none"}
+                    stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
+                    strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
+                    <path d="M17 3 9.5 11.5" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Projects */}
+          <div style={{ marginTop: 52 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 14,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 9.5,
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  color: "rgba(120,113,108,0.45)",
+                }}
+              >
+                Projects
+              </span>
+              <button
+                onClick={() => setShowNewProject(!showNewProject)}
+                style={{
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 9.5,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: "var(--atlas-gold)",
+                  opacity: 0.7,
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  transition: "opacity 160ms ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.7")}
+              >
+                + New project
+              </button>
+            </div>
+
+            {showNewProject && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                <input
+                  autoFocus
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleNewProject();
+                    if (e.key === "Escape") { setShowNewProject(false); setNewProjectName(""); }
+                  }}
+                  placeholder="Project name…"
+                  style={{
+                    flex: 1,
+                    padding: "9px 13px",
+                    borderRadius: 8,
+                    background: "rgba(28,25,23,0.8)",
+                    border: "1px solid var(--atlas-border)",
+                    color: "var(--atlas-fg)",
+                    fontSize: 13,
+                    outline: "none",
+                    fontFamily: "var(--app-font-sans)",
+                    transition: "border-color 160ms ease",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+                />
+                <button
+                  onClick={handleNewProject}
+                  disabled={loading}
+                  style={{
+                    padding: "9px 16px",
+                    borderRadius: 8,
+                    background: "var(--atlas-ember)",
+                    border: "none",
+                    color: "var(--atlas-fg)",
+                    fontSize: 11,
+                    fontFamily: "var(--app-font-mono)",
+                    letterSpacing: "0.08em",
+                    cursor: loading ? "not-allowed" : "pointer",
+                    opacity: loading ? 0.6 : 1,
+                    transition: "opacity 160ms ease",
+                  }}
+                >
+                  Create
+                </button>
+              </div>
+            )}
+
+            {isLoading ? (
+              <div style={{ padding: "24px 0", display: "flex", justifyContent: "center" }}>
+                <div className="atlas-think-dots"><span /><span /><span /></div>
+              </div>
+            ) : !projects || projects.length === 0 ? (
+              <p
+                style={{
+                  fontSize: 12,
+                  color: "var(--atlas-muted)",
+                  opacity: 0.55,
+                  fontStyle: "italic",
+                  padding: "6px 0",
+                  margin: 0,
+                }}
+              >
+                No projects yet. Type something above to begin, or create one.
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {projects.map((p: Project) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    onSelect={() => navigateToProject(p.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
