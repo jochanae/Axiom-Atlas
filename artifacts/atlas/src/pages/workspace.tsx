@@ -398,40 +398,100 @@ function AssistantBubble({
 function LedgerEntry({ entry }: { entry: Entry }) {
   const committed = entry.status === "committed";
   const severity = entry.severity as "blocker" | "parked" | "committed" | "neutral";
+
+  const wrapperGradient = committed
+    ? `linear-gradient(135deg,
+        color-mix(in oklab, var(--atlas-gold) 55%, transparent) 0%,
+        color-mix(in oklab, var(--atlas-gold) 18%, transparent) 28%,
+        transparent 55%,
+        color-mix(in oklab, var(--atlas-bg) 80%, transparent) 100%)`
+    : `linear-gradient(135deg,
+        color-mix(in oklab, var(--atlas-gold) 22%, transparent) 0%,
+        color-mix(in oklab, var(--atlas-border) 70%, transparent) 60%,
+        transparent 100%)`;
+
+  const wrapperShadow = committed
+    ? `0 1px 0 0 color-mix(in oklab, var(--atlas-gold) 8%, transparent) inset, 0 12px 32px -18px rgba(0,0,0,0.55)`
+    : `0 6px 20px -14px rgba(0,0,0,0.4)`;
+
+  const innerBg = committed
+    ? "color-mix(in oklab, var(--atlas-bg) 92%, var(--atlas-surface))"
+    : "var(--atlas-surface)";
+
   return (
-    <div
+    <article
       style={{
-        padding: "9px 11px", borderRadius: 8, marginBottom: 5,
-        background: committed ? "rgba(6,182,212,0.03)" : "rgba(28,25,23,0.4)",
-        border: `1px solid ${committed ? "rgba(6,182,212,0.16)" : "rgba(37,34,32,0.7)"}`,
+        padding: "0.5px", borderRadius: 6, marginBottom: 6,
+        background: wrapperGradient,
+        boxShadow: wrapperShadow,
       }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-        <div style={{ paddingTop: 1, flexShrink: 0 }}>
-          <StatusGlyph severity={severity} verb={entry.verb} size={13} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const, marginBottom: 1 }}>
-            <span style={{ fontSize: 12, fontWeight: 500, color: committed ? "rgba(231,229,228,0.88)" : "rgba(231,229,228,0.45)", lineHeight: 1.4 }}>
-              {entry.title}
-            </span>
-            {committed && (
-              <CapsuleTag severity="committed" size="xs">LOCKED</CapsuleTag>
-            )}
+      <div
+        style={{
+          background: innerBg,
+          borderRadius: 5.5,
+          overflow: "hidden",
+          backdropFilter: committed ? "blur(18px)" : "none",
+          WebkitBackdropFilter: committed ? "blur(18px)" : "none",
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 13px 8px" }}>
+          <div style={{ paddingTop: 2, flexShrink: 0 }}>
+            <StatusGlyph severity={severity} verb={entry.verb} size={14} />
           </div>
-          {entry.summary && (
-            <div
-              style={{
-                fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.5, marginTop: 2,
-                display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden",
-              }}
-            >
-              {entry.summary}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const }}>
+              <span style={{
+                fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, letterSpacing: "-0.01em",
+                color: committed ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.5)",
+              }}>
+                {entry.title}
+              </span>
+              {committed && <CapsuleTag severity="committed" size="xs">LOCKED</CapsuleTag>}
+              {entry.deviation && <CapsuleTag severity="blocker" size="xs">DEVIATION</CapsuleTag>}
             </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        {entry.summary && (
+          <div style={{ padding: "0 13px 9px 37px" }}>
+            <p style={{ margin: 0, fontSize: 11.5, lineHeight: 1.55, color: "var(--atlas-muted)" }}>
+              {entry.summary}
+            </p>
+          </div>
+        )}
+
+        {/* Divider */}
+        <div style={{
+          margin: "0 13px", height: 1,
+          background: "linear-gradient(to right, transparent, var(--atlas-border), transparent)",
+        }} />
+
+        {/* Footer */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 13px 7px" }}>
+          <span style={{
+            fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em",
+            textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.45,
+          }}>
+            {new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </span>
+          {entry.mode && (
+            <span style={{
+              marginLeft: "auto",
+              fontFamily: "var(--app-font-mono)", fontSize: 8.5, letterSpacing: "0.1em",
+              textTransform: "uppercase", padding: "2px 6px", borderRadius: 2,
+              background: "color-mix(in oklab, var(--atlas-gold) 10%, transparent)",
+              border: "0.5px solid color-mix(in oklab, var(--atlas-gold) 20%, var(--atlas-border))",
+              color: "var(--atlas-gold)",
+            }}>
+              {entry.mode}
+            </span>
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -528,17 +588,29 @@ function LedgerTab({
         ) : (
           <>
             {committed.length > 0 && (
-              <div style={{ marginBottom: 18 }}>
-                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(120,113,108,0.4)", marginBottom: 8 }}>
-                  Committed
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-phosphor)", flexShrink: 0, boxShadow: "0 0 6px rgba(6,182,212,0.5)" }} />
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-phosphor)" }}>
+                    Committed
+                  </span>
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-muted)", marginLeft: "auto" }}>
+                    {committed.length}
+                  </span>
                 </div>
                 {committed.map((e) => <LedgerEntry key={e.id} entry={e} />)}
               </div>
             )}
             {parked.length > 0 && (
               <div>
-                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(120,113,108,0.4)", marginBottom: 8 }}>
-                  Parked
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, boxShadow: "0 0 6px rgba(201,162,76,0.4)" }} />
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+                    Parked
+                  </span>
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-muted)", marginLeft: "auto" }}>
+                    {parked.length}
+                  </span>
                 </div>
                 {parked.map((e) => <LedgerEntry key={e.id} entry={e} />)}
               </div>
