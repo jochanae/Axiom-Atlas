@@ -375,6 +375,8 @@ components:
           enum: [active, archived]
         memory:
           type: ["string", "null"]
+        previewUrl:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -407,6 +409,8 @@ components:
           type: string
           enum: [active, archived]
         memory:
+          type: ["string", "null"]
+        previewUrl:
           type: ["string", "null"]
 
     ProjectSummary:
