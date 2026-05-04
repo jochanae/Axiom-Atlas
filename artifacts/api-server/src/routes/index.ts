@@ -6,6 +6,7 @@ import entriesRouter from "./entries";
 import chatRouter from "./chat";
 import githubRouter from "./github";
 import imageRouter from "./image";
+import devserverRouter from "./devserver";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(entriesRouter);
 router.use(chatRouter);
 router.use(githubRouter);
 router.use(imageRouter);
+router.use(devserverRouter);
 
 export default router;
