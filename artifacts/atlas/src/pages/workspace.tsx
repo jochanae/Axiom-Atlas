@@ -43,6 +43,46 @@ function useIsMobile() {
   return mobile;
 }
 
+// ── useVoiceInput ─────────────────────────────────────────────────────────────
+function useVoiceInput(onTranscript: (text: string) => void) {
+  const [listening, setListening] = useState(false);
+  const recRef = useRef<any>(null);
+  const callbackRef = useRef(onTranscript);
+  callbackRef.current = onTranscript;
+
+  const isSupported =
+    typeof window !== "undefined" &&
+    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+
+  const toggle = useCallback(() => {
+    if (!isSupported) return;
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const SR =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.lang = "en-US";
+    rec.onresult = (e: any) => {
+      const text = Array.from(e.results as any[])
+        .map((r: any) => r[0].transcript)
+        .join(" ");
+      callbackRef.current(text);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    rec.start();
+    setListening(true);
+  }, [isSupported, listening]);
+
+  return { listening, toggle, isSupported };
+}
+
 // ── AtlasLogo ────────────────────────────────────────────────────────────────
 function AtlasLogo({ small }: { small?: boolean }) {
   const s = small ? 15 : 18;
@@ -255,15 +295,28 @@ function AssistantBubble({
   sessionId,
   onCatchProceed,
   onCatchAdjust,
+  onPark,
+  onCommit,
 }: {
   message: ChatMessage;
   projectId: number;
   sessionId: number;
   onCatchProceed: () => void;
   onCatchAdjust: () => void;
+  onPark: (content: string) => void;
+  onCommit: (content: string) => void;
 }) {
+  const [hov, setHov] = useState(false);
+  const [parkDone, setParkDone] = useState(false);
+  const [commitDone, setCommitDone] = useState(false);
+
   return (
-    <div className="atlas-bubble-in" style={{ display: "flex", justifyContent: "flex-start", marginBottom: 24 }}>
+    <div
+      className="atlas-bubble-in"
+      style={{ display: "flex", justifyContent: "flex-start", marginBottom: 24 }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+    >
       <div style={{ maxWidth: "80%" }}>
         <div
           style={{
@@ -286,6 +339,54 @@ function AssistantBubble({
             onAdjust={onCatchAdjust}
           />
         )}
+
+        {/* Park / Commit actions */}
+        <div
+          style={{
+            display: "flex", gap: 5, marginTop: 9,
+            opacity: hov ? 1 : 0,
+            transition: "opacity 180ms ease",
+          }}
+        >
+          <button
+            onClick={() => { if (!parkDone) { onPark(message.content); setParkDone(true); } }}
+            style={{
+              display: "flex", alignItems: "center", gap: 4,
+              padding: "3px 9px", borderRadius: 4,
+              background: parkDone ? "rgba(120,113,108,0.12)" : "transparent",
+              border: `1px solid ${parkDone ? "rgba(120,113,108,0.2)" : "rgba(120,113,108,0.3)"}`,
+              color: parkDone ? "rgba(120,113,108,0.55)" : "var(--atlas-muted)",
+              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+              textTransform: "uppercase" as const,
+              cursor: parkDone ? "default" : "pointer",
+              transition: "all 160ms ease",
+            }}
+          >
+            <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+              <path d="M5 1v6M2 7h6M3.5 3.5L5 1l1.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {parkDone ? "Parked" : "Park"}
+          </button>
+          <button
+            onClick={() => { if (!commitDone) { onCommit(message.content); setCommitDone(true); } }}
+            style={{
+              display: "flex", alignItems: "center", gap: 4,
+              padding: "3px 9px", borderRadius: 4,
+              background: commitDone ? "rgba(201,162,76,0.08)" : "transparent",
+              border: `1px solid ${commitDone ? "rgba(201,162,76,0.3)" : "rgba(201,162,76,0.2)"}`,
+              color: commitDone ? "var(--atlas-gold)" : "rgba(201,162,76,0.6)",
+              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+              textTransform: "uppercase" as const,
+              cursor: commitDone ? "default" : "pointer",
+              transition: "all 160ms ease",
+            }}
+          >
+            <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {commitDone ? "Committed" : "Commit"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -771,11 +872,15 @@ function RightPanel({
   entries,
   activeCatch,
   onClose,
+  fullscreen,
+  onToggleFullscreen,
 }: {
   projectId: number;
   entries: Entry[];
   activeCatch: CatchPayload | null;
   onClose?: () => void;
+  fullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }) {
   const [tab, setTab] = useState<RightTab>("ledger");
 
@@ -876,12 +981,40 @@ function RightPanel({
           );
         })}
 
+        {/* Fullscreen toggle (mobile only) */}
+        {onToggleFullscreen && (
+          <button
+            onClick={onToggleFullscreen}
+            title={fullscreen ? "Restore" : "Full screen"}
+            style={{
+              marginLeft: onClose ? 0 : "auto", marginRight: 2,
+              width: 28, height: 28, borderRadius: 6,
+              background: "transparent", border: "none",
+              color: "var(--atlas-muted)", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              opacity: 0.5, transition: "opacity 160ms ease",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}
+          >
+            {fullscreen ? (
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                <path d="M5 1H1v4M11 1h4v4M1 11v4h4M15 11v4h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                <path d="M1 5V1h4M11 1h4v4M1 11v4h4M15 11v4h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
+        )}
+
         {/* Close button (mobile only) */}
         {onClose && (
           <button
             onClick={onClose}
             style={{
-              marginLeft: "auto", marginRight: 6,
+              marginLeft: onToggleFullscreen ? 0 : "auto", marginRight: 6,
               width: 28, height: 28, borderRadius: 6,
               background: "transparent", border: "none",
               color: "var(--atlas-muted)", fontSize: 16, lineHeight: 1,
@@ -967,8 +1100,12 @@ export default function Workspace() {
     try { return parseInt(localStorage.getItem("atlas-chat-w") || "0") || 520; } catch { return 520; }
   });
 
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [rightFullscreen, setRightFullscreen] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const resizing = useRef(false);
   const lastX = useRef(0);
   const initialSent = useRef(false);
@@ -981,6 +1118,7 @@ export default function Workspace() {
   const { data: entries } = useListEntries(id, {}, { query: { enabled: !!id, queryKey: getListEntriesQueryKey(id, {}) } });
   const createSession = useCreateSession();
   const sendMessage = useSendMessage();
+  const createEntry = useCreateEntry();
 
   useEffect(() => {
     if (sessionsLoading) return;
@@ -1058,15 +1196,49 @@ export default function Workspace() {
   const handleSend = () => {
     const text = input.trim();
     if (!text || !sessionId || sendMessage.isPending) return;
+    const messageText = attachedFile ? `${text}\n[Attached: ${attachedFile.name}]` : text;
     const current = messages;
     setInput("");
+    setAttachedFile(null);
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
-    doSend(text, sessionId, current);
+    doSend(messageText, sessionId, current);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
+
+  const handlePark = useCallback(
+    (content: string) => {
+      if (!sessionId) return;
+      const title = content.replace(/\n/g, " ").slice(0, 80).trim();
+      createEntry.mutate(
+        { projectId: id, data: { title, summary: content.slice(0, 500), status: "parked", severity: "parked", mode: "think", sessionId } },
+        { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }) }
+      );
+    },
+    [id, sessionId, createEntry, queryClient]
+  );
+
+  const handleCommit = useCallback(
+    (content: string) => {
+      if (!sessionId) return;
+      const title = content.replace(/\n/g, " ").slice(0, 80).trim();
+      createEntry.mutate(
+        { projectId: id, data: { title, summary: content.slice(0, 500), status: "committed", severity: "committed", mode: "think", sessionId } },
+        { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }) }
+      );
+    },
+    [id, sessionId, createEntry, queryClient]
+  );
+
+  const handleVoiceTranscript = useCallback((text: string) => {
+    setInput((prev) => (prev ? `${prev} ${text}` : text));
+    setTimeout(() => autoResize(), 0);
+  }, []);
+
+  const { listening: voiceListening, toggle: toggleVoice, isSupported: voiceSupported } =
+    useVoiceInput(handleVoiceTranscript);
 
   const handleCatchProceed = (msgId?: number) => {
     setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, catchResolved: true } : m));
@@ -1189,6 +1361,8 @@ export default function Workspace() {
                   sessionId={sessionId || 0}
                   onCatchProceed={() => handleCatchProceed(msg.id)}
                   onCatchAdjust={() => handleCatchAdjust(msg.id)}
+                  onPark={handlePark}
+                  onCommit={handleCommit}
                 />
               )
             )}
@@ -1207,6 +1381,43 @@ export default function Workspace() {
 
           {/* Input */}
           <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0] ?? null;
+                setAttachedFile(file);
+                e.target.value = "";
+              }}
+            />
+
+            {/* Attachment pill */}
+            {attachedFile && (
+              <div
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, marginBottom: 6,
+                  padding: "4px 10px", borderRadius: 6, width: "fit-content",
+                  background: "rgba(201,162,76,0.07)",
+                  border: "1px solid rgba(201,162,76,0.2)",
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                  <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(201,162,76,0.8)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.7)", letterSpacing: "0.05em", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {attachedFile.name}
+                </span>
+                <button
+                  onClick={() => setAttachedFile(null)}
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 13, lineHeight: 1, padding: "0 0 0 2px" }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
             <div className="atlas-input-shell" style={{ padding: "13px 15px" }}>
               <div style={{ position: "relative" }}>
                 {!hasInput && (
@@ -1239,29 +1450,75 @@ export default function Workspace() {
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                {/* Left: paperclip */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach file"
+                  style={{
+                    width: 30, height: 30, borderRadius: 7,
+                    background: "transparent", border: "none",
+                    color: attachedFile ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    opacity: attachedFile ? 1 : 0.4, transition: "opacity 160ms ease",
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                  onMouseLeave={(e) => { if (!attachedFile) e.currentTarget.style.opacity = "0.4"; }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+
                 <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "var(--atlas-muted)", opacity: 0.3 }}>
                   {isMobile ? "Tap to send" : "Enter · Shift+Enter for newline"}
                 </span>
-                <button
-                  className="atlas-send-btn"
-                  onClick={handleSend}
-                  disabled={!hasInput || sendMessage.isPending || !sessionId}
-                  style={{
-                    width: 38, height: 38,
-                    background: hasInput && !sendMessage.isPending && sessionId ? "var(--atlas-ember)" : "rgba(37,34,32,0.7)",
-                    border: hasInput ? "none" : "1px solid var(--atlas-border)",
-                    boxShadow: hasInput && !sendMessage.isPending ? "0 0 16px -3px rgba(146,64,14,0.5)" : "none",
-                    opacity: sendMessage.isPending ? 0.5 : 1,
-                  }}
-                >
-                  <svg viewBox="0 0 20 20" width={13} height={13}
-                    fill={hasInput ? "var(--atlas-fg)" : "none"}
-                    stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
-                    strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
-                    <path d="M17 3 9.5 11.5" />
-                  </svg>
-                </button>
+
+                {/* Right: mic + send */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {voiceSupported && (
+                    <button
+                      onClick={toggleVoice}
+                      title={voiceListening ? "Stop listening" : "Voice input"}
+                      className={voiceListening ? "atlas-voice-active" : ""}
+                      style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        background: voiceListening ? "var(--atlas-ember)" : "rgba(37,34,32,0.6)",
+                        border: `1px solid ${voiceListening ? "var(--atlas-ember)" : "var(--atlas-border)"}`,
+                        color: voiceListening ? "var(--atlas-fg)" : "var(--atlas-muted)",
+                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        transition: "all 180ms ease",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                        <rect x="5" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.3" />
+                        <path d="M2 8a6 6 0 0012 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                        <line x1="8" y1="14" x2="8" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  )}
+                  <button
+                    className="atlas-send-btn"
+                    onClick={handleSend}
+                    disabled={!hasInput || sendMessage.isPending || !sessionId}
+                    style={{
+                      width: 38, height: 38,
+                      background: hasInput && !sendMessage.isPending && sessionId ? "var(--atlas-ember)" : "rgba(37,34,32,0.7)",
+                      border: hasInput ? "none" : "1px solid var(--atlas-border)",
+                      boxShadow: hasInput && !sendMessage.isPending ? "0 0 16px -3px rgba(146,64,14,0.5)" : "none",
+                      opacity: sendMessage.isPending ? 0.5 : 1,
+                    }}
+                  >
+                    <svg viewBox="0 0 20 20" width={13} height={13}
+                      fill={hasInput ? "var(--atlas-fg)" : "none"}
+                      stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
+                      strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
+                      <path d="M17 3 9.5 11.5" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1291,34 +1548,41 @@ export default function Workspace() {
           <div
             style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", justifyContent: "flex-end" }}
           >
-            {/* Backdrop */}
-            <div
-              onClick={() => setRightOpen(false)}
-              style={{
-                position: "absolute", inset: 0,
-                background: "rgba(0,0,0,0.6)",
-                backdropFilter: "blur(2px)",
-              }}
-            />
-            {/* Sheet — slide in from right */}
+            {/* Backdrop — hidden in fullscreen */}
+            {!rightFullscreen && (
+              <div
+                onClick={() => setRightOpen(false)}
+                style={{
+                  position: "absolute", inset: 0,
+                  background: "rgba(0,0,0,0.6)",
+                  backdropFilter: "blur(2px)",
+                }}
+              />
+            )}
+            {/* Sheet — slide in from right; expands to full when fullscreen */}
             <div
               onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
               onTouchEnd={(e) => {
+                if (rightFullscreen) return;
                 const dx = e.changedTouches[0].clientX - touchStartX.current;
                 if (dx > 60) setRightOpen(false);
               }}
               style={{
                 position: "relative", zIndex: 1,
-                width: "88vw", maxWidth: 420,
+                width: rightFullscreen ? "100vw" : "88vw",
+                maxWidth: rightFullscreen ? "none" : 420,
                 height: "100%",
                 animation: "atlas-slide-in-right 220ms cubic-bezier(0.4,0,0.2,1) both",
+                transition: "width 220ms ease, max-width 220ms ease",
               }}
             >
               <RightPanel
                 projectId={id}
                 entries={entries || []}
                 activeCatch={activeCatch}
-                onClose={() => setRightOpen(false)}
+                onClose={() => { setRightOpen(false); setRightFullscreen(false); }}
+                fullscreen={rightFullscreen}
+                onToggleFullscreen={() => setRightFullscreen((f) => !f)}
               />
             </div>
           </div>

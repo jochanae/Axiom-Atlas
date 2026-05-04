@@ -236,6 +236,16 @@
   to   { transform: translateX(0); }
 }
 
+/* ── Voice input pulse ── */
+@keyframes atlas-voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(146, 64, 14, 0.7); }
+  50%       { box-shadow: 0 0 0 7px rgba(146, 64, 14, 0); }
+}
+.atlas-voice-active {
+  background: var(--atlas-ember) !important;
+  animation: atlas-voice-pulse 1.3s ease-out infinite;
+}
+
 /* ── Typewriter cursor ── */
 @keyframes atlas-cursor-blink {
   0%, 100% { opacity: 0.7; }
