@@ -1370,6 +1370,41 @@ export default function Workspace() {
             <div ref={bottomRef} />
           </div>
 
+          {/* Mobile panel toggle — floats above input, reachable one-handed */}
+          {isMobile && (
+            <div style={{ position: "relative", height: 0, flexShrink: 0 }}>
+              <button
+                onClick={() => setRightOpen(v => !v)}
+                aria-label={rightOpen ? "Close panel" : "Open panel"}
+                style={{
+                  position: "absolute", bottom: 10, right: 14,
+                  width: 32, height: 32, borderRadius: 9,
+                  background: rightOpen
+                    ? "rgba(201,162,76,0.14)"
+                    : "rgba(28,25,23,0.88)",
+                  border: `1px solid ${rightOpen ? "rgba(201,162,76,0.45)" : "var(--atlas-border)"}`,
+                  backdropFilter: "blur(10px)",
+                  color: rightOpen ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 160ms ease", zIndex: 10,
+                  boxShadow: "0 2px 12px rgba(0,0,0,0.35)",
+                }}
+              >
+                {rightOpen ? (
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                    <path d="M3 3l10 10M13 3L3 13" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+                    <rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                    <path d="M9 2v16" stroke="currentColor" strokeWidth="1.1" strokeDasharray="1.5 2" />
+                    <path d="M12 7h4M12 10h4M12 13h3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          )}
+
           {/* Input */}
           <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
             {/* Hidden file input */}
