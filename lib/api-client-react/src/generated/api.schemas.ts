@@ -248,6 +248,8 @@ export interface ChatResponse {
   intentType?: string | null;
   /** @nullable */
   catchPayload?: ChatResponseCatchPayload;
+  /** Short keyword/phrase chips extracted from this response for the user to see what Atlas is tracking */
+  memoryChips?: string[];
   messageId: number;
 }
 

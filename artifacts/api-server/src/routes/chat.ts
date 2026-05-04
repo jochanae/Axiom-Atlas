@@ -34,9 +34,30 @@ DECISION_CATCH:{"v":1,"against":{"id":"current","title":"[brief title of the exi
 
 False positives are worse than false negatives for NEW commitments. But for CONTRADICTIONS with existing committed decisions, always fire — that is the system's core protection.
 
+Memory chips: After your main response (and after any DECISION_CATCH block), you may append a MEMORY_CHIPS line with 2–5 short phrases representing the key concepts, constraints, or entities that surfaced in this turn. Only include genuinely new context not already established. Each chip must be 1–4 words. Format:
+MEMORY_CHIPS:["chip one","chip two","chip three"]
+Omit the MEMORY_CHIPS line entirely if there are no new concepts worth surfacing.
+
 You have access to the user's Decision Ledger — the history of committed decisions for this project. Reference these when relevant to prevent contradiction.
 
 Your responses should be direct, dense, and useful. No filler. No pleasantries unless the moment calls for it. The user came here to think clearly — help them do that.`;
+
+function detectMemoryChips(content: string): { content: string; memoryChips: string[] } {
+  const marker = "MEMORY_CHIPS:";
+  const idx = content.lastIndexOf(marker);
+  if (idx === -1) return { content, memoryChips: [] };
+
+  const before = content.slice(0, idx).trim();
+  const jsonStr = content.slice(idx + marker.length).trim();
+
+  try {
+    const chips = JSON.parse(jsonStr);
+    if (Array.isArray(chips) && chips.every((c): c is string => typeof c === "string")) {
+      return { content: before, memoryChips: chips.slice(0, 6) };
+    }
+  } catch {}
+  return { content, memoryChips: [] };
+}
 
 function detectDecisionCatch(content: string): { content: string; catchPayload: object | null } {
   const catchMarker = "DECISION_CATCH:";
@@ -92,7 +113,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   });
 
   const rawContent = completion.choices[0]?.message?.content ?? "";
-  const { content, catchPayload } = detectDecisionCatch(rawContent);
+  // Strip MEMORY_CHIPS first (appears last), then DECISION_CATCH
+  const { content: afterChips, memoryChips } = detectMemoryChips(rawContent);
+  const { content, catchPayload } = detectDecisionCatch(afterChips);
 
   // Detect intent type from response
   let intentType: string | null = null;
@@ -123,6 +146,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     content,
     intentType,
     catchPayload,
+    memoryChips: memoryChips.length > 0 ? memoryChips : undefined,
     messageId: savedMsg.id,
   });
 });

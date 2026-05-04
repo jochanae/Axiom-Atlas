@@ -641,6 +641,11 @@ components:
           type: ["string", "null"]
         catchPayload:
           type: ["object", "null"]
+        memoryChips:
+          type: array
+          items:
+            type: string
+          description: Short keyword/phrase chips extracted from this response for the user to see what Atlas is tracking
         messageId:
           type: integer
       required:

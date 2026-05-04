@@ -295,5 +295,11 @@ export const SendMessageResponse = zod.object({
   content: zod.string(),
   intentType: zod.string().nullish(),
   catchPayload: zod.object({}).passthrough().nullish(),
+  memoryChips: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Short keyword\/phrase chips extracted from this response for the user to see what Atlas is tracking",
+    ),
   messageId: zod.number(),
 });

@@ -292,7 +292,59 @@ function DecisionCatchCard({
   );
 }
 
-// ── Chat bubbles ─────────────────────────────────────────────────────────────
+// ── Chat bubbles + Memory Chips ──────────────────────────────────────────────
+// ── MemoryChips ───────────────────────────────────────────────────────────────
+function MemoryChips({
+  chips,
+  onDismiss,
+}: {
+  chips: string[];
+  onDismiss: (chip: string) => void;
+}) {
+  if (chips.length === 0) return null;
+  return (
+    <div
+      style={{
+        display: "flex", flexWrap: "wrap", gap: 5,
+        padding: "6px 14px 2px", flexShrink: 0,
+      }}
+    >
+      {chips.map((chip) => (
+        <span
+          key={chip}
+          className="atlas-bubble-in"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            padding: "3px 7px 3px 9px", borderRadius: 20,
+            fontFamily: "var(--app-font-mono)", fontSize: 9.5,
+            letterSpacing: "0.05em",
+            color: "var(--atlas-muted)",
+            background: "color-mix(in oklab, var(--atlas-surface) 85%, var(--atlas-bg))",
+            border: "0.5px solid var(--atlas-border)",
+            transition: "border-color 160ms ease",
+          }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "rgba(201,162,76,0.22)")}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--atlas-border)")}
+        >
+          {chip}
+          <button
+            onClick={() => onDismiss(chip)}
+            aria-label={`Dismiss ${chip}`}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: "var(--atlas-muted)", opacity: 0.45,
+              fontSize: 12, lineHeight: 1, padding: "0 1px",
+              display: "flex", alignItems: "center",
+            }}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function UserBubble({ content }: { content: string }) {
   return (
     <div className="atlas-bubble-in" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
@@ -1228,6 +1280,7 @@ export default function Workspace() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
+  const [memoryChips, setMemoryChips] = useState<string[]>([]);
   const [rightOpen, setRightOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(() => {
     try { return parseInt(localStorage.getItem("atlas-chat-w") || "0") || 520; } catch { return 520; }
@@ -1288,6 +1341,15 @@ export default function Workspace() {
               content: res.content, intentType: res.intentType, catchPayload: cp,
             }]);
             if (cp) setActiveCatch(cp);
+            if (res.memoryChips && res.memoryChips.length > 0) {
+              setMemoryChips((prev) => {
+                const merged = [...prev];
+                for (const c of res.memoryChips!) {
+                  if (!merged.includes(c)) merged.push(c);
+                }
+                return merged.slice(-12);
+              });
+            }
           },
           onError: () => {
             setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
@@ -1384,6 +1446,10 @@ export default function Workspace() {
     setActiveCatch(null);
     textareaRef.current?.focus();
   };
+
+  const dismissChip = useCallback((chip: string) => {
+    setMemoryChips((prev) => prev.filter((c) => c !== chip));
+  }, []);
 
   const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -1581,6 +1647,9 @@ export default function Workspace() {
               </button>
             </div>
           )}
+
+          {/* Memory chips — what Atlas is tracking this session */}
+          <MemoryChips chips={memoryChips} onDismiss={dismissChip} />
 
           {/* Input */}
           <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
