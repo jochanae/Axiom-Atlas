@@ -535,8 +535,19 @@ function LedgerTab({
   entries: Entry[];
   activeCatch: CatchPayload | null;
 }) {
-  const committed = entries.filter((e) => e.status === "committed");
   const parked = entries.filter((e) => e.status === "parked");
+
+  // Three committed groups — mirrors original DecisionLedgerGrouped
+  const inTensionId = activeCatch ? String(activeCatch.against.id) : null;
+  const allCommitted = entries.filter((e) => e.status === "committed");
+  const committedClean = allCommitted.filter(
+    (e) => !e.deviation && String(e.id) !== inTensionId
+  );
+  const inTension = inTensionId
+    ? allCommitted.filter((e) => String(e.id) === inTensionId)
+    : [];
+  const overridden = allCommitted.filter((e) => e.deviation);
+
   const [showAdd, setShowAdd] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const createEntry = useCreateEntry();
@@ -557,23 +568,6 @@ function LedgerTab({
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Active catch indicator */}
-      {activeCatch && (
-        <div
-          style={{
-            margin: "10px 12px 0", padding: "8px 11px", borderRadius: 7, flexShrink: 0,
-            background: "rgba(146,64,14,0.07)", border: "1px solid rgba(146,64,14,0.28)",
-          }}
-        >
-          <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 8.5, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-ember)", marginBottom: 3, opacity: 0.85 }}>
-            Catch active
-          </div>
-          <div style={{ fontSize: 11, color: "rgba(231,229,228,0.6)", lineHeight: 1.4 }}>
-            {activeCatch.against.title}
-          </div>
-        </div>
-      )}
-
       {/* Add entry inline */}
       {showAdd && (
         <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
@@ -618,25 +612,100 @@ function LedgerTab({
           </div>
         ) : (
           <>
-            {committed.length > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-phosphor)", flexShrink: 0, boxShadow: "0 0 6px rgba(6,182,212,0.5)" }} />
-                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-phosphor)" }}>
-                    Committed
-                  </span>
-                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-muted)", marginLeft: "auto" }}>
-                    {committed.length}
-                  </span>
-                </div>
-                {committed.map((e) => <LedgerEntry key={e.id} entry={e} />)}
+            {/* ── Group 1: Committed ── */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: "var(--atlas-phosphor)", boxShadow: "0 0 6px color-mix(in oklab, var(--atlas-phosphor) 55%, transparent)" }} />
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--atlas-phosphor)" }}>
+                  Committed
+                </span>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-muted)", marginLeft: "auto" }}>
+                  {committedClean.length}
+                </span>
               </div>
-            )}
+              {committedClean.length > 0 ? (
+                committedClean.map((e) => <LedgerEntry key={e.id} entry={e} />)
+              ) : (
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.45, padding: "6px 2px", lineHeight: 1.55 }}>
+                  No committed decisions yet.
+                </div>
+              )}
+            </div>
+
+            {/* ── Group 2: In Tension ── */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
+                <span
+                  aria-hidden
+                  style={{
+                    width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                    background: inTension.length > 0 ? "var(--atlas-ember)" : "var(--atlas-muted)",
+                    boxShadow: inTension.length > 0
+                      ? "0 0 8px color-mix(in oklab, var(--atlas-ember) 65%, transparent)"
+                      : "none",
+                    transition: "background 300ms ease, box-shadow 300ms ease",
+                  }}
+                />
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: inTension.length > 0 ? "var(--atlas-ember)" : "var(--atlas-muted)", transition: "color 300ms ease" }}>
+                  In Tension
+                </span>
+                {inTension.length > 0 && (
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-ember)", opacity: 0.7, marginLeft: "auto" }}>
+                    {inTension.length}
+                  </span>
+                )}
+              </div>
+              {inTension.length > 0 ? (
+                inTension.map((e) => (
+                  <div
+                    key={e.id}
+                    style={{
+                      borderRadius: 8,
+                      border: "0.5px solid color-mix(in oklab, var(--atlas-ember) 30%, var(--atlas-border))",
+                      background: "color-mix(in oklab, var(--atlas-ember) 4%, transparent)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <LedgerEntry entry={e} />
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.4, padding: "6px 2px", lineHeight: 1.55 }}>
+                  No open tensions.
+                </div>
+              )}
+            </div>
+
+            {/* ── Group 3: Overridden ── */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: "var(--atlas-muted)", opacity: 0.5 }} />
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--atlas-muted)", opacity: 0.65 }}>
+                  Overridden
+                </span>
+                {overridden.length > 0 && (
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-muted)", opacity: 0.5, marginLeft: "auto" }}>
+                    {overridden.length}
+                  </span>
+                )}
+              </div>
+              {overridden.length > 0 ? (
+                <div style={{ opacity: 0.65 }}>
+                  {overridden.map((e) => <LedgerEntry key={e.id} entry={e} />)}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.4, padding: "6px 2px", lineHeight: 1.55 }}>
+                  Nothing overridden.
+                </div>
+              )}
+            </div>
+
+            {/* ── Parked (parking lot) ── */}
             {parked.length > 0 && (
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, boxShadow: "0 0 6px rgba(201,162,76,0.4)" }} />
-                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: "var(--atlas-gold)", boxShadow: "0 0 6px color-mix(in oklab, var(--atlas-gold) 45%, transparent)" }} />
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--atlas-gold)" }}>
                     Parked
                   </span>
                   <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-muted)", marginLeft: "auto" }}>
