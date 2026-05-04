@@ -168,6 +168,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     entries?: Array<{ id: number; title: string; status: string }>;
     fileContext?: string;
     userProfile?: string;
+    imageData?: { base64: string; mediaType: string };
   };
   if (!body.sessionId || !body.projectId || !body.message) {
     res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
@@ -178,6 +179,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
+  const imageData = body.imageData;
 
   // Load project memory from DB
   const [project] = await db.select({ memory: projectsTable.memory }).from(projectsTable).where(eq(projectsTable.id, projectId));
@@ -195,9 +197,19 @@ router.post("/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n--- CODE CONTEXT ---\n${fileContext}\n--- END CODE CONTEXT ---`;
   }
 
-  const messages: Array<{ role: "user" | "assistant"; content: string }> = [
+  type TextBlock = { type: "text"; text: string };
+  type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
+
+  const userContent: string | Array<TextBlock | ImageBlock> = imageData
+    ? [
+        { type: "image", source: { type: "base64", media_type: imageData.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData.base64 } },
+        { type: "text", text: message },
+      ]
+    : message;
+
+  const messages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = [
     ...(history || []).map((h: { role: string; content: string }) => ({ role: h.role as "user" | "assistant", content: h.content })),
-    { role: "user", content: message },
+    { role: "user", content: userContent },
   ];
 
   await db.insert(chatMessagesTable).values({
