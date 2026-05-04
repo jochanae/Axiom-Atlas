@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   useListProjects,
@@ -16,6 +16,55 @@ const PLACEHOLDERS = [
   "What would have to be true for this to work…",
 ];
 
+// ── Typewriter hook ──────────────────────────────────────────────────────────
+function useTypewriter(phrases: string[]) {
+  const [display, setDisplay] = useState("");
+  const state = useRef({ phraseIdx: 0, charIdx: 0, phase: "typing" as "typing" | "erasing" });
+  const phrasesRef = useRef(phrases);
+  phrasesRef.current = phrases;
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+
+    function tick() {
+      const s = state.current;
+      const phrase = phrasesRef.current[s.phraseIdx];
+
+      if (s.phase === "typing") {
+        if (s.charIdx < phrase.length) {
+          s.charIdx++;
+          setDisplay(phrase.slice(0, s.charIdx));
+          timer = setTimeout(tick, 38);
+        } else {
+          // fully typed — hold 2 s then erase
+          timer = setTimeout(() => {
+            s.phase = "erasing";
+            tick();
+          }, 2000);
+        }
+      } else {
+        // erasing
+        if (s.charIdx > 0) {
+          s.charIdx--;
+          setDisplay(phrase.slice(0, s.charIdx));
+          timer = setTimeout(tick, 22);
+        } else {
+          // fully erased — pause then type next
+          s.phraseIdx = (s.phraseIdx + 1) % phrasesRef.current.length;
+          s.phase = "typing";
+          timer = setTimeout(tick, 200);
+        }
+      }
+    }
+
+    timer = setTimeout(tick, 900); // initial delay before first char
+    return () => clearTimeout(timer);
+  }, []);
+
+  return display;
+}
+
+// ── InlineTimestamp ──────────────────────────────────────────────────────────
 function InlineTimestamp() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -48,6 +97,7 @@ function InlineTimestamp() {
   );
 }
 
+// ── AtlasLogo ────────────────────────────────────────────────────────────────
 function AtlasLogo() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -74,10 +124,131 @@ function AtlasLogo() {
   );
 }
 
+// ── SettingsBtn ──────────────────────────────────────────────────────────────
+function SettingsBtn() {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      title="Settings"
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: 8,
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: hov ? 0.75 : 0.32,
+        transition: "opacity 160ms ease",
+        flexShrink: 0,
+      }}
+    >
+      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden>
+        <circle cx="10" cy="10" r="2.6" stroke="var(--atlas-fg)" strokeWidth="1.25" />
+        <path
+          d="M10 1.5v2M10 16.5v2M1.5 10h2M16.5 10h2M4.1 4.1l1.42 1.42M14.48 14.48l1.42 1.42M4.1 15.9l1.42-1.42M14.48 5.52l1.42-1.42"
+          stroke="var(--atlas-fg)"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+        />
+      </svg>
+    </button>
+  );
+}
+
+// ── UserAvatar ───────────────────────────────────────────────────────────────
+function UserAvatar() {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      title="Account"
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: "50%",
+        background: hov ? "rgba(201,162,76,0.18)" : "rgba(201,162,76,0.08)",
+        border: `1px solid ${hov ? "rgba(201,162,76,0.42)" : "rgba(201,162,76,0.2)"}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        cursor: "pointer",
+        transition: "all 160ms ease",
+        flexShrink: 0,
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
+        <circle cx="10" cy="7.5" r="3.2" stroke="#C9A24C" strokeWidth="1.2" />
+        <path d="M3 18.5c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#C9A24C" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
+}
+
+// ── ProjectThumbnail ─────────────────────────────────────────────────────────
+function ProjectThumbnail({ name, id }: { name: string; id: number }) {
+  const hash = (name + id).split("").reduce((acc, c) => acc + c.charCodeAt(0), 17);
+  const hue = hash % 360;
+  const initial = name.trim()[0]?.toUpperCase() ?? "?";
+  return (
+    <div
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: 8,
+        background: `linear-gradient(145deg, hsla(${hue},28%,13%,1) 0%, hsla(${(hue + 45) % 360},18%,9%,1) 100%)`,
+        border: `1px solid hsla(${hue},22%,20%,0.7)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {/* subtle diagonal stripe texture */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 5px,
+            hsla(${hue},30%,50%,0.04) 5px,
+            hsla(${hue},30%,50%,0.04) 6px
+          )`,
+        }}
+      />
+      <span
+        style={{
+          fontFamily: "var(--app-font-mono)",
+          fontSize: 15,
+          fontWeight: 600,
+          color: `hsla(${hue},52%,62%,0.9)`,
+          letterSpacing: "-0.02em",
+          position: "relative",
+          zIndex: 1,
+          lineHeight: 1,
+        }}
+      >
+        {initial}
+      </span>
+    </div>
+  );
+}
+
+// ── ProjectCard ──────────────────────────────────────────────────────────────
 function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => void }) {
   const [hov, setHov] = useState(false);
   const date = new Date(project.createdAt).toLocaleDateString("en-US", {
-    month: "short", day: "numeric"
+    month: "short", day: "numeric",
   });
   return (
     <button
@@ -87,7 +258,7 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
       style={{
         width: "100%",
         textAlign: "left",
-        padding: "13px 16px",
+        padding: "11px 14px",
         borderRadius: 10,
         background: hov ? "rgba(201,162,76,0.04)" : "rgba(28,25,23,0.55)",
         border: `1px solid ${hov ? "rgba(201,162,76,0.28)" : "rgba(37,34,32,0.9)"}`,
@@ -95,10 +266,11 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
         transition: "all 180ms var(--ease-cinematic)",
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
+        gap: 13,
       }}
     >
+      <ProjectThumbnail name={project.name} id={project.id} />
+
       <div style={{ minWidth: 0, flex: 1 }}>
         <div
           style={{
@@ -129,6 +301,7 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
           </div>
         )}
       </div>
+
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         <span
           style={{
@@ -141,7 +314,13 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
         >
           {date}
         </span>
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" opacity={hov ? 0.5 : 0.2} style={{ transition: "opacity 180ms ease" }}>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          style={{ opacity: hov ? 0.5 : 0.2, transition: "opacity 180ms ease" }}
+        >
           <path d="M4.5 2.5L8.5 6L4.5 9.5" stroke="var(--atlas-gold)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
@@ -149,32 +328,31 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
   );
 }
 
+// ── Home ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [input, setInput] = useState("");
-  const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [newProjectName, setNewProjectName] = useState("");
   const [showNewProject, setShowNewProject] = useState(false);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
 
+  const placeholder = useTypewriter(PLACEHOLDERS);
+
   const { data: projects, isLoading } = useListProjects();
   const createProject = useCreateProject();
 
-  useEffect(() => {
-    const id = setInterval(() => setPlaceholderIdx((i) => (i + 1) % PLACEHOLDERS.length), 4200);
-    return () => clearInterval(id);
-  }, []);
+  const navigateToProject = useCallback(
+    (projectId: number) => {
+      if (input.trim()) {
+        sessionStorage.setItem(`atlas-initial-${projectId}`, input.trim());
+      }
+      setLocation(`/project/${projectId}`);
+    },
+    [input, setLocation]
+  );
 
-  const navigateToProject = (projectId: number) => {
-    if (input.trim()) {
-      sessionStorage.setItem(`atlas-initial-${projectId}`, input.trim());
-    }
-    setLocation(`/project/${projectId}`);
-  };
-
-  const handleSubmit = () => {
-    const text = input.trim();
+  const handleSubmit = useCallback(() => {
     const firstProject = projects?.[0];
     if (firstProject) {
       navigateToProject(firstProject.id);
@@ -189,9 +367,9 @@ export default function Home() {
         }
       );
     }
-  };
+  }, [projects, navigateToProject, createProject, queryClient]);
 
-  const handleNewProject = () => {
+  const handleNewProject = useCallback(() => {
     const name = newProjectName.trim() || "New Project";
     createProject.mutate(
       { data: { name } },
@@ -204,7 +382,7 @@ export default function Home() {
         },
       }
     );
-  };
+  }, [newProjectName, createProject, queryClient, setLocation]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -252,7 +430,13 @@ export default function Home() {
         }}
       >
         <AtlasLogo />
-        <InlineTimestamp />
+
+        {/* Right side: timestamp + settings + avatar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <InlineTimestamp />
+          <SettingsBtn />
+          <UserAvatar />
+        </div>
       </div>
 
       {/* Main content */}
@@ -268,7 +452,7 @@ export default function Home() {
         <div style={{ width: "100%", maxWidth: 560 }}>
 
           {/* Greeting */}
-          <div style={{ textAlign: "center", marginBottom: 44 }}>
+          <div style={{ textAlign: "center", marginBottom: 24 }}>
             <h1
               style={{
                 fontSize: 30,
@@ -295,6 +479,21 @@ export default function Home() {
             </p>
           </div>
 
+          {/* Ambient think dots */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              margin: "18px 0 26px",
+            }}
+          >
+            <div className="atlas-think-dots">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+
           {/* Input shell */}
           <div className="atlas-input-shell" style={{ padding: "18px 20px" }}>
             <div style={{ position: "relative" }}>
@@ -317,7 +516,8 @@ export default function Home() {
                     fontFamily: "var(--app-font-sans)",
                   }}
                 >
-                  {PLACEHOLDERS[placeholderIdx]}
+                  {placeholder}
+                  <span className="atlas-cursor" />
                 </div>
               )}
               <textarea
@@ -383,10 +583,16 @@ export default function Home() {
                     <span /><span /><span />
                   </div>
                 ) : (
-                  <svg viewBox="0 0 20 20" width={14} height={14}
+                  <svg
+                    viewBox="0 0 20 20"
+                    width={14}
+                    height={14}
                     fill={hasInput ? "var(--atlas-fg)" : "none"}
                     stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
-                    strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
                     <path d="M17 3 9.5 11.5" />
                   </svg>

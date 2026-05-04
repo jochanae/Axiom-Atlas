@@ -230,6 +230,21 @@
 }
 .atlas-resize-handle:hover::after { background: rgba(201, 162, 76, 0.45); }
 
+/* ── Typewriter cursor ── */
+@keyframes atlas-cursor-blink {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 0; }
+}
+.atlas-cursor {
+  display: inline-block;
+  width: 1.5px;
+  height: 0.85em;
+  background: var(--atlas-gold);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: atlas-cursor-blink 700ms step-end infinite;
+}
+
 /* ── Utility ── */
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
