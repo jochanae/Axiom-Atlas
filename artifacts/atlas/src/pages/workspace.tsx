@@ -31,6 +31,18 @@ interface FileEdit {
   content: string;
 }
 
+interface PushRecord {
+  id: string;
+  path: string;
+  filename: string;
+  branch: string;
+  commitUrl: string;
+  originalContent: string | null;
+  newContent: string;
+  pushedAt: string;
+  rolledBack: boolean;
+}
+
 interface ChatMessage {
   id?: number;
   role: "user" | "assistant";
@@ -39,6 +51,8 @@ interface ChatMessage {
   catchPayload?: CatchPayload | null;
   catchResolved?: boolean;
   fileEdit?: FileEdit;
+  fileEdits?: FileEdit[];
+  memoryChips?: string[];
   sentAt?: string;
 }
 
@@ -540,34 +554,124 @@ function UserBubble({
   );
 }
 
+// ── Diff utilities ────────────────────────────────────────────────────────────
+type DiffLine = { type: "added" | "removed" | "context"; line: string };
+type DiffItem = DiffLine | { type: "ellipsis"; count: number };
+
+function computeLineDiff(before: string, after: string): DiffLine[] {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  const m = a.length, n = b.length;
+  if (m > 400 || n > 400) {
+    return b.map((line) => ({ type: "added" as const, line }));
+  }
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  const result: DiffLine[] = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
+      result.unshift({ type: "context", line: a[i - 1] });
+      i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      result.unshift({ type: "added", line: b[j - 1] });
+      j--;
+    } else {
+      result.unshift({ type: "removed", line: a[i - 1] });
+      i--;
+    }
+  }
+  return result;
+}
+
+function collapseDiff(lines: DiffLine[], ctx = 3): DiffItem[] {
+  const relevant = new Set<number>();
+  lines.forEach((l, i) => {
+    if (l.type !== "context") {
+      for (let k = Math.max(0, i - ctx); k <= Math.min(lines.length - 1, i + ctx); k++) relevant.add(k);
+    }
+  });
+  if (relevant.size === 0) {
+    const preview = lines.slice(0, ctx);
+    const rest = lines.length - preview.length;
+    return [...preview, ...(rest > 0 ? [{ type: "ellipsis" as const, count: rest }] : [])];
+  }
+  const result: DiffItem[] = [];
+  let last = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (!relevant.has(i)) continue;
+    if (last !== -1 && i > last + 1) result.push({ type: "ellipsis" as const, count: i - last - 1 });
+    result.push(lines[i]);
+    last = i;
+  }
+  if (last < lines.length - 1) result.push({ type: "ellipsis" as const, count: lines.length - 1 - last });
+  return result;
+}
+
 // ── GitHubPushModal ───────────────────────────────────────────────────────────
 function GitHubPushModal({
-  fileEdit,
+  fileEdits,
   linkedRepo,
   projectId,
   onClose,
+  onPushSuccess,
 }: {
-  fileEdit: FileEdit;
+  fileEdits: FileEdit[];
   linkedRepo: LinkedRepo | null;
   projectId: number;
   onClose: () => void;
+  onPushSuccess: (records: PushRecord[]) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const filename = fileEdit.path.split("/").pop() ?? fileEdit.path;
-  const lineCount = fileEdit.content.split("\n").length;
+  const _projectId = projectId; void _projectId;
 
+  const [selectedIdx, setSelectedIdx] = useState(0);
   const [useNewBranch, setUseNewBranch] = useState(true);
   const [branchName, setBranchName] = useState(`atlas/fix-${today}`);
-  const [commitMsg, setCommitMsg] = useState(`Atlas: update ${filename}`);
+  const [commitMsg, setCommitMsg] = useState(
+    fileEdits.length === 1
+      ? `Atlas: update ${fileEdits[0]?.path.split("/").pop() ?? "file"}`
+      : `Atlas: update ${fileEdits.length} files`
+  );
   const [pushing, setPushing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ commitUrl: string; branch: string } | null>(null);
-  const [showCode, setShowCode] = useState(false);
-  const [originalContent, setOriginalContent] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"diff" | "full">("diff");
+  const [originalContents, setOriginalContents] = useState<(string | null)[]>(() => fileEdits.map(() => null));
+  const [loadingOriginals, setLoadingOriginals] = useState(true);
   const [rollingBack, setRollingBack] = useState(false);
   const [rolledBack, setRolledBack] = useState(false);
 
   const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
+
+  useEffect(() => {
+    if (!linkedRepo || !token) { setLoadingOriginals(false); return; }
+    let cancelled = false;
+    Promise.all(
+      fileEdits.map((fe) =>
+        fetch(
+          `/api/github/file?repo=${encodeURIComponent(linkedRepo.fullName)}&path=${encodeURIComponent(fe.path)}&branch=${encodeURIComponent(linkedRepo.defaultBranch)}`,
+          { headers: { "x-github-token": token } }
+        )
+          .then((r) => r.ok ? r.json() as Promise<{ content: string }> : null)
+          .then((d) => (d as { content: string } | null)?.content ?? null)
+          .catch(() => null)
+      )
+    ).then((originals) => {
+      if (!cancelled) { setOriginalContents(originals); setLoadingOriginals(false); }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const currentFile = fileEdits[selectedIdx] ?? fileEdits[0];
+  const currentOriginal = originalContents[selectedIdx] ?? null;
+  const diffItems: DiffItem[] = currentOriginal !== null
+    ? collapseDiff(computeLineDiff(currentOriginal, currentFile.content))
+    : currentFile.content.split("\n").map((line) => ({ type: "added" as const, line }));
 
   const handlePush = async () => {
     if (!linkedRepo || !token) {
@@ -576,23 +680,8 @@ function GitHubPushModal({
     }
     setPushing(true);
     setError(null);
-
-    // Fetch original file content for rollback before overwriting
-    try {
-      const origRes = await fetch(
-        `/api/github/file?repo=${encodeURIComponent(linkedRepo.fullName)}&path=${encodeURIComponent(fileEdit.path)}&branch=${encodeURIComponent(linkedRepo.defaultBranch)}`,
-        { headers: { "x-github-token": token } }
-      );
-      if (origRes.ok) {
-        const origData = await origRes.json() as { content: string };
-        setOriginalContent(origData.content);
-      }
-    } catch {}
-
     try {
       const targetBranch = useNewBranch ? branchName : linkedRepo.defaultBranch;
-
-      // Create new branch if needed
       if (useNewBranch) {
         const branchRes = await fetch("/api/github/branch", {
           method: "POST",
@@ -604,25 +693,37 @@ function GitHubPushModal({
           throw new Error(d.error || `Branch creation failed: HTTP ${branchRes.status}`);
         }
       }
-
-      // Commit the file
-      const commitRes = await fetch("/api/github/commit", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "x-github-token": token },
-        body: JSON.stringify({
-          repo: linkedRepo.fullName,
-          branch: targetBranch,
-          path: fileEdit.path,
-          content: fileEdit.content,
-          message: commitMsg,
-        }),
-      });
-      if (!commitRes.ok) {
-        const d = await commitRes.json().catch(() => ({})) as any;
-        throw new Error(d.error || `Commit failed: HTTP ${commitRes.status}`);
+      let lastCommitUrl = "";
+      for (let i = 0; i < fileEdits.length; i++) {
+        const fe = fileEdits[i];
+        const commitRes = await fetch("/api/github/commit", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "x-github-token": token },
+          body: JSON.stringify({
+            repo: linkedRepo.fullName, branch: targetBranch, path: fe.path, content: fe.content,
+            message: `${commitMsg}${fileEdits.length > 1 ? ` (${i + 1}/${fileEdits.length})` : ""}`,
+          }),
+        });
+        if (!commitRes.ok) {
+          const d = await commitRes.json().catch(() => ({})) as any;
+          throw new Error(d.error || `Commit failed for ${fe.path}: HTTP ${commitRes.status}`);
+        }
+        const cd = await commitRes.json() as { commitUrl: string };
+        lastCommitUrl = cd.commitUrl;
       }
-      const commitData = await commitRes.json() as { commitUrl: string; branch: string };
-      setSuccess({ commitUrl: commitData.commitUrl, branch: targetBranch });
+      const records: PushRecord[] = fileEdits.map((fe, i) => ({
+        id: `${Date.now()}-${i}`,
+        path: fe.path,
+        filename: fe.path.split("/").pop() ?? fe.path,
+        branch: targetBranch,
+        commitUrl: lastCommitUrl,
+        originalContent: originalContents[i] ?? null,
+        newContent: fe.content,
+        pushedAt: new Date().toISOString(),
+        rolledBack: false,
+      }));
+      onPushSuccess(records);
+      setSuccess({ commitUrl: lastCommitUrl, branch: targetBranch });
     } catch (e: any) {
       setError(e.message ?? "Push failed");
     } finally {
@@ -631,23 +732,21 @@ function GitHubPushModal({
   };
 
   const handleRollback = async () => {
-    if (!linkedRepo || !token || !originalContent || !success) return;
+    if (!linkedRepo || !token || !success) return;
     setRollingBack(true);
     try {
-      const rollbackRes = await fetch("/api/github/commit", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "x-github-token": token },
-        body: JSON.stringify({
-          repo: linkedRepo.fullName,
-          branch: success.branch,
-          path: fileEdit.path,
-          content: originalContent,
-          message: `Atlas: rollback ${filename}`,
-        }),
-      });
-      if (!rollbackRes.ok) {
-        const d = await rollbackRes.json().catch(() => ({})) as any;
-        throw new Error(d.error || "Rollback failed");
+      for (let i = 0; i < fileEdits.length; i++) {
+        const orig = originalContents[i];
+        if (!orig) continue;
+        const r = await fetch("/api/github/commit", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "x-github-token": token },
+          body: JSON.stringify({
+            repo: linkedRepo.fullName, branch: success.branch, path: fileEdits[i].path,
+            content: orig, message: `Atlas: rollback ${fileEdits[i].path.split("/").pop()}`,
+          }),
+        });
+        if (!r.ok) { const d = await r.json().catch(() => ({})) as any; throw new Error(d.error || "Rollback failed"); }
       }
       setRolledBack(true);
     } catch (e: any) {
@@ -657,301 +756,153 @@ function GitHubPushModal({
     }
   };
 
+  const canRollback = originalContents.some((o) => o !== null);
+
   return (
     <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 1000,
-        background: "rgba(0,0,0,0.72)", backdropFilter: "blur(4px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "20px 16px",
-      }}
+      style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.72)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        style={{
-          width: "100%", maxWidth: 560,
-          background: "var(--atlas-surface)",
-          border: "1px solid var(--atlas-border)",
-          borderRadius: 12,
-          boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(201,162,76,0.08)",
-          display: "flex", flexDirection: "column",
-          maxHeight: "90vh", overflow: "hidden",
-        }}
-      >
+      <div style={{ width: "100%", maxWidth: 680, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", borderRadius: 12, boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(201,162,76,0.08)", display: "flex", flexDirection: "column", maxHeight: "92vh", overflow: "hidden" }}>
+
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px 0" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 7,
-              background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
+            <div style={{ width: 28, height: 28, borderRadius: 7, background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <path d="M8 1C4.13 1 1 4.13 1 8c0 3.09 2 5.71 4.78 6.64.35.06.48-.15.48-.34v-1.2c-1.94.42-2.35-.94-2.35-.94-.32-.81-.78-1.03-.78-1.03-.64-.43.05-.42.05-.42.7.05 1.07.72 1.07.72.62 1.07 1.63.76 2.03.58.06-.45.24-.76.44-.93-1.55-.18-3.18-.77-3.18-3.44 0-.76.27-1.38.72-1.87-.07-.18-.31-.88.07-1.84 0 0 .59-.19 1.92.72A6.6 6.6 0 018 4.82c.59 0 1.19.08 1.74.23 1.33-.9 1.92-.72 1.92-.72.38.96.14 1.66.07 1.84.45.49.72 1.11.72 1.87 0 2.68-1.63 3.26-3.19 3.44.25.22.48.64.48 1.3v1.92c0 .19.13.4.48.33C13 13.71 15 11.09 15 8c0-3.87-3.13-7-7-7z" fill="currentColor" style={{ color: "var(--atlas-gold)" }} />
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)" }}>Push to GitHub</div>
-              {linkedRepo && (
-                <div style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
-                  {linkedRepo.fullName}
-                </div>
-              )}
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)" }}>
+                Push to GitHub
+                {fileEdits.length > 1 && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: "var(--atlas-gold)", opacity: 0.7, fontFamily: "var(--app-font-mono)" }}>{fileEdits.length} files</span>}
+              </div>
+              {linkedRepo && <div style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>{linkedRepo.fullName}</div>}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 18, lineHeight: 1, padding: "4px 6px", opacity: 0.5 }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}
-          >×</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 18, lineHeight: 1, padding: "4px 6px", opacity: 0.5 }} onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")} onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}>×</button>
         </div>
 
-        <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+        <div style={{ padding: "14px 20px", overflowY: "auto", flex: 1 }}>
           {success ? (
-            /* Success state */
             <div style={{ textAlign: "center", padding: "24px 0" }}>
               {rolledBack ? (
                 <>
                   <div style={{ fontSize: 22, marginBottom: 10, color: "rgba(134,239,172,0.8)" }}>↺</div>
-                  <div style={{ fontSize: 14, color: "var(--atlas-fg)", marginBottom: 6 }}>
-                    Rolled back — <strong>{filename}</strong> restored
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 16 }}>
-                    The original version has been pushed to <strong>{success.branch}</strong>.
-                  </div>
+                  <div style={{ fontSize: 14, color: "var(--atlas-fg)", marginBottom: 6 }}>Rolled back — {fileEdits.length > 1 ? `${fileEdits.length} files` : (fileEdits[0]?.path.split("/").pop() ?? "file")} restored</div>
+                  <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 16 }}>Original versions pushed to <strong>{success.branch}</strong>.</div>
                 </>
               ) : (
                 <>
                   <div style={{ fontSize: 28, marginBottom: 12, color: "rgba(134,239,172,0.8)" }}>✓</div>
-                  <div style={{ fontSize: 14, color: "var(--atlas-fg)", marginBottom: 6 }}>Pushed to <strong>{success.branch}</strong></div>
-                  <a
-                    href={success.commitUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                      padding: "6px 14px", borderRadius: 6,
-                      background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)",
-                      color: "var(--atlas-gold)", fontSize: 12,
-                      fontFamily: "var(--app-font-mono)", textDecoration: "none",
-                      marginTop: 8,
-                    }}
-                  >
-                    View commit on GitHub →
-                  </a>
-                  {/* Rollback */}
-                  {originalContent && !rolledBack && (
+                  <div style={{ fontSize: 14, color: "var(--atlas-fg)", marginBottom: 4 }}>{fileEdits.length > 1 ? `${fileEdits.length} files pushed` : "Pushed"} to <strong>{success.branch}</strong></div>
+                  {fileEdits.length > 1 && (
+                    <div style={{ marginBottom: 8 }}>
+                      {fileEdits.map((fe) => <div key={fe.path} style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.6, lineHeight: 1.8 }}>{fe.path}</div>)}
+                    </div>
+                  )}
+                  <a href={success.commitUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 14px", borderRadius: 6, background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)", color: "var(--atlas-gold)", fontSize: 12, fontFamily: "var(--app-font-mono)", textDecoration: "none", marginTop: 8 }}>View commit on GitHub →</a>
+                  {canRollback && (
                     <div style={{ marginTop: 18 }}>
-                      <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 10, lineHeight: 1.6 }}>
-                        Something break? Roll back to the original version instantly.
-                      </div>
-                      <button
-                        onClick={handleRollback}
-                        disabled={rollingBack}
-                        style={{
-                          padding: "7px 16px", borderRadius: 6, fontSize: 11,
-                          fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-                          background: rollingBack ? "rgba(255,255,255,0.04)" : "rgba(239,68,68,0.08)",
-                          border: `1px solid ${rollingBack ? "var(--atlas-border)" : "rgba(239,68,68,0.25)"}`,
-                          color: rollingBack ? "var(--atlas-muted)" : "rgba(252,165,165,0.85)",
-                          cursor: rollingBack ? "not-allowed" : "pointer",
-                          transition: "all 160ms ease",
-                        }}
-                      >
-                        {rollingBack ? "Rolling back…" : "↺ Rollback this change"}
+                      <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 10, lineHeight: 1.6 }}>Something break? Roll back to the original version instantly.</div>
+                      <button onClick={handleRollback} disabled={rollingBack} style={{ padding: "7px 16px", borderRadius: 6, fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", background: rollingBack ? "rgba(255,255,255,0.04)" : "rgba(239,68,68,0.08)", border: `1px solid ${rollingBack ? "var(--atlas-border)" : "rgba(239,68,68,0.25)"}`, color: rollingBack ? "var(--atlas-muted)" : "rgba(252,165,165,0.85)", cursor: rollingBack ? "not-allowed" : "pointer", transition: "all 160ms ease" }}>
+                        {rollingBack ? "Rolling back…" : `↺ Rollback ${fileEdits.length > 1 ? "all changes" : "this change"}`}
                       </button>
-                      {error && (
-                        <div style={{ marginTop: 8, fontSize: 11, color: "rgba(252,165,165,0.75)" }}>{error}</div>
-                      )}
+                      {error && <div style={{ marginTop: 8, fontSize: 11, color: "rgba(252,165,165,0.75)" }}>{error}</div>}
                     </div>
                   )}
                 </>
               )}
               <div style={{ marginTop: 16 }}>
-                <button
-                  onClick={onClose}
-                  style={{
-                    padding: "6px 16px", borderRadius: 6, fontSize: 12,
-                    background: "transparent", border: "1px solid var(--atlas-border)",
-                    color: "var(--atlas-muted)", cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
+                <button onClick={onClose} style={{ padding: "6px 16px", borderRadius: 6, fontSize: 12, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer" }}>Close</button>
               </div>
             </div>
           ) : (
             <>
-              {/* File info */}
-              <div style={{
-                padding: "10px 13px", borderRadius: 7,
-                background: "rgba(0,0,0,0.25)", border: "1px solid var(--atlas-border)",
-                marginBottom: 16,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                      <path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6l-5-5z" stroke="currentColor" strokeWidth="1.2" />
-                      <path d="M9 1v5h5" stroke="currentColor" strokeWidth="1.2" />
-                    </svg>
-                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-fg)" }}>
-                      {fileEdit.path}
-                    </span>
-                  </div>
-                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)" }}>
-                    {lineCount} lines
-                  </span>
+              {/* File tabs (multiple files) */}
+              {fileEdits.length > 1 && (
+                <div style={{ display: "flex", gap: 4, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
+                  {fileEdits.map((fe, idx) => (
+                    <button key={fe.path} onClick={() => setSelectedIdx(idx)} style={{ padding: "5px 11px", borderRadius: 5, fontSize: 10, fontFamily: "var(--app-font-mono)", whiteSpace: "nowrap" as const, background: idx === selectedIdx ? "rgba(201,162,76,0.1)" : "transparent", border: `1px solid ${idx === selectedIdx ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`, color: idx === selectedIdx ? "var(--atlas-gold)" : "var(--atlas-muted)", cursor: "pointer", transition: "all 140ms ease", flexShrink: 0 }}>
+                      {fe.path.split("/").pop()}
+                    </button>
+                  ))}
                 </div>
-                <button
-                  onClick={() => setShowCode((v) => !v)}
-                  style={{
-                    marginTop: 8, background: "none", border: "none", cursor: "pointer",
-                    color: "var(--atlas-muted)", fontSize: 10,
-                    fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-                    padding: 0, opacity: 0.6,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.6")}
-                >
-                  {showCode ? "Hide code ↑" : "Review code ↓"}
-                </button>
-                {showCode && (
-                  <pre style={{
-                    marginTop: 10, padding: "10px", borderRadius: 5,
-                    background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.04)",
-                    fontSize: 10.5, fontFamily: "var(--app-font-mono)", lineHeight: 1.6,
-                    color: "rgba(231,229,228,0.7)", overflowX: "auto",
-                    maxHeight: 220, overflowY: "auto",
-                    whiteSpace: "pre",
-                  }}>
-                    {fileEdit.content}
-                  </pre>
+              )}
+
+              {/* Diff / Full view */}
+              <div style={{ padding: "10px 13px", borderRadius: 7, background: "rgba(0,0,0,0.25)", border: "1px solid var(--atlas-border)", marginBottom: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-fg)" }}>{currentFile.path}</span>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {(["diff", "full"] as const).map((m) => (
+                      <button key={m} onClick={() => setViewMode(m)} style={{ padding: "3px 9px", borderRadius: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", background: viewMode === m ? "rgba(201,162,76,0.1)" : "transparent", border: `1px solid ${viewMode === m ? "rgba(201,162,76,0.3)" : "var(--atlas-border)"}`, color: viewMode === m ? "var(--atlas-gold)" : "var(--atlas-muted)", cursor: "pointer" }}>
+                        {m === "diff" ? "Diff" : "Full"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {viewMode === "diff" ? (
+                  loadingOriginals ? (
+                    <div style={{ padding: "12px 0", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5, fontFamily: "var(--app-font-mono)" }}>Loading original…</div>
+                  ) : (
+                    <div style={{ borderRadius: 5, overflow: "hidden", border: "1px solid rgba(255,255,255,0.04)", maxHeight: 280, overflowY: "auto", fontFamily: "var(--app-font-mono)", fontSize: 10.5, lineHeight: 1.55 }}>
+                      {currentOriginal === null && (
+                        <div style={{ padding: "5px 10px", fontSize: 10, color: "rgba(134,239,172,0.6)", background: "rgba(134,239,172,0.04)", borderBottom: "1px solid rgba(134,239,172,0.1)" }}>New file</div>
+                      )}
+                      {diffItems.map((item, idx) => {
+                        if (item.type === "ellipsis") {
+                          return <div key={idx} style={{ padding: "3px 10px", background: "rgba(0,0,0,0.2)", color: "rgba(120,113,108,0.4)", fontSize: 9.5, letterSpacing: "0.04em", borderTop: "1px solid rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>···  {item.count} unchanged {item.count === 1 ? "line" : "lines"}</div>;
+                        }
+                        const isAdded = item.type === "added";
+                        const isRemoved = item.type === "removed";
+                        return (
+                          <div key={idx} style={{ display: "flex", alignItems: "flex-start", background: isAdded ? "rgba(134,239,172,0.06)" : isRemoved ? "rgba(239,68,68,0.05)" : "transparent", borderLeft: `2px solid ${isAdded ? "rgba(134,239,172,0.4)" : isRemoved ? "rgba(239,68,68,0.35)" : "transparent"}` }}>
+                            <span style={{ width: 16, flexShrink: 0, textAlign: "center", color: isAdded ? "rgba(134,239,172,0.7)" : isRemoved ? "rgba(252,165,165,0.6)" : "transparent", fontSize: 10, paddingTop: 1, userSelect: "none" as const }}>{isAdded ? "+" : isRemoved ? "−" : " "}</span>
+                            <span style={{ flex: 1, padding: "1px 8px 1px 2px", color: isAdded ? "rgba(134,239,172,0.85)" : isRemoved ? "rgba(252,165,165,0.7)" : "rgba(231,229,228,0.32)", whiteSpace: "pre" as const, overflowX: "auto" }}>{item.line || " "}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : (
+                  <pre style={{ margin: 0, padding: "10px", background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 5, fontSize: 10.5, fontFamily: "var(--app-font-mono)", lineHeight: 1.6, color: "rgba(231,229,228,0.7)", overflowX: "auto", maxHeight: 280, overflowY: "auto", whiteSpace: "pre" }}>{currentFile.content}</pre>
                 )}
               </div>
 
-              {/* Branch option */}
+              {/* Branch */}
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", marginBottom: 8 }}>
-                  TARGET BRANCH
-                </div>
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", marginBottom: 8 }}>TARGET BRANCH</div>
                 <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                  <button
-                    onClick={() => setUseNewBranch(true)}
-                    style={{
-                      flex: 1, padding: "7px 10px", borderRadius: 6, fontSize: 12, cursor: "pointer",
-                      background: useNewBranch ? "rgba(201,162,76,0.1)" : "transparent",
-                      border: `1px solid ${useNewBranch ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
-                      color: useNewBranch ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                      transition: "all 160ms ease",
-                    }}
-                  >
-                    New branch (safe)
-                  </button>
-                  <button
-                    onClick={() => setUseNewBranch(false)}
-                    style={{
-                      flex: 1, padding: "7px 10px", borderRadius: 6, fontSize: 12, cursor: "pointer",
-                      background: !useNewBranch ? "rgba(201,162,76,0.1)" : "transparent",
-                      border: `1px solid ${!useNewBranch ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
-                      color: !useNewBranch ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                      transition: "all 160ms ease",
-                    }}
-                  >
-                    {linkedRepo?.defaultBranch ?? "main"} (direct)
-                  </button>
+                  {[true, false].map((isNew) => (
+                    <button key={String(isNew)} onClick={() => setUseNewBranch(isNew)} style={{ flex: 1, padding: "7px 10px", borderRadius: 6, fontSize: 12, cursor: "pointer", background: useNewBranch === isNew ? "rgba(201,162,76,0.1)" : "transparent", border: `1px solid ${useNewBranch === isNew ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`, color: useNewBranch === isNew ? "var(--atlas-gold)" : "var(--atlas-muted)", transition: "all 160ms ease" }}>
+                      {isNew ? "New branch (safe)" : `${linkedRepo?.defaultBranch ?? "main"} (direct)`}
+                    </button>
+                  ))}
                 </div>
                 {useNewBranch && (
-                  <input
-                    value={branchName}
-                    onChange={(e) => setBranchName(e.target.value)}
-                    placeholder="branch name"
-                    style={{
-                      width: "100%", padding: "8px 11px", borderRadius: 6,
-                      background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)",
-                      color: "var(--atlas-fg)", fontSize: 12,
-                      fontFamily: "var(--app-font-mono)",
-                      outline: "none", boxSizing: "border-box",
-                    }}
-                    onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
-                    onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
-                  />
+                  <input value={branchName} onChange={(e) => setBranchName(e.target.value)} placeholder="branch name" style={{ width: "100%", padding: "8px 11px", borderRadius: 6, background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12, fontFamily: "var(--app-font-mono)", outline: "none", boxSizing: "border-box" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")} onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
                 )}
               </div>
 
               {/* Commit message */}
               <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", marginBottom: 8 }}>
-                  COMMIT MESSAGE
-                </div>
-                <input
-                  value={commitMsg}
-                  onChange={(e) => setCommitMsg(e.target.value)}
-                  placeholder="describe the change"
-                  style={{
-                    width: "100%", padding: "8px 11px", borderRadius: 6,
-                    background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)",
-                    color: "var(--atlas-fg)", fontSize: 12,
-                    outline: "none", boxSizing: "border-box",
-                  }}
-                  onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
-                  onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
-                />
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", marginBottom: 8 }}>COMMIT MESSAGE</div>
+                <input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder="describe the change" style={{ width: "100%", padding: "8px 11px", borderRadius: 6, background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12, outline: "none", boxSizing: "border-box" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")} onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
               </div>
 
-              {!linkedRepo && (
-                <div style={{
-                  padding: "9px 12px", borderRadius: 6, marginBottom: 14,
-                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-                  fontSize: 12, color: "rgba(252,165,165,0.8)",
-                }}>
-                  No repo linked. Open the Files tab and link a GitHub repo to this project first.
-                </div>
-              )}
-
-              {error && (
-                <div style={{
-                  padding: "9px 12px", borderRadius: 6, marginBottom: 14,
-                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-                  fontSize: 12, color: "rgba(252,165,165,0.8)",
-                }}>
-                  {error}
-                </div>
-              )}
+              {!linkedRepo && <div style={{ padding: "9px 12px", borderRadius: 6, marginBottom: 14, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 12, color: "rgba(252,165,165,0.8)" }}>No repo linked. Open the Files tab and link a GitHub repo to this project first.</div>}
+              {error && <div style={{ padding: "9px 12px", borderRadius: 6, marginBottom: 14, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 12, color: "rgba(252,165,165,0.8)" }}>{error}</div>}
             </>
           )}
         </div>
 
-        {/* Footer */}
         {!success && (
-          <div style={{
-            padding: "14px 20px",
-            borderTop: "1px solid var(--atlas-border)",
-            display: "flex", gap: 10, justifyContent: "flex-end",
-          }}>
-            <button
-              onClick={onClose}
-              style={{
-                padding: "8px 16px", borderRadius: 6, fontSize: 12,
-                background: "transparent", border: "1px solid var(--atlas-border)",
-                color: "var(--atlas-muted)", cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handlePush}
-              disabled={pushing || !linkedRepo}
-              style={{
-                padding: "8px 18px", borderRadius: 6, fontSize: 12, fontWeight: 600,
-                background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)",
-                color: "var(--atlas-bg)", border: "none",
-                cursor: pushing || !linkedRepo ? "not-allowed" : "pointer",
-                opacity: pushing || !linkedRepo ? 0.5 : 1,
-                transition: "opacity 160ms ease",
-              }}
-            >
-              {pushing ? "Pushing…" : "Push to GitHub"}
+          <div style={{ padding: "14px 20px", borderTop: "1px solid var(--atlas-border)", display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: 6, fontSize: 12, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer" }}>Cancel</button>
+            <button onClick={handlePush} disabled={pushing || !linkedRepo} style={{ padding: "8px 18px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)", color: "var(--atlas-bg)", border: "none", cursor: pushing || !linkedRepo ? "not-allowed" : "pointer", opacity: pushing || !linkedRepo ? 0.5 : 1, transition: "opacity 160ms ease" }}>
+              {pushing ? "Pushing…" : fileEdits.length > 1 ? `Push ${fileEdits.length} files →` : "Push to GitHub"}
             </button>
           </div>
         )}
@@ -970,6 +921,7 @@ function AssistantBubble({
   onPark,
   onCommit,
   onRegenerate,
+  onPushSuccess,
 }: {
   message: ChatMessage;
   projectId: number;
@@ -980,12 +932,14 @@ function AssistantBubble({
   onPark: (content: string) => void;
   onCommit: (content: string) => void;
   onRegenerate: () => void;
+  onPushSuccess: (records: PushRecord[]) => void;
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [showPushModal, setShowPushModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const activeEdits = message.fileEdits ?? (message.fileEdit ? [message.fileEdit] : []);
 
   return (
     <div
@@ -1004,27 +958,42 @@ function AssistantBubble({
         >
           Atlas
         </div>
+        {/* Memory chips */}
+        {message.memoryChips && message.memoryChips.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 5, marginBottom: 8 }}>
+            {message.memoryChips.map((chip) => (
+              <span
+                key={chip}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "2px 8px", borderRadius: 20,
+                  background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.18)",
+                  fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em",
+                  color: "rgba(201,162,76,0.7)",
+                }}
+              >
+                <span style={{ opacity: 0.6, fontSize: 9 }}>◆</span>
+                {chip}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div style={{ fontSize: 14, lineHeight: 1.78, color: "var(--atlas-fg)", opacity: 0.9, whiteSpace: "pre-wrap" }}>
           {message.content}
         </div>
 
         {/* Code ready card */}
-        {message.fileEdit && (
+        {activeEdits.length > 0 && (
           <div
             style={{
-              marginTop: 12, padding: "11px 14px",
-              borderRadius: 8,
-              background: "rgba(201,162,76,0.05)",
-              border: "1px solid rgba(201,162,76,0.2)",
+              marginTop: 12, padding: "11px 14px", borderRadius: 8,
+              background: "rgba(201,162,76,0.05)", border: "1px solid rgba(201,162,76,0.2)",
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-              <div style={{
-                width: 26, height: 26, borderRadius: 6, flexShrink: 0,
-                background: "rgba(201,162,76,0.12)", border: "1px solid rgba(201,162,76,0.25)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
+              <div style={{ width: 26, height: 26, borderRadius: 6, flexShrink: 0, background: "rgba(201,162,76,0.12)", border: "1px solid rgba(201,162,76,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                   <path d="M3 2h8l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="var(--atlas-gold)" strokeWidth="1.2" />
                   <path d="M11 2v4h4" stroke="var(--atlas-gold)" strokeWidth="1.2" />
@@ -1033,31 +1002,19 @@ function AssistantBubble({
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-gold)", marginBottom: 2 }}>
-                  Code ready
+                  {activeEdits.length === 1 ? "Code ready" : `${activeEdits.length} files ready`}
                 </div>
-                <div style={{
-                  fontFamily: "var(--app-font-mono)", fontSize: 10,
-                  color: "var(--atlas-muted)",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}>
-                  {message.fileEdit.path}
-                  <span style={{ opacity: 0.5, marginLeft: 6 }}>
-                    · {message.fileEdit.content.split("\n").length} lines
-                  </span>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                  {activeEdits.length === 1
+                    ? <>{activeEdits[0].path}<span style={{ opacity: 0.5, marginLeft: 6 }}>· {activeEdits[0].content.split("\n").length} lines</span></>
+                    : activeEdits.map((fe) => fe.path.split("/").pop()).join(", ")
+                  }
                 </div>
               </div>
             </div>
             <button
               onClick={() => setShowPushModal(true)}
-              style={{
-                flexShrink: 0,
-                padding: "6px 13px", borderRadius: 5, fontSize: 11, fontWeight: 600,
-                fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-                background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)",
-                color: "var(--atlas-bg)", border: "none", cursor: "pointer",
-                boxShadow: "0 0 12px -4px color-mix(in oklab, var(--atlas-gold) 50%, transparent)",
-                transition: "opacity 160ms ease",
-              }}
+              style={{ flexShrink: 0, padding: "6px 13px", borderRadius: 5, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)", color: "var(--atlas-bg)", border: "none", cursor: "pointer", boxShadow: "0 0 12px -4px color-mix(in oklab, var(--atlas-gold) 50%, transparent)", transition: "opacity 160ms ease" }}
               onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
               onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
             >
@@ -1180,12 +1137,13 @@ function AssistantBubble({
         </div>
       </div>
 
-      {showPushModal && message.fileEdit && (
+      {showPushModal && activeEdits.length > 0 && (
         <GitHubPushModal
-          fileEdit={message.fileEdit}
+          fileEdits={activeEdits}
           linkedRepo={linkedRepo}
           projectId={projectId}
           onClose={() => setShowPushModal(false)}
+          onPushSuccess={(records) => { onPushSuccess(records); setShowPushModal(false); }}
         />
       )}
     </div>
@@ -1374,14 +1332,50 @@ function LedgerEntry({ entry }: { entry: Entry }) {
   );
 }
 
+// ── PushHistoryEntry ──────────────────────────────────────────────────────────
+function PushHistoryEntry({ record, onRollback }: { record: PushRecord; onRollback: () => Promise<void> }) {
+  const [rolling, setRolling] = useState(false);
+  const [done, setDone] = useState(record.rolledBack);
+  return (
+    <div style={{ padding: "10px 12px", borderRadius: 7, background: "rgba(0,0,0,0.2)", border: "1px solid var(--atlas-border)", marginBottom: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-fg)" }}>{record.filename}</span>
+        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.5 }}>
+          {new Date(record.pushedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </div>
+      <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.55, marginBottom: 7 }}>{record.branch}</div>
+      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+        <a href={record.commitUrl} target="_blank" rel="noopener noreferrer" style={{ padding: "3px 9px", borderRadius: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", textDecoration: "none", cursor: "pointer" }}>
+          View →
+        </a>
+        {record.originalContent && !done && (
+          <button
+            disabled={rolling}
+            onClick={async () => { setRolling(true); await onRollback(); setRolling(false); setDone(true); }}
+            style={{ padding: "3px 9px", borderRadius: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: rolling ? "rgba(255,255,255,0.03)" : "rgba(239,68,68,0.07)", border: `1px solid ${rolling ? "var(--atlas-border)" : "rgba(239,68,68,0.22)"}`, color: rolling ? "var(--atlas-muted)" : "rgba(252,165,165,0.8)", cursor: rolling ? "not-allowed" : "pointer", transition: "all 150ms ease" }}
+          >
+            {rolling ? "…" : "↺ Rollback"}
+          </button>
+        )}
+        {done && <span style={{ padding: "3px 9px", fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5 }}>rolled back</span>}
+      </div>
+    </div>
+  );
+}
+
 function LedgerTab({
   projectId,
   entries,
   activeCatch,
+  pushHistory,
+  onRollbackPush,
 }: {
   projectId: number;
   entries: Entry[];
   activeCatch: CatchPayload | null;
+  pushHistory: PushRecord[];
+  onRollbackPush: (record: PushRecord) => Promise<void>;
 }) {
   const parked = entries.filter((e) => e.status === "parked");
 
@@ -1570,6 +1564,34 @@ function LedgerTab({
               )}
             </div>
           </>
+        )}
+      </div>
+
+      {/* ── Changes (push history) ── */}
+      <div style={{ padding: "0 12px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingTop: 12, borderTop: "1px solid var(--atlas-border)" }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: pushHistory.length > 0 ? "rgba(134,239,172,0.6)" : "var(--atlas-muted)", opacity: pushHistory.length > 0 ? 1 : 0.3, flexShrink: 0 }} />
+          <span style={{ fontSize: 10.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--atlas-muted)" }}>Changes</span>
+          {pushHistory.length > 0 && (
+            <span style={{ marginLeft: "auto", fontSize: 9.5, fontFamily: "var(--app-font-mono)", background: "rgba(134,239,172,0.08)", border: "1px solid rgba(134,239,172,0.2)", color: "rgba(134,239,172,0.7)", padding: "1px 6px", borderRadius: 10 }}>
+              {pushHistory.length}
+            </span>
+          )}
+        </div>
+        {pushHistory.length > 0 ? (
+          [...pushHistory].reverse().map((record) => (
+            <PushHistoryEntry
+              key={record.id}
+              record={record}
+              onRollback={async () => {
+                await onRollbackPush(record);
+              }}
+            />
+          ))
+        ) : (
+          <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.35, lineHeight: 1.65 }}>
+            Code pushes will appear here. Tap <strong style={{ opacity: 0.6 }}>Rollback</strong> on any to instantly restore the original.
+          </div>
         )}
       </div>
 
@@ -3000,6 +3022,8 @@ function RightPanel({
   fullscreen,
   onToggleFullscreen,
   onFileContext,
+  pushHistory,
+  onRollbackPush,
 }: {
   projectId: number;
   entries: Entry[];
@@ -3008,6 +3032,8 @@ function RightPanel({
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
   onFileContext: (ctx: string | null) => void;
+  pushHistory: PushRecord[];
+  onRollbackPush: (record: PushRecord) => Promise<void>;
 }) {
   const [tab, setTab] = useState<RightTab>("ledger");
 
@@ -3181,7 +3207,7 @@ function RightPanel({
 
       {/* Tab content */}
       {tab === "ledger" && (
-        <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} />
+        <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} pushHistory={pushHistory} onRollbackPush={onRollbackPush} />
       )}
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
@@ -3204,6 +3230,7 @@ export default function Workspace() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
   const [memoryChips, setMemoryChips] = useState<string[]>([]);
+  const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
   const [rightOpen, setRightOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [chatWidth, setChatWidth] = useState(() => {
@@ -3285,12 +3312,14 @@ export default function Workspace() {
         .then((r) => r.json())
         .then((res) => {
           const cp = res.catchPayload as CatchPayload | null;
-          const fe = res.fileEdit as FileEdit | undefined;
+          const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
+          const chips = (res.memoryChips ?? []) as string[];
           setMessages((prev) => [...prev, {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
             sentAt: new Date().toISOString(),
-            ...(fe ? { fileEdit: fe } : {}),
+            ...(fes.length > 0 ? { fileEdits: fes, fileEdit: fes[0] } : {}),
+            ...(chips.length > 0 ? { memoryChips: chips } : {}),
           }]);
           if (cp) setActiveCatch(cp);
           if (res.memoryChips && res.memoryChips.length > 0) {
@@ -3392,6 +3421,21 @@ export default function Workspace() {
     },
     [id, sessionId, createEntry, queryClient]
   );
+
+  const handleRollbackPush = useCallback(async (record: PushRecord) => {
+    const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
+    if (!linkedRepo || !token || !record.originalContent) return;
+    await fetch("/api/github/commit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-github-token": token },
+      body: JSON.stringify({
+        repo: linkedRepo.fullName, branch: record.branch,
+        path: record.path, content: record.originalContent,
+        message: `Atlas: rollback ${record.filename}`,
+      }),
+    });
+    setPushHistory((prev) => prev.map((r) => r.id === record.id ? { ...r, rolledBack: true } : r));
+  }, [linkedRepo]);
 
   const handleVoiceTranscript = useCallback((text: string) => {
     setInput((prev) => (prev ? `${prev} ${text}` : text));
@@ -3592,6 +3636,7 @@ export default function Workspace() {
                   onPark={handlePark}
                   onCommit={handleCommit}
                   onRegenerate={() => handleRegenerate(i)}
+                  onPushSuccess={(records) => setPushHistory((prev) => [...prev, ...records].slice(-5))}
                 />
               )
             )}
@@ -3805,6 +3850,8 @@ export default function Workspace() {
                 entries={entries || []}
                 activeCatch={activeCatch}
                 onFileContext={setFileContext}
+                pushHistory={pushHistory}
+                onRollbackPush={handleRollbackPush}
               />
             </div>
           </>
@@ -3851,6 +3898,8 @@ export default function Workspace() {
                 fullscreen={rightFullscreen}
                 onToggleFullscreen={() => setRightFullscreen((f) => !f)}
                 onFileContext={setFileContext}
+                pushHistory={pushHistory}
+                onRollbackPush={handleRollbackPush}
               />
             </div>
           </div>

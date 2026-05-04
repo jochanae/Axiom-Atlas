@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, chatMessagesTable, sessionsTable, projectsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { SendMessageBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
@@ -41,7 +40,7 @@ PROJECT_MEMORY: [one plain-English sentence]
 Only use PROJECT_MEMORY when you've confirmed something that will still be true next session. Skip it for observations, questions, or things already in the project memory above. Maximum one PROJECT_MEMORY line per response.
 
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub):
-When the user asks you to fix or build something AND a complete file is in context, you MUST output the corrected complete file at the very END of your response using this EXACT format:
+When the user asks you to fix or build something AND a complete file is in context, output the corrected complete file(s) at the very END of your response using this EXACT format — one block per file:
 
 FILE_EDIT_START
 path: [the file path exactly as shown in the context, e.g. src/components/Foo.tsx]
@@ -50,13 +49,14 @@ FILE_EDIT_CONTENT
 [complete file content here — every line, no omissions, no "... rest stays the same"]
 FILE_EDIT_END
 
+You may emit MULTIPLE FILE_EDIT blocks in a single response when a feature or fix touches more than one file. Each block must contain the complete file content. Emit them back-to-back after your explanation.
+
 Critical rules for FILE_EDIT:
 - ONLY emit FILE_EDIT when you have the full file content in context (not truncated).
 - Always output the COMPLETE file — never partial, never "// ... unchanged". The user will push this directly to GitHub.
-- Explain what you changed and why in plain English BEFORE the FILE_EDIT block.
-- One FILE_EDIT per response maximum.
+- Explain what you changed and why in plain English BEFORE the FILE_EDIT blocks.
 - Do NOT emit FILE_EDIT for: explanations only, debugging questions, when file is truncated, when no file is in context.
-- The FILE_EDIT block is invisible to the user in chat — they see a "Code ready" button instead.`;
+- The FILE_EDIT blocks are invisible to the user in chat — they see a "Code ready" button instead.`;
 
 function detectMemoryChips(content: string): { content: string; memoryChips: string[] } {
   const marker = "MEMORY_CHIPS:";
@@ -102,64 +102,82 @@ interface FileEdit {
   content: string;
 }
 
-function extractFileEdit(content: string): { content: string; fileEdit: FileEdit | null } {
+function extractAllFileEdits(content: string): { visibleContent: string; fileEdits: FileEdit[] } {
   const startMarker = "FILE_EDIT_START";
   const endMarker = "FILE_EDIT_END";
   const contentMarker = "FILE_EDIT_CONTENT";
 
-  const startIdx = content.indexOf(startMarker);
-  const endIdx = content.indexOf(endMarker);
+  const fileEdits: FileEdit[] = [];
 
-  if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) {
-    return { content, fileEdit: null };
+  // Everything before the first FILE_EDIT_START is the visible explanation
+  const firstStart = content.indexOf(startMarker);
+  const visibleContent = firstStart !== -1 ? content.slice(0, firstStart).trim() : content;
+
+  let searchFrom = 0;
+  while (true) {
+    const startIdx = content.indexOf(startMarker, searchFrom);
+    if (startIdx === -1) break;
+    const endIdx = content.indexOf(endMarker, startIdx + startMarker.length);
+    if (endIdx === -1) break;
+
+    const block = content.slice(startIdx + startMarker.length, endIdx);
+    const contentIdx = block.indexOf(contentMarker);
+    if (contentIdx !== -1) {
+      const header = block.slice(0, contentIdx).trim();
+      const fileContent = block.slice(contentIdx + contentMarker.length);
+      const trimmed = fileContent.startsWith("\n") ? fileContent.slice(1) : fileContent;
+      const final = trimmed.endsWith("\n") ? trimmed.slice(0, -1) : trimmed;
+
+      let path = "";
+      let language = "typescript";
+      for (const line of header.split("\n")) {
+        const ci = line.indexOf(":");
+        if (ci === -1) continue;
+        const key = line.slice(0, ci).trim();
+        const val = line.slice(ci + 1).trim();
+        if (key === "path") path = val;
+        if (key === "language") language = val;
+      }
+      if (path) fileEdits.push({ path, language, content: final });
+    }
+
+    searchFrom = endIdx + endMarker.length;
   }
 
-  const block = content.slice(startIdx + startMarker.length, endIdx);
-  const contentIdx = block.indexOf(contentMarker);
-  if (contentIdx === -1) return { content, fileEdit: null };
+  return { visibleContent, fileEdits };
+}
 
-  const header = block.slice(0, contentIdx).trim();
-  const fileContent = block.slice(contentIdx + contentMarker.length);
-  // Strip leading newline after the marker
-  const trimmedFileContent = fileContent.startsWith("\n") ? fileContent.slice(1) : fileContent;
-  // Strip trailing newline before FILE_EDIT_END
-  const finalContent = trimmedFileContent.endsWith("\n")
-    ? trimmedFileContent.slice(0, -1)
-    : trimmedFileContent;
-
-  let path = "";
-  let language = "typescript";
-  for (const line of header.split("\n")) {
-    const colonIdx = line.indexOf(":");
-    if (colonIdx === -1) continue;
-    const key = line.slice(0, colonIdx).trim();
-    const val = line.slice(colonIdx + 1).trim();
-    if (key === "path") path = val;
-    if (key === "language") language = val;
-  }
-
-  if (!path) return { content, fileEdit: null };
-
-  // Clean visible content: everything before FILE_EDIT_START
-  const visibleContent = content.slice(0, startIdx).trim();
-
-  return {
-    content: visibleContent,
-    fileEdit: { path, language, content: finalContent },
-  };
+function matchEntryChips(
+  content: string,
+  entries: Array<{ id: number; title: string; status: string }>
+): string[] {
+  const lower = content.toLowerCase();
+  return entries
+    .filter((e) => e.title.length > 5 && lower.includes(e.title.toLowerCase()))
+    .map((e) => e.title)
+    .slice(0, 5);
 }
 
 router.post("/chat", async (req, res): Promise<void> => {
-  const parsed = SendMessageBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  const body = req.body as {
+    sessionId: number;
+    projectId: number;
+    message: string;
+    mode?: string;
+    history?: Array<{ role: string; content: string }>;
+    entries?: Array<{ id: number; title: string; status: string }>;
+    fileContext?: string;
+    userProfile?: string;
+  };
+  if (!body.sessionId || !body.projectId || !body.message) {
+    res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
     return;
   }
 
-  const { sessionId, projectId, message, mode, history = [], entries = [] } = parsed.data;
+  const { sessionId, projectId, message, mode, history = [], entries = [] } = body;
 
-  const fileContext = (req.body.fileContext as string | undefined) ?? "";
-  const userProfile = (req.body.userProfile as string | undefined) ?? "";
+  const fileContext = body.fileContext ?? "";
+  const userProfile = body.userProfile ?? "";
 
   // Load project memory from DB
   const [project] = await db.select({ memory: projectsTable.memory }).from(projectsTable).where(eq(projectsTable.id, projectId));
@@ -178,7 +196,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   }
 
   const messages: Array<{ role: "user" | "assistant"; content: string }> = [
-    ...(history || []).map(h => ({ role: h.role as "user" | "assistant", content: h.content })),
+    ...(history || []).map((h: { role: string; content: string }) => ({ role: h.role as "user" | "assistant", content: h.content })),
     { role: "user", content: message },
   ];
 
@@ -198,10 +216,14 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   const rawContent = response.content[0]?.type === "text" ? response.content[0].text : "";
 
-  // Parse in order: FILE_EDIT → PROJECT_MEMORY → MEMORY_CHIPS
-  const { content: afterFileEdit, fileEdit } = extractFileEdit(rawContent);
-  const { content: afterMemory, newFacts } = extractProjectMemoryLines(afterFileEdit);
-  const { content: finalContent, memoryChips } = detectMemoryChips(afterMemory);
+  // Parse in order: all FILE_EDITs → PROJECT_MEMORY → MEMORY_CHIPS
+  const { visibleContent, fileEdits } = extractAllFileEdits(rawContent);
+  const { content: afterMemory, newFacts } = extractProjectMemoryLines(visibleContent);
+  const { content: finalContent, memoryChips: aiMemoryChips } = detectMemoryChips(afterMemory);
+
+  // Auto-match ledger entries referenced in the response
+  const entryChips = matchEntryChips(finalContent, entries as Array<{ id: number; title: string; status: string }>);
+  const allChips = [...new Set([...aiMemoryChips, ...entryChips])].slice(0, 6);
 
   // Persist new memory facts to DB
   if (newFacts.length > 0) {
@@ -226,10 +248,12 @@ router.post("/chat", async (req, res): Promise<void> => {
     content: finalContent,
     intentType: null,
     catchPayload: null,
-    memoryChips: memoryChips.length > 0 ? memoryChips : undefined,
+    memoryChips: allChips.length > 0 ? allChips : undefined,
     messageId: savedMsg.id,
     memoryUpdated: newFacts.length > 0,
-    fileEdit: fileEdit ?? undefined,
+    fileEdits: fileEdits.length > 0 ? fileEdits : undefined,
+    // Keep backward-compat single fileEdit field
+    fileEdit: fileEdits.length > 0 ? fileEdits[0] : undefined,
   });
 });
 
