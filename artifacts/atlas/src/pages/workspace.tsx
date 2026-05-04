@@ -1039,50 +1039,6 @@ function RightPanel({
   );
 }
 
-// ── Mobile FAB ───────────────────────────────────────────────────────────────
-function MobileFAB({ onClick, activeTab, entryCount }: { onClick: () => void; activeTab?: RightTab; entryCount: number }) {
-  const [hov, setHov] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      aria-label="Open workspace panel"
-      style={{
-        position: "fixed", bottom: 90, right: 16, zIndex: 40,
-        width: 48, height: 48, borderRadius: 14,
-        background: hov ? "rgba(201,162,76,0.22)" : "rgba(28,25,23,0.92)",
-        border: "1px solid rgba(201,162,76,0.32)",
-        backdropFilter: "blur(16px)",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-        cursor: "pointer",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        transition: "all 180ms ease",
-      }}
-    >
-      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-        <rect x="2" y="2" width="16" height="16" rx="2" stroke="#C9A24C" strokeWidth="1.3" />
-        <path d="M9 2v16" stroke="#C9A24C" strokeWidth="1.1" strokeDasharray="1.5 2" />
-        <path d="M12 7h4M12 10h4M12 13h3" stroke="#C9A24C" strokeWidth="1.1" strokeLinecap="round" />
-      </svg>
-      {entryCount > 0 && (
-        <div
-          style={{
-            position: "absolute", top: -4, right: -4,
-            width: 16, height: 16, borderRadius: "50%",
-            background: "var(--atlas-ember)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 8.5, fontFamily: "var(--app-font-mono)",
-            color: "var(--atlas-fg)", fontWeight: 600,
-          }}
-        >
-          {entryCount > 9 ? "9+" : entryCount}
-        </div>
-      )}
-    </button>
-  );
-}
-
 // ── Workspace ────────────────────────────────────────────────────────────────
 export default function Workspace() {
   const { projectId } = useParams();
@@ -1313,29 +1269,40 @@ export default function Workspace() {
             </>
           )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {voiceSupported && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Panel toggle — opens Ledger/Files/Preview; visible on mobile, also on desktop for future use */}
+          {isMobile && (
             <button
-              onClick={toggleVoice}
-              title={voiceListening ? "Stop listening" : "Voice input"}
-              className={voiceListening ? "atlas-voice-active" : ""}
+              onClick={() => setRightOpen(true)}
+              aria-label="Open workspace panel"
               style={{
                 width: 30, height: 30, borderRadius: 8,
-                background: voiceListening ? "var(--atlas-ember)" : "transparent",
-                border: `1px solid ${voiceListening ? "var(--atlas-ember)" : "var(--atlas-border)"}`,
-                color: voiceListening ? "var(--atlas-fg)" : "var(--atlas-muted)",
+                background: "transparent",
+                border: "1px solid var(--atlas-border)",
+                color: "var(--atlas-muted)",
                 cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "all 180ms ease",
-                flexShrink: 0,
+                transition: "all 180ms ease", flexShrink: 0, position: "relative",
               }}
-              onMouseEnter={(e) => { if (!voiceListening) { e.currentTarget.style.borderColor = "rgba(201,162,76,0.3)"; e.currentTarget.style.color = "var(--atlas-fg)"; } }}
-              onMouseLeave={(e) => { if (!voiceListening) { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; } }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.3)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
             >
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-                <rect x="5" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.3" />
-                <path d="M2 8a6 6 0 0012 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                <line x1="8" y1="14" x2="8" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
+                <rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M9 2v16" stroke="currentColor" strokeWidth="1.1" strokeDasharray="1.5 2" />
+                <path d="M12 7h4M12 10h4M12 13h3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
               </svg>
+              {entryCount > 0 && (
+                <span style={{
+                  position: "absolute", top: -4, right: -4,
+                  width: 14, height: 14, borderRadius: "50%",
+                  background: "var(--atlas-ember)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 8, fontFamily: "var(--app-font-mono)",
+                  color: "var(--atlas-fg)", fontWeight: 600,
+                }}>
+                  {entryCount > 9 ? "9+" : entryCount}
+                </span>
+              )}
             </button>
           )}
           {sessionId && (
@@ -1498,8 +1465,29 @@ export default function Workspace() {
                   {isMobile ? "Tap to send" : "Enter · Shift+Enter for newline"}
                 </span>
 
-                {/* Right: send */}
+                {/* Right: mic + send */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {voiceSupported && (
+                    <button
+                      onClick={toggleVoice}
+                      title={voiceListening ? "Stop listening" : "Voice input"}
+                      className={voiceListening ? "atlas-voice-active" : ""}
+                      style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        background: voiceListening ? "var(--atlas-ember)" : "rgba(37,34,32,0.6)",
+                        border: `1px solid ${voiceListening ? "var(--atlas-ember)" : "var(--atlas-border)"}`,
+                        color: voiceListening ? "var(--atlas-fg)" : "var(--atlas-muted)",
+                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        transition: "all 180ms ease", flexShrink: 0,
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                        <rect x="5" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.3" />
+                        <path d="M2 8a6 6 0 0012 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                        <line x1="8" y1="14" x2="8" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     className="atlas-send-btn"
                     onClick={handleSend}
@@ -1591,14 +1579,6 @@ export default function Workspace() {
         )}
       </div>
 
-      {/* Mobile FAB */}
-      {isMobile && !rightOpen && (
-        <MobileFAB
-          onClick={() => setRightOpen(true)}
-          activeTab="ledger"
-          entryCount={entryCount}
-        />
-      )}
     </div>
   );
 }
