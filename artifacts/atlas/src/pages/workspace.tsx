@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import type React from "react";
 import { useParams, useLocation } from "wouter";
 import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
@@ -8,6 +9,7 @@ import {
   useListEntries,
   useCreateSession,
   useCreateEntry,
+  useUpdateProject,
   getListEntriesQueryKey,
   getListSessionsQueryKey,
   getGetProjectQueryKey,
@@ -31,7 +33,36 @@ interface ChatMessage {
   catchResolved?: boolean;
 }
 
-type RightTab = "ledger" | "files" | "preview";
+type RightTab = "ledger" | "files" | "preview" | "memory";
+
+// ── User profile helpers ──────────────────────────────────────────────────────
+interface UserProfile {
+  name: string;
+  stack: string;
+  projects: string;
+  notes: string;
+}
+
+function loadProfile(): UserProfile {
+  try {
+    const raw = localStorage.getItem("atlas-user-profile");
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { name: "", stack: "React, React Router, Tailwind CSS, Supabase", projects: "Compani, IntoIQ, CoinsBloom, PresentQ, SanctumIQ, Atlas", notes: "" };
+}
+
+function saveProfile(p: UserProfile) {
+  try { localStorage.setItem("atlas-user-profile", JSON.stringify(p)); } catch {}
+}
+
+function profileToString(p: UserProfile): string {
+  const parts: string[] = [];
+  if (p.name) parts.push(`Name: ${p.name}`);
+  if (p.stack) parts.push(`Stack: ${p.stack}`);
+  if (p.projects) parts.push(`Projects: ${p.projects}`);
+  if (p.notes) parts.push(`Notes: ${p.notes}`);
+  return parts.join("\n");
+}
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 function useIsMobile() {
@@ -1497,6 +1528,248 @@ function PreviewTab({ projectId }: { projectId: number }) {
   );
 }
 
+// ── MemoryTab ─────────────────────────────────────────────────────────────────
+function MemoryTab({ projectId }: { projectId: number }) {
+  const queryClient = useQueryClient();
+  const { data: project, isLoading } = useGetProject(projectId, {
+    query: { queryKey: getGetProjectQueryKey(projectId) },
+  });
+  const updateProject = useUpdateProject();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const memory = project?.memory ?? "";
+
+  const startEdit = () => {
+    setDraft(memory);
+    setEditing(true);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    updateProject.mutate(
+      { id: projectId, data: { memory: draft.trim() || null } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+          setEditing(false);
+        },
+        onSettled: () => setSaving(false),
+      }
+    );
+  };
+
+  const clear = async () => {
+    if (!window.confirm("Clear all project memory? This cannot be undone.")) return;
+    setSaving(true);
+    updateProject.mutate(
+      { id: projectId, data: { memory: null } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
+        },
+        onSettled: () => setSaving(false),
+      }
+    );
+  };
+
+  const sMono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
+
+  if (isLoading) {
+    return (
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ fontSize: 10, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Loading…</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ padding: "7px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{ fontSize: 10, ...sMono, letterSpacing: "0.08em", color: "var(--atlas-muted)", opacity: 0.6 }}>project memory</span>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+          {!editing && memory && (
+            <button
+              onClick={clear}
+              disabled={saving}
+              style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 9, ...sMono, letterSpacing: "0.06em", color: "var(--atlas-muted)", opacity: 0.35, padding: "2px 4px" }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.35")}
+            >
+              clear
+            </button>
+          )}
+          {!editing && (
+            <button
+              onClick={startEdit}
+              style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 9, ...sMono, letterSpacing: "0.06em", color: "var(--atlas-gold)", opacity: 0.55, padding: "2px 4px" }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.55")}
+            >
+              edit
+            </button>
+          )}
+          {editing && (
+            <>
+              <button
+                onClick={() => setEditing(false)}
+                style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 9, ...sMono, color: "var(--atlas-muted)", opacity: 0.4, padding: "2px 4px" }}
+              >
+                cancel
+              </button>
+              <button
+                onClick={save}
+                disabled={saving}
+                style={{ background: "var(--atlas-ember)", border: "none", cursor: saving ? "not-allowed" : "pointer", fontSize: 9, ...sMono, letterSpacing: "0.08em", color: "var(--atlas-fg)", padding: "2px 8px", borderRadius: 4, opacity: saving ? 0.5 : 1 }}
+              >
+                {saving ? "saving…" : "save"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px" }} className="scrollbar-none">
+        {editing ? (
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            autoFocus
+            style={{
+              width: "100%", height: "100%", minHeight: 200, resize: "none",
+              background: "rgba(12,10,9,0.6)", border: "1px solid rgba(201,162,76,0.25)",
+              borderRadius: 6, color: "var(--atlas-fg)", fontSize: 11,
+              ...sMono, lineHeight: 1.65, padding: "10px 12px",
+              outline: "none", boxSizing: "border-box",
+            }}
+          />
+        ) : memory ? (
+          <pre style={{
+            margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word",
+            fontSize: 11, color: "var(--atlas-fg)", opacity: 0.75, lineHeight: 1.7,
+            ...sMono,
+          }}>
+            {memory}
+          </pre>
+        ) : (
+          <div style={{ padding: "48px 16px", textAlign: "center" }}>
+            <div style={{ fontSize: 10, color: "var(--atlas-muted)", opacity: 0.4, lineHeight: 1.7, ...sMono }}>
+              Nothing here yet.<br />
+              As we work together, I'll build up<br />
+              context about this project automatically.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── UserProfilePanel ──────────────────────────────────────────────────────────
+function UserProfilePanel({ onClose }: { onClose: () => void }) {
+  const [profile, setProfile] = useState<UserProfile>(loadProfile);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    saveProfile(profile);
+    setSaved(true);
+    setTimeout(() => { setSaved(false); onClose(); }, 700);
+  };
+
+  const field = (label: string, key: keyof UserProfile, placeholder: string, multiline?: boolean) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <label style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>
+        {label}
+      </label>
+      {multiline ? (
+        <textarea
+          value={profile[key]}
+          onChange={(e) => setProfile((p) => ({ ...p, [key]: e.target.value }))}
+          placeholder={placeholder}
+          rows={3}
+          style={{
+            width: "100%", resize: "none", padding: "8px 10px", borderRadius: 6,
+            background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)",
+            color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
+            outline: "none", boxSizing: "border-box", lineHeight: 1.6,
+          }}
+          onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
+          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+        />
+      ) : (
+        <input
+          type="text"
+          value={profile[key]}
+          onChange={(e) => setProfile((p) => ({ ...p, [key]: e.target.value }))}
+          placeholder={placeholder}
+          style={{
+            width: "100%", padding: "8px 10px", borderRadius: 6,
+            background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)",
+            color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
+            outline: "none", boxSizing: "border-box",
+          }}
+          onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
+          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+        />
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      display: "flex", alignItems: "flex-start", justifyContent: "flex-end",
+    }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
+      <div style={{
+        position: "relative", zIndex: 1,
+        width: 320, height: "100%",
+        background: "var(--atlas-surface)",
+        borderLeft: "1px solid var(--atlas-border)",
+        display: "flex", flexDirection: "column",
+        boxShadow: "-8px 0 32px rgba(0,0,0,0.4)",
+      }}>
+        {/* Header */}
+        <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--atlas-border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <span style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "var(--atlas-fg)", opacity: 0.8 }}>Your Profile</span>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 18, color: "var(--atlas-muted)", lineHeight: 1, opacity: 0.45, padding: "0 2px" }}>×</button>
+        </div>
+
+        {/* Fields */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 14 }} className="scrollbar-none">
+          <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.5, lineHeight: 1.6, fontFamily: "var(--app-font-mono)" }}>
+            This gets injected into every conversation so Atlas always knows who you are and what you're building.
+          </div>
+          {field("Your name", "name", "e.g. Jane")}
+          {field("Stack", "stack", "React, Tailwind, Supabase…")}
+          {field("Projects", "projects", "Compani, IntoIQ, CoinsBloom…")}
+          {field("Notes for Atlas", "notes", "Anything you want it to always know…", true)}
+        </div>
+
+        {/* Save */}
+        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+          <button
+            onClick={handleSave}
+            style={{
+              width: "100%", padding: "9px", borderRadius: 6,
+              background: saved ? "rgba(52,211,153,0.15)" : "var(--atlas-ember)",
+              border: "none", color: saved ? "#34d399" : "var(--atlas-fg)",
+              fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+              textTransform: "uppercase", cursor: "pointer",
+              transition: "background 200ms ease, color 200ms ease",
+            }}
+          >
+            {saved ? "Saved ✓" : "Save Profile"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── RightPanel (tabbed) ──────────────────────────────────────────────────────
 function RightPanel({
   projectId,
@@ -1551,6 +1824,19 @@ function RightPanel({
           <path d="M1 6h14" stroke="currentColor" strokeWidth="1.1" />
           <circle cx="3.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} />
           <circle cx="5.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} />
+        </svg>
+      ),
+    },
+    {
+      id: "memory" as RightTab,
+      label: "Memory",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path d="M3 2h10a1 1 0 011 1v10a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M5 5.5h6M5 8h6M5 10.5h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+          <circle cx="3.2" cy="5.5" r="0.7" fill="currentColor" opacity={0.45} />
+          <circle cx="3.2" cy="8" r="0.7" fill="currentColor" opacity={0.45} />
+          <circle cx="3.2" cy="10.5" r="0.7" fill="currentColor" opacity={0.45} />
         </svg>
       ),
     },
@@ -1668,6 +1954,7 @@ function RightPanel({
       )}
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
+      {tab === "memory" && <MemoryTab projectId={projectId} />}
     </div>
   );
 }
@@ -1686,6 +1973,7 @@ export default function Workspace() {
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
   const [memoryChips, setMemoryChips] = useState<string[]>([]);
   const [rightOpen, setRightOpen] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [chatWidth, setChatWidth] = useState(() => {
     try { return parseInt(localStorage.getItem("atlas-chat-w") || "0") || 520; } catch { return 520; }
   });
@@ -1738,6 +2026,8 @@ export default function Workspace() {
       setMessages((prev) => [...prev, userMsg]);
       setChatPending(true);
 
+      const userProfileStr = profileToString(loadProfile());
+
       const body = {
         sessionId: sid,
         projectId: id,
@@ -1746,6 +2036,7 @@ export default function Workspace() {
         history,
         entries: ledgerEntries,
         ...(activeCtx ? { fileContext: activeCtx } : {}),
+        ...(userProfileStr ? { userProfile: userProfileStr } : {}),
       };
 
       fetch("/api/chat", {
@@ -1972,6 +2263,24 @@ export default function Workspace() {
               Session active
             </span>
           )}
+          {/* Profile button */}
+          <button
+            onClick={() => setShowProfile(true)}
+            title="Your profile"
+            style={{
+              width: 28, height: 28, borderRadius: "50%",
+              background: "rgba(201,162,76,0.1)",
+              border: "1px solid rgba(201,162,76,0.2)",
+              color: "var(--atlas-gold)", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 600,
+              flexShrink: 0, transition: "all 160ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.18)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.1)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.2)"; }}
+          >
+            {(() => { const n = loadProfile().name; return n ? n[0].toUpperCase() : "P"; })()}
+          </button>
         </div>
       </div>
 
@@ -2280,6 +2589,9 @@ export default function Workspace() {
           </div>
         )}
       </div>
+
+      {/* User Profile Panel */}
+      {showProfile && <UserProfilePanel onClose={() => setShowProfile(false)} />}
 
     </div>
   );

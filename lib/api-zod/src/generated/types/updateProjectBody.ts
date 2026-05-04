@@ -12,4 +12,6 @@ export interface UpdateProjectBody {
   /** @nullable */
   description?: string | null;
   status?: UpdateProjectBodyStatus;
+  /** @nullable */
+  memory?: string | null;
 }

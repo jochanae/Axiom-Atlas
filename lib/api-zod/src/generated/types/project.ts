@@ -13,6 +13,8 @@ export interface Project {
   /** @nullable */
   description?: string | null;
   status: ProjectStatus;
+  /** @nullable */
+  memory?: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, chatMessagesTable, sessionsTable } from "@workspace/db";
+import { db, chatMessagesTable, sessionsTable, projectsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { SendMessageBody } from "@workspace/api-zod";
 
@@ -32,7 +32,13 @@ When file contents are provided in the conversation, use them directly. Referenc
 
 Stack you're optimizing for: React, React Router, Tailwind CSS, Supabase (auth + database). TanStack Start for the Atlas project specifically.
 
-You may also generate UI sketches or product concept images when asked — the user uses this to think visually about their product ideas.`;
+You may also generate UI sketches or product concept images when asked — the user uses this to think visually about their product ideas.
+
+Memory protocol:
+When you learn something durable about this project — a bug pattern, a component relationship, a decision, a tech fact specific to their setup — write it on its own line at the END of your response in this exact format:
+PROJECT_MEMORY: [one plain-English sentence]
+
+Only use PROJECT_MEMORY when you've confirmed something that will still be true next session. Skip it for observations, questions, or things already in the project memory above. Maximum one PROJECT_MEMORY line per response.`;
 
 function detectMemoryChips(content: string): { content: string; memoryChips: string[] } {
   const marker = "MEMORY_CHIPS:";
@@ -49,6 +55,29 @@ function detectMemoryChips(content: string): { content: string; memoryChips: str
   return { content, memoryChips: [] };
 }
 
+function extractProjectMemoryLines(content: string): { content: string; newFacts: string[] } {
+  const lines = content.split("\n");
+  const newFacts: string[] = [];
+  const kept: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("PROJECT_MEMORY:")) {
+      const fact = trimmed.slice("PROJECT_MEMORY:".length).trim();
+      if (fact) newFacts.push(fact);
+    } else {
+      kept.push(line);
+    }
+  }
+  return { content: kept.join("\n").trim(), newFacts };
+}
+
+function appendToMemory(existing: string | null, newFacts: string[]): string {
+  const now = new Date().toISOString().slice(0, 10);
+  const lines = newFacts.map((f) => `[${now}] ${f}`);
+  if (!existing || !existing.trim()) return lines.join("\n");
+  return existing.trim() + "\n" + lines.join("\n");
+}
+
 router.post("/chat", async (req, res): Promise<void> => {
   const parsed = SendMessageBody.safeParse(req.body);
   if (!parsed.success) {
@@ -59,9 +88,23 @@ router.post("/chat", async (req, res): Promise<void> => {
   const { sessionId, projectId, message, mode, history = [], entries = [] } = parsed.data;
 
   const fileContext = (req.body.fileContext as string | undefined) ?? "";
-  const systemPrompt = fileContext
-    ? `${DEV_SYSTEM_PROMPT}\n\n--- CODE CONTEXT ---\n${fileContext}\n--- END CODE CONTEXT ---`
-    : DEV_SYSTEM_PROMPT;
+  const userProfile = (req.body.userProfile as string | undefined) ?? "";
+
+  // Load project memory from DB
+  const [project] = await db.select({ memory: projectsTable.memory }).from(projectsTable).where(eq(projectsTable.id, projectId));
+  const projectMemory = project?.memory ?? "";
+
+  // Build layered system prompt
+  let systemPrompt = DEV_SYSTEM_PROMPT;
+  if (userProfile) {
+    systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
+  }
+  if (projectMemory) {
+    systemPrompt += `\n\n--- PROJECT MEMORY (what you already know about this project) ---\n${projectMemory}\n--- END PROJECT MEMORY ---`;
+  }
+  if (fileContext) {
+    systemPrompt += `\n\n--- CODE CONTEXT ---\n${fileContext}\n--- END CODE CONTEXT ---`;
+  }
 
   const messages: Array<{ role: "user" | "assistant"; content: string }> = [
     ...(history || []).map(h => ({ role: h.role as "user" | "assistant", content: h.content })),
@@ -83,7 +126,16 @@ router.post("/chat", async (req, res): Promise<void> => {
   });
 
   const rawContent = response.content[0]?.type === "text" ? response.content[0].text : "";
-  const { content: afterChips, memoryChips } = detectMemoryChips(rawContent);
+
+  // Parse PROJECT_MEMORY: lines first, then memory chips
+  const { content: afterMemory, newFacts } = extractProjectMemoryLines(rawContent);
+  const { content: afterChips, memoryChips } = detectMemoryChips(afterMemory);
+
+  // Persist new memory facts to DB
+  if (newFacts.length > 0) {
+    const updatedMemory = appendToMemory(project?.memory ?? null, newFacts);
+    await db.update(projectsTable).set({ memory: updatedMemory }).where(eq(projectsTable.id, projectId));
+  }
 
   const [savedMsg] = await db.insert(chatMessagesTable).values({
     sessionId,
@@ -104,6 +156,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     catchPayload: null,
     memoryChips: memoryChips.length > 0 ? memoryChips : undefined,
     messageId: savedMsg.id,
+    memoryUpdated: newFacts.length > 0,
   });
 });
 
