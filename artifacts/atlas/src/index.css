@@ -207,8 +207,9 @@
 /* ── Decision catch card ── */
 .atlas-catch-card {
   border-radius: 10px;
-  border: 1px solid rgba(146, 64, 14, 0.42);
-  background: linear-gradient(160deg, rgba(146,64,14,0.07) 0%, transparent 100%);
+  border: 1px solid color-mix(in oklab, #92400E 40%, #252220);
+  background: linear-gradient(180deg, color-mix(in oklab, #92400E 6%, transparent) 0%, transparent 100%);
+  box-shadow: 0 0 0 1px color-mix(in oklab, #92400E 8%, transparent) inset;
 }
 
 /* ── Resize handle ── */
