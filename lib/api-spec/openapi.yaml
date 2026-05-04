@@ -373,6 +373,8 @@ components:
         status:
           type: string
           enum: [active, archived]
+        memory:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -404,6 +406,8 @@ components:
         status:
           type: string
           enum: [active, archived]
+        memory:
+          type: ["string", "null"]
 
     ProjectSummary:
       type: object

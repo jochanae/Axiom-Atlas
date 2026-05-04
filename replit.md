@@ -36,6 +36,28 @@ lib/db/src/schema/
   entries.ts
 ```
 
+## Session Memory System
+
+Three-layer persistent memory so Atlas never loses context between sessions:
+
+### 1. Project Memory (Database)
+- `memory` column on `projects` table — a running log of durable facts Atlas learns about each project
+- Injected into the system prompt at the start of every chat: "--- PROJECT MEMORY ---"
+- AI writes new facts during sessions using `PROJECT_MEMORY: [one sentence]` protocol
+- Facts are auto-stripped from visible response, timestamped `[YYYY-MM-DD]`, and appended to the DB
+- View/edit/clear in the **Memory tab** of the right panel
+
+### 2. User Profile (localStorage)
+- Stored as `atlas-user-profile` in localStorage: name, stack, projects list, notes
+- Edit via the **P avatar button** in the workspace header (opens profile panel)
+- Sent as `userProfile` with every chat request → injected as "--- WHO YOU'RE WORKING WITH ---"
+- Pre-filled defaults: React/Tailwind/Supabase stack, all 6 project names
+
+### 3. AI Memory Protocol
+- AI instructed to emit `PROJECT_MEMORY: [fact]` for durable project-specific discoveries
+- Chat route parses, strips from visible output, and persists to DB automatically
+- One fact per response max — only for things worth knowing next session
+
 ## Core Features
 
 ### Decision Catch Engine
@@ -100,10 +122,17 @@ Think / Plan / Build / Explore / Decide / Audit exist in the AI logic but are **
   - Committed entries (gold dot) and Parked entries (muted dot)
 - Header: Atlas logo (→ home), project name, "Session active" indicator
 
+## Four-Phase Roadmap
+
+- **Phase 1 (Connect + Read)**: ~70% done — GitHub browser, file tree, file context in chat, per-project repo auto-link. Gap: AI only sees files you manually open; must manually link each of 6 repos once.
+- **Phase 2 (Apply Edits)**: 0% — diff generation + GitHub write-back (create commit/PR). Needs GitHub write API routes.
+- **Phase 3 (Understand)**: 0% — route/component/table mapping, auto-generated project overview. Session memory (pre-Phase 2) is now complete.
+- **Phase 4 (Live Preview)**: 0% — real running app in iframe (not typed URL).
+
 ## Environment Variables
 - `DATABASE_URL` — PostgreSQL connection (auto-provisioned by Replit)
-- `AI_INTEGRATIONS_OPENAI_BASE_URL` — OpenAI proxy base URL
-- `AI_INTEGRATIONS_OPENAI_API_KEY` — OpenAI key via Replit AI Integrations
+- `ANTHROPIC_API_KEY` — Claude sonnet-4-6 for AI chat
+- `GOOGLE_GEMINI_API_KEY` — Gemini for image generation
 
 ## Development Commands
 ```bash
