@@ -1313,7 +1313,31 @@ export default function Workspace() {
             </>
           )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {voiceSupported && (
+            <button
+              onClick={toggleVoice}
+              title={voiceListening ? "Stop listening" : "Voice input"}
+              className={voiceListening ? "atlas-voice-active" : ""}
+              style={{
+                width: 30, height: 30, borderRadius: 8,
+                background: voiceListening ? "var(--atlas-ember)" : "transparent",
+                border: `1px solid ${voiceListening ? "var(--atlas-ember)" : "var(--atlas-border)"}`,
+                color: voiceListening ? "var(--atlas-fg)" : "var(--atlas-muted)",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "all 180ms ease",
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { if (!voiceListening) { e.currentTarget.style.borderColor = "rgba(201,162,76,0.3)"; e.currentTarget.style.color = "var(--atlas-fg)"; } }}
+              onMouseLeave={(e) => { if (!voiceListening) { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; } }}
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                <rect x="5" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.3" />
+                <path d="M2 8a6 6 0 0012 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                <line x1="8" y1="14" x2="8" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
           {sessionId && (
             <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(120,113,108,0.35)" }}>
               Session active
@@ -1474,30 +1498,8 @@ export default function Workspace() {
                   {isMobile ? "Tap to send" : "Enter · Shift+Enter for newline"}
                 </span>
 
-                {/* Right: mic + send */}
+                {/* Right: send */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {voiceSupported && (
-                    <button
-                      onClick={toggleVoice}
-                      title={voiceListening ? "Stop listening" : "Voice input"}
-                      className={voiceListening ? "atlas-voice-active" : ""}
-                      style={{
-                        width: 32, height: 32, borderRadius: 8,
-                        background: voiceListening ? "var(--atlas-ember)" : "rgba(37,34,32,0.6)",
-                        border: `1px solid ${voiceListening ? "var(--atlas-ember)" : "var(--atlas-border)"}`,
-                        color: voiceListening ? "var(--atlas-fg)" : "var(--atlas-muted)",
-                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                        transition: "all 180ms ease",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-                        <rect x="5" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.3" />
-                        <path d="M2 8a6 6 0 0012 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                        <line x1="8" y1="14" x2="8" y2="16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  )}
                   <button
                     className="atlas-send-btn"
                     onClick={handleSend}
