@@ -125,11 +125,12 @@ function AtlasLogo() {
 }
 
 // ── SettingsBtn ──────────────────────────────────────────────────────────────
-function SettingsBtn() {
+function SettingsBtn({ onClick }: { onClick?: () => void }) {
   const [hov, setHov] = useState(false);
   return (
     <button
       title="Settings"
+      onClick={onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -161,7 +162,7 @@ function SettingsBtn() {
 }
 
 // ── UserAvatar ───────────────────────────────────────────────────────────────
-function UserAvatar() {
+function UserAvatar({ onClick }: { onClick?: () => void }) {
   const [hov, setHov] = useState(false);
   const photoUrl = (() => {
     try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).photoUrl ?? "" : ""; } catch { return ""; }
@@ -169,6 +170,7 @@ function UserAvatar() {
   return (
     <button
       title="Account"
+      onClick={onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -337,16 +339,109 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
   );
 }
 
+// ── HomeProfileSheet ─────────────────────────────────────────────────────────
+function HomeProfileSheet({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState(() => {
+    try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name ?? "" : ""; } catch { return ""; }
+  });
+  const [photoUrl, setPhotoUrl] = useState(() => {
+    try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).photoUrl ?? "" : ""; } catch { return ""; }
+  });
+  const [saved, setSaved] = useState(false);
+  const sMono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
+
+  const save = () => {
+    try {
+      const raw = localStorage.getItem("atlas-user-profile");
+      const existing = raw ? JSON.parse(raw) : {};
+      localStorage.setItem("atlas-user-profile", JSON.stringify({ ...existing, name, photoUrl }));
+    } catch {}
+    setSaved(true);
+    setTimeout(() => { setSaved(false); onClose(); }, 700);
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }} />
+      <div style={{
+        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
+        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
+        borderTop: "1px solid var(--atlas-border)", padding: "20px 20px 36px",
+        display: "flex", flexDirection: "column", gap: 14,
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "0 auto 4px" }} />
+        <div style={{ fontSize: 12, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-fg)", opacity: 0.7 }}>YOUR PROFILE</div>
+        {photoUrl && (
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <img src={photoUrl} alt="" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(201,162,76,0.3)" }} />
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <label style={{ fontSize: 9, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name"
+            style={{ padding: "8px 10px", borderRadius: 6, background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 13, outline: "none", ...sMono }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <label style={{ fontSize: 9, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>Photo URL</label>
+          <input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="Paste your Google profile photo URL"
+            style={{ padding: "8px 10px", borderRadius: 6, background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 11, outline: "none", ...sMono }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
+          <div style={{ fontSize: 9, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Right-click your Google photo → Copy image address</div>
+        </div>
+        <button onClick={save} style={{
+          marginTop: 4, padding: "11px", borderRadius: 8, border: "none",
+          background: saved ? "rgba(52,211,153,0.15)" : "var(--atlas-ember)",
+          color: saved ? "#34d399" : "var(--atlas-fg)",
+          fontSize: 11, ...sMono, letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer",
+        }}>
+          {saved ? "Saved ✓" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Home ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [input, setInput] = useState("");
   const [newProjectName, setNewProjectName] = useState("");
   const [showNewProject, setShowNewProject] = useState(false);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [isListening, setIsListening] = useState(false);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
   const queryClient = useQueryClient();
+
+  const toggleVoice = useCallback(() => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.onresult = (e: any) => {
+      const t = Array.from(e.results as SpeechRecognitionResultList)
+        .map((r) => (r as SpeechRecognitionResult)[0].transcript)
+        .join("");
+      setInput(t);
+    };
+    rec.onend = () => setIsListening(false);
+    rec.onerror = () => setIsListening(false);
+    rec.start();
+    recognitionRef.current = rec;
+    setIsListening(true);
+  }, [isListening]);
 
   const placeholder = useTypewriter(PLACEHOLDERS);
 
@@ -443,7 +538,8 @@ export default function Home() {
         {/* Left side: layout icon + logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button
-            title="Navigation"
+            title="Projects"
+            onClick={() => setLocation("/projects")}
             style={{
               width: 28, height: 28, borderRadius: 7,
               background: "transparent", border: "none",
@@ -466,8 +562,8 @@ export default function Home() {
         {/* Right side: timestamp + settings + avatar */}
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <InlineTimestamp />
-          <SettingsBtn />
-          <UserAvatar />
+          <SettingsBtn onClick={() => setShowProfile(true)} />
+          <UserAvatar onClick={() => setShowProfile(true)} />
         </div>
       </div>
 
@@ -610,9 +706,10 @@ export default function Home() {
 
             {/* Bottom action bar */}
             <div style={{ display: "flex", alignItems: "center", marginTop: 12, gap: 2 }}>
-              {/* + button */}
+              {/* + button — opens file picker */}
               <button
-                title="Add context"
+                title="Add file"
+                onClick={() => fileInputRef.current?.click()}
                 style={{
                   width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none",
                   color: "rgba(120,113,108,0.45)", cursor: "pointer",
@@ -658,15 +755,17 @@ export default function Home() {
 
               {/* Mic + waveform */}
               <button
-                title="Voice input"
+                title={isListening ? "Stop listening" : "Voice input"}
+                onClick={toggleVoice}
                 style={{
-                  height: 32, borderRadius: 8, background: "transparent", border: "none",
-                  color: "rgba(120,113,108,0.45)", cursor: "pointer",
+                  height: 32, borderRadius: 8, border: "none",
+                  background: isListening ? "rgba(201,162,76,0.08)" : "transparent",
+                  color: isListening ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                  padding: "0 8px", transition: "color 160ms ease", flexShrink: 0,
+                  padding: "0 8px", transition: "color 160ms ease, background 160ms ease", flexShrink: 0,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-fg)")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
+                onMouseEnter={(e) => { if (!isListening) e.currentTarget.style.color = "var(--atlas-fg)"; }}
+                onMouseLeave={(e) => { if (!isListening) e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="9" y="2" width="6" height="11" rx="3" />
@@ -674,7 +773,7 @@ export default function Home() {
                   <line x1="12" y1="19" x2="12" y2="23" />
                   <line x1="8" y1="23" x2="16" y2="23" />
                 </svg>
-                <div className="atlas-waveform">
+                <div className="atlas-waveform" style={{ color: "var(--atlas-gold)" }}>
                   <span /><span /><span />
                 </div>
               </button>
@@ -830,6 +929,7 @@ export default function Home() {
           </div>
         </div>
       </div>
+      {showProfile && <HomeProfileSheet onClose={() => setShowProfile(false)} />}
     </div>
   );
 }
