@@ -7,7 +7,6 @@ import {
   useListSessions,
   useListEntries,
   useCreateSession,
-  useSendMessage,
   useCreateEntry,
   getListEntriesQueryKey,
   getListSessionsQueryKey,
@@ -795,37 +794,43 @@ function LedgerTab({
   );
 }
 
-// ── Files tab ────────────────────────────────────────────────────────────────
-interface FileNode {
+// ── GitHub file browser ───────────────────────────────────────────────────────
+interface GhRepo {
+  id: number;
   name: string;
-  type: "file" | "folder";
-  ext?: string;
-  children?: FileNode[];
+  fullName: string;
+  private: boolean;
+  description: string | null;
+  language: string | null;
+  defaultBranch: string;
+  updatedAt: string;
 }
 
-const PLACEHOLDER_TREE: FileNode[] = [
-  {
-    name: "Strategy",
-    type: "folder",
-    children: [
-      { name: "north-star.md", type: "file", ext: "md" },
-      { name: "positioning.md", type: "file", ext: "md" },
-    ],
-  },
-  {
-    name: "Research",
-    type: "folder",
-    children: [
-      { name: "customer-interviews.md", type: "file", ext: "md" },
-    ],
-  },
-  { name: "README.md", type: "file", ext: "md" },
-];
+interface GhTreeItem {
+  path: string;
+  type: "blob" | "tree";
+  sha: string;
+}
+
+interface GhFileContent {
+  path: string;
+  content: string;
+  size: number;
+  truncated: boolean;
+  lines: number;
+}
+
 
 function FileIcon({ ext }: { ext?: string }) {
-  const color = ext === "md" ? "#C9A24C" : ext === "ts" || ext === "tsx" ? "#60a5fa" : "rgba(120,113,108,0.7)";
+  const color =
+    ext === "md" ? "#C9A24C"
+    : ext === "ts" || ext === "tsx" ? "#60a5fa"
+    : ext === "js" || ext === "jsx" ? "#fbbf24"
+    : ext === "css" ? "#a78bfa"
+    : ext === "json" ? "#34d399"
+    : "rgba(120,113,108,0.7)";
   return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
       <path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke={color} strokeWidth="1.1" />
       <path d="M10 2v3h3" stroke={color} strokeWidth="1.1" strokeLinejoin="round" />
     </svg>
@@ -834,56 +839,91 @@ function FileIcon({ ext }: { ext?: string }) {
 
 function FolderIcon({ open }: { open?: boolean }) {
   return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-      {open ? (
-        <>
-          <path d="M1 4h5l1.5 1.5H15v8H1V4z" stroke="rgba(201,162,76,0.6)" strokeWidth="1.1" fill="rgba(201,162,76,0.06)" />
-        </>
-      ) : (
-        <path d="M1 4h5l1.5 1.5H15v8H1V4z" stroke="rgba(201,162,76,0.45)" strokeWidth="1.1" />
-      )}
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M1 4h5l1.5 1.5H15v8H1V4z"
+        stroke={open ? "rgba(201,162,76,0.7)" : "rgba(201,162,76,0.45)"}
+        strokeWidth="1.1"
+        fill={open ? "rgba(201,162,76,0.07)" : "none"}
+      />
     </svg>
   );
 }
 
-function FileTreeNode({
+function buildTree(items: GhTreeItem[]): GhTreeNode[] {
+  const root: GhTreeNode[] = [];
+  const map: Record<string, GhTreeNode> = {};
+
+  const sorted = [...items].sort((a, b) => {
+    if (a.type !== b.type) return a.type === "tree" ? -1 : 1;
+    return a.path.localeCompare(b.path);
+  });
+
+  for (const item of sorted) {
+    const parts = item.path.split("/");
+    const name = parts[parts.length - 1];
+    const ext = name.includes(".") ? name.split(".").pop() : undefined;
+    const node: GhTreeNode = { name, path: item.path, type: item.type, ext, children: item.type === "tree" ? [] : undefined };
+    map[item.path] = node;
+
+    if (parts.length === 1) {
+      root.push(node);
+    } else {
+      const parentPath = parts.slice(0, -1).join("/");
+      const parent = map[parentPath];
+      if (parent?.children) parent.children.push(node);
+    }
+  }
+
+  return root;
+}
+
+interface GhTreeNode {
+  name: string;
+  path: string;
+  type: "blob" | "tree";
+  ext?: string;
+  children?: GhTreeNode[];
+}
+
+function GhTreeNodeRow({
   node,
   depth,
-  selected,
+  selectedPath,
   onSelect,
 }: {
-  node: FileNode;
+  node: GhTreeNode;
   depth: number;
-  selected: string | null;
-  onSelect: (name: string) => void;
+  selectedPath: string | null;
+  onSelect: (path: string) => void;
 }) {
-  const [open, setOpen] = useState(depth === 0);
-  const isSelected = selected === node.name;
+  const [open, setOpen] = useState(depth < 1);
+  const isSelected = selectedPath === node.path;
 
-  if (node.type === "folder") {
+  if (node.type === "tree") {
     return (
       <div>
         <button
           onClick={() => setOpen((o) => !o)}
           style={{
             width: "100%", display: "flex", alignItems: "center",
-            gap: 6, padding: `4px 8px 4px ${8 + depth * 14}px`,
+            gap: 5, padding: `3px 8px 3px ${8 + depth * 12}px`,
             background: "transparent", border: "none", cursor: "pointer",
-            borderRadius: 4, transition: "background 120ms ease",
+            borderRadius: 3, transition: "background 100ms ease",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.04)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
         >
-          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ flexShrink: 0, opacity: 0.4, transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 140ms ease" }}>
+          <svg width="7" height="7" viewBox="0 0 8 8" fill="none" style={{ flexShrink: 0, opacity: 0.35, transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 130ms ease" }}>
             <path d="M2 1l4 3-4 3" stroke="var(--atlas-fg)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <FolderIcon open={open} />
-          <span style={{ fontSize: 12, color: "rgba(231,229,228,0.65)", fontFamily: "var(--app-font-sans)" }}>
+          <span style={{ fontSize: 11.5, color: "rgba(231,229,228,0.6)", fontFamily: "var(--app-font-sans)", textAlign: "left" }}>
             {node.name}
           </span>
         </button>
         {open && node.children?.map((child) => (
-          <FileTreeNode key={child.name} node={child} depth={depth + 1} selected={selected} onSelect={onSelect} />
+          <GhTreeNodeRow key={child.path} node={child} depth={depth + 1} selectedPath={selectedPath} onSelect={onSelect} />
         ))}
       </div>
     );
@@ -891,75 +931,338 @@ function FileTreeNode({
 
   return (
     <button
-      onClick={() => onSelect(node.name)}
+      onClick={() => onSelect(node.path)}
       style={{
         width: "100%", display: "flex", alignItems: "center",
-        gap: 6, padding: `4px 8px 4px ${8 + depth * 14}px`,
-        background: isSelected ? "rgba(201,162,76,0.08)" : "transparent",
-        border: "none", cursor: "pointer", borderRadius: 4,
-        transition: "background 120ms ease",
-        borderLeft: isSelected ? "2px solid rgba(201,162,76,0.5)" : "2px solid transparent",
+        gap: 5, padding: `3px 8px 3px ${8 + depth * 12}px`,
+        background: isSelected ? "rgba(201,162,76,0.09)" : "transparent",
+        border: "none", cursor: "pointer", borderRadius: 3,
+        transition: "background 100ms ease",
+        borderLeft: isSelected ? "2px solid rgba(201,162,76,0.55)" : "2px solid transparent",
       }}
       onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
       onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
     >
       <FileIcon ext={node.ext} />
-      <span style={{ fontSize: 12, color: isSelected ? "rgba(231,229,228,0.9)" : "rgba(231,229,228,0.55)", fontFamily: "var(--app-font-sans)", textAlign: "left" }}>
+      <span style={{ fontSize: 11.5, color: isSelected ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.5)", fontFamily: "var(--app-font-sans)", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {node.name}
       </span>
     </button>
   );
 }
 
-function FilesTab() {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [showPlaceholder] = useState(true);
+function FilesTab({
+  onFileContext,
+}: {
+  onFileContext: (ctx: string | null) => void;
+}) {
+  const [tokenState, setTokenState] = useState<string | null>(() => {
+    try { return localStorage.getItem("atlas-gh-token"); } catch { return null; }
+  });
+  const [tokenInput, setTokenInput] = useState("");
+  const [repos, setRepos] = useState<GhRepo[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [reposError, setReposError] = useState<string | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<GhRepo | null>(null);
+  const [tree, setTree] = useState<GhTreeNode[]>([]);
+  const [treeLoading, setTreeLoading] = useState(false);
+  const [treeError, setTreeError] = useState<string | null>(null);
+  const [repoBranch, setRepoBranch] = useState("main");
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<GhFileContent | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [view, setView] = useState<"repos" | "tree" | "file">("repos");
+
+  const saveToken = (t: string) => {
+    try { localStorage.setItem("atlas-gh-token", t); } catch {}
+    setTokenState(t);
+  };
+
+  const clearToken = () => {
+    try { localStorage.removeItem("atlas-gh-token"); } catch {}
+    setTokenState(null);
+    setRepos([]); setSelectedRepo(null); setTree([]);
+    setSelectedPath(null); setFileContent(null);
+    setView("repos");
+    onFileContext(null);
+  };
+
+  const ghFetch = useCallback(async (path: string) => {
+    const res = await fetch(path, { headers: { "x-github-token": tokenState! } });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  }, [tokenState]);
+
+  useEffect(() => {
+    if (!tokenState) return;
+    setReposLoading(true);
+    setReposError(null);
+    ghFetch("/api/github/repos")
+      .then((data) => setRepos(data as GhRepo[]))
+      .catch((e) => setReposError(e.message))
+      .finally(() => setReposLoading(false));
+  }, [tokenState, ghFetch]);
+
+  const loadTree = useCallback(async (repo: GhRepo) => {
+    setSelectedRepo(repo);
+    setView("tree");
+    setTree([]);
+    setTreeLoading(true);
+    setTreeError(null);
+    setSelectedPath(null);
+    setFileContent(null);
+    onFileContext(null);
+    try {
+      const data = await ghFetch(`/api/github/tree?repo=${encodeURIComponent(repo.fullName)}&branch=${repo.defaultBranch}`) as any;
+      setRepoBranch(data.branch);
+      const nodes = buildTree((data.tree as GhTreeItem[]).filter(i => i.type === "blob" || i.type === "tree"));
+      setTree(nodes);
+    } catch (e: any) {
+      setTreeError(e.message);
+    } finally {
+      setTreeLoading(false);
+    }
+  }, [ghFetch, onFileContext]);
+
+  const loadFile = useCallback(async (path: string) => {
+    if (!selectedRepo) return;
+    setSelectedPath(path);
+    setView("file");
+    setFileContent(null);
+    setFileLoading(true);
+    setFileError(null);
+    onFileContext(null);
+    try {
+      const data = await ghFetch(
+        `/api/github/file?repo=${encodeURIComponent(selectedRepo.fullName)}&path=${encodeURIComponent(path)}&branch=${repoBranch}`
+      ) as GhFileContent;
+      setFileContent(data);
+      const ctx = `File: ${data.path} (${selectedRepo.fullName}, branch: ${repoBranch})\n\`\`\`\n${data.content}\n\`\`\``;
+      onFileContext(ctx);
+    } catch (e: any) {
+      setFileError(e.message);
+    } finally {
+      setFileLoading(false);
+    }
+  }, [selectedRepo, repoBranch, ghFetch, onFileContext]);
+
+  const sMono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
+  const sMuted = { color: "var(--atlas-muted)", ...sMono };
+
+  // Token setup screen
+  if (!tokenState) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 18px", gap: 14 }}>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" opacity={0.25}>
+          <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.69c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0112 6.8c.85.004 1.71.11 2.51.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0022 12c0-5.52-4.48-10-10-10z" fill="var(--atlas-fg)" />
+        </svg>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 12.5, color: "var(--atlas-fg)", opacity: 0.7, fontWeight: 500, marginBottom: 5 }}>Connect GitHub</div>
+          <div style={{ fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.6, opacity: 0.6 }}>
+            Paste a GitHub personal access token<br />to browse your repos.
+          </div>
+        </div>
+        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 7 }}>
+          <input
+            type="password"
+            value={tokenInput}
+            onChange={(e) => setTokenInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && tokenInput.trim()) saveToken(tokenInput.trim()); }}
+            placeholder="ghp_…"
+            autoComplete="off"
+            style={{
+              width: "100%", padding: "8px 10px", borderRadius: 6,
+              background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)",
+              color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
+              outline: "none", boxSizing: "border-box",
+              transition: "border-color 160ms ease",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+          />
+          <button
+            onClick={() => tokenInput.trim() && saveToken(tokenInput.trim())}
+            disabled={!tokenInput.trim()}
+            style={{
+              padding: "7px", borderRadius: 6, width: "100%",
+              background: tokenInput.trim() ? "var(--atlas-ember)" : "rgba(37,34,32,0.6)",
+              border: "none", color: "var(--atlas-fg)", fontSize: 10,
+              fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+              textTransform: "uppercase", cursor: tokenInput.trim() ? "pointer" : "not-allowed",
+              transition: "background 160ms ease",
+            }}
+          >
+            Connect
+          </button>
+        </div>
+        <a
+          href="https://github.com/settings/tokens/new?description=Atlas+Dev+Env&scopes=repo"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ fontSize: 9.5, color: "var(--atlas-gold)", opacity: 0.6, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}
+        >
+          Create token on GitHub →
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {showPlaceholder ? (
-        <>
-          {/* Placeholder tree */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "10px 4px" }} className="scrollbar-none">
-            <div style={{ padding: "0 8px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(120,113,108,0.35)" }}>
-                Project files
-              </span>
-              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", color: "rgba(120,113,108,0.25)", fontStyle: "italic" }}>
-                preview
-              </span>
+      {/* Header breadcrumb */}
+      <div style={{ padding: "7px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+        <button
+          onClick={() => { setView("repos"); setSelectedRepo(null); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
+          style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "repos" ? "var(--atlas-fg)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "repos" ? 0.8 : 0.45 }}
+        >
+          repos
+        </button>
+        {selectedRepo && (
+          <>
+            <span style={{ color: "var(--atlas-border)", fontSize: 10 }}>/</span>
+            <button
+              onClick={() => { setView("tree"); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
+              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "tree" ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "tree" ? 1 : 0.5 }}
+            >
+              {selectedRepo.name}
+            </button>
+          </>
+        )}
+        {selectedPath && (
+          <>
+            <span style={{ color: "var(--atlas-border)", fontSize: 10 }}>/</span>
+            <span style={{ color: "var(--atlas-gold)", fontSize: 10, fontFamily: "var(--app-font-mono)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 100 }}>
+              {selectedPath.split("/").pop()}
+            </span>
+          </>
+        )}
+        <button
+          onClick={clearToken}
+          title="Disconnect GitHub"
+          style={{ marginLeft: "auto", background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1, opacity: 0.3, padding: "0 2px", flexShrink: 0 }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.3")}
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Repos list */}
+      {view === "repos" && (
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 6px" }} className="scrollbar-none">
+          {reposLoading && (
+            <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 10, ...sMuted, opacity: 0.4 }}>
+              Loading repos…
             </div>
-            {PLACEHOLDER_TREE.map((node) => (
-              <FileTreeNode key={node.name} node={node} depth={0} selected={selected} onSelect={setSelected} />
-            ))}
-          </div>
-          {/* Footer */}
-          <div style={{ padding: "8px 12px", borderTop: "1px solid var(--atlas-border)", flexShrink: 0 }}>
-            <div style={{ fontSize: 10, color: "rgba(120,113,108,0.4)", fontFamily: "var(--app-font-mono)", textAlign: "center", lineHeight: 1.6 }}>
-              File sync coming soon
+          )}
+          {reposError && (
+            <div style={{ padding: "16px 12px", textAlign: "center", fontSize: 11, color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)" }}>
+              {reposError}
             </div>
-          </div>
-        </>
-      ) : (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" opacity={0.2}>
-            <rect x="2" y="4" width="24" height="20" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" />
-            <path d="M8 10h12M8 14h8" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.5, textAlign: "center", lineHeight: 1.65 }}>
-            No files attached to this project yet.
-          </div>
-          <button
-            style={{
-              padding: "6px 14px", borderRadius: 6,
-              background: "transparent", border: "1px dashed rgba(201,162,76,0.25)",
-              color: "var(--atlas-muted)", fontSize: 11,
-              fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-              textTransform: "uppercase", cursor: "pointer", opacity: 0.6,
-            }}
-          >
-            + Attach file
-          </button>
+          )}
+          {!reposLoading && repos.map((repo) => (
+            <button
+              key={repo.id}
+              onClick={() => loadTree(repo)}
+              style={{
+                width: "100%", display: "flex", flexDirection: "column", gap: 3,
+                padding: "8px 10px", borderRadius: 5, marginBottom: 2,
+                background: "transparent", border: "1px solid transparent",
+                cursor: "pointer", textAlign: "left",
+                transition: "all 120ms ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.04)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.12)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 12, color: "rgba(231,229,228,0.75)", fontFamily: "var(--app-font-sans)", fontWeight: 500 }}>{repo.name}</span>
+                {repo.private && (
+                  <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 3, background: "rgba(120,113,108,0.12)", color: "var(--atlas-muted)", border: "0.5px solid rgba(120,113,108,0.2)" }}>
+                    private
+                  </span>
+                )}
+                {repo.language && (
+                  <span style={{ fontSize: 8.5, color: "var(--atlas-muted)", marginLeft: "auto", fontFamily: "var(--app-font-mono)", opacity: 0.55 }}>{repo.language}</span>
+                )}
+              </div>
+              {repo.description && (
+                <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.55, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {repo.description}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* File tree */}
+      {view === "tree" && (
+        <div style={{ flex: 1, overflowY: "auto", padding: "6px 2px" }} className="scrollbar-none">
+          {treeLoading && (
+            <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 10, ...sMuted, opacity: 0.4 }}>
+              Loading tree…
+            </div>
+          )}
+          {treeError && (
+            <div style={{ padding: "16px 12px", textAlign: "center", fontSize: 11, color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)" }}>
+              {treeError}
+            </div>
+          )}
+          {!treeLoading && tree.map((node) => (
+            <GhTreeNodeRow key={node.path} node={node} depth={0} selectedPath={selectedPath} onSelect={loadFile} />
+          ))}
+        </div>
+      )}
+
+      {/* File content */}
+      {view === "file" && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {fileLoading && (
+            <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 10, ...sMuted, opacity: 0.4 }}>
+              Loading file…
+            </div>
+          )}
+          {fileError && (
+            <div style={{ padding: "16px 12px", textAlign: "center", fontSize: 11, color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)" }}>
+              {fileError}
+            </div>
+          )}
+          {fileContent && (
+            <>
+              <div style={{ padding: "6px 10px 5px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", opacity: 0.75, letterSpacing: "0.04em" }}>
+                  {fileContent.lines} lines{fileContent.truncated ? " (truncated)" : ""}
+                </span>
+                <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.4, letterSpacing: "0.04em" }}>
+                  {Math.round(fileContent.size / 1024 * 10) / 10} KB
+                </span>
+                <div style={{
+                  marginLeft: "auto", display: "flex", alignItems: "center", gap: 4,
+                  padding: "2px 7px", borderRadius: 4,
+                  background: "rgba(52,211,153,0.08)", border: "0.5px solid rgba(52,211,153,0.2)",
+                }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 6px rgba(52,211,153,0.6)", flexShrink: 0 }} />
+                  <span style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "#34d399" }}>
+                    In context
+                  </span>
+                </div>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px" }} className="scrollbar-none">
+                <pre style={{
+                  margin: 0, fontSize: 10.5, lineHeight: 1.7,
+                  color: "rgba(231,229,228,0.65)",
+                  fontFamily: "var(--app-font-mono)",
+                  whiteSpace: "pre-wrap", wordBreak: "break-all",
+                }}>
+                  {fileContent.content}
+                </pre>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1103,6 +1406,7 @@ function RightPanel({
   onClose,
   fullscreen,
   onToggleFullscreen,
+  onFileContext,
 }: {
   projectId: number;
   entries: Entry[];
@@ -1110,6 +1414,7 @@ function RightPanel({
   onClose?: () => void;
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  onFileContext: (ctx: string | null) => void;
 }) {
   const [tab, setTab] = useState<RightTab>("ledger");
 
@@ -1262,7 +1567,7 @@ function RightPanel({
       {tab === "ledger" && (
         <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} />
       )}
-      {tab === "files" && <FilesTab />}
+      {tab === "files" && <FilesTab onFileContext={onFileContext} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
     </div>
   );
@@ -1288,6 +1593,8 @@ export default function Workspace() {
 
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [rightFullscreen, setRightFullscreen] = useState(false);
+  const [fileContext, setFileContext] = useState<string | null>(null);
+  const [chatPending, setChatPending] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1303,7 +1610,6 @@ export default function Workspace() {
   });
   const { data: entries } = useListEntries(id, {}, { query: { enabled: !!id, queryKey: getListEntriesQueryKey(id, {}) } });
   const createSession = useCreateSession();
-  const sendMessage = useSendMessage();
   const createEntry = useCreateEntry();
 
   useEffect(() => {
@@ -1324,40 +1630,54 @@ export default function Workspace() {
   }, [sessions, sessionsLoading, id]);
 
   const doSend = useCallback(
-    (text: string, sid: number, currentMessages: ChatMessage[]) => {
+    (text: string, sid: number, currentMessages: ChatMessage[], ctx?: string | null) => {
       const userMsg: ChatMessage = { role: "user", content: text };
       const history = currentMessages.map((m) => ({ role: m.role, content: m.content }));
       const ledgerEntries = (entries || []).map((e: Entry) => ({ id: e.id, title: e.title, status: e.status }));
+      const activeCtx = ctx !== undefined ? ctx : fileContext;
 
       setMessages((prev) => [...prev, userMsg]);
+      setChatPending(true);
 
-      sendMessage.mutate(
-        { data: { sessionId: sid, projectId: id, message: text, mode: "think", history, entries: ledgerEntries } },
-        {
-          onSuccess: (res) => {
-            const cp = res.catchPayload as CatchPayload | null;
-            setMessages((prev) => [...prev, {
-              id: res.messageId, role: "assistant",
-              content: res.content, intentType: res.intentType, catchPayload: cp,
-            }]);
-            if (cp) setActiveCatch(cp);
-            if (res.memoryChips && res.memoryChips.length > 0) {
-              setMemoryChips((prev) => {
-                const merged = [...prev];
-                for (const c of res.memoryChips!) {
-                  if (!merged.includes(c)) merged.push(c);
-                }
-                return merged.slice(-12);
-              });
-            }
-          },
-          onError: () => {
-            setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
-          },
-        }
-      );
+      const body = {
+        sessionId: sid,
+        projectId: id,
+        message: text,
+        mode: "think",
+        history,
+        entries: ledgerEntries,
+        ...(activeCtx ? { fileContext: activeCtx } : {}),
+      };
+
+      fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+        .then((r) => r.json())
+        .then((res) => {
+          const cp = res.catchPayload as CatchPayload | null;
+          setMessages((prev) => [...prev, {
+            id: res.messageId, role: "assistant",
+            content: res.content, intentType: res.intentType, catchPayload: cp,
+          }]);
+          if (cp) setActiveCatch(cp);
+          if (res.memoryChips && res.memoryChips.length > 0) {
+            setMemoryChips((prev) => {
+              const merged = [...prev];
+              for (const c of res.memoryChips!) {
+                if (!merged.includes(c)) merged.push(c);
+              }
+              return merged.slice(-12);
+            });
+          }
+        })
+        .catch(() => {
+          setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
+        })
+        .finally(() => setChatPending(false));
     },
-    [entries, id, sendMessage]
+    [entries, id, fileContext]
   );
 
   useEffect(() => {
@@ -1374,7 +1694,7 @@ export default function Workspace() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, sendMessage.isPending]);
+  }, [messages, chatPending]);
 
   // Close mobile panel on mobile→desktop resize
   useEffect(() => {
@@ -1390,7 +1710,7 @@ export default function Workspace() {
 
   const handleSend = () => {
     const text = input.trim();
-    if (!text || !sessionId || sendMessage.isPending) return;
+    if (!text || !sessionId || chatPending) return;
     const messageText = attachedFile ? `${text}\n[Attached: ${attachedFile.name}]` : text;
     const current = messages;
     setInput("");
@@ -1573,7 +1893,7 @@ export default function Workspace() {
         >
           {/* Messages */}
           <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px" }} className="scrollbar-none">
-            {messages.length === 0 && !sendMessage.isPending && (
+            {messages.length === 0 && !chatPending && (
               <div style={{ textAlign: "center", padding: "72px 20px" }}>
                 <div style={{ fontSize: 22, fontWeight: 300, color: "rgba(231,229,228,0.3)", marginBottom: 8, letterSpacing: "-0.01em" }}>
                   {project ? project.name : "Ready."}
@@ -1601,7 +1921,7 @@ export default function Workspace() {
               )
             )}
 
-            {sendMessage.isPending && (
+            {chatPending && (
               <div className="atlas-bubble-in" style={{ marginBottom: 24 }}>
                 <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.35, marginBottom: 8 }}>
                   Atlas
@@ -1772,13 +2092,13 @@ export default function Workspace() {
                   <button
                     className="atlas-send-btn"
                     onClick={handleSend}
-                    disabled={!hasInput || sendMessage.isPending || !sessionId}
+                    disabled={!hasInput || chatPending || !sessionId}
                     style={{
                       width: 38, height: 38,
-                      background: hasInput && !sendMessage.isPending && sessionId ? "var(--atlas-ember)" : "rgba(37,34,32,0.7)",
+                      background: hasInput && !chatPending && sessionId ? "var(--atlas-ember)" : "rgba(37,34,32,0.7)",
                       border: hasInput ? "none" : "1px solid var(--atlas-border)",
-                      boxShadow: hasInput && !sendMessage.isPending ? "0 0 16px -3px rgba(146,64,14,0.5)" : "none",
-                      opacity: sendMessage.isPending ? 0.5 : 1,
+                      boxShadow: hasInput && !chatPending ? "0 0 16px -3px rgba(146,64,14,0.5)" : "none",
+                      opacity: chatPending ? 0.5 : 1,
                     }}
                   >
                     <svg viewBox="0 0 20 20" width={13} height={13}
@@ -1809,6 +2129,7 @@ export default function Workspace() {
                 projectId={id}
                 entries={entries || []}
                 activeCatch={activeCatch}
+                onFileContext={setFileContext}
               />
             </div>
           </>
@@ -1854,6 +2175,7 @@ export default function Workspace() {
                 onClose={() => { setRightOpen(false); setRightFullscreen(false); }}
                 fullscreen={rightFullscreen}
                 onToggleFullscreen={() => setRightFullscreen((f) => !f)}
+                onFileContext={setFileContext}
               />
             </div>
           </div>

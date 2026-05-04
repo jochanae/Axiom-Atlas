@@ -4,6 +4,8 @@ import projectsRouter from "./projects";
 import sessionsRouter from "./sessions";
 import entriesRouter from "./entries";
 import chatRouter from "./chat";
+import githubRouter from "./github";
+import imageRouter from "./image";
 
 const router: IRouter = Router();
 
@@ -12,5 +14,7 @@ router.use(projectsRouter);
 router.use(sessionsRouter);
 router.use(entriesRouter);
 router.use(chatRouter);
+router.use(githubRouter);
+router.use(imageRouter);
 
 export default router;
