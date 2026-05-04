@@ -10,6 +10,7 @@ import {
   useCreateSession,
   useCreateEntry,
   useUpdateProject,
+  useUpdateEntry,
   getListEntriesQueryKey,
   getListSessionsQueryKey,
   getGetProjectQueryKey,
@@ -38,6 +39,7 @@ interface ChatMessage {
   catchPayload?: CatchPayload | null;
   catchResolved?: boolean;
   fileEdit?: FileEdit;
+  sentAt?: string;
 }
 
 interface LinkedRepo {
@@ -404,29 +406,134 @@ function MemoryChips({
   );
 }
 
-function UserBubble({ content }: { content: string }) {
+const LINE_HEIGHT_PX = 23.8; // 14px * 1.7 line-height
+const COLLAPSE_LINES = 3;
+
+function formatTimestamp(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function UserBubble({
+  content,
+  sentAt,
+  onCopy,
+  onEdit,
+}: {
+  content: string;
+  sentAt?: string;
+  onCopy: () => void;
+  onEdit: () => void;
+}) {
+  const lines = content.split("\n");
+  const isTall = lines.length > COLLAPSE_LINES || content.length > 180;
+  const [expanded, setExpanded] = useState(!isTall);
+  const [hov, setHov] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const displayContent = !expanded
+    ? lines.slice(0, COLLAPSE_LINES).join("\n") + (lines.length > COLLAPSE_LINES ? "…" : "")
+    : content;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content).catch(() => {});
+    setCopied(true);
+    onCopy();
+    setTimeout(() => setCopied(false), 1800);
+  };
+
   return (
-    <div className="atlas-bubble-in" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}>
-      <div
-        style={{
-          maxWidth: "74%",
-          padding: "11px 15px",
-          borderRadius: "12px 12px 3px 12px",
-          background: "rgba(146,64,14,0.10)",
-          border: "1px solid rgba(146,64,14,0.22)",
-        }}
-      >
+    <div
+      className="atlas-bubble-in"
+      style={{ display: "flex", justifyContent: "flex-end", marginBottom: 24 }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+    >
+      <div style={{ maxWidth: "74%", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
+        {/* Bubble */}
         <div
           style={{
-            fontFamily: "var(--app-font-mono)", fontSize: 9,
-            letterSpacing: "0.12em", textTransform: "uppercase",
-            color: "var(--atlas-ember)", opacity: 0.65, marginBottom: 6,
+            padding: "11px 15px",
+            borderRadius: "12px 12px 3px 12px",
+            background: "rgba(146,64,14,0.10)",
+            border: "1px solid rgba(146,64,14,0.22)",
+            width: "100%",
           }}
         >
-          You
+          <div
+            style={{
+              fontFamily: "var(--app-font-mono)", fontSize: 9,
+              letterSpacing: "0.12em", textTransform: "uppercase",
+              color: "var(--atlas-ember)", opacity: 0.65, marginBottom: 6,
+            }}
+          >
+            You
+          </div>
+          <div style={{ fontSize: 14, lineHeight: 1.7, color: "var(--atlas-fg)", whiteSpace: "pre-wrap" }}>
+            {displayContent}
+          </div>
+          {isTall && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              style={{
+                marginTop: 6, background: "none", border: "none",
+                color: "var(--atlas-ember)", fontSize: 10,
+                fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                cursor: "pointer", padding: 0, opacity: 0.7,
+              }}
+            >
+              {expanded ? "Show less ↑" : "Show more ↓"}
+            </button>
+          )}
+          {/* Timestamp */}
+          {sentAt && (
+            <div style={{
+              textAlign: "right", marginTop: 4,
+              fontSize: 8.5, fontFamily: "var(--app-font-mono)",
+              color: "var(--atlas-muted)", opacity: 0.3,
+            }}>
+              {formatTimestamp(sentAt)}
+            </div>
+          )}
         </div>
-        <div style={{ fontSize: 14, lineHeight: 1.7, color: "var(--atlas-fg)", whiteSpace: "pre-wrap" }}>
-          {content}
+
+        {/* Action row — visible on hover */}
+        <div style={{
+          display: "flex", gap: 4,
+          opacity: hov ? 1 : 0,
+          transition: "opacity 180ms ease",
+          justifyContent: "flex-end",
+        }}>
+          {[
+            { label: copied ? "Copied" : "Copy", action: handleCopy },
+            { label: "Edit", action: onEdit },
+          ].map(({ label, action }) => (
+            <button
+              key={label}
+              onClick={action}
+              style={{
+                padding: "3px 9px", borderRadius: 4,
+                background: "transparent",
+                border: "1px solid rgba(120,113,108,0.3)",
+                color: "var(--atlas-muted)",
+                fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+                textTransform: "uppercase" as const,
+                cursor: "pointer", transition: "all 160ms ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.6)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -456,6 +563,9 @@ function GitHubPushModal({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ commitUrl: string; branch: string } | null>(null);
   const [showCode, setShowCode] = useState(false);
+  const [originalContent, setOriginalContent] = useState<string | null>(null);
+  const [rollingBack, setRollingBack] = useState(false);
+  const [rolledBack, setRolledBack] = useState(false);
 
   const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
 
@@ -466,6 +576,19 @@ function GitHubPushModal({
     }
     setPushing(true);
     setError(null);
+
+    // Fetch original file content for rollback before overwriting
+    try {
+      const origRes = await fetch(
+        `/api/github/file?repo=${encodeURIComponent(linkedRepo.fullName)}&path=${encodeURIComponent(fileEdit.path)}&branch=${encodeURIComponent(linkedRepo.defaultBranch)}`,
+        { headers: { "x-github-token": token } }
+      );
+      if (origRes.ok) {
+        const origData = await origRes.json() as { content: string };
+        setOriginalContent(origData.content);
+      }
+    } catch {}
+
     try {
       const targetBranch = useNewBranch ? branchName : linkedRepo.defaultBranch;
 
@@ -504,6 +627,33 @@ function GitHubPushModal({
       setError(e.message ?? "Push failed");
     } finally {
       setPushing(false);
+    }
+  };
+
+  const handleRollback = async () => {
+    if (!linkedRepo || !token || !originalContent || !success) return;
+    setRollingBack(true);
+    try {
+      const rollbackRes = await fetch("/api/github/commit", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-github-token": token },
+        body: JSON.stringify({
+          repo: linkedRepo.fullName,
+          branch: success.branch,
+          path: fileEdit.path,
+          content: originalContent,
+          message: `Atlas: rollback ${filename}`,
+        }),
+      });
+      if (!rollbackRes.ok) {
+        const d = await rollbackRes.json().catch(() => ({})) as any;
+        throw new Error(d.error || "Rollback failed");
+      }
+      setRolledBack(true);
+    } catch (e: any) {
+      setError(e.message ?? "Rollback failed");
+    } finally {
+      setRollingBack(false);
     }
   };
 
@@ -561,23 +711,63 @@ function GitHubPushModal({
           {success ? (
             /* Success state */
             <div style={{ textAlign: "center", padding: "24px 0" }}>
-              <div style={{ fontSize: 28, marginBottom: 12 }}>✓</div>
-              <div style={{ fontSize: 14, color: "var(--atlas-fg)", marginBottom: 6 }}>Pushed to <strong>{success.branch}</strong></div>
-              <a
-                href={success.commitUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 5,
-                  padding: "6px 14px", borderRadius: 6,
-                  background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)",
-                  color: "var(--atlas-gold)", fontSize: 12,
-                  fontFamily: "var(--app-font-mono)", textDecoration: "none",
-                  marginTop: 8,
-                }}
-              >
-                View commit on GitHub →
-              </a>
+              {rolledBack ? (
+                <>
+                  <div style={{ fontSize: 22, marginBottom: 10, color: "rgba(134,239,172,0.8)" }}>↺</div>
+                  <div style={{ fontSize: 14, color: "var(--atlas-fg)", marginBottom: 6 }}>
+                    Rolled back — <strong>{filename}</strong> restored
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 16 }}>
+                    The original version has been pushed to <strong>{success.branch}</strong>.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 28, marginBottom: 12, color: "rgba(134,239,172,0.8)" }}>✓</div>
+                  <div style={{ fontSize: 14, color: "var(--atlas-fg)", marginBottom: 6 }}>Pushed to <strong>{success.branch}</strong></div>
+                  <a
+                    href={success.commitUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      padding: "6px 14px", borderRadius: 6,
+                      background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)",
+                      color: "var(--atlas-gold)", fontSize: 12,
+                      fontFamily: "var(--app-font-mono)", textDecoration: "none",
+                      marginTop: 8,
+                    }}
+                  >
+                    View commit on GitHub →
+                  </a>
+                  {/* Rollback */}
+                  {originalContent && !rolledBack && (
+                    <div style={{ marginTop: 18 }}>
+                      <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 10, lineHeight: 1.6 }}>
+                        Something break? Roll back to the original version instantly.
+                      </div>
+                      <button
+                        onClick={handleRollback}
+                        disabled={rollingBack}
+                        style={{
+                          padding: "7px 16px", borderRadius: 6, fontSize: 11,
+                          fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                          background: rollingBack ? "rgba(255,255,255,0.04)" : "rgba(239,68,68,0.08)",
+                          border: `1px solid ${rollingBack ? "var(--atlas-border)" : "rgba(239,68,68,0.25)"}`,
+                          color: rollingBack ? "var(--atlas-muted)" : "rgba(252,165,165,0.85)",
+                          cursor: rollingBack ? "not-allowed" : "pointer",
+                          transition: "all 160ms ease",
+                        }}
+                      >
+                        {rollingBack ? "Rolling back…" : "↺ Rollback this change"}
+                      </button>
+                      {error && (
+                        <div style={{ marginTop: 8, fontSize: 11, color: "rgba(252,165,165,0.75)" }}>{error}</div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
               <div style={{ marginTop: 16 }}>
                 <button
                   onClick={onClose}
@@ -779,6 +969,7 @@ function AssistantBubble({
   onCatchAdjust,
   onPark,
   onCommit,
+  onRegenerate,
 }: {
   message: ChatMessage;
   projectId: number;
@@ -788,11 +979,13 @@ function AssistantBubble({
   onCatchAdjust: () => void;
   onPark: (content: string) => void;
   onCommit: (content: string) => void;
+  onRegenerate: () => void;
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [showPushModal, setShowPushModal] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   return (
     <div
@@ -883,14 +1076,67 @@ function AssistantBubble({
           />
         )}
 
-        {/* Park / Commit actions */}
+        {/* Timestamp */}
+        {message.sentAt && (
+          <div style={{
+            marginTop: 5, fontSize: 8.5, fontFamily: "var(--app-font-mono)",
+            color: "var(--atlas-muted)", opacity: 0.28,
+          }}>
+            {formatTimestamp(message.sentAt)}
+          </div>
+        )}
+
+        {/* Action row — Copy / Regenerate / Park / Commit */}
         <div
           style={{
-            display: "flex", gap: 5, marginTop: 9,
+            display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" as const,
             opacity: hov ? 1 : 0,
             transition: "opacity 180ms ease",
           }}
         >
+          {/* Copy */}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(message.content).catch(() => {});
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1800);
+            }}
+            style={{
+              display: "flex", alignItems: "center", gap: 4,
+              padding: "3px 9px", borderRadius: 4,
+              background: "transparent",
+              border: "1px solid rgba(120,113,108,0.3)",
+              color: "var(--atlas-muted)",
+              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+              textTransform: "uppercase" as const,
+              cursor: "pointer", transition: "all 160ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.6)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+          >
+            {copied ? "✓ Copied" : "Copy"}
+          </button>
+
+          {/* Regenerate */}
+          <button
+            onClick={onRegenerate}
+            style={{
+              display: "flex", alignItems: "center", gap: 4,
+              padding: "3px 9px", borderRadius: 4,
+              background: "transparent",
+              border: "1px solid rgba(120,113,108,0.3)",
+              color: "var(--atlas-muted)",
+              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+              textTransform: "uppercase" as const,
+              cursor: "pointer", transition: "all 160ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.6)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+          >
+            ↺ Retry
+          </button>
+
+          {/* Park */}
           <button
             onClick={() => { if (!parkDone) { onPark(message.content); setParkDone(true); } }}
             style={{
@@ -910,6 +1156,8 @@ function AssistantBubble({
             </svg>
             {parkDone ? "Parked" : "Park"}
           </button>
+
+          {/* Commit */}
           <button
             onClick={() => { if (!commitDone) { onCommit(message.content); setCommitDone(true); } }}
             style={{
@@ -940,6 +1188,87 @@ function AssistantBubble({
           onClose={() => setShowPushModal(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ── Parking Lot entry ─────────────────────────────────────────────────────────
+function ParkingLotEntry({ entry }: { entry: Entry }) {
+  const queryClient = useQueryClient();
+  const updateEntry = useUpdateEntry();
+  const [done, setDone] = useState(false);
+
+  const handleResolve = () => {
+    if (done) return;
+    updateEntry.mutate(
+      { id: entry.id, data: { status: "archived" } },
+      { onSuccess: () => { setDone(true); queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(entry.projectId, {}) }); } }
+    );
+  };
+
+  const handleCommit = () => {
+    if (done) return;
+    updateEntry.mutate(
+      { id: entry.id, data: { status: "committed", severity: "committed" } },
+      { onSuccess: () => { setDone(true); queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(entry.projectId, {}) }); } }
+    );
+  };
+
+  return (
+    <div style={{
+      marginBottom: 6, padding: "10px 12px", borderRadius: 7,
+      background: "rgba(201,162,76,0.04)", border: "1px solid rgba(201,162,76,0.14)",
+      opacity: done ? 0.4 : 1, transition: "opacity 200ms ease",
+    }}>
+      <div style={{ fontSize: 12, color: "rgba(231,229,228,0.7)", lineHeight: 1.45, marginBottom: 6 }}>
+        {entry.title}
+      </div>
+      {entry.summary && entry.summary !== entry.title && (
+        <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.6, lineHeight: 1.5, marginBottom: 7 }}>
+          {entry.summary.slice(0, 160)}{entry.summary.length > 160 ? "…" : ""}
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        <span style={{
+          fontSize: 8.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.35, letterSpacing: "0.06em",
+        }}>
+          {new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          {" · "}
+          {new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+        </span>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 5 }}>
+          <button
+            onClick={handleResolve}
+            disabled={done || updateEntry.isPending}
+            style={{
+              padding: "3px 9px", borderRadius: 4, fontSize: 9.5,
+              fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+              background: "transparent", border: "1px solid rgba(120,113,108,0.3)",
+              color: "var(--atlas-muted)", cursor: done ? "default" : "pointer",
+              transition: "all 160ms ease",
+            }}
+            onMouseEnter={(e) => { if (!done) { e.currentTarget.style.borderColor = "rgba(120,113,108,0.6)"; e.currentTarget.style.color = "var(--atlas-fg)"; } }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+          >
+            Resolve
+          </button>
+          <button
+            onClick={handleCommit}
+            disabled={done || updateEntry.isPending}
+            style={{
+              padding: "3px 9px", borderRadius: 4, fontSize: 9.5,
+              fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+              background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)",
+              color: "var(--atlas-gold)", cursor: done ? "default" : "pointer",
+              transition: "all 160ms ease",
+            }}
+            onMouseEnter={(e) => { if (!done) { e.currentTarget.style.background = "rgba(201,162,76,0.14)"; } }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
+          >
+            Commit
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1219,21 +1548,27 @@ function LedgerTab({
               )}
             </div>
 
-            {/* ── Parked (parking lot) ── */}
-            {parked.length > 0 && (
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: "var(--atlas-gold)", boxShadow: "0 0 6px color-mix(in oklab, var(--atlas-gold) 45%, transparent)" }} />
-                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--atlas-gold)" }}>
-                    Parked
-                  </span>
-                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-muted)", marginLeft: "auto" }}>
+            {/* ── Parking Lot ── */}
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: parked.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)", opacity: parked.length > 0 ? 1 : 0.35, boxShadow: parked.length > 0 ? "0 0 6px color-mix(in oklab, var(--atlas-gold) 45%, transparent)" : "none", transition: "all 300ms ease" }} />
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: parked.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)", opacity: parked.length > 0 ? 1 : 0.45, transition: "color 300ms ease" }}>
+                  Parking Lot
+                </span>
+                {parked.length > 0 && (
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-gold)", opacity: 0.6, marginLeft: "auto" }}>
                     {parked.length}
                   </span>
-                </div>
-                {parked.map((e) => <LedgerEntry key={e.id} entry={e} />)}
+                )}
               </div>
-            )}
+              {parked.length > 0 ? (
+                parked.map((e) => <ParkingLotEntry key={e.id} entry={e} />)
+              ) : (
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.35, padding: "6px 2px", lineHeight: 1.65 }}>
+                  Tap <strong style={{ opacity: 0.6 }}>Park</strong> on any Atlas response to save a thought here without breaking your flow.
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -2921,7 +3256,7 @@ export default function Workspace() {
 
   const doSend = useCallback(
     (text: string, sid: number, currentMessages: ChatMessage[], ctx?: string | null) => {
-      const userMsg: ChatMessage = { role: "user", content: text };
+      const userMsg: ChatMessage = { role: "user", content: text, sentAt: new Date().toISOString() };
       const history = currentMessages.map((m) => ({ role: m.role, content: m.content }));
       const ledgerEntries = (entries || []).map((e: Entry) => ({ id: e.id, title: e.title, status: e.status }));
       const activeCtx = ctx !== undefined ? ctx : fileContext;
@@ -2954,6 +3289,7 @@ export default function Workspace() {
           setMessages((prev) => [...prev, {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
+            sentAt: new Date().toISOString(),
             ...(fe ? { fileEdit: fe } : {}),
           }]);
           if (cp) setActiveCatch(cp);
@@ -2968,11 +3304,26 @@ export default function Workspace() {
           }
         })
         .catch(() => {
-          setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again." }]);
+          setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again.", sentAt: new Date().toISOString() }]);
         })
         .finally(() => setChatPending(false));
     },
     [entries, id, fileContext]
+  );
+
+  const handleRegenerate = useCallback(
+    (assistantMsgIndex: number) => {
+      if (!sessionId || chatPending) return;
+      // Find the user message that preceded this assistant response
+      const msgsUpToAssistant = messages.slice(0, assistantMsgIndex);
+      const prevUserMsg = [...msgsUpToAssistant].reverse().find((m) => m.role === "user");
+      if (!prevUserMsg) return;
+      // Remove the assistant message and resend
+      const historyUpToPrevUser = msgsUpToAssistant.slice(0, msgsUpToAssistant.lastIndexOf(prevUserMsg));
+      setMessages(msgsUpToAssistant.slice(0, msgsUpToAssistant.lastIndexOf(prevUserMsg) + 1));
+      doSend(prevUserMsg.content, sessionId, historyUpToPrevUser);
+    },
+    [sessionId, chatPending, messages, doSend]
   );
 
   useEffect(() => {
@@ -3219,7 +3570,16 @@ export default function Workspace() {
 
             {messages.map((msg, i) =>
               msg.role === "user" ? (
-                <UserBubble key={i} content={msg.content} />
+                <UserBubble
+                  key={i}
+                  content={msg.content}
+                  sentAt={msg.sentAt}
+                  onCopy={() => {}}
+                  onEdit={() => {
+                    setInput(msg.content);
+                    setTimeout(() => textareaRef.current?.focus(), 50);
+                  }}
+                />
               ) : (
                 <AssistantBubble
                   key={i}
@@ -3231,6 +3591,7 @@ export default function Workspace() {
                   onCatchAdjust={() => handleCatchAdjust(msg.id)}
                   onPark={handlePark}
                   onCommit={handleCommit}
+                  onRegenerate={() => handleRegenerate(i)}
                 />
               )
             )}
