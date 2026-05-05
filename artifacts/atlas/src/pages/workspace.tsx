@@ -507,14 +507,6 @@ function UserBubble({
           }}
           onClick={isTall ? () => setExpanded((v) => !v) : undefined}
         >
-          {/* Gold accent bar */}
-          <div aria-hidden style={{
-            position: "absolute",
-            left: 0, top: 8, bottom: 8,
-            width: 2, borderRadius: 1,
-            background: "var(--atlas-gold)",
-            opacity: 0.6,
-          }} />
           <div
             style={{
               fontFamily: "var(--app-font-mono)", fontSize: 9,
@@ -1165,16 +1157,6 @@ function AssistantBubble({
             onProceed={onCatchProceed}
             onAdjust={onCatchAdjust}
           />
-        )}
-
-        {/* Timestamp */}
-        {message.sentAt && (
-          <div style={{
-            marginTop: 5, fontSize: 8.5, fontFamily: "var(--app-font-mono)",
-            color: "var(--atlas-muted)", opacity: 0.28,
-          }}>
-            {formatTimestamp(message.sentAt)}
-          </div>
         )}
 
         {/* Action row — icon-only cockpit buttons */}
@@ -3822,12 +3804,11 @@ export default function Workspace() {
     if (!isMobile) setRightOpen(false);
   }, [isMobile]);
 
-  // mobileTab drives rightOpen
+  // Surface tab drives right panel on both mobile and desktop
   useEffect(() => {
-    if (!isMobile) return;
     if (mobileTab === "chat") setRightOpen(false);
     else setRightOpen(true);
-  }, [mobileTab, isMobile]);
+  }, [mobileTab]);
 
   // When panel closes (swipe), reset tab to chat
   useEffect(() => {
@@ -4018,9 +3999,9 @@ export default function Workspace() {
     >
 
       {/* ── Header ── */}
-      <div style={{ flexShrink: 0, borderBottom: "1px solid var(--atlas-border)", background: "rgba(12,10,9,0.92)", backdropFilter: "blur(12px)" }}>
-        {/* Main row: logo | centered project name | profile */}
-        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px" }}>
+      <div style={{ flexShrink: 0, background: "rgba(12,10,9,0.92)", backdropFilter: "blur(12px)" }}>
+        {/* Row 1: logo | project name (centered) | mode + P + avatar */}
+        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
 
           {/* Left: Atlas logo → home */}
           <button
@@ -4080,43 +4061,8 @@ export default function Workspace() {
             )}
           </div>
 
-          {/* Right: view switcher (mobile) + profile */}
+          {/* Right: mode + P + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-
-            {/* Mobile view switcher — collapses after selection */}
-            {isMobile && (
-              <div style={{ position: "relative" }}>
-                <button
-                  onClick={() => { setShowViewMenu(v => !v); setShowProjectMenu(false); }}
-                  style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 7, padding: "5px 9px", cursor: "pointer", color: "rgba(231,229,228,0.7)", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase" }}
-                >
-                  {mobileTab}
-                  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 4l4 4 4-4" /></svg>
-                  {mobileTab !== "chat" && entryCount > 0 && (
-                    <span style={{ fontSize: 8, background: "var(--atlas-ember)", color: "#fff", borderRadius: 6, padding: "1px 4px", fontWeight: 700 }}>{entryCount}</span>
-                  )}
-                </button>
-                {showViewMenu && (
-                  <>
-                    <div onClick={() => setShowViewMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
-                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "5px 4px", boxShadow: "0 12px 36px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 9999, minWidth: 160 }}>
-                      {([["chat", "Chat"], ["ledger", "Ledger"], ["workshop", "Workshop"]] as const).map(([tab, label]) => (
-                        <button key={tab}
-                          onClick={() => { setMobileTab(tab); setShowViewMenu(false); }}
-                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: mobileTab === tab ? "rgba(201,162,76,0.08)" : "transparent", border: "none", padding: "9px 12px", borderRadius: 7, cursor: "pointer", color: mobileTab === tab ? "var(--atlas-gold)" : "rgba(231,229,228,0.75)", fontSize: 13 }}
-                          onMouseEnter={(e) => { if (mobileTab !== tab) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                          onMouseLeave={(e) => { if (mobileTab !== tab) e.currentTarget.style.background = "transparent"; }}
-                        >
-                          <span>{label}</span>
-                          {tab === "ledger" && entryCount > 0 && <span style={{ fontSize: 9, background: "var(--atlas-ember)", color: "#fff", borderRadius: 6, padding: "1px 5px", fontWeight: 700 }}>{entryCount}</span>}
-                          {mobileTab === tab && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
 
             {/* Mode pill — always visible, tappable */}
             {(() => {
@@ -4190,6 +4136,76 @@ export default function Workspace() {
               {(() => { const p = loadProfile(); if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />; return p.name ? p.name[0].toUpperCase() : "👤"; })()}
             </button>
           </div>
+        </div>
+
+        {/* Row 2: Icon-only surface tabs — always visible on all screen sizes */}
+        <div style={{ height: 38, display: "flex", alignItems: "center", justifyContent: "center", gap: 2, borderBottom: "1px solid var(--atlas-border)" }}>
+          {([
+            {
+              id: "chat" as const,
+              label: "Chat",
+              icon: (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              ),
+            },
+            {
+              id: "ledger" as const,
+              label: "Ledger",
+              badge: entryCount > 0 ? entryCount : 0,
+              icon: (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+                  <rect x="9" y="3" width="6" height="4" rx="1" ry="1" />
+                  <line x1="9" y1="12" x2="15" y2="12" />
+                  <line x1="9" y1="16" x2="13" y2="16" />
+                </svg>
+              ),
+            },
+            {
+              id: "workshop" as const,
+              label: "Workshop",
+              icon: (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                </svg>
+              ),
+            },
+          ] as { id: "chat" | "ledger" | "workshop"; label: string; badge?: number; icon: React.ReactNode }[]).map(({ id, label, badge, icon }) => {
+            const active = mobileTab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setMobileTab(id)}
+                title={label}
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 36,
+                  height: 28,
+                  borderRadius: 7,
+                  border: "none",
+                  background: active ? "rgba(201,162,76,0.1)" : "transparent",
+                  color: active ? "var(--atlas-gold)" : "rgba(120,113,108,0.6)",
+                  cursor: "pointer",
+                  transition: "background 140ms ease, color 140ms ease",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "rgba(231,229,228,0.55)"; } }}
+                onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(120,113,108,0.6)"; } }}
+              >
+                {icon}
+                {badge ? (
+                  <span style={{ position: "absolute", top: 2, right: 2, fontSize: 7, background: "var(--atlas-ember)", color: "#fff", borderRadius: 5, padding: "1px 3px", fontWeight: 700, lineHeight: 1, pointerEvents: "none" }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       </div>
 

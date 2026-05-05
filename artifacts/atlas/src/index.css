@@ -374,22 +374,22 @@
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
 
-/* ── Chat timeline — vertical gold thread running left of messages ───────────── */
+/* ── Chat timeline — vertical gold thread on the right side ─────────────────── */
 .atlas-chat-timeline {
   position: relative;
 }
 .atlas-chat-timeline::before {
   content: "";
   position: absolute;
-  left: 20px;
+  right: 12px;
   top: 28px;
   bottom: 28px;
   width: 1px;
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(201,162,76,0.22) 4%,
-    rgba(201,162,76,0.22) 96%,
+    rgba(201,162,76,0.20) 4%,
+    rgba(201,162,76,0.20) 96%,
     transparent 100%
   );
   pointer-events: none;
