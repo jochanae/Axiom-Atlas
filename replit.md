@@ -18,10 +18,15 @@ Atlas is a decision enforcement system and strategic thinking partner for founde
 ### Key Directories
 ```
 artifacts/atlas/src/pages/
-  home.tsx          — Front Door ("Where were we.", glass input, project list)
+  home.tsx          — Front Door ("Where were we.", glass input, project list, BelowFoldDashboard)
   workspace.tsx     — Two-pane: left chat + right Decision Ledger canvas
   projects.tsx      — Project list (secondary, accessible via nav)
   ledger.tsx        — Full ledger view for a project
+
+artifacts/atlas/src/components/
+  ProjectsDrawer.tsx    — Left slide-in panel: projects list, navigate, tools, user footer
+  UserMenuDropdown.tsx  — Avatar dropdown: identity, Obsidian/Parchment theme toggle, edit profile
+  BelowFoldDashboard.tsx — Scroll-reveal below-fold section: Atlas noticed, Momentum, Where were we
 
 artifacts/api-server/src/routes/
   projects.ts       — CRUD + summary stats
@@ -80,7 +85,14 @@ Think / Plan / Build / Explore / Decide / Audit exist in the AI logic but are **
 
 ## Design System
 
+### Themes
+Two themes are supported. Theme is toggled via the avatar dropdown → Theme section. Persisted in `localStorage` as `atlas-theme` and applied as `data-theme="parchment"` on `<html>`.
+
+- **Obsidian** (default/dark): Deep black-brown obsidian — original volcanic identity
+- **Parchment** (light): Warm cream / cognac — readable field-notes aesthetic
+
 ### Identity tokens (CSS custom properties)
+Obsidian values (Parchment overrides defined in `[data-theme="parchment"]`):
 ```css
 --atlas-bg:          #0C0A09   /* True obsidian — the darkest surface */
 --atlas-surface:     #1C1917   /* Raised panels */
@@ -90,6 +102,11 @@ Think / Plan / Build / Explore / Decide / Audit exist in the AI logic but are **
 --atlas-ember:       #92400E   /* Deep bronze amber — Decision Catch, send button */
 --atlas-gold:        #C9A24C   /* Accent gold — Ledger, Atlas label, borders */
 --atlas-border:      #252220   /* Subtle dividers */
+```
+
+CSS alias tokens (for original component compatibility):
+```css
+--ember, --accent-gold, --surface, --foreground, --border, --background, --muted-text
 ```
 
 ### Key CSS classes

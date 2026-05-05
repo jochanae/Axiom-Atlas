@@ -7,6 +7,9 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Project } from "@workspace/api-client-react";
+import { ProjectsDrawer } from "../components/ProjectsDrawer";
+import { UserMenuDropdown } from "../components/UserMenuDropdown";
+import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
 
 const PLACEHOLDERS = [
   "What are we actually trying to solve here…",
@@ -412,6 +415,7 @@ export default function Home() {
   const [showNewProject, setShowNewProject] = useState(false);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -535,11 +539,11 @@ export default function Home() {
           flexShrink: 0,
         }}
       >
-        {/* Left side: layout icon + logo */}
+        {/* Left side: menu icon + logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button
-            title="Projects"
-            onClick={() => setLocation("/projects")}
+            title="Menu"
+            onClick={() => setShowDrawer(true)}
             style={{
               width: 28, height: 28, borderRadius: 7,
               background: "transparent", border: "none",
@@ -559,11 +563,10 @@ export default function Home() {
           <AtlasLogo />
         </div>
 
-        {/* Right side: timestamp + settings + avatar */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        {/* Right side: timestamp + user menu */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <InlineTimestamp />
-          <SettingsBtn onClick={() => setShowProfile(true)} />
-          <UserAvatar onClick={() => setShowProfile(true)} />
+          <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
         </div>
       </div>
 
@@ -929,7 +932,36 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {/* Below-the-fold: Recent Activity / Discovery section */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "0 24px" }}>
+        <BelowFoldDashboard
+          projects={(projects ?? []).map((p: Project) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            updatedAt: p.createdAt,
+          }))}
+          onOpenProject={navigateToProject}
+          onOpenLedger={() => {
+            const p = projects?.[0];
+            if (p) setLocation(`/ledger/${p.id}`);
+          }}
+        />
+      </div>
+
       {showProfile && <HomeProfileSheet onClose={() => setShowProfile(false)} />}
+
+      {/* Projects Drawer (slide-in menu) */}
+      <ProjectsDrawer
+        open={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description }))}
+        onOpenProject={navigateToProject}
+        onNewProject={() => { setShowNewProject(true); setShowDrawer(false); }}
+        onOpenLedger={(id) => setLocation(`/ledger/${id}`)}
+        userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
+      />
     </div>
   );
 }
