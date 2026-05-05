@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { LoadingSpinner } from "../components/ui/loading-spinner";
 import {
   useListProjects,
   useListEntries,
@@ -430,14 +431,8 @@ function Empty({ message }: { message: string }) {
 
 function Loading() {
   return (
-    <div style={{ display: "flex", gap: 5, justifyContent: "center", padding: "48px 0" }}>
-      {[0, 1, 2].map(i => (
-        <div key={i} style={{
-          width: 5, height: 5, borderRadius: "50%",
-          background: "var(--atlas-gold)", opacity: 0.4,
-          animation: `atlas-think-dot 1.4s ease-in-out ${i * 180}ms infinite`,
-        }} />
-      ))}
+    <div style={{ display: "flex", justifyContent: "center", padding: "48px 0" }}>
+      <LoadingSpinner size="md" color="atlas" />
     </div>
   );
 }

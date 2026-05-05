@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type React from "react";
 import { useParams, useLocation } from "wouter";
+import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
 import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
@@ -2652,7 +2653,7 @@ function PreviewTab({ projectId }: { projectId: number }) {
             <div style={{ flex: 1, position: "relative" }}>
               {iframeLoading && (
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, background: "var(--atlas-bg)", zIndex: 2 }}>
-                  <div className="atlas-think-dots"><span /><span /><span /></div>
+                  <LoadingSpinner size="sm" color="atlas" />
                   <div style={{ fontSize: 9.5, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Loading preview…</div>
                 </div>
               )}
@@ -3075,7 +3076,7 @@ function MapTab({ projectId }: { projectId: number }) {
       {/* Scanning spinner */}
       {scanning && (
         <div style={{ padding: "24px 14px", textAlign: "center" }}>
-          <div className="atlas-think-dots"><span /><span /><span /></div>
+          <div style={{ display: "flex", justifyContent: "center" }}><LoadingSpinner size="sm" color="atlas" /></div>
           <div style={{ marginTop: 10, fontSize: 10, ...sMono, color: "var(--atlas-muted)", opacity: 0.45 }}>
             Reading key files and mapping structure…
           </div>
@@ -4200,7 +4201,7 @@ export default function Workspace() {
                 <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.35, marginBottom: 8 }}>
                   Atlas
                 </div>
-                <div className="atlas-think-dots"><span /><span /><span /></div>
+                <LoadingSpinner size="sm" color="atlas" />
               </div>
             )}
 

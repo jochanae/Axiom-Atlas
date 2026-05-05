@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
+import { LoadingSpinner } from "../components/ui/loading-spinner";
 import {
   useListProjects,
   useCreateProject,
@@ -610,7 +611,7 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Ambient think dots */}
+          {/* Ambient bloom spinner */}
           <div
             style={{
               display: "flex",
@@ -618,11 +619,7 @@ export default function Home() {
               margin: "18px 0 26px",
             }}
           >
-            <div className="atlas-think-dots">
-              <span />
-              <span />
-              <span />
-            </div>
+            <LoadingSpinner size="sm" color="atlas" />
           </div>
 
           {/* Input shell */}
@@ -795,7 +792,7 @@ export default function Home() {
                 }}
               >
                 {loading ? (
-                  <div className="atlas-think-dots"><span /><span /><span /></div>
+                  <LoadingSpinner size="sm" color="ember" />
                 ) : (
                   <svg viewBox="0 0 20 20" width={13} height={13}
                     fill={hasInput ? "var(--atlas-fg)" : "none"}
