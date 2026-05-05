@@ -7,7 +7,8 @@
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "css:audit": "node -e \"const fs=require('fs');const css=fs.readFileSync('src/index.css','utf8');const classes=[...css.matchAll(/\\.([a-zA-Z][a-zA-Z0-9_-]+)\\s*[{:,]/g)].map(m=>m[1]).filter((v,i,a)=>a.indexOf(v)===i);const src=require('child_process').execSync('find src -name \\\"*.tsx\\\" -o -name \\\"*.ts\\\" -o -name \\\"*.html\\\"',{encoding:'utf8'}).trim().split('\\n').map(f=>fs.readFileSync(f,'utf8')).join('\\n');const unused=classes.filter(c=>!src.includes(c));console.log(unused.length?'Unused classes: '+unused.join(', '):'All CSS classes are in use.');\""
   },
   "devDependencies": {
     "@hookform/resolvers": "^3.10.0",
