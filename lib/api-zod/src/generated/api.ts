@@ -246,7 +246,7 @@ export const CreateEntryParams = zod.object({
 export const CreateEntryBody = zod.object({
   sessionId: zod.number().nullish(),
   status: zod.enum(["committed", "parked", "draft"]),
-  title: zod.string(),
+  title: zod.string().min(1),
   summary: zod.string().nullish(),
   details: zod.string().nullish(),
   severity: zod.enum(["blocker", "parked", "committed", "neutral"]),
@@ -304,7 +304,7 @@ export const UpdateEntryParams = zod.object({
 
 export const UpdateEntryBody = zod.object({
   status: zod.enum(["committed", "parked", "draft", "archived"]).optional(),
-  title: zod.string().optional(),
+  title: zod.string().min(1).optional(),
   summary: zod.string().nullish(),
   details: zod.string().nullish(),
   severity: zod.enum(["blocker", "parked", "committed", "neutral"]).optional(),

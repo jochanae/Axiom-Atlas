@@ -207,6 +207,7 @@ export interface CreateEntryBody {
   /** @nullable */
   sessionId?: number | null;
   status: CreateEntryBodyStatus;
+  /** @minLength 1 */
   title: string;
   /** @nullable */
   summary?: string | null;
@@ -257,6 +258,7 @@ export const UpdateEntryBodySeverity = {
 
 export interface UpdateEntryBody {
   status?: UpdateEntryBodyStatus;
+  /** @minLength 1 */
   title?: string;
   /** @nullable */
   summary?: string | null;
