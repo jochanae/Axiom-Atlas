@@ -128,13 +128,35 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
             </div>
           </div>
 
-          {/* Appearance toggle */}
-          <MenuRow
-            icon={isParchment ? <SunIcon /> : <MoonIcon />}
-            label="Appearance"
-            badge={isParchment ? "Parchment" : "Obsidian"}
-            onClick={() => handleThemeChange(isParchment ? "obsidian" : "parchment")}
-          />
+          {/* Appearance toggle — real pill switch */}
+          <div style={{ display: "flex", alignItems: "center", padding: "6px 10px", gap: 9 }}>
+            <span style={{ color: "var(--atlas-muted)", display: "flex", flexShrink: 0, opacity: 0.8 }}>
+              {isParchment ? <SunIcon /> : <MoonIcon />}
+            </span>
+            <span style={{ flex: 1, fontSize: 12.5, color: "var(--atlas-fg)" }}>Appearance</span>
+            <button
+              type="button"
+              onClick={() => handleThemeChange(isParchment ? "obsidian" : "parchment")}
+              aria-label={isParchment ? "Switch to Obsidian" : "Switch to Parchment"}
+              style={{
+                width: 44, height: 24, borderRadius: 12, flexShrink: 0,
+                background: isParchment ? "rgba(201,162,76,0.22)" : "rgba(60,50,40,0.55)",
+                border: "1px solid rgba(201,162,76,0.28)",
+                cursor: "pointer", position: "relative",
+                transition: "background 220ms ease",
+                padding: 0,
+              }}
+            >
+              <div style={{
+                position: "absolute", top: 3,
+                left: isParchment ? 23 : 3,
+                width: 16, height: 16, borderRadius: "50%",
+                background: isParchment ? "var(--atlas-gold)" : "rgba(201,162,76,0.45)",
+                transition: "left 220ms ease, background 220ms ease",
+                boxShadow: isParchment ? "0 0 6px rgba(201,162,76,0.4)" : "none",
+              }} />
+            </button>
+          </div>
 
           {/* Shortcuts */}
           <MenuRow

@@ -7,6 +7,7 @@ import {
   useGetProject,
   useListSessions,
   useListEntries,
+  useListMessages,
   useCreateSession,
   useCreateEntry,
   useUpdateProject,
@@ -3415,6 +3416,25 @@ export default function Workspace() {
   const { data: entries } = useListEntries(id, {}, { query: { enabled: !!id, queryKey: getListEntriesQueryKey(id, {}) } });
   const createSession = useCreateSession();
   const createEntry = useCreateEntry();
+
+  // Load prior messages when a session already exists (resuming a project)
+  const { data: priorMessages } = useListMessages(sessionId ?? 0, {
+    query: { enabled: !!sessionId, queryKey: ["messages", sessionId] },
+  });
+  const priorLoaded = useRef(false);
+  useEffect(() => {
+    if (!priorMessages || priorMessages.length === 0 || priorLoaded.current || messages.length > 0) return;
+    priorLoaded.current = true;
+    setMessages(
+      priorMessages.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        intentType: m.intentType,
+        sentAt: m.createdAt,
+      }))
+    );
+  }, [priorMessages]);
 
   // Persist last visited project for footer LEDGER shortcut
   useEffect(() => {
