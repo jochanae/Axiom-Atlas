@@ -111,20 +111,30 @@ export default function EntryDetail() {
 
   function handleCopyLink() {
     const url = window.location.href;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {
-      // Fallback: select a temporary input element
-      const el = document.createElement("input");
-      el.value = url;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    function fallbackCopy() {
+      try {
+        const el = document.createElement("input");
+        el.value = url;
+        document.body.appendChild(el);
+        el.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(el);
+        if (ok) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }
+      } catch {
+        // copy unavailable — silently ignore
+      }
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }).catch(fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
   }
 
   const { data: entry, isLoading, isError } = useGetEntry(entryId, {
