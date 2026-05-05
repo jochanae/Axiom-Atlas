@@ -2038,6 +2038,8 @@ function FilesTab({
   const [fileError, setFileError] = useState<string | null>(null);
   const [view, setView] = useState<"repos" | "tree" | "file">("repos");
   const [disconnectConfirm, setDisconnectConfirm] = useState(false);
+  const [clearTokenError, setClearTokenError] = useState<string | null>(null);
+  const [unlinkRepoError, setUnlinkRepoError] = useState<string | null>(null);
   const autoLoadedRef = useRef(false);
 
   // Reset auto-load gate when project switches
@@ -2066,12 +2068,24 @@ function FilesTab({
   };
 
   const clearToken = () => {
-    updateProject.mutate({ id: projectId, data: { githubToken: null } });
-    setTokenState(null);
-    setRepos([]); setSelectedRepo(null); setTree([]);
-    setSelectedPath(null); setFileContent(null);
-    setView("repos");
-    onFileContext(null);
+    setClearTokenError(null);
+    updateProject.mutate(
+      { id: projectId, data: { githubToken: null } },
+      {
+        onSuccess: () => {
+          setTokenState(null);
+          setRepos([]); setSelectedRepo(null); setTree([]);
+          setSelectedPath(null); setFileContent(null);
+          setView("repos");
+          onFileContext(null);
+        },
+        onError: (err: any) => {
+          const msg = err?.response?.data?.error ?? err?.message ?? "Failed to disconnect GitHub";
+          setClearTokenError(msg);
+          setDisconnectConfirm(false);
+        },
+      }
+    );
   };
 
   const ghFetch = useCallback(async (path: string) => {
@@ -2147,15 +2161,26 @@ function FilesTab({
 
   // Unlink the repo from this project
   const unlinkRepo = useCallback(() => {
-    updateProject.mutate({ id: projectId, data: { linkedRepo: null } });
-    onLinkedRepoChange(null);
-    autoLoadedRef.current = false;
-    setSelectedRepo(null);
-    setTree([]);
-    setSelectedPath(null);
-    setFileContent(null);
-    setView("repos");
-    onFileContext(null);
+    setUnlinkRepoError(null);
+    updateProject.mutate(
+      { id: projectId, data: { linkedRepo: null } },
+      {
+        onSuccess: () => {
+          onLinkedRepoChange(null);
+          autoLoadedRef.current = false;
+          setSelectedRepo(null);
+          setTree([]);
+          setSelectedPath(null);
+          setFileContent(null);
+          setView("repos");
+          onFileContext(null);
+        },
+        onError: (err: any) => {
+          const msg = err?.response?.data?.error ?? err?.message ?? "Failed to unlink repo";
+          setUnlinkRepoError(msg);
+        },
+      }
+    );
   }, [projectId, updateProject, onLinkedRepoChange, onFileContext]);
 
   const loadFile = useCallback(async (path: string) => {
@@ -2326,6 +2351,20 @@ function FilesTab({
           )}
         </div>
       </div>
+
+      {/* Inline errors for disconnect / unlink */}
+      {clearTokenError && (
+        <div style={{ margin: "4px 6px 0", padding: "6px 10px", borderRadius: 5, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 10, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)", lineHeight: 1.4, display: "flex", alignItems: "flex-start", gap: 6 }}>
+          <span style={{ flexShrink: 0, opacity: 0.7 }}>✕</span>
+          <span>{clearTokenError}</span>
+        </div>
+      )}
+      {unlinkRepoError && (
+        <div style={{ margin: "4px 6px 0", padding: "6px 10px", borderRadius: 5, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 10, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)", lineHeight: 1.4, display: "flex", alignItems: "flex-start", gap: 6 }}>
+          <span style={{ flexShrink: 0, opacity: 0.7 }}>✕</span>
+          <span>{unlinkRepoError}</span>
+        </div>
+      )}
 
       {/* Repos list */}
       {view === "repos" && (
