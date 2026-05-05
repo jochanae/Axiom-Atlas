@@ -3856,6 +3856,7 @@ export default function Workspace() {
 
   const hasInput = input.trim().length > 0;
   const entryCount = entries?.length ?? 0;
+  const parkedCount = entries?.filter((e) => e.status === "parked").length ?? 0;
 
   return (
     <div style={{ height: isMobile ? "calc(100dvh - 64px)" : "100vh", display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden" }}>
@@ -3981,13 +3982,27 @@ export default function Workspace() {
               </span>
             )}
 
-            {/* Profile avatar */}
+            {/* Parking lot "P" badge */}
+            <button
+              onClick={() => setLocation("/parking")}
+              title="Parking lot"
+              style={{ position: "relative", width: 28, height: 28, borderRadius: 7, background: parkedCount > 0 ? "rgba(201,162,76,0.1)" : "transparent", border: `1px solid ${parkedCount > 0 ? "rgba(201,162,76,0.35)" : "rgba(120,113,108,0.2)"}`, color: parkedCount > 0 ? "var(--atlas-gold)" : "rgba(120,113,108,0.4)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, flexShrink: 0, letterSpacing: "0.02em", transition: "all 200ms ease" }}
+            >
+              P
+              {parkedCount > 0 && (
+                <span style={{ position: "absolute", top: -5, right: -5, minWidth: 14, height: 14, borderRadius: 7, background: "var(--atlas-ember)", color: "#fff", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", fontFamily: "var(--app-font-mono)" }}>
+                  {parkedCount}
+                </span>
+              )}
+            </button>
+
+            {/* User avatar */}
             <button
               onClick={() => setShowProfile(true)}
               title="Your profile"
-              style={{ width: 30, height: 30, borderRadius: "50%", background: loadProfile().photoUrl ? "transparent" : "rgba(28,25,23,0.9)", border: "1.5px solid rgba(120,113,108,0.25)", color: "rgba(231,229,228,0.6)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontFamily: "var(--app-font-mono)", fontWeight: 600, flexShrink: 0, overflow: "hidden", padding: 0 }}
+              style={{ width: 30, height: 30, borderRadius: "50%", background: loadProfile().photoUrl ? "transparent" : "rgba(28,25,23,0.95)", border: "1.5px solid rgba(120,113,108,0.3)", color: "rgba(231,229,228,0.65)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontFamily: "var(--app-font-mono)", fontWeight: 600, flexShrink: 0, overflow: "hidden", padding: 0 }}
             >
-              {(() => { const p = loadProfile(); if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />; return p.name ? p.name[0].toUpperCase() : "P"; })()}
+              {(() => { const p = loadProfile(); if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />; return p.name ? p.name[0].toUpperCase() : "👤"; })()}
             </button>
           </div>
         </div>
