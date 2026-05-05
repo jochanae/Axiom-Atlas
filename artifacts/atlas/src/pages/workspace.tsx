@@ -115,9 +115,9 @@ function profileToString(p: UserProfile): string {
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth < 768);
+  const [mobile, setMobile] = useState(() => window.innerWidth < 1024);
   useEffect(() => {
-    const handler = () => setMobile(window.innerWidth < 768);
+    const handler = () => setMobile(window.innerWidth < 1024);
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);

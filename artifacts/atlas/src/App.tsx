@@ -21,9 +21,9 @@ const queryClient = new QueryClient({
 });
 
 function useIsMobile() {
-  const [mob, setMob] = useState(() => window.innerWidth < 768);
+  const [mob, setMob] = useState(() => window.innerWidth < 1024);
   useEffect(() => {
-    const h = () => setMob(window.innerWidth < 768);
+    const h = () => setMob(window.innerWidth < 1024);
     window.addEventListener("resize", h);
     return () => window.removeEventListener("resize", h);
   }, []);
