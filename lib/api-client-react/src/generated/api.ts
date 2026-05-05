@@ -22,6 +22,7 @@ import type {
   CreateEntryBody,
   CreateProjectBody,
   CreateSessionBody,
+  CreateThoughtBody,
   Entry,
   HealthStatus,
   ListEntriesParams,
@@ -30,6 +31,7 @@ import type {
   ProjectSummary,
   Session,
   SessionWithMessages,
+  Thought,
   UpdateEntryBody,
   UpdateProjectBody,
 } from "./api.schemas";
@@ -117,6 +119,251 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List all saved thoughts
+ */
+export const getListThoughtsUrl = () => {
+  return `/api/thoughts`;
+};
+
+export const listThoughts = async (
+  options?: RequestInit,
+): Promise<Thought[]> => {
+  return customFetch<Thought[]>(getListThoughtsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListThoughtsQueryKey = () => {
+  return [`/api/thoughts`] as const;
+};
+
+export const getListThoughtsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listThoughts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listThoughts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListThoughtsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listThoughts>>> = ({
+    signal,
+  }) => listThoughts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listThoughts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListThoughtsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listThoughts>>
+>;
+export type ListThoughtsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all saved thoughts
+ */
+
+export function useListThoughts<
+  TData = Awaited<ReturnType<typeof listThoughts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listThoughts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListThoughtsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Save a new thought
+ */
+export const getCreateThoughtUrl = () => {
+  return `/api/thoughts`;
+};
+
+export const createThought = async (
+  createThoughtBody: CreateThoughtBody,
+  options?: RequestInit,
+): Promise<Thought> => {
+  return customFetch<Thought>(getCreateThoughtUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createThoughtBody),
+  });
+};
+
+export const getCreateThoughtMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createThought>>,
+    TError,
+    { data: BodyType<CreateThoughtBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createThought>>,
+  TError,
+  { data: BodyType<CreateThoughtBody> },
+  TContext
+> => {
+  const mutationKey = ["createThought"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createThought>>,
+    { data: BodyType<CreateThoughtBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createThought(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateThoughtMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createThought>>
+>;
+export type CreateThoughtMutationBody = BodyType<CreateThoughtBody>;
+export type CreateThoughtMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Save a new thought
+ */
+export const useCreateThought = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createThought>>,
+    TError,
+    { data: BodyType<CreateThoughtBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createThought>>,
+  TError,
+  { data: BodyType<CreateThoughtBody> },
+  TContext
+> => {
+  return useMutation(getCreateThoughtMutationOptions(options));
+};
+
+/**
+ * @summary Delete a thought
+ */
+export const getDeleteThoughtUrl = (id: number) => {
+  return `/api/thoughts/${id}`;
+};
+
+export const deleteThought = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteThoughtUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteThoughtMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteThought>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteThought>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteThought"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteThought>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteThought(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteThoughtMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteThought>>
+>;
+
+export type DeleteThoughtMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a thought
+ */
+export const useDeleteThought = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteThought>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteThought>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteThoughtMutationOptions(options));
+};
 
 /**
  * @summary List all projects

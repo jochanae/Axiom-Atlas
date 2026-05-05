@@ -8,6 +8,7 @@ import githubRouter from "./github";
 import imageRouter from "./image";
 import devserverRouter from "./devserver";
 import selfRouter from "./self";
+import thoughtsRouter from "./thoughts";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(githubRouter);
 router.use(imageRouter);
 router.use(devserverRouter);
 router.use(selfRouter);
+router.use(thoughtsRouter);
 
 export default router;

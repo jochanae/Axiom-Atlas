@@ -15,6 +15,30 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary List all saved thoughts
+ */
+export const ListThoughtsResponseItem = zod.object({
+  id: zod.number(),
+  content: zod.string(),
+  createdAt: zod.string(),
+});
+export const ListThoughtsResponse = zod.array(ListThoughtsResponseItem);
+
+/**
+ * @summary Save a new thought
+ */
+export const CreateThoughtBody = zod.object({
+  content: zod.string(),
+});
+
+/**
+ * @summary Delete a thought
+ */
+export const DeleteThoughtParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary List all projects
  */
 export const ListProjectsResponseItem = zod.object({

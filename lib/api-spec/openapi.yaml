@@ -33,6 +33,53 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /thoughts:
+    get:
+      operationId: listThoughts
+      tags: [thoughts]
+      summary: List all saved thoughts
+      responses:
+        "200":
+          description: List of thoughts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Thought"
+    post:
+      operationId: createThought
+      tags: [thoughts]
+      summary: Save a new thought
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateThoughtBody"
+      responses:
+        "201":
+          description: Created thought
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Thought"
+
+  /thoughts/{id}:
+    delete:
+      operationId: deleteThought
+      tags: [thoughts]
+      summary: Delete a thought
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   /projects:
     get:
       operationId: listProjects
@@ -747,6 +794,28 @@ components:
         - id
         - title
         - status
+
+    Thought:
+      type: object
+      properties:
+        id:
+          type: integer
+        content:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - content
+        - createdAt
+
+    CreateThoughtBody:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
 
     ChatResponse:
       type: object
