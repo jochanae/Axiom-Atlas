@@ -496,46 +496,40 @@ function UserBubble({
       <div style={{ maxWidth: "74%", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
         {/* Bubble */}
         <div
-          className="atlas-user-bubble"
           style={{
-            padding: "11px 15px",
-            borderRadius: "12px 12px 3px 12px",
+            position: "relative",
+            padding: "11px 15px 11px 17px",
+            borderRadius: "16px 4px 16px 16px",
             width: "100%",
+            background: "rgba(28, 28, 32, 0.85)",
+            cursor: isTall ? "pointer" : "default",
+            transition: "all 280ms cubic-bezier(0.4, 0, 0.2, 1)",
           }}
+          onClick={isTall ? () => setExpanded((v) => !v) : undefined}
         >
+          {/* Gold accent bar */}
+          <div aria-hidden style={{
+            position: "absolute",
+            left: 0, top: 8, bottom: 8,
+            width: 2, borderRadius: 1,
+            background: "var(--atlas-gold)",
+            opacity: 0.6,
+          }} />
           <div
             style={{
               fontFamily: "var(--app-font-mono)", fontSize: 9,
-              letterSpacing: "0.12em", textTransform: "uppercase",
-              color: "var(--atlas-ember)", opacity: 0.65, marginBottom: 6,
+              letterSpacing: "0.15em", textTransform: "uppercase",
+              color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 8, textAlign: "right",
             }}
           >
-            You
+            YOU{sentAt ? ` · ${formatTimestamp(sentAt)}` : ""}
           </div>
-          <div style={{ fontSize: 14, lineHeight: 1.7, color: "var(--atlas-fg)", whiteSpace: "pre-wrap" }}>
+          <div style={{ fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.75)", whiteSpace: "pre-wrap", fontFamily: "var(--app-font-mono)", letterSpacing: "-0.01em" }}>
             {displayContent}
           </div>
           {isTall && (
-            <button
-              onClick={() => setExpanded((v) => !v)}
-              style={{
-                marginTop: 6, background: "none", border: "none",
-                color: "var(--atlas-ember)", fontSize: 10,
-                fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-                cursor: "pointer", padding: 0, opacity: 0.7,
-              }}
-            >
-              {expanded ? "Show less ↑" : "Show more ↓"}
-            </button>
-          )}
-          {/* Timestamp */}
-          {sentAt && (
-            <div style={{
-              textAlign: "right", marginTop: 4,
-              fontSize: 8.5, fontFamily: "var(--app-font-mono)",
-              color: "var(--atlas-muted)", opacity: 0.3,
-            }}>
-              {formatTimestamp(sentAt)}
+            <div style={{ marginTop: 5, fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "var(--atlas-gold)", opacity: 0.5 }}>
+              {expanded ? "SHOW LESS ↑" : "SHOW MORE ↓"}
             </div>
           )}
         </div>
@@ -4122,12 +4116,6 @@ export default function Workspace() {
                   </>
                 )}
               </div>
-            )}
-
-            {sessionId && !isMobile && (
-              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(120,113,108,0.3)" }}>
-                Session active
-              </span>
             )}
 
             {/* Mode pill — always visible, tappable */}
