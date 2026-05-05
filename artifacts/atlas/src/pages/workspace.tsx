@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
@@ -501,7 +502,7 @@ function UserBubble({
             padding: "11px 15px 11px 17px",
             borderRadius: "16px 4px 16px 16px",
             width: "100%",
-            background: "rgba(28, 28, 32, 0.85)",
+            background: "var(--atlas-surface)",
             cursor: isTall ? "pointer" : "default",
             transition: "all 280ms cubic-bezier(0.4, 0, 0.2, 1)",
           }}
@@ -1302,7 +1303,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
 
       {/* Expanded definition card */}
       {expanded && (
-        <div style={{ marginLeft: 20, marginBottom: 14, background: "rgba(22,19,17,0.8)", border: "1px solid rgba(201,162,76,0.12)", borderRadius: 10, padding: "14px 16px" }}>
+        <div style={{ marginLeft: 20, marginBottom: 14, background: "var(--atlas-surface-alt)", border: "1px solid color-mix(in oklab, var(--atlas-gold) 12%, transparent)", borderRadius: 10, padding: "14px 16px" }}>
           {/* Category tags + status badge */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" as const }}>
             <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "rgba(120,113,108,0.45)", textTransform: "uppercase" as const }}>
@@ -3611,8 +3612,21 @@ export default function Workspace() {
   const [showSrcPicker, setShowSrcPicker] = useState(false);
   const [srcReadLoading, setSrcReadLoading] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const projectBtnRef = useRef<HTMLButtonElement>(null);
+  const modeBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
   const [showModeMenu, setShowModeMenu] = useState(false);
+  // Close portaled header dropdowns on scroll/resize so they don't float off their anchors.
+  useEffect(() => {
+    if (!showProjectMenu && !showModeMenu) return;
+    const close = () => { setShowProjectMenu(false); setShowModeMenu(false); };
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [showProjectMenu, showModeMenu]);
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
@@ -4028,6 +4042,7 @@ export default function Workspace() {
           {/* Center: project name + dropdown */}
           <div style={{ position: "relative", flex: 1, display: "flex", justifyContent: "center" }}>
             <button
+              ref={projectBtnRef}
               onClick={() => setShowProjectMenu((v) => !v)}
               style={{ display: "flex", alignItems: "center", gap: 7, background: "transparent", border: "none", cursor: "pointer", padding: "5px 10px", borderRadius: 8, transition: "background 150ms ease", maxWidth: 260 }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
@@ -4062,16 +4077,26 @@ export default function Workspace() {
               </svg>
             </button>
 
-            {/* Dropdown menu */}
-            {showProjectMenu && (
+            {/* Dropdown menu — portaled to escape any parent stacking context */}
+            {showProjectMenu && createPortal(
               <>
                 <div onClick={() => setShowProjectMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
-                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "6px 4px", boxShadow: "0 12px 40px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 9999, minWidth: 220 }}>
+                <div
+                  className="atlas-popover"
+                  style={{
+                    position: "fixed",
+                    top: (projectBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
+                    left: (projectBtnRef.current?.getBoundingClientRect().left ?? 0) + (projectBtnRef.current?.offsetWidth ?? 0) / 2,
+                    transform: "translateX(-50%)",
+                    zIndex: 9999, minWidth: 220,
+                  }}
+                >
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation("/parking"); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
                 </div>
-              </>
+              </>,
+              document.body
             )}
           </div>
 
@@ -4089,6 +4114,7 @@ export default function Workspace() {
               return (
                 <div style={{ position: "relative" }}>
                   <button
+                    ref={modeBtnRef}
                     onClick={() => { setShowModeMenu(v => !v); setShowProjectMenu(false); setShowViewMenu(false); }}
                     title={`Mode: ${projectMode} — ${cfg.desc}`}
                     style={{ display: "flex", alignItems: "center", gap: 5, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 7, padding: "4px 8px", cursor: "pointer", color: cfg.color, fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", flexShrink: 0, transition: "all 180ms ease" }}
@@ -4096,11 +4122,19 @@ export default function Workspace() {
                     <span style={{ width: 5, height: 5, borderRadius: "50%", background: cfg.color, flexShrink: 0, display: "inline-block" }} />
                     {projectMode}
                   </button>
-                  {showModeMenu && (
+                  {showModeMenu && createPortal(
                     <>
                       <div onClick={() => setShowModeMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
-                      <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "6px 4px", boxShadow: "0 12px 40px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 9999, minWidth: 210 }}>
-                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(120,113,108,0.45)", padding: "4px 12px 6px" }}>Select mode</div>
+                      <div
+                        className="atlas-popover"
+                        style={{
+                          position: "fixed",
+                          top: (modeBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
+                          right: Math.max(8, window.innerWidth - (modeBtnRef.current?.getBoundingClientRect().right ?? 0)),
+                          zIndex: 9999, minWidth: 210,
+                        }}
+                      >
+                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.7, padding: "4px 12px 6px" }}>Select mode</div>
                         {(["THINK", "PLAN", "BUILD"] as const).map((m) => {
                           const mc = modeConfig[m];
                           const active = projectMode === m;
@@ -4113,15 +4147,16 @@ export default function Workspace() {
                             >
                               <span style={{ width: 7, height: 7, borderRadius: "50%", background: mc.color, flexShrink: 0 }} />
                               <span style={{ flex: 1, textAlign: "left" }}>
-                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? mc.color : "rgba(231,229,228,0.8)" }}>{m}</span>
-                                <span style={{ display: "block", fontSize: 10, color: "rgba(120,113,108,0.65)", marginTop: 1 }}>{mc.desc}</span>
+                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? mc.color : "var(--atlas-fg)" }}>{m}</span>
+                                <span style={{ display: "block", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.75, marginTop: 1 }}>{mc.desc}</span>
                               </span>
                               {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={mc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
                             </button>
                           );
                         })}
                       </div>
-                    </>
+                    </>,
+                    document.body
                   )}
                 </div>
               );
@@ -4475,12 +4510,10 @@ export default function Workspace() {
                   {/* Source picker dropdown */}
                   {showSrcPicker && (
                     <div
+                      className="atlas-popover"
                       style={{
                         position: "absolute", bottom: "calc(100% + 8px)", left: 0,
-                        background: "rgba(18,15,14,0.97)", border: "1px solid rgba(56,189,248,0.2)",
-                        borderRadius: 8, padding: "6px 4px",
-                        boxShadow: "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(56,189,248,0.06)",
-                        backdropFilter: "blur(12px)",
+                        borderColor: "rgba(56,189,248,0.2)",
                         zIndex: 50, minWidth: 230,
                       }}
                     >

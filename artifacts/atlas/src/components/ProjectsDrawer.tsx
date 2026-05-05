@@ -45,15 +45,16 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
         role="dialog"
         aria-label="Menu"
         style={{
-          position: "fixed", top: 0, left: 0, bottom: 0,
+          position: "fixed", top: 0, left: 0,
           width: "min(88vw, 300px)",
+          height: "100dvh",
           background: "var(--atlas-surface)",
           borderRight: "1px solid var(--atlas-gold-border)",
           boxShadow: "8px 0 40px -8px rgba(0,0,0,0.6)",
           zIndex: 91,
           display: "flex", flexDirection: "column",
           animation: "atlas-drawer-in 220ms cubic-bezier(.2,.8,.2,1)",
-          maxHeight: "100vh",
+          maxHeight: "100dvh",
           overflowY: "hidden",
           overscrollBehavior: "contain",
         }}
