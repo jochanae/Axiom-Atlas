@@ -103,8 +103,8 @@ export default function ParkingLot() {
     deleteEntry.mutate({ id: entry.id }, { onSettled: () => setBusyId(null) });
   };
 
-  // Edit: patch details, buildId, touched, costOfLesson
-  const handleEditSave = async (id: number, data: { details: string | null; buildId: string | null; touched: string[] | null; costOfLesson: number | null }) => {
+  // Edit: patch title, summary, details, buildId, touched, costOfLesson
+  const handleEditSave = async (id: number, data: { title: string; summary: string | null; details: string | null; buildId: string | null; touched: string[] | null; costOfLesson: number | null }) => {
     setEditSaving(true);
     try {
       await updateEntry.mutateAsync({ id, data });

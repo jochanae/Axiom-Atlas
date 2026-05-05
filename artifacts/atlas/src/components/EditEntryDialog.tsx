@@ -3,22 +3,33 @@ import type { Entry } from "@workspace/api-client-react";
 import type React from "react";
 
 type EditableFields = {
+  title: string;
+  summary: string;
   details: string;
   buildId: string;
   touched: string[];
   costOfLesson: string;
 };
 
+type SaveData = {
+  title: string;
+  summary: string | null;
+  details: string | null;
+  buildId: string | null;
+  touched: string[] | null;
+  costOfLesson: number | null;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
   entry: Entry | null;
-  onSave: (id: number, data: { details: string | null; buildId: string | null; touched: string[] | null; costOfLesson: number | null }) => Promise<void>;
+  onSave: (id: number, data: SaveData) => Promise<void>;
   saving?: boolean;
 };
 
 export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }: Props) {
-  const [fields, setFields] = useState<EditableFields>({ details: "", buildId: "", touched: [], costOfLesson: "" });
+  const [fields, setFields] = useState<EditableFields>({ title: "", summary: "", details: "", buildId: "", touched: [], costOfLesson: "" });
   const [tagInput, setTagInput] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +37,8 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
   useEffect(() => {
     if (entry) {
       setFields({
+        title: entry.title ?? "",
+        summary: entry.summary ?? "",
         details: entry.details ?? "",
         buildId: entry.buildId ?? "",
         touched: entry.touched ?? [],
@@ -67,6 +80,11 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
     e.preventDefault();
     if (saving) return;
     setSaveError(null);
+    const trimmedTitle = fields.title.trim();
+    if (!trimmedTitle) {
+      setSaveError("Title is required.");
+      return;
+    }
     const parsedCost = fields.costOfLesson !== "" ? Number(fields.costOfLesson) : null;
     if (parsedCost !== null && isNaN(parsedCost)) {
       setSaveError("Cost of Lesson must be a valid number.");
@@ -74,6 +92,8 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
     }
     try {
       await onSave(entry.id, {
+        title: trimmedTitle,
+        summary: fields.summary.trim() || null,
         details: fields.details.trim() || null,
         buildId: fields.buildId.trim() || null,
         touched: fields.touched.length > 0 ? fields.touched : null,
@@ -123,10 +143,10 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
             </h2>
             <p style={{
               margin: "2px 0 0", fontFamily: "var(--app-font-mono, var(--font-mono))",
-              fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase",
+              fontSize: 9.5, letterSpacing: "0.1em",
               color: "var(--atlas-muted, var(--muted-text))",
             }}>
-              {entry.title}
+              #{entry.id} · {entry.title}
             </p>
           </div>
           <button
@@ -145,6 +165,26 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
 
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Title */}
+          <FormField label="Title" hint="required">
+            <input
+              value={fields.title}
+              onChange={(e) => setFields((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Entry title…"
+              style={inputStyle}
+            />
+          </FormField>
+
+          {/* Summary */}
+          <FormField label="Summary" hint="optional — one-line description">
+            <input
+              value={fields.summary}
+              onChange={(e) => setFields((f) => ({ ...f, summary: e.target.value }))}
+              placeholder="Brief summary…"
+              style={inputStyle}
+            />
+          </FormField>
 
           {/* Build ID */}
           <FormField label="Build ID" hint="optional — e.g. v1.4.2 or commit sha">

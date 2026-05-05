@@ -172,7 +172,7 @@ export default function Ledger() {
     }
   };
 
-  const handleEditSave = async (id: number, data: { details: string | null; buildId: string | null; touched: string[] | null; costOfLesson: number | null }) => {
+  const handleEditSave = async (id: number, data: { title: string; summary: string | null; details: string | null; buildId: string | null; touched: string[] | null; costOfLesson: number | null }) => {
     setEditSaving(true);
     try {
       await updateEntry.mutateAsync({ id, data });
