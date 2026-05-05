@@ -1267,10 +1267,22 @@ function AssistantBubble({
 }
 
 // ── Parking Lot entry ─────────────────────────────────────────────────────────
+function timeAgo(date: string | Date): string {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (mins > 0) return `${mins}m ago`;
+  return "just now";
+}
+
 function ParkingLotEntry({ entry }: { entry: Entry }) {
   const queryClient = useQueryClient();
   const updateEntry = useUpdateEntry();
   const [done, setDone] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const handleResolve = () => {
     if (done) return;
@@ -1288,61 +1300,107 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
     );
   };
 
+  const modeLabel = entry.mode ? entry.mode.toUpperCase() : "NOTE";
+  const typeLabel = entry.verb ? entry.verb.toUpperCase() : "INSIGHT";
+  const summary = entry.summary || "";
+  const sentences = summary.split(/(?<=[.!?])\s+/);
+  const shortDef = sentences.slice(0, 2).join(" ") || summary;
+  const context = sentences.length > 2 ? sentences.slice(2).join(" ") : "";
+
   return (
-    <div style={{
-      marginBottom: 6, padding: "10px 12px", borderRadius: 7,
-      background: "rgba(201,162,76,0.04)", border: "1px solid rgba(201,162,76,0.14)",
-      opacity: done ? 0.4 : 1, transition: "opacity 200ms ease",
-    }}>
-      <div style={{ fontSize: 12, color: "rgba(231,229,228,0.7)", lineHeight: 1.45, marginBottom: 6 }}>
-        {entry.title}
+    <div style={{ marginBottom: 2, position: "relative", opacity: done ? 0.4 : 1, transition: "opacity 300ms ease" }}>
+      {/* Gold timeline vertical line */}
+      {expanded && (
+        <div style={{ position: "absolute", left: 5, top: 22, bottom: 14, width: 1, background: "rgba(201,162,76,0.2)" }} />
+      )}
+
+      {/* Collapsed header row */}
+      <div
+        onClick={() => setExpanded(v => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 2px", cursor: "pointer" }}
+      >
+        {/* Gold dot */}
+        <span style={{ width: 11, height: 11, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, zIndex: 1, boxShadow: "0 0 0 3px rgba(201,162,76,0.1)", display: "inline-block" }} />
+        {/* Expand caret */}
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+          style={{ flexShrink: 0, color: "rgba(120,113,108,0.45)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 180ms ease" }}>
+          <path d="M2 4l4 4 4-4" />
+        </svg>
+        {/* Title */}
+        <span style={{ flex: 1, fontSize: 12.5, color: "rgba(231,229,228,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.4 }}>
+          {entry.title}
+        </span>
+        {/* NOTE badge */}
+        <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.07em", background: "rgba(120,113,108,0.12)", color: "rgba(120,113,108,0.6)", padding: "2px 7px", borderRadius: 4, flexShrink: 0, textTransform: "uppercase" as const }}>
+          NOTE
+        </span>
       </div>
-      {entry.summary && entry.summary !== entry.title && (
-        <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.6, lineHeight: 1.5, marginBottom: 7 }}>
-          {entry.summary.slice(0, 160)}{entry.summary.length > 160 ? "…" : ""}
+
+      {/* Source line (collapsed) */}
+      {!expanded && (
+        <div style={{ paddingLeft: 20, paddingBottom: 6, fontSize: 10, color: "rgba(120,113,108,0.38)", fontFamily: "var(--app-font-mono)" }}>
+          chat message · {timeAgo(entry.createdAt)}
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <span style={{
-          fontSize: 8.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.35, letterSpacing: "0.06em",
-        }}>
-          {new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-          {" · "}
-          {new Date(entry.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
-        </span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 5 }}>
-          <button
-            onClick={handleResolve}
-            disabled={done || updateEntry.isPending}
-            style={{
-              padding: "3px 9px", borderRadius: 4, fontSize: 9.5,
-              fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-              background: "transparent", border: "1px solid rgba(120,113,108,0.3)",
-              color: "var(--atlas-muted)", cursor: done ? "default" : "pointer",
-              transition: "all 160ms ease",
-            }}
-            onMouseEnter={(e) => { if (!done) { e.currentTarget.style.borderColor = "rgba(120,113,108,0.6)"; e.currentTarget.style.color = "var(--atlas-fg)"; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
-          >
-            Resolve
-          </button>
-          <button
-            onClick={handleCommit}
-            disabled={done || updateEntry.isPending}
-            style={{
-              padding: "3px 9px", borderRadius: 4, fontSize: 9.5,
-              fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-              background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)",
-              color: "var(--atlas-gold)", cursor: done ? "default" : "pointer",
-              transition: "all 160ms ease",
-            }}
-            onMouseEnter={(e) => { if (!done) { e.currentTarget.style.background = "rgba(201,162,76,0.14)"; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
-          >
-            Commit
-          </button>
+
+      {/* Expanded definition card */}
+      {expanded && (
+        <div style={{ marginLeft: 20, marginBottom: 14, background: "rgba(22,19,17,0.8)", border: "1px solid rgba(201,162,76,0.12)", borderRadius: 10, padding: "14px 16px" }}>
+          {/* Category tags + status badge */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "rgba(120,113,108,0.45)", textTransform: "uppercase" as const }}>
+              {modeLabel} · {typeLabel}
+            </span>
+            <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: entry.isViolation ? "rgba(239,68,68,0.08)" : "rgba(74,222,128,0.07)", border: `1px solid ${entry.isViolation ? "rgba(239,68,68,0.18)" : "rgba(74,222,128,0.18)"}`, color: entry.isViolation ? "rgba(239,68,68,0.75)" : "rgba(74,222,128,0.75)", padding: "2px 9px", borderRadius: 20, textTransform: "uppercase" as const }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
+              {entry.isViolation ? "BLOCKER" : "REVERSIBLE"}
+            </span>
+          </div>
+
+          {/* Title */}
+          <div style={{ fontSize: 14, fontWeight: 600, color: "rgba(231,229,228,0.9)", marginBottom: 8, lineHeight: 1.35 }}>
+            {entry.title}
+          </div>
+
+          {/* Short definition (italic intro) */}
+          {shortDef && (
+            <div style={{ fontSize: 12, color: "rgba(231,229,228,0.55)", lineHeight: 1.65, marginBottom: context ? 12 : 10, fontStyle: "italic" }}>
+              {shortDef}
+            </div>
+          )}
+
+          {/* WHAT IT MEANS */}
+          {context && (
+            <>
+              <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(120,113,108,0.45)", marginBottom: 5 }}>
+                What it means
+              </div>
+              <div style={{ fontSize: 12, color: "rgba(231,229,228,0.5)", lineHeight: 1.65, marginBottom: 12 }}>
+                {context}
+              </div>
+            </>
+          )}
+
+          {/* Source */}
+          <div style={{ fontSize: 10, color: "rgba(120,113,108,0.35)", fontFamily: "var(--app-font-mono)", marginBottom: 12 }}>
+            chat message · {timeAgo(entry.createdAt)}
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={handleResolve} disabled={done || updateEntry.isPending}
+              style={{ flex: 1, padding: "7px", borderRadius: 7, fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "transparent", border: "1px solid rgba(120,113,108,0.22)", color: "var(--atlas-muted)", cursor: done ? "default" : "pointer", transition: "all 150ms ease" }}
+              onMouseEnter={(e) => { if (!done) e.currentTarget.style.borderColor = "rgba(120,113,108,0.5)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.22)"; }}
+            >Resolve</button>
+            <button onClick={handleCommit} disabled={done || updateEntry.isPending}
+              style={{ flex: 1, padding: "7px", borderRadius: 7, fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)", color: "var(--atlas-gold)", cursor: done ? "default" : "pointer", transition: "all 150ms ease" }}
+              onMouseEnter={(e) => { if (!done) e.currentTarget.style.background = "rgba(201,162,76,0.15)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
+            >Commit</button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1660,19 +1718,28 @@ function LedgerTab({
 
             {/* ── Parking Lot ── */}
             <div style={{ marginBottom: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10, padding: "0 2px" }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: parked.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)", opacity: parked.length > 0 ? 1 : 0.35, boxShadow: parked.length > 0 ? "0 0 6px color-mix(in oklab, var(--atlas-gold) 45%, transparent)" : "none", transition: "all 300ms ease" }} />
-                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: parked.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)", opacity: parked.length > 0 ? 1 : 0.45, transition: "color 300ms ease" }}>
+              {/* Header row */}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6, padding: "0 2px" }}>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: parked.length > 0 ? "rgba(231,229,228,0.7)" : "var(--atlas-muted)", fontWeight: 600 }}>
                   Parking Lot
                 </span>
                 {parked.length > 0 && (
-                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.06em", color: "var(--atlas-gold)", opacity: 0.6, marginLeft: "auto" }}>
-                    {parked.length}
+                  <span style={{ fontSize: 10, color: "rgba(120,113,108,0.45)", fontFamily: "var(--app-font-mono)" }}>
+                    {parked.length} waiting · 0 resolved
                   </span>
                 )}
               </div>
               {parked.length > 0 ? (
-                parked.map((e) => <ParkingLotEntry key={e.id} entry={e} />)
+                <div style={{ paddingTop: 4 }}>
+                  {parked.map((e) => <ParkingLotEntry key={e.id} entry={e} />)}
+                  {/* Bottom item count */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "6px 2px", borderTop: "1px solid rgba(201,162,76,0.1)" }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", boxShadow: "0 0 6px rgba(201,162,76,0.4)" }} />
+                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "rgba(201,162,76,0.6)", letterSpacing: "0.06em" }}>
+                      {parked.length} {parked.length === 1 ? "ITEM" : "ITEMS"}
+                    </span>
+                  </div>
+                </div>
               ) : (
                 <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.35, padding: "6px 2px", lineHeight: 1.65 }}>
                   Tap <strong style={{ opacity: 0.6 }}>Park</strong> on any Atlas response to save a thought here without breaking your flow.
@@ -3914,8 +3981,8 @@ export default function Workspace() {
             {/* Dropdown menu */}
             {showProjectMenu && (
               <>
-                <div onClick={() => setShowProjectMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
-                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "6px 4px", boxShadow: "0 12px 40px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 100, minWidth: 220 }}>
+                <div onClick={() => setShowProjectMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "6px 4px", boxShadow: "0 12px 40px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 9999, minWidth: 220 }}>
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation("/parking"); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
@@ -3956,8 +4023,8 @@ export default function Workspace() {
                 </button>
                 {showViewMenu && (
                   <>
-                    <div onClick={() => setShowViewMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
-                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "5px 4px", boxShadow: "0 12px 36px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 100, minWidth: 160 }}>
+                    <div onClick={() => setShowViewMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
+                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "5px 4px", boxShadow: "0 12px 36px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 9999, minWidth: 160 }}>
                       {([["chat", "Chat"], ["ledger", "Ledger"], ["workshop", "Workshop"]] as const).map(([tab, label]) => (
                         <button key={tab}
                           onClick={() => { setMobileTab(tab); setShowViewMenu(false); }}
