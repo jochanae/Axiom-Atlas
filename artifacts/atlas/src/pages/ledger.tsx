@@ -1,244 +1,509 @@
-import { useState } from "react";
-import { useParams, Link } from "wouter";
+import { useState, useMemo, useCallback } from "react";
+import { useParams, useLocation, Link } from "wouter";
 import {
-  useGetProject,
   useListEntries,
-  useGetProjectSummary,
-  getGetProjectQueryKey,
+  useListProjects,
+  useUpdateEntry,
+  useCreateEntry,
   getListEntriesQueryKey,
-  getGetProjectSummaryQueryKey
 } from "@workspace/api-client-react";
+import type { Entry, Project } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { LoadingSpinner } from "../components/ui/loading-spinner";
+import { FooterAuditLine } from "../components/FooterAuditLine";
+import { ThreadAnchor } from "../components/ThreadAnchor";
+import { DecisionLedgerGrouped } from "../components/DecisionLedgerGrouped";
+import { AddEntryDialog } from "../components/AddEntryDialog";
+import { relativeTime, formatCost } from "../lib/atlas-utils";
 
-const FILTER_PILLS = ["ALL", "STRUCTURE", "AESTHETIC", "LOGIC", "GENERAL"] as const;
-type FilterPill = typeof FILTER_PILLS[number];
+/* ─── Category inference ─────────────────────────────────────────── */
 
-function filterMatchesCategory(category: string | null | undefined, filter: FilterPill): boolean {
-  if (filter === "ALL") return true;
-  return (category ?? "GENERAL").toUpperCase() === filter;
+type Category = "structure" | "aesthetic" | "logic" | "general";
+
+const CATEGORY_CONFIG: Record<Category, { label: string; color: string }> = {
+  structure: { label: "STRUCTURE", color: "var(--phosphor)" },
+  aesthetic: { label: "AESTHETIC", color: "var(--accent-gold)" },
+  logic:     { label: "LOGIC",     color: "var(--ember)" },
+  general:   { label: "GENERAL",   color: "var(--muted-text)" },
+};
+
+function inferCategory(entry: Entry): Category {
+  const t = (entry.title + " " + (entry.summary ?? "")).toLowerCase();
+  const touched = (entry.touched ?? []).join(" ").toLowerCase();
+  if (/blueprint|template|layout|component|route|page|scaffold|wireframe/i.test(t) || /\.tsx|\.jsx|routes\/|components\//i.test(touched)) return "structure";
+  if (/design|theme|css|style|color|font|animation|visual|ui kit/i.test(t) || /\.css|styles|tailwind/i.test(touched)) return "aesthetic";
+  if (/api|connector|function|edge|database|logic|hook|server|migration|query/i.test(t) || /\.server\.|functions\/|supabase\//i.test(touched)) return "logic";
+  return "general";
 }
 
+/* ─── Session grouping ───────────────────────────────────────────── */
+
+interface SessionGroup { key: string; label: string; dateLabel: string; entries: Entry[] }
+
+function groupBySession(entries: Entry[]): SessionGroup[] {
+  const map = new Map<string, Entry[]>();
+  for (const entry of entries) {
+    const dt = new Date(entry.createdAt);
+    const dateStr = dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const hour = dt.getHours();
+    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
+    const key = `${dateStr}-${period}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(entry);
+  }
+  return Array.from(map.entries()).map(([key, entries]) => {
+    const dt = new Date(entries[0].createdAt);
+    const dateStr = dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const hour = dt.getHours();
+    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : "Evening";
+    const timeStr = dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return { key, label: `${period} Build — ${timeStr}`, dateLabel: dateStr, entries };
+  });
+}
+
+/* ─── Filter types ───────────────────────────────────────────────── */
+
+type CategoryFilter = "all" | Category;
+type SeverityFilter = "all" | "committed" | "blocker" | "parked" | "neutral";
+type VerbFilter = "all" | "new" | "bug" | "perf" | "note" | "wip" | "audit" | "merge" | "plan";
+type DateFilter = "all" | "today" | "week" | "month";
+
+/* ─── Main component ─────────────────────────────────────────────── */
+
 export default function Ledger() {
-  const { projectId } = useParams();
-  const id = Number(projectId);
-  const [activeFilter, setActiveFilter] = useState<FilterPill>("ALL");
-  const [search, setSearch] = useState("");
+  const { projectId: projectIdStr } = useParams<{ projectId: string }>();
+  const projectId = Number(projectIdStr);
+  const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
 
-  const { data: project } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
-  const { data: summary } = useGetProjectSummary(id, { query: { enabled: !!id, queryKey: getGetProjectSummaryQueryKey(id) } });
-  const { data: entries } = useListEntries(id, {}, { query: { enabled: !!id, queryKey: getListEntriesQueryKey(id, {}) } });
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
+  const [verbFilter, setVerbFilter] = useState<VerbFilter>("all");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
 
-  const allEntries = entries ?? [];
-  const filtered = allEntries.filter(e =>
-    filterMatchesCategory(e.mode, activeFilter) &&
-    (search === "" || e.title.toLowerCase().includes(search.toLowerCase()) || e.summary?.toLowerCase().includes(search.toLowerCase()))
-  );
+  const { data: entries = [], isLoading } = useListEntries(projectId, {}, { query: { enabled: !!projectId, queryKey: getListEntriesQueryKey(projectId) } });
+  const { data: projects = [] } = useListProjects();
 
-  const committed = filtered.filter(e => e.status === "committed");
-  const inTension = filtered.filter(e => e.status === "draft");
-  const overridden = filtered.filter(e => e.status === "archived" || e.status === "parked");
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(projectId) });
+  }, [queryClient, projectId]);
+
+  const updateEntry = useUpdateEntry({ mutation: { onSuccess: invalidate } });
+  const createEntry = useCreateEntry({ mutation: { onSuccess: invalidate } });
+
+  const project = projects.find((p: Project) => p.id === projectId);
+
+  /* ─── Filtered list (only committed shown in timeline) ─── */
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    return entries.filter((e: Entry) => {
+      if (e.status !== "committed") return false;
+      if (categoryFilter !== "all" && inferCategory(e) !== categoryFilter) return false;
+      if (severityFilter !== "all" && e.severity !== severityFilter) return false;
+      if (verbFilter !== "all" && e.verb !== verbFilter) return false;
+      if (dateFilter !== "all") {
+        const age = now - new Date(e.createdAt).getTime();
+        const day = 86400000;
+        if (dateFilter === "today" && age > day) return false;
+        if (dateFilter === "week" && age > 7 * day) return false;
+        if (dateFilter === "month" && age > 30 * day) return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const match = e.title.toLowerCase().includes(q) || (e.summary ?? "").toLowerCase().includes(q) || (e.details ?? "").toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [entries, categoryFilter, severityFilter, verbFilter, dateFilter, searchQuery]);
+
+  const groups = useMemo(() => groupBySession(filtered), [filtered]);
+  const mostRecent = entries.find((e: Entry) => e.status === "committed");
+
+  /* ─── Actions ─── */
+  const handleReopen = async (entry: Entry) => {
+    setBusyId(entry.id);
+    try {
+      await createEntry.mutateAsync({
+        projectId: entry.projectId,
+        data: {
+          title: entry.title,
+          summary: entry.summary,
+          details: entry.details,
+          status: "draft",
+          severity: "neutral",
+          verb: entry.verb ?? null,
+          buildId: entry.buildId ?? null,
+          touched: entry.touched ?? null,
+          supersedesId: entry.id,
+        },
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleArchive = async (entry: Entry) => {
+    setBusyId(entry.id);
+    try {
+      await updateEntry.mutateAsync({ id: entry.id, data: { status: "archived" } });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const committedCount = entries.filter((e: Entry) => e.status === "committed").length;
 
   return (
-    <div style={{ height: "100vh", background: "var(--atlas-bg)", display: "flex", flexDirection: "column", overflowY: "auto" }}>
+    <div style={{ minHeight: "100vh", background: "var(--background)", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
+      <FooterAuditLine />
 
-      {/* Header / breadcrumb */}
-      <header className="atlas-home-header" style={{
-        position: "sticky", top: 0,
-        height: 50, display: "flex", alignItems: "center",
-        padding: "0 20px",
-        borderBottom: "1px solid var(--atlas-glass-border)",
-        zIndex: 10, flexShrink: 0,
-      }}>
-        <nav style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}>
-          <Link href="/">
-            <span style={{ color: "var(--atlas-muted)", cursor: "pointer", opacity: 0.7 }}>← WORKSPACE</span>
+      {/* ─── Header ─── */}
+      <header style={{ padding: "14px 18px 12px", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 20, background: "var(--background)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <button
+            type="button"
+            onClick={() => setLocation(project ? `/project/${projectId}` : "/")}
+            style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--muted-text)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
+          >
+            ← Workspace
+          </button>
+          <Link
+            href="/parking"
+            style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--accent-gold)", textDecoration: "none" }}
+          >
+            Parking Lot →
           </Link>
-          <span style={{ color: "var(--atlas-border)" }}>|</span>
-          <Link href={`/project/${id}`}>
-            <span style={{ color: "var(--atlas-muted)", cursor: "pointer", opacity: 0.7, textTransform: "uppercase" }}>
-              {project?.name || "Project"}
-            </span>
+          <Link
+            href="/guard-report"
+            style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--phosphor)", textDecoration: "none", marginLeft: "auto" }}
+          >
+            Guard Report →
           </Link>
-          <span style={{ color: "var(--atlas-border)" }}>|</span>
-          <span style={{ color: "var(--atlas-gold)", opacity: 0.9, textTransform: "uppercase" }}>Ledger</span>
-        </nav>
-      </header>
-
-      {/* Page body */}
-      <div style={{ flex: 1, maxWidth: 860, margin: "0 auto", width: "100%", padding: "32px 24px 80px", display: "flex", flexDirection: "column", gap: 0 }}>
-
-        {/* Title + stats */}
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.02em" }}>
-            Decision Ledger
-          </h1>
-          <p style={{ margin: 0, fontSize: 12, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.6 }}>
-            {summary?.committedCount ?? 0} committed · {allEntries.length} total
-          </p>
         </div>
 
-        {/* Filter pills + search + add */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 4, flex: 1, flexWrap: "wrap" }}>
-            {FILTER_PILLS.map(pill => (
-              <button
-                key={pill}
-                type="button"
-                onClick={() => setActiveFilter(pill)}
-                style={{
-                  padding: "5px 12px", borderRadius: 20, cursor: "pointer",
-                  fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  background: activeFilter === pill ? "var(--atlas-gold)" : "var(--atlas-surface)",
-                  color: activeFilter === pill ? "var(--atlas-bg)" : "var(--atlas-muted)",
-                  fontWeight: activeFilter === pill ? 600 : 400,
-                  border: `1px solid ${activeFilter === pill ? "transparent" : "var(--atlas-gold-border)"}`,
-                  transition: "all 160ms ease",
-                }}
-              >
-                {pill}
-              </button>
-            ))}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.01em", margin: 0, lineHeight: 1.2 }}>
+              Ledger
+              {project && <span style={{ fontSize: 13, fontWeight: 400, color: "var(--muted-text)", marginLeft: 10 }}>{project.name}</span>}
+            </h1>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted-text)", margin: "4px 0 0", letterSpacing: "0.06em" }}>
+              {committedCount} committed · Locked record
+            </p>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search…"
-              style={{
-                padding: "5px 12px", borderRadius: 8,
-                background: "var(--atlas-surface)", border: "1px solid var(--atlas-gold-border)",
-                color: "var(--atlas-fg)", fontSize: 12, outline: "none",
-                fontFamily: "var(--app-font-sans)", width: 140,
-              }}
-            />
-            <button type="button" style={{
-              padding: "5px 14px", borderRadius: 8, border: "1px solid var(--atlas-gold-border)",
-              background: "transparent", color: "var(--atlas-gold)", fontSize: 11,
-              fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", cursor: "pointer",
-              transition: "all 160ms ease",
-            }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+
+          {/* Project switcher */}
+          {projects.length > 1 && (
+            <select
+              value={projectId}
+              onChange={(e) => setLocation(`/ledger/${e.target.value}`)}
+              style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 10px", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted-text)", outline: "none", cursor: "pointer", marginRight: 8 }}
             >
-              + ADD
+              {projects.map((p: Project) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={() => setSearchOpen((v) => !v)}
+              aria-label="Search ledger"
+              style={{ width: 36, height: 36, borderRadius: 8, background: searchOpen ? "var(--surface-alt)" : "transparent", border: searchOpen ? "1px solid var(--accent-gold)" : "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", color: searchOpen ? "var(--accent-gold)" : "var(--muted-text)", cursor: "pointer", transition: "all 160ms ease" }}
+            >
+              <svg viewBox="0 0 16 16" width={14} height={14} stroke="currentColor" fill="none" strokeWidth={1.5}>
+                <circle cx="6.5" cy="6.5" r="4" /><path d="M10 10l3.5 3.5" strokeLinecap="round" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setDialogOpen(true)}
+              style={{ padding: "7px 14px", fontSize: 10, fontWeight: 600, fontFamily: "var(--font-mono)", letterSpacing: "0.1em", textTransform: "uppercase" as const, background: "var(--ember)", color: "var(--background)", border: "none", borderRadius: 4, cursor: "pointer" }}
+            >
+              + Add
             </button>
           </div>
         </div>
+      </header>
 
-        {/* COMMITTED section */}
-        <LedgerSection
-          title="COMMITTED"
-          accentColor="var(--atlas-gold)"
-          entries={committed}
-          emptyText="No decisions locked in yet."
-          renderBadge={(e) => (
-            <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "2px 8px", borderRadius: 10, background: "rgba(201,162,76,0.12)", color: "var(--atlas-gold)", textTransform: "uppercase" }}>
-              Locked record
-            </span>
+      {/* ─── Search bar ─── */}
+      {searchOpen && (
+        <div style={{ padding: "8px 18px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+          <input
+            autoFocus
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search decisions..."
+            style={{ width: "100%", background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 12px", fontSize: 13, color: "var(--foreground)", outline: "none", fontFamily: "var(--font-sans)" }}
+          />
+        </div>
+      )}
+
+      {/* ─── Category filter pills ─── */}
+      <div style={{ padding: "10px 18px", display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" as const, borderBottom: "1px solid var(--border)" }}>
+        {(["all", "structure", "aesthetic", "logic", "general"] as const).map((cat) => {
+          const isActive = categoryFilter === cat;
+          const cfg = cat === "all" ? { label: "ALL", color: "var(--foreground)" } : CATEGORY_CONFIG[cat];
+          return (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(cat)}
+              style={{ flexShrink: 0, padding: "4px 12px", borderRadius: 14, border: `1px solid ${isActive ? cfg.color : "var(--border)"}`, background: isActive ? `color-mix(in oklab, ${cfg.color} 12%, transparent)` : "transparent", fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: isActive ? cfg.color : "var(--muted-text)", cursor: "pointer", transition: "all 160ms ease" }}
+            >
+              {cfg.label}
+            </button>
+          );
+        })}
+        <button
+          onClick={() => setFiltersExpanded((v) => !v)}
+          style={{ flexShrink: 0, marginLeft: "auto", padding: "4px 10px", borderRadius: 14, border: filtersExpanded ? "1px solid var(--accent-gold)" : "1px solid var(--border)", background: filtersExpanded ? "color-mix(in oklab, var(--accent-gold) 10%, transparent)" : "transparent", fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: filtersExpanded ? "var(--accent-gold)" : "var(--muted-text)", cursor: "pointer", transition: "all 160ms ease" }}
+        >
+          ⚙ {(severityFilter !== "all" || verbFilter !== "all" || dateFilter !== "all") ? "●" : ""}
+        </button>
+      </div>
+
+      {/* ─── Advanced filters ─── */}
+      {filtersExpanded && (
+        <div style={{ padding: "8px 18px 10px", borderBottom: "1px solid var(--border)", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <FilterSelect label="Severity" value={severityFilter} onChange={(v) => setSeverityFilter(v as SeverityFilter)} options={[{ value: "all", label: "All" }, { value: "committed", label: "Committed" }, { value: "blocker", label: "Blocker" }, { value: "parked", label: "Parked" }, { value: "neutral", label: "Neutral" }]} />
+          <FilterSelect label="Verb" value={verbFilter} onChange={(v) => setVerbFilter(v as VerbFilter)} options={[{ value: "all", label: "All" }, { value: "new", label: "New" }, { value: "bug", label: "Bug" }, { value: "perf", label: "Perf" }, { value: "note", label: "Note" }, { value: "wip", label: "WIP" }, { value: "audit", label: "Audit" }, { value: "merge", label: "Merge" }, { value: "plan", label: "Plan" }]} />
+          <FilterSelect label="Date" value={dateFilter} onChange={(v) => setDateFilter(v as DateFilter)} options={[{ value: "all", label: "All time" }, { value: "today", label: "Today" }, { value: "week", label: "This week" }, { value: "month", label: "This month" }]} />
+          {(severityFilter !== "all" || verbFilter !== "all" || dateFilter !== "all") && (
+            <button onClick={() => { setSeverityFilter("all"); setVerbFilter("all"); setDateFilter("all"); }} style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "var(--ember)", background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
+              Reset
+            </button>
           )}
+        </div>
+      )}
+
+      {/* ─── ThreadAnchor ─── */}
+      {!isLoading && mostRecent && (
+        <ThreadAnchor
+          text={mostRecent.title}
+          meta={`last commit · ${relativeTime(mostRecent.createdAt)}`}
+          onClick={() => {
+            setExpanded(mostRecent.id);
+            requestAnimationFrame(() => {
+              const el = document.querySelector(`[data-entry-id="${mostRecent.id}"]`);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            });
+          }}
         />
+      )}
 
-        {/* IN TENSION section */}
-        {inTension.length > 0 && (
-          <LedgerSection
-            title="IN TENSION"
-            accentColor="var(--atlas-phosphor)"
-            entries={inTension}
-            emptyText=""
-          />
-        )}
+      {/* ─── Decision Ledger Grouped overview ─── */}
+      {!isLoading && entries.length > 0 && (
+        <section style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+          <DecisionLedgerGrouped entries={entries} focusId={expanded ?? undefined} onFocus={setExpanded} />
+        </section>
+      )}
 
-        {/* OVERRIDDEN section */}
-        {overridden.length > 0 && (
-          <LedgerSection
-            title="OVERRIDDEN"
-            accentColor="var(--atlas-muted)"
-            entries={overridden}
-            emptyText=""
-            dimmed
-          />
-        )}
+      {/* ─── Timeline ─── */}
+      <main style={{ padding: "0 18px" }}>
+        {isLoading ? (
+          <div style={{ padding: "80px 0", display: "flex", justifyContent: "center" }}>
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState hasEntries={entries.length > 0} onAdd={() => setDialogOpen(true)} />
+        ) : (
+          <div style={{ position: "relative", paddingLeft: 20, paddingTop: 16 }}>
+            {/* Gold spine */}
+            <div aria-hidden style={{ position: "absolute", left: 7, top: 0, bottom: 0, width: 1, background: "linear-gradient(180deg, var(--accent-gold), color-mix(in oklab, var(--accent-gold) 20%, transparent))" }} />
 
-        {/* Empty state */}
-        {allEntries.length === 0 && (
-          <div style={{ padding: "60px 0", textAlign: "center" }}>
-            <p style={{ fontSize: 14, color: "var(--atlas-muted)", fontStyle: "italic", opacity: 0.6 }}>
-              No decisions recorded yet. Start a session to log decisions.
-            </p>
+            {groups.map((group) => (
+              <div key={group.key} style={{ marginBottom: 24 }}>
+                {/* Sticky date header */}
+                <div style={{ position: "sticky", top: 0, zIndex: 10, paddingBottom: 8, paddingTop: 4, background: "var(--background)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: -20 }}>
+                    <div style={{ width: 14, height: 14, borderRadius: "50%", background: "var(--background)", border: "2px solid var(--accent-gold)", flexShrink: 0 }} />
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--accent-gold)" }}>{group.dateLabel}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted-text)" }}>·</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted-text)", letterSpacing: "0.06em" }}>{group.label}</span>
+                  </div>
+                </div>
+
+                {group.entries.map((entry) => (
+                  <EntryRow
+                    key={entry.id}
+                    entry={entry}
+                    expanded={expanded === entry.id}
+                    busy={busyId === entry.id}
+                    onToggle={() => setExpanded((v) => (v === entry.id ? null : entry.id))}
+                    onReopen={() => handleReopen(entry)}
+                    onArchive={() => handleArchive(entry)}
+                  />
+                ))}
+              </div>
+            ))}
           </div>
         )}
-      </div>
+      </main>
+
+      {/* ─── Add Entry Dialog ─── */}
+      {projectId && (
+        <AddEntryDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          projectId={projectId}
+          onCreated={invalidate}
+        />
+      )}
     </div>
   );
 }
 
-type LedgerEntry = {
-  id: number;
-  title: string;
-  summary?: string | null;
-  mode?: string | null;
-  status?: string | null;
-  createdAt: string;
-};
+/* ─── Entry row ──────────────────────────────────────────────────── */
 
-function LedgerSection({
-  title, accentColor, entries, emptyText, dimmed = false, renderBadge,
+function EntryRow({
+  entry,
+  expanded,
+  busy,
+  onToggle,
+  onReopen,
+  onArchive,
 }: {
-  title: string;
-  accentColor: string;
-  entries: LedgerEntry[];
-  emptyText: string;
-  dimmed?: boolean;
-  renderBadge?: (e: LedgerEntry) => React.ReactNode;
+  entry: Entry;
+  expanded: boolean;
+  busy: boolean;
+  onToggle: () => void;
+  onReopen: () => void;
+  onArchive: () => void;
 }) {
-  if (entries.length === 0 && !emptyText) return null;
+  const catColor = CATEGORY_CONFIG[inferCategory(entry)].color;
 
   return (
-    <div style={{ marginBottom: 32 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-        <div style={{ width: 3, height: 14, borderRadius: 2, background: accentColor, opacity: 0.8 }} />
-        <h2 style={{ margin: 0, fontSize: 10, fontWeight: 700, fontFamily: "var(--app-font-mono)", letterSpacing: "0.14em", color: accentColor, opacity: dimmed ? 0.6 : 0.9, textTransform: "uppercase" }}>
-          {title}
-        </h2>
-        <div style={{ flex: 1, height: 1, background: "var(--atlas-gold-border)" }} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {entries.length === 0 && emptyText && (
-          <p style={{ fontSize: 13, color: "var(--atlas-muted)", fontStyle: "italic", opacity: 0.6, margin: 0, padding: "8px 0" }}>{emptyText}</p>
-        )}
-        {entries.map(e => (
-          <div
-            key={e.id}
-            style={{
-              padding: "14px 16px", borderRadius: 10,
-              background: "var(--atlas-surface)",
-              border: `1px solid ${dimmed ? "var(--atlas-border)" : "var(--atlas-gold-border)"}`,
-              opacity: dimmed ? 0.65 : 1,
-              transition: "opacity 160ms ease",
-            }}
-            onMouseEnter={(el) => { (el.currentTarget as HTMLElement).style.opacity = "1"; }}
-            onMouseLeave={(el) => { (el.currentTarget as HTMLElement).style.opacity = dimmed ? "0.65" : "1"; }}
-          >
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: e.summary ? 8 : 0 }}>
-              <h3 style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", lineHeight: 1.4 }}>{e.title}</h3>
-              {renderBadge?.(e)}
-            </div>
-            {e.summary && (
-              <p style={{ margin: 0, fontSize: 12, color: "var(--atlas-muted)", lineHeight: 1.55, opacity: 0.8 }}>{e.summary}</p>
-            )}
-            <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
-              {e.mode && (
-                <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", padding: "2px 8px", borderRadius: 10, background: "var(--atlas-surface-alt)", color: "var(--atlas-muted)", textTransform: "uppercase", border: "1px solid var(--atlas-border)" }}>
-                  {e.mode}
-                </span>
-              )}
-              <span style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.4 }}>
-                {new Date(e.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+    <div
+      data-entry-id={entry.id}
+      style={{
+        marginBottom: 8,
+        borderRadius: 8,
+        border: `1px solid ${expanded ? "color-mix(in oklab, var(--accent-gold) 30%, transparent)" : "var(--border)"}`,
+        background: expanded ? "var(--surface)" : "transparent",
+        transition: "all 160ms ease",
+        overflow: "hidden",
+      }}
+    >
+      {/* Row header — always visible */}
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", width: "100%", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" as const, color: "inherit", font: "inherit" }}
+      >
+        {/* Severity dot */}
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: entry.severity === "blocker" ? "var(--ember)" : entry.severity === "committed" ? "var(--phosphor)" : entry.severity === "parked" ? "var(--accent-gold)" : "var(--muted-text)", flexShrink: 0, marginTop: 5 }} />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+            <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: "-0.01em", color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+              {entry.title}
+            </span>
+            {entry.buildId && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--muted-text)", flexShrink: 0, background: "var(--surface-alt)", padding: "1px 6px", borderRadius: 3 }}>
+                {entry.buildId}
               </span>
-            </div>
+            )}
           </div>
-        ))}
-      </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--muted-text)", letterSpacing: "0.06em" }}>{relativeTime(entry.createdAt)}</span>
+            {entry.verb && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: catColor, background: `color-mix(in oklab, ${catColor} 10%, transparent)`, border: `1px solid color-mix(in oklab, ${catColor} 25%, transparent)`, padding: "1px 6px", borderRadius: 3, textTransform: "uppercase" as const }}>{entry.verb}</span>}
+            {entry.costOfLesson != null && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--ember)", letterSpacing: "0.06em" }}>{formatCost(entry.costOfLesson)}</span>}
+            {entry.isViolation && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--ember)", background: "rgba(146,64,14,0.12)", border: "1px solid rgba(146,64,14,0.25)", padding: "1px 6px", borderRadius: 3, textTransform: "uppercase" as const }}>violation</span>}
+          </div>
+        </div>
+
+        <span aria-hidden style={{ color: "var(--muted-text)", fontSize: 10, flexShrink: 0, marginTop: 2, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }}>▾</span>
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div style={{ padding: "0 14px 14px", borderTop: "1px solid color-mix(in oklab, var(--accent-gold) 10%, transparent)" }}>
+          {entry.summary && (
+            <p style={{ fontSize: 13, lineHeight: 1.6, color: "var(--foreground)", margin: "12px 0 0", opacity: 0.85 }}>
+              {entry.summary}
+            </p>
+          )}
+          {entry.details && (
+            <p style={{ fontSize: 12, lineHeight: 1.7, color: "var(--muted-text)", margin: "8px 0 0", fontStyle: "italic" as const }}>
+              {entry.details}
+            </p>
+          )}
+          {entry.touched && entry.touched.length > 0 && (
+            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {entry.touched.map((f, i) => (
+                <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 3, padding: "2px 7px", color: "var(--muted-text)" }}>{f}</span>
+              ))}
+            </div>
+          )}
+          {entry.lockedAt && (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted-text)", margin: "10px 0 0", letterSpacing: "0.06em" }}>
+              Locked {relativeTime(entry.lockedAt)}
+            </p>
+          )}
+
+          {/* Actions */}
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, borderTop: "1px solid color-mix(in oklab, var(--accent-gold) 10%, transparent)", paddingTop: 10, marginTop: 14 }}>
+            <ActionButton onClick={onReopen} disabled={busy}>Reopen</ActionButton>
+            <ActionButton onClick={onArchive} disabled={busy}>Archive</ActionButton>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ActionButton({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      disabled={disabled}
+      style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase" as const, padding: "5px 12px", borderRadius: 4, border: "0.5px solid color-mix(in oklab, var(--accent-gold) 40%, transparent)", background: "transparent", color: "color-mix(in oklab, var(--accent-gold) 80%, var(--foreground))", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.4 : 1, transition: "all 120ms ease" }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EmptyState({ hasEntries, onAdd }: { hasEntries: boolean; onAdd: () => void }) {
+  return (
+    <div style={{ padding: "80px 24px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+      <div style={{ width: 48, height: 48, borderRadius: 4, border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+        <div style={{ width: 8, height: 8, background: "var(--ember)", borderRadius: 1 }} />
+      </div>
+      <h2 style={{ fontSize: 14, fontWeight: 500, margin: 0 }}>
+        {hasEntries ? "No entries match this filter." : "The ledger is empty."}
+      </h2>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--muted-text)", marginTop: 8, maxWidth: 300 }}>
+        {hasEntries ? "Adjust your filters to see other committed decisions." : "Phase 1 begins with the first committed decision. Park an idea, then commit it."}
+      </p>
+      {!hasEntries && (
+        <button
+          onClick={onAdd}
+          style={{ marginTop: 20, padding: "8px 18px", fontSize: 11, fontWeight: 600, fontFamily: "var(--font-mono)", letterSpacing: "0.1em", textTransform: "uppercase" as const, background: "var(--ember)", color: "var(--background)", border: "none", borderRadius: 4, cursor: "pointer" }}
+        >
+          Log First Decision
+        </button>
+      )}
+    </div>
+  );
+}
+
+function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "var(--muted-text)" }}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 6, padding: "3px 8px", fontFamily: "var(--font-mono)", fontSize: 10, color: value !== "all" ? "var(--accent-gold)" : "var(--muted-text)", outline: "none", cursor: "pointer" }}
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
   );
 }

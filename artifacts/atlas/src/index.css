@@ -96,15 +96,22 @@
   --app-font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
 
   /* Alias tokens so ported original components work without modification */
-  --ember:       var(--atlas-ember);
-  --accent-gold: var(--atlas-gold);
-  --surface:     var(--atlas-surface);
-  --surface-alt: var(--atlas-surface-alt);
-  --foreground:  var(--atlas-fg);
-  --border:      var(--atlas-border);
-  --background:  var(--atlas-bg);
-  --muted-text:  var(--atlas-muted);
-  --phosphor:    var(--atlas-phosphor);
+  --ember:        var(--atlas-ember);
+  --accent-gold:  var(--atlas-gold);
+  --surface:      var(--atlas-surface);
+  --surface-alt:  var(--atlas-surface-alt);
+  --foreground:   var(--atlas-fg);
+  --border:       var(--atlas-border);
+  --background:   var(--atlas-bg);
+  --muted-text:   var(--atlas-muted);
+  --phosphor:     var(--atlas-phosphor);
+  --violated:     var(--atlas-ember);
+  --warning:      #F59E0B;
+  --shell-edge:   20px;
+  --glass-bg:     var(--atlas-glass-bg);
+  --glass-border: var(--atlas-glass-border);
+  --gold-glow:    var(--atlas-gold-glow);
+  --gold-border:  var(--atlas-gold-border);
 }
 
 /* ── Parchment theme (light mode) ─────────────────────────────────────────── */

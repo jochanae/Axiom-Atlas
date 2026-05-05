@@ -10,6 +10,7 @@ import Projects from "./pages/projects";
 import Workspace from "./pages/workspace";
 import Ledger from "./pages/ledger";
 import ParkingLot from "./pages/parking-lot";
+import GuardReport from "./pages/guard-report";
 import { ProjectsSheet } from "./components/ProjectsSheet";
 
 const queryClient = new QueryClient({
@@ -242,6 +243,7 @@ function Router({ onYou, onProjects }: { onYou: () => void; onProjects: () => vo
         <Route path="/project/:projectId" component={Workspace} />
         <Route path="/ledger/:projectId" component={Ledger} />
         <Route path="/parking" component={ParkingLot} />
+        <Route path="/guard-report" component={GuardReport} />
         <Route component={NotFound} />
       </Switch>
       <MobileFooter onYou={onYou} onProjects={onProjects} />
