@@ -307,6 +307,16 @@ export interface ChatRequest {
   entries?: EntryContext[];
 }
 
+export interface Thought {
+  id: number;
+  content: string;
+  createdAt: string;
+}
+
+export interface CreateThoughtBody {
+  content: string;
+}
+
 /**
  * @nullable
  */
