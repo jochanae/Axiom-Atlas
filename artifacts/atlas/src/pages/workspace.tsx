@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type React from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
@@ -1280,9 +1280,13 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
           <path d="M2 4l4 4 4-4" />
         </svg>
         {/* Title */}
-        <span style={{ flex: 1, fontSize: 12.5, color: "rgba(231,229,228,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.4 }}>
+        <Link
+          href={`/entry/${entry.id}`}
+          onClick={(e) => e.stopPropagation()}
+          style={{ flex: 1, fontSize: 12.5, color: "rgba(231,229,228,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.4, textDecoration: "none" }}
+        >
           {entry.title}
-        </span>
+        </Link>
         {/* NOTE badge */}
         <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.07em", background: "rgba(120,113,108,0.12)", color: "rgba(120,113,108,0.6)", padding: "2px 7px", borderRadius: 4, flexShrink: 0, textTransform: "uppercase" as const }}>
           NOTE
@@ -1321,9 +1325,13 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
           </div>
 
           {/* Title */}
-          <div style={{ fontSize: 14, fontWeight: 600, color: "rgba(231,229,228,0.9)", marginBottom: 8, lineHeight: 1.35 }}>
+          <Link
+            href={`/entry/${entry.id}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: "block", fontSize: 14, fontWeight: 600, color: "rgba(231,229,228,0.9)", marginBottom: 8, lineHeight: 1.35, textDecoration: "none" }}
+          >
             {entry.title}
-          </div>
+          </Link>
 
           {/* Short definition (italic intro) */}
           {shortDef && (
@@ -1473,12 +1481,17 @@ function LedgerEntry({ entry }: { entry: Entry }) {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" as const }}>
-              <span style={{
-                fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, letterSpacing: "-0.01em",
-                color: committed ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.5)",
-              }}>
+              <Link
+                href={`/entry/${entry.id}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, letterSpacing: "-0.01em",
+                  color: committed ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.5)",
+                  textDecoration: "none",
+                }}
+              >
                 {entry.title}
-              </span>
+              </Link>
               {committed && <CapsuleTag severity="committed" size="xs">LOCKED</CapsuleTag>}
               {entry.deviation && <CapsuleTag severity="blocker" size="xs">DEVIATION</CapsuleTag>}
             </div>
