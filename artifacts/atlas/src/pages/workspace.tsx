@@ -16,9 +16,11 @@ import {
   useCreateEntry,
   useUpdateProject,
   useUpdateEntry,
+  useDeleteProject,
   getListEntriesQueryKey,
   getListSessionsQueryKey,
   getGetProjectQueryKey,
+  getListProjectsQueryKey,
 } from "@workspace/api-client-react";
 import type { Entry } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -522,7 +524,7 @@ function UserBubble({
           >
             YOU{sentAt ? ` · ${formatTimestamp(sentAt)}` : ""}
           </div>
-          <div style={{ fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.75)", whiteSpace: "pre-wrap", fontFamily: "var(--app-font-mono)", letterSpacing: "-0.01em" }}>
+          <div style={{ fontSize: 14, lineHeight: 1.7, color: "var(--atlas-fg)", opacity: 0.85, whiteSpace: "pre-wrap", fontFamily: "var(--app-font-mono)", letterSpacing: "-0.01em" }}>
             {displayContent}
           </div>
           {isTall && (
@@ -3639,7 +3641,9 @@ export default function Workspace() {
   const [showSurfaceTabs, setShowSurfaceTabs] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const updateProjectHeader = useUpdateProject();
+  const deleteProjectMutation = useDeleteProject();
 
   const ATLAS_SRC_FILES = [
     { label: "workspace.tsx", path: "artifacts/atlas/src/pages/workspace.tsx", hint: "main UI · ~4k lines" },
@@ -4034,7 +4038,7 @@ export default function Workspace() {
       {/* ── Header ── */}
       <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(12px)" }}>
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
-        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid var(--atlas-border)" }}>
 
           {/* Left: Atlas logo → home */}
           <button
@@ -4102,6 +4106,33 @@ export default function Workspace() {
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="9" height="9" rx="1.5" /><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" /></svg>} label="Clone project" badge="SOON" disabled />
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
+                  <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
+                  {confirmDeleteProject ? (
+                    <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ fontSize: 11.5, color: "rgba(252,165,165,0.9)", fontFamily: "var(--app-font-mono)" }}>Delete "{project?.name}"?</div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => { setConfirmDeleteProject(false); }} style={{ flex: 1, padding: "5px 0", borderRadius: 5, fontSize: 11, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer" }}>Cancel</button>
+                        <button onClick={() => {
+                          deleteProjectMutation.mutate({ id }, {
+                            onSuccess: () => {
+                              queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                              setShowProjectMenu(false);
+                              setConfirmDeleteProject(false);
+                              setLocation("/");
+                            },
+                          });
+                        }} style={{ flex: 1, padding: "5px 0", borderRadius: 5, fontSize: 11, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)", color: "rgba(252,165,165,0.9)", cursor: "pointer", fontWeight: 600 }}>
+                          {deleteProjectMutation.isPending ? "Deleting…" : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <MenuBtn
+                      icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 4 13 12 13 13 6" /><path d="M1 6h14" /><path d="M6 6V4a1 1 0 011-1h2a1 1 0 011 1v2" /></svg>}
+                      label="Delete project"
+                      onClick={() => setConfirmDeleteProject(true)}
+                    />
+                  )}
                 </div>
               </>,
               document.body
@@ -4566,7 +4597,7 @@ export default function Workspace() {
                       className={voiceListening ? "atlas-voice-active" : ""}
                       style={{
                         width: 32, height: 32, borderRadius: 8,
-                        background: voiceListening ? "var(--atlas-ember)" : "rgba(37,34,32,0.6)",
+                        background: voiceListening ? "var(--atlas-ember)" : "var(--atlas-surface)",
                         border: `1px solid ${voiceListening ? "var(--atlas-ember)" : "var(--atlas-border)"}`,
                         color: voiceListening ? "var(--atlas-fg)" : "var(--atlas-muted)",
                         cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
@@ -4586,7 +4617,7 @@ export default function Workspace() {
                     disabled={!hasInput || chatPending || !sessionId}
                     style={{
                       width: 38, height: 38,
-                      background: hasInput && !chatPending && sessionId ? "var(--atlas-ember)" : "rgba(37,34,32,0.7)",
+                      background: hasInput && !chatPending && sessionId ? "var(--atlas-ember)" : "var(--atlas-surface)",
                       border: hasInput ? "none" : "1px solid var(--atlas-border)",
                       boxShadow: hasInput && !chatPending ? "0 0 16px -3px rgba(146,64,14,0.5)" : "none",
                       opacity: chatPending ? 0.5 : 1,

@@ -513,3 +513,6 @@
   -webkit-backdrop-filter: blur(10px);
   flex-shrink: 0;
 }
+[data-theme="parchment"] .atlas-ledger-bar {
+  background: rgba(245,241,232,0.75);
+}
