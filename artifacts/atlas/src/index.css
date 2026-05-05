@@ -115,6 +115,20 @@
 }
 
 /* ── Parchment theme (light mode) ─────────────────────────────────────────── */
+[data-theme="parchment"],
+[data-theme="parchment"] body,
+[data-theme="parchment"] #root {
+  background-image: none;
+}
+
+[data-theme="parchment"] input,
+[data-theme="parchment"] textarea,
+[data-theme="parchment"] select {
+  background: var(--atlas-surface) !important;
+  color: var(--atlas-fg) !important;
+  border-color: var(--atlas-border) !important;
+}
+
 [data-theme="parchment"] {
   color-scheme: light;
 

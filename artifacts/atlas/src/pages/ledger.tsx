@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
-import { useParams, useLocation, Link } from "wouter";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useParams, useLocation, useSearch, Link } from "wouter";
 import {
   useListEntries,
   useListProjects,
@@ -90,8 +90,22 @@ export default function Ledger() {
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
 
+  const search = useSearch();
   const { data: entries = [], isLoading } = useListEntries(projectId, {}, { query: { enabled: !!projectId, queryKey: getListEntriesQueryKey(projectId) } });
   const { data: projects = [] } = useListProjects();
+
+  // Auto-expand and scroll to an entry from ?expand=<id>
+  useEffect(() => {
+    if (isLoading || entries.length === 0) return;
+    const params = new URLSearchParams(search);
+    const expandId = Number(params.get("expand"));
+    if (!expandId) return;
+    setExpanded(expandId);
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-entry-id="${expandId}"]`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [isLoading, entries.length, search]);
 
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(projectId) });

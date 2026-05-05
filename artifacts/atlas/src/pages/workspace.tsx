@@ -3238,7 +3238,7 @@ function MapTab({ projectId }: { projectId: number }) {
 }
 
 // ── UserProfilePanel ──────────────────────────────────────────────────────────
-function UserProfilePanel({ onClose }: { onClose: () => void }) {
+function UserProfilePanel({ onClose, isMobile = false }: { onClose: () => void; isMobile?: boolean }) {
   const [profile, setProfile] = useState<UserProfile>(loadProfile);
   const [saved, setSaved] = useState(false);
 
@@ -3261,7 +3261,7 @@ function UserProfilePanel({ onClose }: { onClose: () => void }) {
           rows={3}
           style={{
             width: "100%", resize: "none", padding: "8px 10px", borderRadius: 6,
-            background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)",
+            background: "var(--atlas-bg)", border: "1px solid var(--atlas-border)",
             color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
             outline: "none", boxSizing: "border-box", lineHeight: 1.6,
           }}
@@ -3276,7 +3276,7 @@ function UserProfilePanel({ onClose }: { onClose: () => void }) {
           placeholder={placeholder}
           style={{
             width: "100%", padding: "8px 10px", borderRadius: 6,
-            background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)",
+            background: "var(--atlas-bg)", border: "1px solid var(--atlas-border)",
             color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
             outline: "none", boxSizing: "border-box",
           }}
@@ -3295,9 +3295,9 @@ function UserProfilePanel({ onClose }: { onClose: () => void }) {
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)" }} />
       <div style={{
         position: "relative", zIndex: 1,
-        width: 320, height: "100%",
+        width: isMobile ? "100%" : 320, height: "100%",
         background: "var(--atlas-surface)",
-        borderLeft: "1px solid var(--atlas-border)",
+        borderLeft: isMobile ? "none" : "1px solid var(--atlas-border)",
         display: "flex", flexDirection: "column",
         boxShadow: "-8px 0 32px rgba(0,0,0,0.4)",
       }}>
@@ -3330,7 +3330,7 @@ function UserProfilePanel({ onClose }: { onClose: () => void }) {
               placeholder="Paste your Google profile photo URL"
               style={{
                 width: "100%", padding: "8px 10px", borderRadius: 6,
-                background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)",
+                background: "var(--atlas-bg)", border: "1px solid var(--atlas-border)",
                 color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
                 outline: "none", boxSizing: "border-box",
               }}
@@ -3347,7 +3347,7 @@ function UserProfilePanel({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Save */}
-        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+        <div style={{ padding: "12px 16px", paddingBottom: "max(12px, env(safe-area-inset-bottom))", borderTop: "1px solid var(--atlas-border)", flexShrink: 0 }}>
           <button
             onClick={handleSave}
             style={{
@@ -3604,6 +3604,7 @@ export default function Workspace() {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
   const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "workshop">("chat");
+  const [showSurfaceTabs, setShowSurfaceTabs] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const updateProjectHeader = useUpdateProject();
@@ -4138,74 +4139,67 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* Row 2: Icon-only surface tabs — always visible on all screen sizes */}
-        <div style={{ height: 38, display: "flex", alignItems: "center", justifyContent: "center", gap: 2, borderBottom: "1px solid var(--atlas-border)" }}>
-          {([
-            {
-              id: "chat" as const,
-              label: "Chat",
-              icon: (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              ),
-            },
-            {
-              id: "ledger" as const,
-              label: "Ledger",
-              badge: entryCount > 0 ? entryCount : 0,
-              icon: (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-                  <rect x="9" y="3" width="6" height="4" rx="1" ry="1" />
-                  <line x1="9" y1="12" x2="15" y2="12" />
-                  <line x1="9" y1="16" x2="13" y2="16" />
-                </svg>
-              ),
-            },
-            {
-              id: "workshop" as const,
-              label: "Workshop",
-              icon: (
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                </svg>
-              ),
-            },
-          ] as { id: "chat" | "ledger" | "workshop"; label: string; badge?: number; icon: React.ReactNode }[]).map(({ id, label, badge, icon }) => {
-            const active = mobileTab === id;
-            return (
-              <button
-                key={id}
-                onClick={() => setMobileTab(id)}
-                title={label}
-                style={{
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 36,
-                  height: 28,
-                  borderRadius: 7,
-                  border: "none",
-                  background: active ? "rgba(201,162,76,0.1)" : "transparent",
-                  color: active ? "var(--atlas-gold)" : "rgba(120,113,108,0.6)",
-                  cursor: "pointer",
-                  transition: "background 140ms ease, color 140ms ease",
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "rgba(231,229,228,0.55)"; } }}
-                onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(120,113,108,0.6)"; } }}
-              >
-                {icon}
-                {badge ? (
-                  <span style={{ position: "absolute", top: 2, right: 2, fontSize: 7, background: "var(--atlas-ember)", color: "#fff", borderRadius: 5, padding: "1px 3px", fontWeight: 700, lineHeight: 1, pointerEvents: "none" }}>
-                    {badge > 9 ? "9+" : badge}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
+        {/* Surface tab drawer — hidden by default, revealed by chevron */}
+        <div style={{ borderBottom: "1px solid var(--atlas-border)" }}>
+          {/* Chevron handle */}
+          <button
+            onClick={() => setShowSurfaceTabs(v => !v)}
+            aria-label={showSurfaceTabs ? "Hide surface tabs" : "Show surface tabs"}
+            style={{
+              width: "100%", height: 16,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "transparent", border: "none", cursor: "pointer",
+              color: "rgba(120,113,108,0.35)",
+              transition: "color 140ms ease",
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d={showSurfaceTabs ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"} />
+            </svg>
+          </button>
+
+          {/* Tab strip — only shown when open */}
+          {showSurfaceTabs && (
+            <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", gap: 2, paddingBottom: 4 }}>
+              {([
+                {
+                  id: "chat" as const, label: "Chat",
+                  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>,
+                },
+                {
+                  id: "ledger" as const, label: "Ledger", badge: entryCount > 0 ? entryCount : 0,
+                  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" ry="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="13" y2="16" /></svg>,
+                },
+                {
+                  id: "workshop" as const, label: "Workshop",
+                  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>,
+                },
+              ] as { id: "chat" | "ledger" | "workshop"; label: string; badge?: number; icon: React.ReactNode }[]).map(({ id, label, badge, icon }) => {
+                const active = mobileTab === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => { setMobileTab(id); setShowSurfaceTabs(false); }}
+                    title={label}
+                    style={{
+                      position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 36, height: 28, borderRadius: 7, border: "none",
+                      background: active ? "rgba(201,162,76,0.1)" : "transparent",
+                      color: active ? "var(--atlas-gold)" : "rgba(120,113,108,0.6)",
+                      cursor: "pointer", transition: "background 140ms ease, color 140ms ease", flexShrink: 0,
+                    }}
+                  >
+                    {icon}
+                    {badge ? (
+                      <span style={{ position: "absolute", top: 2, right: 2, fontSize: 7, background: "var(--atlas-ember)", color: "#fff", borderRadius: 5, padding: "1px 3px", fontWeight: 700, lineHeight: 1, pointerEvents: "none" }}>
+                        {badge > 9 ? "9+" : badge}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -4607,8 +4601,8 @@ export default function Workspace() {
               }}
               style={{
                 position: "relative", zIndex: 1,
-                width: rightFullscreen ? "100vw" : "88vw",
-                maxWidth: rightFullscreen ? "none" : 420,
+                width: "100vw",
+                maxWidth: "none",
                 height: "100%",
                 animation: "atlas-slide-in-right 220ms cubic-bezier(0.4,0,0.2,1) both",
                 transition: "width 220ms ease, max-width 220ms ease",
@@ -4632,7 +4626,7 @@ export default function Workspace() {
       </div>
 
       {/* User Profile Panel */}
-      {showProfile && <UserProfilePanel onClose={() => setShowProfile(false)} />}
+      {showProfile && <UserProfilePanel onClose={() => setShowProfile(false)} isMobile={isMobile} />}
 
     </div>
   );
