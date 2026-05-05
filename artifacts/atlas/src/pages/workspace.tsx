@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
+import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
@@ -9,6 +10,7 @@ import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../componen
 import type { ZipEntry } from "../components/ZipImport";
 import {
   useGetProject,
+  useListProjects,
   useListSessions,
   useListEntries,
   useListMessages,
@@ -3710,7 +3712,7 @@ export default function Workspace() {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
   const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "workshop">("chat");
-  const [showSurfaceTabs, setShowSurfaceTabs] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -3755,6 +3757,7 @@ export default function Workspace() {
   const initialSent = useRef(false);
   const touchStartX = useRef(0);
 
+  const { data: allProjects } = useListProjects();
   const { data: project } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
   const { data: sessions, isLoading: sessionsLoading } = useListSessions(id, {
     query: { enabled: !!id, queryKey: getListSessionsQueryKey(id) },
@@ -4114,13 +4117,28 @@ export default function Workspace() {
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
         <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid var(--atlas-border)" }}>
 
-          {/* Left: Atlas logo → home */}
-          <button
-            onClick={() => setLocation("/")}
-            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, flexShrink: 0 }}
-          >
-            <AtlasLogo small />
-          </button>
+          {/* Left: drawer button + Atlas logo → home */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <button
+              title="Menu"
+              onClick={() => setShowDrawer(true)}
+              style={{ width: 28, height: 28, borderRadius: 7, background: "transparent", border: "none", color: "rgba(120,113,108,0.45)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "color 160ms ease", flexShrink: 0 }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+                <rect x="2" y="2" width="16" height="16" rx="2.5" />
+                <path d="M7 2v16" />
+                <path d="M10 7h5M10 10h5M10 13h4" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setLocation("/")}
+              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, flexShrink: 0 }}
+            >
+              <AtlasLogo small />
+            </button>
+          </div>
 
           {/* Center: project name + dropdown — absolutely centered so left/right widths don't skew it */}
           <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", maxWidth: "min(220px, calc(100% - 260px))", overflow: "hidden" }}>
@@ -4188,6 +4206,34 @@ export default function Workspace() {
                     zIndex: 9999, minWidth: 220,
                   }}
                 >
+                  {/* View switcher section */}
+                  <div style={{ padding: "4px 10px 2px", fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.5 }}>View</div>
+                  <div style={{ display: "flex", gap: 4, padding: "2px 8px 6px" }}>
+                    {([
+                      { id: "chat" as const, label: "Chat", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg> },
+                      { id: "ledger" as const, label: "Ledger", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="13" y2="16" /></svg> },
+                      { id: "workshop" as const, label: "Workshop", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg> },
+                    ] as { id: "chat" | "ledger" | "workshop"; label: string; icon: React.ReactNode }[]).map(({ id, label, icon }) => {
+                      const active = mobileTab === id;
+                      return (
+                        <button
+                          key={id}
+                          onClick={() => { setMobileTab(id); setShowProjectMenu(false); }}
+                          style={{
+                            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                            padding: "7px 4px", borderRadius: 7, border: `1px solid ${active ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
+                            background: active ? "rgba(201,162,76,0.08)" : "transparent",
+                            color: active ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                            cursor: "pointer", transition: "all 140ms ease",
+                          }}
+                        >
+                          {icon}
+                          <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ height: 1, background: "var(--atlas-border)", margin: "0 6px 4px", opacity: 0.5 }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2" /><path d="M13.7 9.4a1 1 0 010-2.8l.5-.2a1 1 0 00.6-1.5l-.7-1.2a1 1 0 00-1.5-.3l-.4.3a1 1 0 01-1.4-.6l-.1-.5a1 1 0 00-1-.8H8.3a1 1 0 00-1 .8l-.1.5a1 1 0 01-1.4.6l-.4-.3a1 1 0 00-1.5.3l-.7 1.2a1 1 0 00.6 1.5l.5.2a1 1 0 010 2.8l-.5.2a1 1 0 00-.6 1.5l.7 1.2a1 1 0 001.5.3l.4-.3a1 1 0 011.4.6l.1.5a1 1 0 001 .8h1.4a1 1 0 001-.8l.1-.5a1 1 0 011.4-.6l.4.3a1 1 0 001.5-.3l.7-1.2a1 1 0 00-.6-1.5l-.5-.2z" /></svg>} label="Project settings" badge="SOON" disabled />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation("/parking"); setShowProjectMenu(false); }} />
@@ -4314,68 +4360,6 @@ export default function Workspace() {
           </div>
         </div>
 
-        {/* Surface tab drawer — hidden by default, revealed by chevron */}
-        <div style={{ borderBottom: "1px solid var(--atlas-border)" }}>
-          {/* Chevron handle */}
-          <button
-            onClick={() => setShowSurfaceTabs(v => !v)}
-            aria-label={showSurfaceTabs ? "Hide surface tabs" : "Show surface tabs"}
-            style={{
-              width: "100%", height: 16,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: "transparent", border: "none", cursor: "pointer",
-              color: "rgba(120,113,108,0.35)",
-              transition: "color 140ms ease",
-            }}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d={showSurfaceTabs ? "M18 15l-6-6-6 6" : "M6 9l6 6 6-6"} />
-            </svg>
-          </button>
-
-          {/* Tab strip — only shown when open */}
-          {showSurfaceTabs && (
-            <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", gap: 2, paddingBottom: 4 }}>
-              {([
-                {
-                  id: "chat" as const, label: "Chat",
-                  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>,
-                },
-                {
-                  id: "ledger" as const, label: "Ledger", badge: entryCount > 0 ? entryCount : 0,
-                  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" ry="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="13" y2="16" /></svg>,
-                },
-                {
-                  id: "workshop" as const, label: "Workshop",
-                  icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>,
-                },
-              ] as { id: "chat" | "ledger" | "workshop"; label: string; badge?: number; icon: React.ReactNode }[]).map(({ id, label, badge, icon }) => {
-                const active = mobileTab === id;
-                return (
-                  <button
-                    key={id}
-                    onClick={() => { setMobileTab(id); setShowSurfaceTabs(false); }}
-                    title={label}
-                    style={{
-                      position: "relative", display: "flex", alignItems: "center", justifyContent: "center",
-                      width: 36, height: 28, borderRadius: 7, border: "none",
-                      background: active ? "rgba(201,162,76,0.1)" : "transparent",
-                      color: active ? "var(--atlas-gold)" : "rgba(120,113,108,0.6)",
-                      cursor: "pointer", transition: "background 140ms ease, color 140ms ease", flexShrink: 0,
-                    }}
-                  >
-                    {icon}
-                    {badge ? (
-                      <span style={{ position: "absolute", top: 2, right: 2, fontSize: 7, background: "var(--atlas-ember)", color: "#fff", borderRadius: 5, padding: "1px 3px", fontWeight: 700, lineHeight: 1, pointerEvents: "none" }}>
-                        {badge > 9 ? "9+" : badge}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* ── Two-pane body ── */}
@@ -4800,6 +4784,19 @@ export default function Workspace() {
 
       {/* User Profile Panel */}
       {showProfile && <UserProfilePanel onClose={() => setShowProfile(false)} isMobile={isMobile} />}
+
+      {/* Projects Drawer */}
+      <ProjectsDrawer
+        open={showDrawer}
+        onClose={() => setShowDrawer(false)}
+        projects={allProjects ?? []}
+        activeProjectId={id}
+        onOpenProject={(projectId) => { setLocation(`/project/${projectId}`); setShowDrawer(false); }}
+        onNewProject={() => { setLocation("/"); setShowDrawer(false); }}
+        onOpenLedger={(projectId) => { setLocation(`/ledger/${projectId}`); setShowDrawer(false); }}
+        onOpenParking={() => { setLocation("/parking"); setShowDrawer(false); }}
+        userLabel={loadProfile().name || null}
+      />
 
     </div>
   );
