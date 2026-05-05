@@ -2022,9 +2022,11 @@ function FilesTab({
     setTokenState(filesProject.githubToken ?? null);
   }, [filesProject]);
   const [tokenInput, setTokenInput] = useState("");
+  const [tokenSaveError, setTokenSaveError] = useState<string | null>(null);
   const [repos, setRepos] = useState<GhRepo[]>([]);
   const [reposLoading, setReposLoading] = useState(false);
   const [reposError, setReposError] = useState<string | null>(null);
+  const [linkRepoError, setLinkRepoError] = useState<string | null>(null);
   const [selectedRepo, setSelectedRepo] = useState<GhRepo | null>(null);
   const [tree, setTree] = useState<GhTreeNode[]>([]);
   const [treeLoading, setTreeLoading] = useState(false);
@@ -2050,8 +2052,17 @@ function FilesTab({
   }, [projectId]);
 
   const saveToken = (t: string) => {
-    updateProject.mutate({ id: projectId, data: { githubToken: t } });
-    setTokenState(t);
+    setTokenSaveError(null);
+    updateProject.mutate(
+      { id: projectId, data: { githubToken: t } },
+      {
+        onSuccess: () => setTokenState(t),
+        onError: (err: any) => {
+          const msg = err?.response?.data?.error ?? err?.message ?? "Failed to save token";
+          setTokenSaveError(msg);
+        },
+      }
+    );
   };
 
   const clearToken = () => {
@@ -2118,9 +2129,20 @@ function FilesTab({
 
   // Link a repo to this project and load its tree
   const pickRepo = useCallback((repo: GhRepo) => {
-    updateProject.mutate({ id: projectId, data: { linkedRepo: JSON.stringify(repo) } });
-    onLinkedRepoChange(repo);
-    loadTree(repo);
+    setLinkRepoError(null);
+    updateProject.mutate(
+      { id: projectId, data: { linkedRepo: JSON.stringify(repo) } },
+      {
+        onSuccess: () => {
+          onLinkedRepoChange(repo);
+          loadTree(repo);
+        },
+        onError: (err: any) => {
+          const msg = err?.response?.data?.error ?? err?.message ?? "Failed to link repo";
+          setLinkRepoError(msg);
+        },
+      }
+    );
   }, [projectId, updateProject, onLinkedRepoChange, loadTree]);
 
   // Unlink the repo from this project
@@ -2178,20 +2200,26 @@ function FilesTab({
           <input
             type="password"
             value={tokenInput}
-            onChange={(e) => setTokenInput(e.target.value)}
+            onChange={(e) => { setTokenInput(e.target.value); setTokenSaveError(null); }}
             onKeyDown={(e) => { if (e.key === "Enter" && tokenInput.trim()) saveToken(tokenInput.trim()); }}
             placeholder="ghp_…"
             autoComplete="off"
             style={{
               width: "100%", padding: "8px 10px", borderRadius: 6,
-              background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)",
+              background: "rgba(12,10,9,0.7)",
+              border: `1px solid ${tokenSaveError ? "rgba(239,68,68,0.5)" : "var(--atlas-border)"}`,
               color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
               outline: "none", boxSizing: "border-box",
               transition: "border-color 160ms ease",
             }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+            onFocus={(e) => (e.currentTarget.style.borderColor = tokenSaveError ? "rgba(239,68,68,0.5)" : "rgba(201,162,76,0.4)")}
+            onBlur={(e) => (e.currentTarget.style.borderColor = tokenSaveError ? "rgba(239,68,68,0.5)" : "var(--atlas-border)")}
           />
+          {tokenSaveError && (
+            <div style={{ fontSize: 10, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)", lineHeight: 1.4, marginTop: -2 }}>
+              {tokenSaveError}
+            </div>
+          )}
           <button
             onClick={() => tokenInput.trim() && saveToken(tokenInput.trim())}
             disabled={!tokenInput.trim()}
@@ -2310,6 +2338,11 @@ function FilesTab({
           {reposError && (
             <div style={{ padding: "16px 12px", textAlign: "center", fontSize: 11, color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)" }}>
               {reposError}
+            </div>
+          )}
+          {linkRepoError && (
+            <div style={{ margin: "4px 4px 2px", padding: "7px 10px", borderRadius: 5, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 10, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)", lineHeight: 1.4 }}>
+              {linkRepoError}
             </div>
           )}
           {!reposLoading && repos.map((repo) => {
