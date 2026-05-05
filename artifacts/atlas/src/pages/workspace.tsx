@@ -944,7 +944,37 @@ function AssistantBubble({
   const [commitDone, setCommitDone] = useState(false);
   const [showPushModal, setShowPushModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [selfApplyStatus, setSelfApplyStatus] = useState<"idle" | "applying" | "done" | "error">("idle");
+  const [selfApplyMsg, setSelfApplyMsg] = useState("");
   const activeEdits = message.fileEdits ?? (message.fileEdit ? [message.fileEdit] : []);
+
+  const SELF_PATH_RE = /^artifacts\/(atlas|api-server)\//;
+  const selfEdits = activeEdits.filter((e) => SELF_PATH_RE.test(e.path));
+  const userEdits = activeEdits.filter((e) => !SELF_PATH_RE.test(e.path));
+
+  const handleSelfApply = async () => {
+    if (selfApplyStatus === "applying") return;
+    setSelfApplyStatus("applying");
+    setSelfApplyMsg("");
+    let lastMsg = "";
+    try {
+      for (const edit of selfEdits) {
+        const res = await fetch("/api/self/apply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: edit.path, content: edit.content }),
+        });
+        const json = await res.json() as { ok?: boolean; message?: string; error?: string };
+        if (!res.ok || !json.ok) throw new Error(json.error ?? "Apply failed");
+        lastMsg = json.message ?? "Applied.";
+      }
+      setSelfApplyStatus("done");
+      setSelfApplyMsg(lastMsg);
+    } catch (err: unknown) {
+      setSelfApplyStatus("error");
+      setSelfApplyMsg(err instanceof Error ? err.message : "Unknown error");
+    }
+  };
 
   return (
     <div
@@ -998,8 +1028,64 @@ function AssistantBubble({
           {message.content}
         </div>
 
-        {/* Code ready card */}
-        {activeEdits.length > 0 && (
+        {/* Code ready card — self-repair paths */}
+        {selfEdits.length > 0 && (
+          <div
+            style={{
+              marginTop: 12, padding: "11px 14px", borderRadius: 8,
+              background: "rgba(56,189,248,0.04)", border: "1px solid rgba(56,189,248,0.18)",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+              <div style={{ width: 26, height: 26, borderRadius: 6, flexShrink: 0, background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.22)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {/* wrench icon */}
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <path d="M10.5 1.5A3.5 3.5 0 007 5c0 .36.05.71.14 1.04L2.5 10.5A1.5 1.5 0 004.5 12.5l4.46-4.64c.33.09.68.14 1.04.14a3.5 3.5 0 000-7z" stroke="rgba(56,189,248,0.9)" strokeWidth="1.2" strokeLinecap="round" />
+                  <circle cx="10.5" cy="5" r="1" fill="rgba(56,189,248,0.9)" />
+                </svg>
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(56,189,248,0.9)", marginBottom: 2 }}>
+                  {selfEdits.length === 1 ? "Self-repair ready" : `${selfEdits.length} Atlas files ready`}
+                </div>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                  {selfEdits.length === 1
+                    ? <>{selfEdits[0].path.split("/").pop()}<span style={{ opacity: 0.5, marginLeft: 6 }}>· {selfEdits[0].content.split("\n").length} lines</span></>
+                    : selfEdits.map((e) => e.path.split("/").pop()).join(", ")
+                  }
+                </div>
+                {selfApplyStatus === "done" && (
+                  <div style={{ fontSize: 10, color: "rgba(56,189,248,0.7)", marginTop: 3 }}>✓ {selfApplyMsg}</div>
+                )}
+                {selfApplyStatus === "error" && (
+                  <div style={{ fontSize: 10, color: "var(--atlas-ember)", marginTop: 3 }}>✗ {selfApplyMsg}</div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={handleSelfApply}
+              disabled={selfApplyStatus === "applying" || selfApplyStatus === "done"}
+              style={{
+                flexShrink: 0, padding: "6px 13px", borderRadius: 5, fontSize: 11, fontWeight: 600,
+                fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                background: selfApplyStatus === "done"
+                  ? "rgba(56,189,248,0.08)"
+                  : "linear-gradient(180deg, rgba(56,189,248,0.9) 0%, rgba(14,165,233,0.85) 100%)",
+                color: selfApplyStatus === "done" ? "rgba(56,189,248,0.5)" : "#0a1628",
+                border: selfApplyStatus === "done" ? "1px solid rgba(56,189,248,0.2)" : "none",
+                cursor: selfApplyStatus === "applying" || selfApplyStatus === "done" ? "default" : "pointer",
+                opacity: selfApplyStatus === "applying" ? 0.6 : 1,
+                transition: "opacity 160ms ease",
+              }}
+            >
+              {selfApplyStatus === "applying" ? "Applying…" : selfApplyStatus === "done" ? "Applied ✓" : "Apply to Atlas →"}
+            </button>
+          </div>
+        )}
+
+        {/* Code ready card — user project paths */}
+        {userEdits.length > 0 && (
           <div
             style={{
               marginTop: 12, padding: "11px 14px", borderRadius: 8,
@@ -1017,12 +1103,12 @@ function AssistantBubble({
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-gold)", marginBottom: 2 }}>
-                  {activeEdits.length === 1 ? "Code ready" : `${activeEdits.length} files ready`}
+                  {userEdits.length === 1 ? "Code ready" : `${userEdits.length} files ready`}
                 </div>
                 <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-                  {activeEdits.length === 1
-                    ? <>{activeEdits[0].path}<span style={{ opacity: 0.5, marginLeft: 6 }}>· {activeEdits[0].content.split("\n").length} lines</span></>
-                    : activeEdits.map((fe) => fe.path.split("/").pop()).join(", ")
+                  {userEdits.length === 1
+                    ? <>{userEdits[0].path}<span style={{ opacity: 0.5, marginLeft: 6 }}>· {userEdits[0].content.split("\n").length} lines</span></>
+                    : userEdits.map((fe) => fe.path.split("/").pop()).join(", ")
                   }
                 </div>
               </div>
@@ -3407,6 +3493,33 @@ export default function Workspace() {
 
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [rightFullscreen, setRightFullscreen] = useState(false);
+  const [showSrcPicker, setShowSrcPicker] = useState(false);
+  const [srcReadLoading, setSrcReadLoading] = useState(false);
+
+  const ATLAS_SRC_FILES = [
+    { label: "workspace.tsx", path: "artifacts/atlas/src/pages/workspace.tsx", hint: "main UI · ~4k lines" },
+    { label: "home.tsx", path: "artifacts/atlas/src/pages/home.tsx", hint: "home page" },
+    { label: "chat.ts", path: "artifacts/api-server/src/routes/chat.ts", hint: "AI + memory route" },
+    { label: "self.ts", path: "artifacts/api-server/src/routes/self.ts", hint: "self-repair route" },
+    { label: "projects.ts", path: "artifacts/api-server/src/routes/projects.ts", hint: "projects API" },
+  ];
+
+  const handleReadSrc = async (filePath: string) => {
+    setShowSrcPicker(false);
+    setSrcReadLoading(true);
+    try {
+      const res = await fetch(`/api/self/read?path=${encodeURIComponent(filePath)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json() as { content: string; lines: number };
+      const label = filePath.split("/").pop() ?? filePath;
+      setFileContext(`// ${label} (${json.lines} lines)\n${json.content}`);
+    } catch {
+      // silent
+    } finally {
+      setSrcReadLoading(false);
+    }
+  };
+
   const [fileContext, setFileContext] = useState<string | null>(null);
   const [chatPending, setChatPending] = useState(false);
   const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(null);
@@ -3984,25 +4097,94 @@ export default function Workspace() {
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
-                {/* Left: paperclip */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Attach file"
-                  style={{
-                    width: 30, height: 30, borderRadius: 7,
-                    background: "transparent", border: "none",
-                    color: attachedFile ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                    opacity: attachedFile ? 1 : 0.4, transition: "opacity 160ms ease",
-                    flexShrink: 0,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                  onMouseLeave={(e) => { if (!attachedFile) e.currentTarget.style.opacity = "0.4"; }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
+                {/* Left: paperclip + wrench (read Atlas source) */}
+                <div style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Attach file"
+                    style={{
+                      width: 30, height: 30, borderRadius: 7,
+                      background: "transparent", border: "none",
+                      color: attachedFile ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                      opacity: attachedFile ? 1 : 0.4, transition: "opacity 160ms ease",
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                    onMouseLeave={(e) => { if (!attachedFile) e.currentTarget.style.opacity = "0.4"; }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+
+                  {/* Wrench — read Atlas source into context */}
+                  <button
+                    onClick={() => setShowSrcPicker((v) => !v)}
+                    title="Read Atlas source file into context"
+                    style={{
+                      width: 30, height: 30, borderRadius: 7,
+                      background: showSrcPicker ? "rgba(56,189,248,0.1)" : "transparent",
+                      border: showSrcPicker ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
+                      color: showSrcPicker ? "rgba(56,189,248,0.9)" : "var(--atlas-muted)",
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                      opacity: srcReadLoading ? 0.5 : (showSrcPicker ? 1 : 0.4), transition: "all 160ms ease",
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+                    onMouseLeave={(e) => { if (!showSrcPicker) e.currentTarget.style.opacity = "0.4"; }}
+                  >
+                    {srcReadLoading ? (
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ animation: "spin 1s linear infinite" }}>
+                        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="10 6" />
+                      </svg>
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                        <path d="M10.5 1.5A3.5 3.5 0 007 5c0 .36.05.71.14 1.04L2.5 10.5A1.5 1.5 0 004.5 12.5l4.46-4.64c.33.09.68.14 1.04.14a3.5 3.5 0 000-7z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                        <circle cx="10.5" cy="4.5" r="1" fill="currentColor" />
+                      </svg>
+                    )}
+                  </button>
+
+                  {/* Source picker dropdown */}
+                  {showSrcPicker && (
+                    <div
+                      style={{
+                        position: "absolute", bottom: "calc(100% + 8px)", left: 0,
+                        background: "rgba(18,15,14,0.97)", border: "1px solid rgba(56,189,248,0.2)",
+                        borderRadius: 8, padding: "6px 4px",
+                        boxShadow: "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(56,189,248,0.06)",
+                        backdropFilter: "blur(12px)",
+                        zIndex: 50, minWidth: 230,
+                      }}
+                    >
+                      <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(56,189,248,0.5)", padding: "4px 10px 6px", borderBottom: "1px solid rgba(56,189,248,0.08)", marginBottom: 4 }}>
+                        Read Atlas source into context
+                      </div>
+                      {ATLAS_SRC_FILES.map((f) => (
+                        <button
+                          key={f.path}
+                          onClick={() => handleReadSrc(f.path)}
+                          style={{
+                            display: "block", width: "100%", textAlign: "left",
+                            background: "transparent", border: "none",
+                            padding: "6px 10px", borderRadius: 5,
+                            cursor: "pointer",
+                            transition: "background 120ms ease",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(56,189,248,0.07)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
+                          <div style={{ fontSize: 11.5, fontFamily: "var(--app-font-mono)", color: "rgba(231,229,228,0.85)", fontWeight: 500 }}>{f.label}</div>
+                          <div style={{ fontSize: 9.5, color: "rgba(120,113,108,0.55)", marginTop: 1 }}>{f.hint}</div>
+                        </button>
+                      ))}
+                      <div style={{ fontSize: 9, padding: "4px 10px 2px", color: "rgba(120,113,108,0.35)", borderTop: "1px solid rgba(56,189,248,0.06)", marginTop: 4 }}>
+                        File loads into context · next message only
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "var(--atlas-muted)", opacity: 0.3 }}>
                   {isMobile ? "Tap to send" : "Enter · Shift+Enter for newline"}
