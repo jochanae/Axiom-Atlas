@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "3gXoj_2chJsfejTPFay-Q"
+uri = "file://screenshots/parking-lot.jpg"
+type = "image"
+title = "Parking Lot — Atlas v2"
