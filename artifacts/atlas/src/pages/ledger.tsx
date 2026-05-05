@@ -427,19 +427,26 @@ function EntryRow({
       }}
     >
       {/* Row header — always visible */}
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
         onClick={onToggle}
-        style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", width: "100%", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" as const, color: "inherit", font: "inherit" }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", width: "100%", cursor: "pointer", textAlign: "left" as const, color: "inherit", font: "inherit", userSelect: "none" as const }}
       >
         {/* Severity dot */}
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: entry.severity === "blocker" ? "var(--ember)" : entry.severity === "committed" ? "var(--phosphor)" : entry.severity === "parked" ? "var(--accent-gold)" : "var(--muted-text)", flexShrink: 0, marginTop: 5 }} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-            <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: "-0.01em", color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+            <Link
+              href={`/entry/${entry.id}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{ textDecoration: "none", fontSize: 14, fontWeight: 500, letterSpacing: "-0.01em", color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}
+            >
               {entry.title}
-            </span>
+            </Link>
             {entry.buildId && (
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--muted-text)", flexShrink: 0, background: "var(--surface-alt)", padding: "1px 6px", borderRadius: 3 }}>
                 {entry.buildId}
@@ -466,7 +473,7 @@ function EntryRow({
         </div>
 
         <span aria-hidden style={{ color: "var(--muted-text)", fontSize: 10, flexShrink: 0, marginTop: 2, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }}>▾</span>
-      </button>
+      </div>
 
       {/* Expanded detail */}
       {expanded && (

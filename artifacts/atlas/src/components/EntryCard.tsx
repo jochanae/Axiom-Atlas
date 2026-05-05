@@ -13,6 +13,7 @@
  */
 
 import { useState } from "react";
+import { Link } from "wouter";
 import { StatusGlyph, SEVERITY_LABEL } from "./StatusGlyph";
 import { CapsuleTag } from "./CapsuleTag";
 import type { Entry } from "@workspace/api-client-react";
@@ -78,9 +79,15 @@ export function EntryCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-[13px] font-semibold tracking-tight leading-snug truncate" style={{ color: "var(--atlas-fg)" }}>
-                {entry.title}
-              </h3>
+              <Link
+                href={`/entry/${entry.id}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{ textDecoration: "none", color: "inherit" }}
+              >
+                <h3 className="text-[13px] font-semibold tracking-tight leading-snug truncate" style={{ color: "var(--atlas-fg)" }}>
+                  {entry.title}
+                </h3>
+              </Link>
               {locked && (
                 <CapsuleTag severity="committed" size="xs">LOCKED</CapsuleTag>
               )}

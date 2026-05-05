@@ -293,6 +293,25 @@ paths:
                 $ref: "#/components/schemas/Entry"
 
   /entries/{id}:
+    get:
+      operationId: getEntry
+      tags: [entries]
+      summary: Get a single ledger entry by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "404":
+          description: Not found
     patch:
       operationId: updateEntry
       tags: [entries]

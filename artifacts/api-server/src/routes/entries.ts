@@ -63,6 +63,20 @@ router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
   res.status(201).json(serializeEntry(entry));
 });
 
+router.get("/entries/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid entry id" });
+    return;
+  }
+  const [entry] = await db.select().from(entriesTable).where(eq(entriesTable.id, id));
+  if (!entry) {
+    res.status(404).json({ error: "Entry not found" });
+    return;
+  }
+  res.json(serializeEntry(entry));
+});
+
 router.patch("/entries/:id", async (req, res): Promise<void> => {
   const params = UpdateEntryParams.safeParse(req.params);
   if (!params.success) {

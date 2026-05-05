@@ -263,6 +263,39 @@ export const CreateEntryBody = zod.object({
 });
 
 /**
+ * @summary Get a single ledger entry by ID
+ */
+export const GetEntryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetEntryResponse = zod.object({
+  id: zod.number(),
+  projectId: zod.number(),
+  sessionId: zod.number().nullish(),
+  status: zod.enum(["committed", "parked", "draft", "archived"]),
+  title: zod.string(),
+  summary: zod.string().nullish(),
+  details: zod.string().nullish(),
+  severity: zod.enum(["blocker", "parked", "committed", "neutral"]),
+  verb: zod.string().nullish(),
+  buildId: zod.string().nullish(),
+  touched: zod.array(zod.string()).nullish(),
+  isViolation: zod.boolean(),
+  costOfLesson: zod.number().nullish(),
+  deviation: zod.boolean(),
+  deviationReason: zod.string().nullish(),
+  catchAgainstId: zod.number().nullish(),
+  supersedesId: zod.number().nullish(),
+  cardSchemaVersion: zod.number().nullish(),
+  lockedAt: zod.string().nullish(),
+  mode: zod.string().nullish(),
+  sourceMessageId: zod.number().nullish(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
  * @summary Update a ledger entry
  */
 export const UpdateEntryParams = zod.object({

@@ -1256,6 +1256,91 @@ export const useCreateEntry = <
 };
 
 /**
+ * @summary Get a single ledger entry by ID
+ */
+export const getGetEntryUrl = (id: number) => {
+  return `/api/entries/${id}`;
+};
+
+export const getEntry = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Entry> => {
+  return customFetch<Entry>(getGetEntryUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetEntryQueryKey = (id: number) => {
+  return [`/api/entries/${id}`] as const;
+};
+
+export const getGetEntryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEntry>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEntry>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetEntryQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntry>>> = ({
+    signal,
+  }) => getEntry(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getEntry>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetEntryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEntry>>
+>;
+export type GetEntryQueryError = ErrorType<void>;
+
+/**
+ * @summary Get a single ledger entry by ID
+ */
+
+export function useGetEntry<
+  TData = Awaited<ReturnType<typeof getEntry>>,
+  TError = ErrorType<void>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEntry>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetEntryQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Update a ledger entry
  */
 export const getUpdateEntryUrl = (id: number) => {
