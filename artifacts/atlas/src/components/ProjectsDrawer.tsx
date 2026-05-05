@@ -53,6 +53,9 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
           zIndex: 91,
           display: "flex", flexDirection: "column",
           animation: "atlas-drawer-in 220ms cubic-bezier(.2,.8,.2,1)",
+          maxHeight: "100vh",
+          overflowY: "hidden",
+          overscrollBehavior: "contain",
         }}
       >
         {/* Header */}

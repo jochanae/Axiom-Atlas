@@ -377,3 +377,80 @@
 /* ── Utility ── */
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* ── Gold aura — gradient border on user bubbles ─────────────────────────────── */
+.atlas-user-bubble {
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(rgba(146,64,14,0.10), rgba(146,64,14,0.10)) padding-box,
+    linear-gradient(135deg, rgba(212,175,55,0.55) 0%, rgba(191,149,63,0.35) 55%, rgba(201,162,76,0.14) 100%) border-box !important;
+  box-shadow: 0 0 20px -8px rgba(212,175,55,0.10);
+}
+
+/* ── Chat timeline — vertical gold thread through messages ───────────────────── */
+.atlas-chat-timeline {
+  position: relative;
+}
+.atlas-chat-timeline::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 28px;
+  bottom: 28px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(201,162,76,0.13) 6%,
+    rgba(201,162,76,0.13) 94%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Icon-only action button ─────────────────────────────────────────────────── */
+.atlas-icon-action {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: transparent;
+  border: 1px solid rgba(120,113,108,0.26);
+  color: var(--atlas-muted);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+  flex-shrink: 0;
+}
+.atlas-icon-action:hover {
+  border-color: rgba(201,162,76,0.45);
+  color: rgba(201,162,76,0.9);
+  background: rgba(201,162,76,0.06);
+}
+.atlas-icon-action.done {
+  border-color: rgba(201,162,76,0.35);
+  color: var(--atlas-gold);
+  background: rgba(201,162,76,0.08);
+  cursor: default;
+}
+.atlas-icon-action.copy-done {
+  border-color: rgba(74,222,128,0.4);
+  color: #4ade80;
+  background: rgba(74,222,128,0.06);
+  cursor: default;
+}
+
+/* ── Ledger status bar above input ───────────────────────────────────────────── */
+.atlas-ledger-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 16px;
+  border-top: 1px solid rgba(201,162,76,0.07);
+  background: rgba(12,10,9,0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  flex-shrink: 0;
+}

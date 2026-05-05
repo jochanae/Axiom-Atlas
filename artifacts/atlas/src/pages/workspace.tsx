@@ -495,11 +495,10 @@ function UserBubble({
       <div style={{ maxWidth: "74%", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
         {/* Bubble */}
         <div
+          className="atlas-user-bubble"
           style={{
             padding: "11px 15px",
             borderRadius: "12px 12px 3px 12px",
-            background: "rgba(146,64,14,0.10)",
-            border: "1px solid rgba(146,64,14,0.22)",
             width: "100%",
           }}
         >
@@ -540,35 +539,21 @@ function UserBubble({
           )}
         </div>
 
-        {/* Action row — visible on hover */}
-        <div style={{
-          display: "flex", gap: 4,
-          opacity: hov ? 1 : 0,
-          transition: "opacity 180ms ease",
-          justifyContent: "flex-end",
-        }}>
-          {[
-            { label: copied ? "Copied" : "Copy", action: handleCopy },
-            { label: "Edit", action: onEdit },
-          ].map(({ label, action }) => (
-            <button
-              key={label}
-              onClick={action}
-              style={{
-                padding: "3px 9px", borderRadius: 4,
-                background: "transparent",
-                border: "1px solid rgba(120,113,108,0.3)",
-                color: "var(--atlas-muted)",
-                fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-                textTransform: "uppercase" as const,
-                cursor: "pointer", transition: "all 160ms ease",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.6)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
-            >
-              {label}
-            </button>
-          ))}
+        {/* Action row — icon-only, visible on hover */}
+        <div style={{ display: "flex", gap: 4, opacity: hov ? 1 : 0, transition: "opacity 180ms ease", justifyContent: "flex-end" }}>
+          {/* Copy */}
+          <button className={`atlas-icon-action${copied ? " copy-done" : ""}`} onClick={handleCopy} title={copied ? "Copied!" : "Copy"}>
+            {copied
+              ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7l3 3 7-7" /></svg>
+              : <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M9 5V3a1 1 0 00-1-1H3a1 1 0 00-1 1v5a1 1 0 001 1h2" /></svg>
+            }
+          </button>
+          {/* Edit */}
+          <button className="atlas-icon-action" onClick={onEdit} title="Edit &amp; resend">
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" />
+            </svg>
+          </button>
         </div>
       </div>
     </div>
@@ -1197,96 +1182,47 @@ function AssistantBubble({
           </div>
         )}
 
-        {/* Action row — Copy / Regenerate / Park / Commit */}
-        <div
-          style={{
-            display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" as const,
-            opacity: hov ? 1 : 0.38,
-            transition: "opacity 180ms ease",
-          }}
-        >
+        {/* Action row — icon-only cockpit buttons */}
+        <div style={{ display: "flex", gap: 4, marginTop: 7, opacity: hov ? 1 : 0.32, transition: "opacity 180ms ease" }}>
           {/* Copy */}
           <button
-            onClick={() => {
-              navigator.clipboard.writeText(message.content).catch(() => {});
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1800);
-            }}
-            style={{
-              display: "flex", alignItems: "center", gap: 4,
-              padding: "3px 9px", borderRadius: 4,
-              background: "transparent",
-              border: "1px solid rgba(120,113,108,0.3)",
-              color: "var(--atlas-muted)",
-              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-              textTransform: "uppercase" as const,
-              cursor: "pointer", transition: "all 160ms ease",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.6)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+            className={`atlas-icon-action${copied ? " copy-done" : ""}`}
+            title={copied ? "Copied!" : "Copy response"}
+            onClick={() => { navigator.clipboard.writeText(message.content).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1800); }}
           >
-            {copied ? "✓ Copied" : "Copy"}
+            {copied
+              ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7l3 3 7-7" /></svg>
+              : <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M9 5V3a1 1 0 00-1-1H3a1 1 0 00-1 1v5a1 1 0 001 1h2" /></svg>
+            }
           </button>
-
-          {/* Regenerate */}
-          <button
-            onClick={onRegenerate}
-            style={{
-              display: "flex", alignItems: "center", gap: 4,
-              padding: "3px 9px", borderRadius: 4,
-              background: "transparent",
-              border: "1px solid rgba(120,113,108,0.3)",
-              color: "var(--atlas-muted)",
-              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-              textTransform: "uppercase" as const,
-              cursor: "pointer", transition: "all 160ms ease",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.6)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
-          >
-            ↺ Retry
+          {/* Regenerate / Retry */}
+          <button className="atlas-icon-action" title="Retry (regenerate)" onClick={onRegenerate}>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1.5 7a5.5 5.5 0 005.5 5.5 5.5 5.5 0 005.5-5.5 5.5 5.5 0 00-5.5-5.5 5.5 5.5 0 00-3.9 1.6" />
+              <polyline points="1.5 1.5 1.5 4 4 4" />
+            </svg>
           </button>
-
           {/* Park */}
           <button
+            className={`atlas-icon-action${parkDone ? " done" : ""}`}
+            title={parkDone ? "Parked" : "Park to inbox"}
             onClick={() => { if (!parkDone) { onPark(message.content); setParkDone(true); } }}
-            style={{
-              display: "flex", alignItems: "center", gap: 4,
-              padding: "3px 9px", borderRadius: 4,
-              background: parkDone ? "rgba(120,113,108,0.12)" : "transparent",
-              border: `1px solid ${parkDone ? "rgba(120,113,108,0.2)" : "rgba(120,113,108,0.3)"}`,
-              color: parkDone ? "rgba(120,113,108,0.55)" : "var(--atlas-muted)",
-              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-              textTransform: "uppercase" as const,
-              cursor: parkDone ? "default" : "pointer",
-              transition: "all 160ms ease",
-            }}
           >
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-              <path d="M5 1v6M2 7h6M3.5 3.5L5 1l1.5 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {parkDone ? "Parked" : "Park"}
+            {parkDone
+              ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7l3 3 7-7" /></svg>
+              : <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4h12l-1.5 6.5a1 1 0 01-1 .8H3.5a1 1 0 01-1-.8L1 4z" /><path d="M4.5 4V3a1 1 0 011-1h3a1 1 0 011 1v1" /></svg>
+            }
           </button>
-
-          {/* Commit */}
+          {/* Commit to ledger */}
           <button
+            className={`atlas-icon-action${commitDone ? " done" : ""}`}
+            title={commitDone ? "Committed to ledger" : "Commit to ledger"}
             onClick={() => { if (!commitDone) { onCommit(message.content); setCommitDone(true); } }}
-            style={{
-              display: "flex", alignItems: "center", gap: 4,
-              padding: "3px 9px", borderRadius: 4,
-              background: commitDone ? "rgba(201,162,76,0.08)" : "transparent",
-              border: `1px solid ${commitDone ? "rgba(201,162,76,0.3)" : "rgba(201,162,76,0.2)"}`,
-              color: commitDone ? "var(--atlas-gold)" : "rgba(201,162,76,0.6)",
-              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-              textTransform: "uppercase" as const,
-              cursor: commitDone ? "default" : "pointer",
-              transition: "all 160ms ease",
-            }}
           >
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-              <path d="M1.5 5.5l2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {commitDone ? "Committed" : "Commit"}
+            {commitDone
+              ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7l3 3 7-7" /></svg>
+              : <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="1.5" width="10" height="11" rx="1.5" /><path d="M4.5 5h5M4.5 7.5h5M4.5 10h3" /></svg>
+            }
           </button>
         </div>
       </div>
@@ -4218,7 +4154,7 @@ export default function Workspace() {
           }}
         >
           {/* Messages */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px" }} className="scrollbar-none">
+          <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px", position: "relative" }} className="scrollbar-none atlas-chat-timeline">
             {messages.length === 0 && !chatPending && (
               <div style={{ textAlign: "center", padding: "72px 20px" }}>
                 <div style={{ fontSize: 22, fontWeight: 300, color: "rgba(231,229,228,0.3)", marginBottom: 8, letterSpacing: "-0.01em" }}>
@@ -4269,6 +4205,18 @@ export default function Workspace() {
             )}
 
             <div ref={bottomRef} />
+          </div>
+
+          {/* Ledger status bar */}
+          <div className="atlas-ledger-bar">
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: entryCount > 0 ? "var(--atlas-gold)" : "rgba(120,113,108,0.35)", flexShrink: 0, display: "inline-block", boxShadow: entryCount > 0 ? "0 0 6px rgba(201,162,76,0.45)" : "none", transition: "all 400ms ease" }} />
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: entryCount > 0 ? "rgba(201,162,76,0.65)" : "rgba(120,113,108,0.35)", transition: "color 400ms ease" }}>
+              [{entryCount}] Ledger Entries
+            </span>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.3)" }}>·</span>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: chatPending ? "rgba(74,222,128,0.55)" : "rgba(120,113,108,0.3)", transition: "color 300ms ease" }}>
+              {chatPending ? "Generating" : "Session Active"}
+            </span>
           </div>
 
           {/* Memory chips — what Atlas is tracking this session */}
