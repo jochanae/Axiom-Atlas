@@ -1001,12 +1001,48 @@ function AssistantBubble({
       <div style={{ maxWidth: "80%" }}>
         <div
           style={{
+            display: "flex", alignItems: "center", gap: 6,
             fontFamily: "var(--app-font-mono)", fontSize: 9,
             letterSpacing: "0.12em", textTransform: "uppercase",
-            color: "var(--atlas-gold)", opacity: 0.45, marginBottom: 7,
+            color: "var(--atlas-gold)", opacity: 0.65, marginBottom: 7,
           }}
         >
-          Atlas
+          <span>Atlas</span>
+          {message.sentAt && (
+            <span style={{ opacity: 0.55 }}>
+              · {(() => {
+                const diff = Date.now() - new Date(message.sentAt).getTime();
+                const m = Math.floor(diff / 60000);
+                if (m < 1) return "just now";
+                if (m < 60) return `${m}m ago`;
+                const h = Math.floor(m / 60);
+                if (h < 24) return `${h}h ago`;
+                return `${Math.floor(h / 24)}d ago`;
+              })()}
+            </span>
+          )}
+          {message.intentType && (
+            <span style={{
+              display: "inline-flex", alignItems: "center",
+              padding: "1px 6px", borderRadius: 8, opacity: 1,
+              background: message.intentType === "BUILD"
+                ? "rgba(74,222,128,0.12)"
+                : message.intentType === "PLAN"
+                ? "rgba(201,162,76,0.12)"
+                : "rgba(139,92,246,0.15)",
+              border: `1px solid ${
+                message.intentType === "BUILD" ? "rgba(74,222,128,0.3)"
+                : message.intentType === "PLAN" ? "rgba(201,162,76,0.3)"
+                : "rgba(139,92,246,0.3)"
+              }`,
+              fontSize: 8, fontWeight: 700, letterSpacing: "0.06em",
+              color: message.intentType === "BUILD" ? "#4ade80"
+                : message.intentType === "PLAN" ? "var(--atlas-gold)"
+                : "#a78bfa",
+            }}>
+              {message.intentType}
+            </span>
+          )}
         </div>
         {/* Memory chips */}
         {message.memoryChips && message.memoryChips.length > 0 && (
@@ -3950,7 +3986,7 @@ export default function Workspace() {
               onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
+              <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 7, height: 7, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
               {renaming ? (
                 <input
                   autoFocus
@@ -4103,7 +4139,7 @@ export default function Workspace() {
             <button
               onClick={() => setShowProfile(true)}
               title="Your profile"
-              style={{ width: 30, height: 30, borderRadius: "50%", background: loadProfile().photoUrl ? "transparent" : "rgba(28,25,23,0.95)", border: "1.5px solid rgba(120,113,108,0.3)", color: "rgba(231,229,228,0.65)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontFamily: "var(--app-font-mono)", fontWeight: 600, flexShrink: 0, overflow: "hidden", padding: 0 }}
+              style={{ width: 34, height: 34, borderRadius: "50%", background: loadProfile().photoUrl ? "transparent" : "rgba(28,25,23,0.95)", border: "1.5px solid rgba(120,113,108,0.3)", color: "rgba(231,229,228,0.65)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontFamily: "var(--app-font-mono)", fontWeight: 600, flexShrink: 0, overflow: "hidden", padding: 0 }}
             >
               {(() => { const p = loadProfile(); if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />; return p.name ? p.name[0].toUpperCase() : "👤"; })()}
             </button>

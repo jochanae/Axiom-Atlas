@@ -269,6 +269,15 @@
   animation: atlas-bubble-in 260ms var(--ease-cinematic) both;
 }
 
+/* ── Pulsing status dot ── */
+@keyframes atlas-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.75); }
+}
+.atlas-pulse-dot {
+  animation: atlas-dot-pulse 2.2s ease-in-out infinite;
+}
+
 /* ── Send button ── */
 .atlas-send-btn {
   border-radius: 10px;

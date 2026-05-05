@@ -383,14 +383,14 @@ function HomeProfileSheet({ onClose }: { onClose: () => void }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           <label style={{ fontSize: 9, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>Name</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name"
-            style={{ padding: "8px 10px", borderRadius: 6, background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 13, outline: "none", ...sMono }}
+            style={{ padding: "8px 10px", borderRadius: 6, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 13, outline: "none", ...sMono }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           <label style={{ fontSize: 9, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>Photo URL</label>
           <input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="Paste your Google profile photo URL"
-            style={{ padding: "8px 10px", borderRadius: 6, background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 11, outline: "none", ...sMono }}
+            style={{ padding: "8px 10px", borderRadius: 6, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 11, outline: "none", ...sMono }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
           <div style={{ fontSize: 9, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Right-click your Google photo → Copy image address</div>
@@ -788,7 +788,7 @@ export default function Home() {
                 disabled={loading}
                 style={{
                   width: 40, height: 40, flexShrink: 0,
-                  background: hasInput && !loading ? "var(--atlas-ember)" : "rgba(37,34,32,0.8)",
+                  background: hasInput && !loading ? "var(--atlas-ember)" : "var(--atlas-surface-alt)",
                   border: hasInput ? "none" : "1px solid var(--atlas-border)",
                   boxShadow: hasInput && !loading ? "0 0 18px -3px rgba(146,64,14,0.55)" : "none",
                   opacity: loading ? 0.5 : 1,

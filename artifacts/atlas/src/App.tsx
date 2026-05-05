@@ -10,6 +10,7 @@ import Projects from "./pages/projects";
 import Workspace from "./pages/workspace";
 import Ledger from "./pages/ledger";
 import ParkingLot from "./pages/parking-lot";
+import { ProjectsSheet } from "./components/ProjectsSheet";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,7 +80,7 @@ function MiniProfilePanel({ onClose }: { onClose: () => void }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
-            style={{ padding: "8px 10px", borderRadius: 6, background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 13, outline: "none", ...sMono }}
+            style={{ padding: "8px 10px", borderRadius: 6, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 13, outline: "none", ...sMono }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
           />
@@ -90,7 +91,7 @@ function MiniProfilePanel({ onClose }: { onClose: () => void }) {
             value={photoUrl}
             onChange={(e) => setPhotoUrl(e.target.value)}
             placeholder="https://… your Google profile photo URL"
-            style={{ padding: "8px 10px", borderRadius: 6, background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 11, outline: "none", ...sMono }}
+            style={{ padding: "8px 10px", borderRadius: 6, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 11, outline: "none", ...sMono }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
           />
@@ -114,7 +115,7 @@ function MiniProfilePanel({ onClose }: { onClose: () => void }) {
 }
 
 // ── Mobile Footer ─────────────────────────────────────────────────────────────
-function MobileFooter({ onYou }: { onYou: () => void }) {
+function MobileFooter({ onYou, onProjects }: { onYou: () => void; onProjects: () => void }) {
   const [location, setLocation] = useLocation();
   const isMobile = useIsMobile();
 
@@ -169,7 +170,7 @@ function MobileFooter({ onYou }: { onYou: () => void }) {
           <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
         </svg>,
         "Projects",
-        () => setLocation("/projects"),
+        onProjects,
         isProjects
       )}
 
@@ -232,7 +233,7 @@ function MobileFooter({ onYou }: { onYou: () => void }) {
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
-function Router({ onYou }: { onYou: () => void }) {
+function Router({ onYou, onProjects }: { onYou: () => void; onProjects: () => void }) {
   return (
     <>
       <Switch>
@@ -243,7 +244,7 @@ function Router({ onYou }: { onYou: () => void }) {
         <Route path="/parking" component={ParkingLot} />
         <Route component={NotFound} />
       </Switch>
-      <MobileFooter onYou={onYou} />
+      <MobileFooter onYou={onYou} onProjects={onProjects} />
     </>
   );
 }
@@ -251,6 +252,7 @@ function Router({ onYou }: { onYou: () => void }) {
 // ── App ───────────────────────────────────────────────────────────────────────
 function App() {
   const [profileOpen, setProfileOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
 
   // Apply saved theme on mount
   useEffect(() => {
@@ -266,9 +268,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router onYou={() => setProfileOpen(true)} />
+          <Router onYou={() => setProfileOpen(true)} onProjects={() => setProjectsOpen(true)} />
         </WouterRouter>
         {profileOpen && <MiniProfilePanel onClose={() => setProfileOpen(false)} />}
+        {projectsOpen && <ProjectsSheet onClose={() => setProjectsOpen(false)} />}
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

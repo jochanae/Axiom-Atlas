@@ -79,7 +79,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
         </header>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "10px 8px 16px" }}>
+        <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "10px 8px 16px" }}>
 
           {/* PROJECTS section */}
           <div style={{ display: "flex", alignItems: "center", padding: "2px 4px", marginBottom: 2 }}>
