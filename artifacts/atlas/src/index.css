@@ -260,6 +260,16 @@
   40%           { opacity: 1;   transform: scale(1.15); }
 }
 
+/* ── Bloom spinner keyframes ── */
+@keyframes atlas-bloom-circle {
+  0%, 100% { transform: scale(0.25); opacity: 0; }
+  35%, 65% { transform: scale(1);    opacity: 1; }
+}
+@keyframes atlas-bloom-blur {
+  0%, 100% { transform: scale(0.15); opacity: 0; }
+  35%, 65% { transform: scale(1.8);  opacity: 0.38; }
+}
+
 /* ── Message bubble in ── */
 @keyframes atlas-bubble-in {
   from { opacity: 0; transform: translateY(8px); }

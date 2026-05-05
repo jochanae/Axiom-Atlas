@@ -1,14 +1,3 @@
-const KEYFRAMES = `
-@keyframes atlas-bloom-circle {
-  0%, 100% { transform: scale(0.25); opacity: 0; }
-  35%, 65% { transform: scale(1); opacity: 1; }
-}
-@keyframes atlas-bloom-blur {
-  0%, 100% { transform: scale(0.15); opacity: 0; }
-  35%, 65% { transform: scale(1.8); opacity: 0.38; }
-}
-`;
-
 type BloomSize = "sm" | "md" | "lg";
 type BloomColor = "atlas" | "ember" | "phosphor";
 
@@ -18,7 +7,7 @@ const CIRCLE_SIZE: Record<BloomSize, number> = { sm: 5, md: 7, lg: 9 };
 const COLOR_MAP: Record<BloomColor, string> = {
   atlas: "var(--atlas-gold)",
   ember: "var(--atlas-ember)",
-  phosphor: "#4ade80",
+  phosphor: "var(--atlas-phosphor)",
 };
 
 // Center + 4 petals (top, right, bottom, left) as % of container
@@ -43,60 +32,57 @@ export function LoadingSpinner({
   const blurPx = circleSize * 0.65;
 
   return (
-    <>
-      <style>{KEYFRAMES}</style>
-      <div
-        role="status"
-        aria-label="Loading"
-        style={{
-          position: "relative",
-          width: containerSize,
-          height: containerSize,
-          flexShrink: 0,
-        }}
-      >
-        {POSITIONS.map((pos, i) => (
+    <div
+      role="status"
+      aria-label="Loading"
+      style={{
+        position: "relative",
+        width: containerSize,
+        height: containerSize,
+        flexShrink: 0,
+      }}
+    >
+      {POSITIONS.map((pos, i) => (
+        <div
+          key={i}
+          style={{
+            position: "absolute",
+            left: `${pos.x}%`,
+            top: `${pos.y}%`,
+            width: circleSize,
+            height: circleSize,
+            marginLeft: -circleSize / 2,
+            marginTop: -circleSize / 2,
+          }}
+        >
+          {/* Glow blur layer behind */}
           <div
-            key={i}
+            aria-hidden
             style={{
               position: "absolute",
-              left: `${pos.x}%`,
-              top: `${pos.y}%`,
-              width: circleSize,
-              height: circleSize,
-              marginLeft: -circleSize / 2,
-              marginTop: -circleSize / 2,
+              inset: 0,
+              borderRadius: "50%",
+              background: c,
+              filter: `blur(${blurPx}px)`,
+              opacity: 0,
+              transform: "scale(0.15)",
+              animation: `atlas-bloom-blur 1800ms ease-in-out ${i * 140}ms infinite`,
             }}
-          >
-            {/* Glow blur layer behind */}
-            <div
-              aria-hidden
-              style={{
-                position: "absolute",
-                inset: 0,
-                borderRadius: "50%",
-                background: c,
-                filter: `blur(${blurPx}px)`,
-                opacity: 0,
-                transform: "scale(0.15)",
-                animation: `atlas-bloom-blur 1800ms ease-in-out ${i * 140}ms infinite`,
-              }}
-            />
-            {/* Main circle */}
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                borderRadius: "50%",
-                background: c,
-                opacity: 0,
-                transform: "scale(0.25)",
-                animation: `atlas-bloom-circle 1800ms ease-in-out ${i * 140}ms infinite`,
-              }}
-            />
-          </div>
-        ))}
-      </div>
-    </>
+          />
+          {/* Main circle */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "50%",
+              background: c,
+              opacity: 0,
+              transform: "scale(0.25)",
+              animation: `atlas-bloom-circle 1800ms ease-in-out ${i * 140}ms infinite`,
+            }}
+          />
+        </div>
+      ))}
+    </div>
   );
 }
