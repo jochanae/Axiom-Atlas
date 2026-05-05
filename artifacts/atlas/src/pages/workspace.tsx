@@ -3641,6 +3641,7 @@ export default function Workspace() {
   const [showSurfaceTabs, setShowSurfaceTabs] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const updateProjectHeader = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
@@ -4059,23 +4060,30 @@ export default function Workspace() {
             >
               <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 7, height: 7, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
               {renaming ? (
-                <input
-                  autoFocus
-                  value={renameDraft}
-                  onChange={(e) => setRenameDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const newName = renameDraft.trim() || (project?.name ?? "");
-                      updateProjectHeader.mutate({ id, data: { name: newName } }, {
-                        onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(id) }); setRenaming(false); }
-                      });
-                    }
-                    if (e.key === "Escape") setRenaming(false);
-                  }}
-                  onBlur={() => setRenaming(false)}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160 }}
-                />
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }} onClick={(e) => e.stopPropagation()}>
+                  <input
+                    autoFocus
+                    value={renameDraft}
+                    onChange={(e) => { setRenameDraft(e.target.value); setRenameError(null); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const newName = renameDraft.trim() || (project?.name ?? "");
+                        updateProjectHeader.mutate({ id, data: { name: newName } }, {
+                          onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(id) }); setRenaming(false); setRenameError(null); },
+                          onError: (err) => { setRenameError((err as Error)?.message ?? "Failed to rename."); },
+                        });
+                      }
+                      if (e.key === "Escape") { setRenaming(false); setRenameError(null); }
+                    }}
+                    onBlur={() => { if (!renameError) { setRenaming(false); } }}
+                    style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160 }}
+                  />
+                  {renameError && (
+                    <span style={{ fontSize: 10.5, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)", marginTop: 2, lineHeight: 1.3, pointerEvents: "none" }}>
+                      {renameError}
+                    </span>
+                  )}
+                </div>
               ) : (
                 <span style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.92, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {project?.name ?? "…"}
