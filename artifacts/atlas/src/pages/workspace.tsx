@@ -3,6 +3,8 @@ import type React from "react";
 import { useParams, useLocation } from "wouter";
 import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
+import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
+import type { ZipEntry } from "../components/ZipImport";
 import {
   useGetProject,
   useListSessions,
@@ -3962,8 +3964,58 @@ export default function Workspace() {
   const entryCount = entries?.length ?? 0;
   const parkedCount = entries?.filter((e) => e.status === "parked").length ?? 0;
 
+  // ── ZIP import ─────────────────────────────────────────────────────────────
+  const [zipFiles, setZipFiles] = useState<ZipEntry[]>([]);
+  const [zipName, setZipName] = useState("");
+  const [zipTruncated, setZipTruncated] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const zipInputRef = useRef<HTMLInputElement>(null);
+
+  const processZip = useCallback(async (file: File) => {
+    try {
+      const { entries: parsed, truncated } = await parseZip(file);
+      setZipFiles(parsed);
+      setZipName(file.name);
+      setZipTruncated(truncated);
+      setFileContext(assembleContext(file.name, parsed));
+    } catch { /* ignore */ }
+  }, []);
+
+  const clearZip = useCallback(() => {
+    setZipFiles([]);
+    setZipName("");
+    setZipTruncated(false);
+    setFileContext(null);
+  }, []);
+
+  const toggleZipFile = useCallback((path: string) => {
+    setZipFiles((prev) => {
+      const next = prev.map((e) => e.path === path ? { ...e, selected: !e.selected } : e);
+      setFileContext(assembleContext(zipName, next));
+      return next;
+    });
+  }, [zipName]);
+
+  const setAllZip = useCallback((selected: boolean) => {
+    setZipFiles((prev) => {
+      const next = prev.map((e) => ({ ...e, selected }));
+      setFileContext(assembleContext(zipName, next));
+      return next;
+    });
+  }, [zipName]);
+
   return (
-    <div style={{ height: isMobile ? "calc(100dvh - 64px)" : "100vh", display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden" }}>
+    <div
+      style={{ height: isMobile ? "calc(100dvh - 64px)" : "100vh", display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden", position: "relative" }}
+      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        const file = e.dataTransfer.files[0];
+        if (file && file.name.toLowerCase().endsWith(".zip")) await processZip(file);
+      }}
+    >
 
       {/* ── Header ── */}
       <div style={{ flexShrink: 0, borderBottom: "1px solid var(--atlas-border)", background: "rgba(12,10,9,0.92)", backdropFilter: "blur(12px)" }}>
@@ -4150,6 +4202,9 @@ export default function Workspace() {
       {/* ── Two-pane body ── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
 
+        {/* ZIP drag overlay */}
+        <ZipDragOverlay visible={isDragOver} />
+
         {/* Left: Chat */}
         <div
           style={{
@@ -4233,6 +4288,31 @@ export default function Workspace() {
                 e.target.value = "";
               }}
             />
+            {/* Hidden ZIP input */}
+            <input
+              ref={zipInputRef}
+              type="file"
+              accept=".zip,application/zip"
+              style={{ display: "none" }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) await processZip(file);
+                e.target.value = "";
+              }}
+            />
+
+            {/* ZIP panel — shows when a ZIP is loaded */}
+            {zipFiles.length > 0 && (
+              <ZipPanel
+                zipName={zipName}
+                entries={zipFiles}
+                truncated={zipTruncated}
+                onToggle={toggleZipFile}
+                onSelectAll={() => setAllZip(true)}
+                onDeselectAll={() => setAllZip(false)}
+                onClear={clearZip}
+              />
+            )}
 
             {/* Attachment pill */}
             {attachedFile && (
@@ -4309,6 +4389,29 @@ export default function Workspace() {
                   >
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                       <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+
+                  {/* ZIP import button */}
+                  <button
+                    onClick={() => zipInputRef.current?.click()}
+                    title="Load project ZIP into context"
+                    style={{
+                      width: 30, height: 30, borderRadius: 7,
+                      background: zipFiles.length > 0 ? "rgba(201,162,76,0.1)" : "transparent",
+                      border: zipFiles.length > 0 ? "1px solid rgba(201,162,76,0.25)" : "1px solid transparent",
+                      color: zipFiles.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                      opacity: zipFiles.length > 0 ? 1 : 0.4, transition: "all 160ms ease",
+                      flexShrink: 0,
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+                    onMouseLeave={(e) => { if (!zipFiles.length) e.currentTarget.style.opacity = "0.4"; }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                      <line x1="12" y1="22.08" x2="12" y2="12" />
                     </svg>
                   </button>
 
