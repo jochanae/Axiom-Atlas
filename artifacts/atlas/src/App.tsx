@@ -12,6 +12,10 @@ import Ledger from "./pages/ledger";
 import ParkingLot from "./pages/parking-lot";
 import GuardReport from "./pages/guard-report";
 import EntryDetail from "./pages/entry-detail";
+import Sessions from "./pages/sessions";
+import ThinkFreely from "./pages/think-freely";
+import Workshop from "./pages/workshop";
+import ProjectCompass from "./pages/project-compass";
 import { ProjectsSheet } from "./components/ProjectsSheet";
 
 const queryClient = new QueryClient({
@@ -246,6 +250,10 @@ function Router({ onYou, onProjects }: { onYou: () => void; onProjects: () => vo
         <Route path="/parking" component={ParkingLot} />
         <Route path="/guard-report" component={GuardReport} />
         <Route path="/entry/:id" component={EntryDetail} />
+        <Route path="/sessions" component={Sessions} />
+        <Route path="/think-freely" component={ThinkFreely} />
+        <Route path="/workshop" component={Workshop} />
+        <Route path="/compass" component={ProjectCompass} />
         <Route component={NotFound} />
       </Switch>
       <MobileFooter onYou={onYou} onProjects={onProjects} />

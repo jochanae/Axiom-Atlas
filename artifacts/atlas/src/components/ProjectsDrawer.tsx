@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { Plus, X, ChevronDown, ChevronRight, MessageSquare, BookOpen, Inbox, Feather, Hammer, Compass, ShieldCheck } from "lucide-react";
 
 export type DrawerProject = {
@@ -20,8 +21,11 @@ type Props = {
 };
 
 export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, userLabel }: Props) {
+  const [, setLocation] = useLocation();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(false);
+
+  const navigate = (path: string) => { setLocation(path); onClose(); };
 
   useEffect(() => {
     if (!open) return;
@@ -161,41 +165,21 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
           {/* NAVIGATE section */}
           <SectionLabel>Navigate</SectionLabel>
 
-          {/* Sessions (collapsible) */}
-          <button type="button" onClick={() => setSessionsExpanded(v => !v)} style={{
-            display: "flex", alignItems: "center", gap: 9,
-            width: "100%", padding: "7px 10px",
-            borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
-            color: "var(--atlas-fg)",
-          }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.06)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            <span style={{ color: "var(--atlas-muted)", opacity: 0.7, display: "flex", flexShrink: 0 }}>
-              <MessageSquare size={14} strokeWidth={1.6} />
-            </span>
-            <span style={{ flex: 1, fontSize: 12.5, fontFamily: "var(--app-font-sans)", color: "var(--atlas-fg)" }}>Sessions</span>
-            {sessionsExpanded ? <ChevronDown size={11} strokeWidth={2} style={{ color: "var(--atlas-muted)", opacity: 0.5 }} /> : <ChevronRight size={11} strokeWidth={2} style={{ color: "var(--atlas-muted)", opacity: 0.5 }} />}
-          </button>
-
-          {sessionsExpanded && (
-            <div style={{ paddingLeft: 16, marginBottom: 2 }}>
-              <div style={{ padding: "6px 10px", fontSize: 11.5, color: "var(--atlas-muted)", fontStyle: "italic", opacity: 0.6 }}>No sessions yet.</div>
-            </div>
-          )}
+          {/* Sessions */}
+          <NavRow icon={<MessageSquare size={14} strokeWidth={1.6} />} label="Sessions" onClick={() => navigate("/sessions")} />
 
           {activeProjectId && onOpenLedger && (
             <NavRow icon={<BookOpen size={14} strokeWidth={1.6} />} label="Decision Ledger" onClick={() => { onOpenLedger(activeProjectId); onClose(); }} />
           )}
           <NavRow icon={<Inbox size={14} strokeWidth={1.6} />} label="Parking Lot" onClick={() => { onOpenParking?.(); onClose(); }} />
-          <NavRow icon={<Feather size={14} strokeWidth={1.6} />} label="Think Freely" onClick={onClose} />
+          <NavRow icon={<Feather size={14} strokeWidth={1.6} />} label="Think Freely" onClick={() => navigate("/think-freely")} />
 
           <div style={{ height: 1, background: "var(--atlas-gold-border)", margin: "8px 6px" }} />
 
           <SectionLabel>Tools</SectionLabel>
-          <NavRow icon={<Hammer size={14} strokeWidth={1.6} />} label="Workshop" onClick={onClose} />
-          <NavRow icon={<Compass size={14} strokeWidth={1.6} />} label="Project Compass" onClick={onClose} />
-          <NavRow icon={<ShieldCheck size={14} strokeWidth={1.6} />} label="Guard Report" onClick={onClose} />
+          <NavRow icon={<Hammer size={14} strokeWidth={1.6} />} label="Workshop" onClick={() => navigate("/workshop")} />
+          <NavRow icon={<Compass size={14} strokeWidth={1.6} />} label="Project Compass" onClick={() => navigate("/compass")} />
+          <NavRow icon={<ShieldCheck size={14} strokeWidth={1.6} />} label="Guard Report" onClick={() => navigate("/guard-report")} />
         </div>
 
         {/* User footer */}
