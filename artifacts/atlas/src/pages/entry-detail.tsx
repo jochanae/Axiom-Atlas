@@ -1,4 +1,5 @@
 import type React from "react";
+import { useState } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useGetEntry, useListEntries, getGetEntryQueryKey, getListEntriesQueryKey } from "@workspace/api-client-react";
 import type { Entry } from "@workspace/api-client-react";
@@ -105,7 +106,26 @@ function DraftSuccessors({ entryId, projectId }: { entryId: number; projectId: n
 export default function EntryDetail() {
   const { id: idStr } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const [copied, setCopied] = useState(false);
   const entryId = Number(idStr);
+
+  function handleCopyLink() {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Fallback: select a temporary input element
+      const el = document.createElement("input");
+      el.value = url;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   const { data: entry, isLoading, isError } = useGetEntry(entryId, {
     query: { enabled: !!entryId && !Number.isNaN(entryId), queryKey: getGetEntryQueryKey(entryId) },
@@ -179,10 +199,46 @@ export default function EntryDetail() {
           </span>
         </nav>
 
-        {/* Permanent URL hint */}
-        <span style={{ ...sMono, fontSize: 9, letterSpacing: "0.08em", color: "var(--muted-text)", opacity: 0.4, flexShrink: 0 }}>
-          /entry/{entry.id}
-        </span>
+        {/* Copy link button */}
+        <button
+          type="button"
+          onClick={handleCopyLink}
+          title="Copy permanent link"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 5,
+            flexShrink: 0,
+            fontFamily: "var(--font-mono)", fontSize: 9.5,
+            letterSpacing: "0.08em", textTransform: "uppercase" as const,
+            background: copied
+              ? "color-mix(in oklab, var(--accent-gold) 12%, transparent)"
+              : "transparent",
+            border: `0.5px solid ${copied
+              ? "color-mix(in oklab, var(--accent-gold) 35%, transparent)"
+              : "var(--border)"}`,
+            borderRadius: 4,
+            color: copied ? "var(--accent-gold)" : "var(--muted-text)",
+            padding: "4px 9px",
+            cursor: "pointer",
+            transition: "all 160ms ease",
+          }}
+        >
+          {copied ? (
+            <>
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <polyline points="2 8 6 12 14 4" />
+              </svg>
+              Copied!
+            </>
+          ) : (
+            <>
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="5" y="5" width="9" height="9" rx="1" />
+                <path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2" />
+              </svg>
+              Copy link
+            </>
+          )}
+        </button>
       </header>
 
       {/* ── Body ── */}
