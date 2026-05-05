@@ -115,7 +115,7 @@ export default function GuardReport() {
               <SectionHeader>Entries by Verb</SectionHeader>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {Object.entries(stats.byVerb).sort((a, b) => b[1].count - a[1].count).map(([verb, { count, violations }]) => (
-                  <div key={verb} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, background: "rgba(28,25,23,0.55)", border: "1px solid var(--border)" }}>
+                  <div key={verb} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: 8, background: "var(--atlas-surface)", border: "1px solid var(--border)" }}>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--foreground)", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{verb}</span>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent-gold)" }}>{count} entries</span>
@@ -133,7 +133,7 @@ export default function GuardReport() {
               <SectionHeader>Recent Violations</SectionHeader>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {stats.recentViolations.map((e) => (
-                  <div key={e.id} style={{ padding: "10px 12px", borderRadius: 8, background: "rgba(28,25,23,0.55)", border: "1px solid var(--border)" }}>
+                  <div key={e.id} style={{ padding: "10px 12px", borderRadius: 8, background: "var(--atlas-surface)", border: "1px solid var(--border)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, padding: "1px 6px", borderRadius: 4, background: "rgba(146,64,14,0.12)", color: "var(--ember)", border: "1px solid rgba(146,64,14,0.2)" }}>
@@ -186,7 +186,7 @@ export default function GuardReport() {
 
 function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
   return (
-    <div style={{ padding: "14px", borderRadius: 10, background: "rgba(28,25,23,0.55)", border: "1px solid var(--border)", backdropFilter: "blur(12px)" }}>
+    <div style={{ padding: "14px", borderRadius: 10, background: "var(--atlas-surface)", border: "1px solid var(--border)", backdropFilter: "blur(12px)" }}>
       <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--muted-text)", marginBottom: 6 }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 600, color: accent ?? "var(--foreground)", letterSpacing: "-0.02em" }}>{value}</div>
     </div>

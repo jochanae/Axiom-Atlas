@@ -356,6 +356,25 @@
   animation: atlas-slide-in-right 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
+/* ── Themed popover (header dropdowns, mode menu, source picker) ── */
+/* Theme-aware so it works in both Obsidian and Parchment modes,
+   and uses position:fixed via JS positioning to escape parent stacking contexts. */
+.atlas-popover {
+  background: var(--atlas-surface);
+  border: 1px solid var(--atlas-border);
+  border-radius: 10px;
+  padding: 6px 4px;
+  box-shadow:
+    0 12px 40px color-mix(in oklab, var(--atlas-bg) 60%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--atlas-gold) 4%, transparent) inset;
+  backdrop-filter: blur(16px);
+}
+[data-theme="parchment"] .atlas-popover {
+  box-shadow:
+    0 12px 40px rgba(60, 40, 20, 0.18),
+    0 0 0 1px color-mix(in oklab, var(--atlas-gold) 8%, transparent) inset;
+}
+
 /* ── Voice input pulse ── */
 @keyframes atlas-voice-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(146, 64, 14, 0.7); }
