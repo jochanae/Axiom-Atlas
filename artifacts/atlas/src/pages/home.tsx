@@ -11,6 +11,7 @@ import type { Project } from "@workspace/api-client-react";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
+import { extractApiErrorMessage } from "../lib/atlas-utils";
 
 const PLACEHOLDERS = [
   "What are we actually trying to solve here…",
@@ -412,8 +413,7 @@ function HomeProfileSheet({ onClose }: { onClose: () => void }) {
 // ── Home ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [input, setInput] = useState("");
-  const [newProjectName, setNewProjectName] = useState("");
-  const [showNewProject, setShowNewProject] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
@@ -468,6 +468,7 @@ export default function Home() {
     if (firstProject) {
       navigateToProject(firstProject.id);
     } else {
+      setCreateError(null);
       createProject.mutate(
         { data: { name: "My Project" } },
         {
@@ -475,25 +476,14 @@ export default function Home() {
             queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
             navigateToProject(p.id);
           },
+          onError: (err) => {
+            setCreateError(extractApiErrorMessage(err));
+          },
         }
       );
     }
   }, [projects, navigateToProject, createProject, queryClient]);
 
-  const handleNewProject = useCallback(() => {
-    const name = newProjectName.trim() || "New Project";
-    createProject.mutate(
-      { data: { name } },
-      {
-        onSuccess: (p) => {
-          queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-          setShowNewProject(false);
-          setNewProjectName("");
-          setLocation(`/project/${p.id}`);
-        },
-      }
-    );
-  }, [newProjectName, createProject, queryClient, setLocation]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -681,7 +671,7 @@ export default function Home() {
               <textarea
                 ref={textareaRef}
                 value={input}
-                onChange={(e) => { setInput(e.target.value); autoResize(); }}
+                onChange={(e) => { setInput(e.target.value); autoResize(); if (createError) setCreateError(null); }}
                 onKeyDown={handleKeyDown}
                 rows={2}
                 style={{
@@ -807,6 +797,20 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Inline create error */}
+          {createError && (
+            <div style={{
+              marginTop: 8, padding: "6px 12px", borderRadius: 5, fontSize: 11,
+              background: "rgba(146,64,14,0.1)",
+              border: "0.5px solid rgba(146,64,14,0.35)",
+              color: "var(--atlas-ember)",
+              fontFamily: "var(--app-font-mono)",
+              lineHeight: 1.4,
+            }}>
+              {createError}
+            </div>
+          )}
+
           {/* Scroll cue — pinned to bottom of hero */}
           <div aria-hidden style={{ position: "absolute", bottom: 20, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
             <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.28 }}>
@@ -846,7 +850,7 @@ export default function Home() {
         onClose={() => setShowDrawer(false)}
         projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description }))}
         onOpenProject={navigateToProject}
-        onNewProject={() => { setShowNewProject(true); setShowDrawer(false); }}
+        onNewProject={() => { setShowDrawer(false); }}
         onOpenLedger={(id) => setLocation(`/ledger/${id}`)}
         onOpenParking={() => setLocation("/parking")}
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
