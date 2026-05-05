@@ -137,17 +137,21 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
           borderBottom: "1px solid var(--atlas-border, var(--border))",
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--atlas-fg, var(--foreground))", letterSpacing: "-0.01em" }}>
-              Edit Entry
-            </h2>
-            <p style={{
-              margin: "2px 0 0", fontFamily: "var(--app-font-mono, var(--font-mono))",
-              fontSize: 9.5, letterSpacing: "0.1em",
-              color: "var(--atlas-muted, var(--muted-text))",
+          <div style={{ minWidth: 0 }}>
+            <div style={{
+              fontFamily: "var(--app-font-mono, var(--font-mono))",
+              fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase",
+              color: "var(--atlas-muted, var(--muted-text))", marginBottom: 4,
             }}>
-              #{entry.id} · {entry.title}
-            </p>
+              Edit Entry · <span style={{ opacity: 0.6 }}>#{entry.id}</span>
+            </div>
+            <h2 style={{
+              margin: 0, fontSize: 14, fontWeight: 500, lineHeight: 1.35,
+              color: "var(--atlas-fg, var(--foreground))", letterSpacing: "-0.01em",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              {entry.title}
+            </h2>
           </div>
           <button
             type="button"
