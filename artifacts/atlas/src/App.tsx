@@ -251,6 +251,16 @@ function Router({ onYou }: { onYou: () => void }) {
 function App() {
   const [profileOpen, setProfileOpen] = useState(false);
 
+  // Apply saved theme on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("atlas-theme");
+      if (saved === "parchment") {
+        document.documentElement.dataset.theme = "parchment";
+      }
+    } catch {}
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

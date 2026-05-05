@@ -91,6 +91,47 @@
 
   --app-font-sans: 'Geist', system-ui, -apple-system, sans-serif;
   --app-font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Alias tokens so ported original components work without modification */
+  --ember:       var(--atlas-ember);
+  --accent-gold: var(--atlas-gold);
+  --surface:     var(--atlas-surface);
+  --surface-alt: var(--atlas-surface-alt);
+  --foreground:  var(--atlas-fg);
+  --border:      var(--atlas-border);
+  --background:  var(--atlas-bg);
+  --muted-text:  var(--atlas-muted);
+  --phosphor:    var(--atlas-phosphor);
+}
+
+/* ── Parchment theme (light mode) ─────────────────────────────────────────── */
+[data-theme="parchment"] {
+  color-scheme: light;
+
+  --atlas-bg:           #F5F1E8;
+  --atlas-surface:      #EDE9DF;
+  --atlas-surface-alt:  #E4E0D6;
+  --atlas-fg:           #1A1714;
+  --atlas-muted:        #6B5E52;
+  --atlas-ember:        #8B4513;
+  --atlas-ember-glow:   rgba(139, 69, 19, 0.30);
+  --atlas-gold:         #B45309;
+  --atlas-gold-glow:    rgba(180, 83, 9, 0.25);
+  --atlas-gold-dim:     rgba(180, 83, 9, 0.10);
+  --atlas-gold-border:  rgba(180, 83, 9, 0.20);
+  --atlas-phosphor:     #0284C7;
+  --atlas-border:       #D6CFBF;
+  --atlas-glass-bg:     rgba(245, 241, 232, 0.80);
+  --atlas-glass-border: rgba(26, 23, 20, 0.08);
+
+  --background: 38 38% 93%;
+  --foreground: 20 12% 10%;
+  --border: 38 15% 80%;
+  --card: 38 25% 90%;
+  --primary: 24 70% 31%;
+  --muted: 38 15% 83%;
+  --muted-foreground: 20 12% 42%;
+  --accent: 32 60% 36%;
 }
 
 @layer base {
