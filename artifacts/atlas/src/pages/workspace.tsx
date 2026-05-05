@@ -3675,6 +3675,7 @@ export default function Workspace() {
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const updateProjectHeader = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
@@ -4095,6 +4096,7 @@ export default function Workspace() {
               {renaming ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }} onClick={(e) => e.stopPropagation()}>
                   <input
+                    ref={renameInputRef}
                     autoFocus
                     value={renameDraft}
                     onChange={(e) => { setRenameDraft(e.target.value); setRenameError(null); }}
@@ -4103,12 +4105,12 @@ export default function Workspace() {
                         const newName = renameDraft.trim() || (project?.name ?? "");
                         updateProjectHeader.mutate({ id, data: { name: newName } }, {
                           onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(id) }); setRenaming(false); setRenameError(null); },
-                          onError: (err) => { setRenameError((err as Error)?.message ?? "Failed to rename."); },
+                          onError: (err) => { setRenameError((err as Error)?.message ?? "Failed to rename."); setTimeout(() => renameInputRef.current?.focus(), 0); },
                         });
                       }
                       if (e.key === "Escape") { setRenaming(false); setRenameError(null); }
                     }}
-                    onBlur={() => { if (!renameError) { setRenaming(false); } }}
+                    onBlur={() => { setRenaming(false); setRenameError(null); }}
                     style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160 }}
                   />
                   {renameError && (
