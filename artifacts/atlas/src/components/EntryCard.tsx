@@ -42,6 +42,7 @@ export interface EntryCardProps {
   onDelete?: (entry: Entry) => void | Promise<void>;
   onReopen?: (entry: Entry) => void | Promise<void>;
   onArchive?: (entry: Entry) => void | Promise<void>;
+  onEdit?: (entry: Entry) => void;
   busy?: boolean;
 }
 
@@ -52,6 +53,7 @@ export function EntryCard({
   onDelete,
   onReopen,
   onArchive,
+  onEdit,
   busy = false,
 }: EntryCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -162,6 +164,11 @@ export function EntryCard({
             {(entry.details || (entry.touched && entry.touched.length > 0)) && (
               <EntryGhostBtn onClick={() => setDetailsOpen((v) => !v)} active={detailsOpen} disabled={busy}>
                 Details
+              </EntryGhostBtn>
+            )}
+            {onEdit && (
+              <EntryGhostBtn onClick={() => onEdit(entry)} disabled={busy}>
+                Edit
               </EntryGhostBtn>
             )}
           </div>

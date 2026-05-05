@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { EntryCard } from "../components/EntryCard";
+import { EditEntryDialog } from "../components/EditEntryDialog";
 import {
   useListProjects,
   useListEntries,
@@ -26,6 +27,8 @@ export default function ParkingLot() {
   const { data: projects = [] } = useListProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [editEntry, setEditEntry] = useState<Entry | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
 
   const activeProjectId = selectedProjectId ?? projects[0]?.id ?? null;
   const queryProjectId = activeProjectId ?? 0;
@@ -85,6 +88,16 @@ export default function ParkingLot() {
   const handleDelete = (entry: Entry) => {
     setBusyId(entry.id);
     deleteEntry.mutate({ id: entry.id }, { onSettled: () => setBusyId(null) });
+  };
+
+  // Edit: patch details, buildId, touched, costOfLesson
+  const handleEditSave = async (id: number, data: { details: string | null; buildId: string | null; touched: string[] | null; costOfLesson: number | null }) => {
+    setEditSaving(true);
+    try {
+      await updateEntry.mutateAsync({ id, data });
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const parkedCount = entries.length;
@@ -201,6 +214,7 @@ export default function ParkingLot() {
                   onResume={() => handleResume(entry)}
                   onCommit={() => handleCommit(entry)}
                   onDelete={() => handleDelete(entry)}
+                  onEdit={() => setEditEntry(entry)}
                 />
               ))}
             </div>
@@ -216,6 +230,15 @@ export default function ParkingLot() {
         zIndex: 50,
         transition: "background 600ms ease",
       }} />
+
+      {/* Edit dialog */}
+      <EditEntryDialog
+        open={editEntry !== null}
+        onClose={() => setEditEntry(null)}
+        entry={editEntry}
+        onSave={handleEditSave}
+        saving={editSaving}
+      />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { FooterAuditLine } from "../components/FooterAuditLine";
 import { ThreadAnchor } from "../components/ThreadAnchor";
 import { DecisionLedgerGrouped } from "../components/DecisionLedgerGrouped";
 import { AddEntryDialog } from "../components/AddEntryDialog";
+import { EditEntryDialog } from "../components/EditEntryDialog";
 import { relativeTime, formatCost } from "../lib/atlas-utils";
 
 /* ─── Category inference ─────────────────────────────────────────── */
@@ -80,6 +81,8 @@ export default function Ledger() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [editEntry, setEditEntry] = useState<Entry | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
@@ -155,6 +158,15 @@ export default function Ledger() {
       await updateEntry.mutateAsync({ id: entry.id, data: { status: "archived" } });
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const handleEditSave = async (id: number, data: { details: string | null; buildId: string | null; touched: string[] | null; costOfLesson: number | null }) => {
+    setEditSaving(true);
+    try {
+      await updateEntry.mutateAsync({ id, data });
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -336,6 +348,7 @@ export default function Ledger() {
                     onToggle={() => setExpanded((v) => (v === entry.id ? null : entry.id))}
                     onReopen={() => handleReopen(entry)}
                     onArchive={() => handleArchive(entry)}
+                    onEdit={() => setEditEntry(entry)}
                   />
                 ))}
               </div>
@@ -353,6 +366,15 @@ export default function Ledger() {
           onCreated={invalidate}
         />
       )}
+
+      {/* ─── Edit Entry Dialog ─── */}
+      <EditEntryDialog
+        open={editEntry !== null}
+        onClose={() => setEditEntry(null)}
+        entry={editEntry}
+        onSave={handleEditSave}
+        saving={editSaving}
+      />
     </div>
   );
 }
@@ -366,6 +388,7 @@ function EntryRow({
   onToggle,
   onReopen,
   onArchive,
+  onEdit,
 }: {
   entry: Entry;
   expanded: boolean;
@@ -373,6 +396,7 @@ function EntryRow({
   onToggle: () => void;
   onReopen: () => void;
   onArchive: () => void;
+  onEdit: () => void;
 }) {
   const catColor = CATEGORY_CONFIG[inferCategory(entry)].color;
 
@@ -446,9 +470,12 @@ function EntryRow({
           )}
 
           {/* Actions */}
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, borderTop: "1px solid color-mix(in oklab, var(--accent-gold) 10%, transparent)", paddingTop: 10, marginTop: 14 }}>
-            <ActionButton onClick={onReopen} disabled={busy}>Reopen</ActionButton>
-            <ActionButton onClick={onArchive} disabled={busy}>Archive</ActionButton>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 6, borderTop: "1px solid color-mix(in oklab, var(--accent-gold) 10%, transparent)", paddingTop: 10, marginTop: 14 }}>
+            <ActionButton onClick={onEdit} disabled={busy}>Edit</ActionButton>
+            <div style={{ display: "flex", gap: 6 }}>
+              <ActionButton onClick={onReopen} disabled={busy}>Reopen</ActionButton>
+              <ActionButton onClick={onArchive} disabled={busy}>Archive</ActionButton>
+            </div>
           </div>
         </div>
       )}
