@@ -164,6 +164,21 @@ function useVoiceInput(onTranscript: (text: string) => void) {
   return { listening, toggle, isSupported };
 }
 
+// ── MenuBtn — reusable dropdown menu item ─────────────────────────────────────
+function MenuBtn({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "transparent", border: "none", padding: "9px 12px", borderRadius: 7, cursor: "pointer", color: "rgba(231,229,228,0.8)", fontSize: 13, textAlign: "left" }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+    >
+      <span style={{ color: "rgba(120,113,108,0.6)", display: "flex", flexShrink: 0 }}>{icon}</span>
+      {label}
+    </button>
+  );
+}
+
 // ── AtlasLogo ────────────────────────────────────────────────────────────────
 function AtlasLogo({ small }: { small?: boolean }) {
   const s = small ? 15 : 18;
@@ -3495,6 +3510,14 @@ export default function Workspace() {
   const [rightFullscreen, setRightFullscreen] = useState(false);
   const [showSrcPicker, setShowSrcPicker] = useState(false);
   const [srcReadLoading, setSrcReadLoading] = useState(false);
+  const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
+    try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
+  });
+  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "workshop">("chat");
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const updateProjectHeader = useUpdateProject();
 
   const ATLAS_SRC_FILES = [
     { label: "workspace.tsx", path: "artifacts/atlas/src/pages/workspace.tsx", hint: "main UI · ~4k lines" },
@@ -3692,6 +3715,18 @@ export default function Workspace() {
     if (!isMobile) setRightOpen(false);
   }, [isMobile]);
 
+  // mobileTab drives rightOpen
+  useEffect(() => {
+    if (!isMobile) return;
+    if (mobileTab === "chat") setRightOpen(false);
+    else setRightOpen(true);
+  }, [mobileTab, isMobile]);
+
+  // When panel closes (swipe), reset tab to chat
+  useEffect(() => {
+    if (!rightOpen && isMobile) setMobileTab("chat");
+  }, [rightOpen, isMobile]);
+
   const autoResize = () => {
     const el = textareaRef.current;
     if (!el) return;
@@ -3822,100 +3857,119 @@ export default function Workspace() {
   const entryCount = entries?.length ?? 0;
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden" }}>
+    <div style={{ height: isMobile ? "calc(100dvh - 64px)" : "100vh", display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden" }}>
 
       {/* ── Header ── */}
-      <div
-        style={{
-          height: 46, flexShrink: 0,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "0 18px",
-          borderBottom: "1px solid var(--atlas-border)",
-          background: "rgba(12,10,9,0.92)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ flexShrink: 0, borderBottom: "1px solid var(--atlas-border)", background: "rgba(12,10,9,0.92)", backdropFilter: "blur(12px)" }}>
+        {/* Main row: logo | centered project name | profile */}
+        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px" }}>
+
+          {/* Left: Atlas logo → home */}
           <button
             onClick={() => setLocation("/")}
-            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex" }}
+            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, flexShrink: 0 }}
           >
             <AtlasLogo small />
           </button>
-          {project && (
-            <>
-              <span style={{ color: "rgba(37,34,32,0.9)", fontSize: 16, userSelect: "none" }}>/</span>
-              <span style={{ fontSize: 13, color: "rgba(231,229,228,0.55)", fontWeight: 500, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {project.name}
-              </span>
-            </>
-          )}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Panel toggle — opens Ledger/Files/Preview; visible on mobile, also on desktop for future use */}
-          {isMobile && (
+
+          {/* Center: project name + dropdown */}
+          <div style={{ position: "relative", flex: 1, display: "flex", justifyContent: "center" }}>
             <button
-              onClick={() => setRightOpen(true)}
-              aria-label="Open workspace panel"
-              style={{
-                width: 30, height: 30, borderRadius: 8,
-                background: "transparent",
-                border: "1px solid var(--atlas-border)",
-                color: "var(--atlas-muted)",
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "all 180ms ease", flexShrink: 0, position: "relative",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.3)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+              onClick={() => setShowProjectMenu((v) => !v)}
+              style={{ display: "flex", alignItems: "center", gap: 7, background: "transparent", border: "none", cursor: "pointer", padding: "5px 10px", borderRadius: 8, transition: "background 150ms ease", maxWidth: 260 }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
-              <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
-                <rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                <path d="M9 2v16" stroke="currentColor" strokeWidth="1.1" strokeDasharray="1.5 2" />
-                <path d="M12 7h4M12 10h4M12 13h3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-              </svg>
-              {entryCount > 0 && (
-                <span style={{
-                  position: "absolute", top: -4, right: -4,
-                  width: 14, height: 14, borderRadius: "50%",
-                  background: "var(--atlas-ember)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 8, fontFamily: "var(--app-font-mono)",
-                  color: "var(--atlas-fg)", fontWeight: 600,
-                }}>
-                  {entryCount > 9 ? "9+" : entryCount}
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
+              {renaming ? (
+                <input
+                  autoFocus
+                  value={renameDraft}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const newName = renameDraft.trim() || (project?.name ?? "");
+                      updateProjectHeader.mutate({ id, data: { name: newName } }, {
+                        onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(id) }); setRenaming(false); }
+                      });
+                    }
+                    if (e.key === "Escape") setRenaming(false);
+                  }}
+                  onBlur={() => setRenaming(false)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160 }}
+                />
+              ) : (
+                <span style={{ fontSize: 13, color: "rgba(231,229,228,0.88)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {project?.name ?? "…"}
                 </span>
               )}
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" style={{ color: "rgba(120,113,108,0.5)", flexShrink: 0 }}>
+                <path d="M2 4l4 4 4-4" />
+              </svg>
             </button>
-          )}
-          {sessionId && (
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(120,113,108,0.35)" }}>
-              Session active
-            </span>
-          )}
-          {/* Profile button */}
-          <button
-            onClick={() => setShowProfile(true)}
-            title="Your profile"
-            style={{
-              width: 28, height: 28, borderRadius: "50%",
-              background: loadProfile().photoUrl ? "transparent" : "rgba(201,162,76,0.1)",
-              border: "1px solid rgba(201,162,76,0.2)",
-              color: "var(--atlas-gold)", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 600,
-              flexShrink: 0, transition: "all 160ms ease",
-              overflow: "hidden", padding: 0,
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.2)"; }}
-          >
-            {(() => {
-              const p = loadProfile();
-              if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
-              return p.name ? p.name[0].toUpperCase() : "P";
-            })()}
-          </button>
+
+            {/* Dropdown menu */}
+            {showProjectMenu && (
+              <>
+                <div onClick={() => setShowProjectMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
+                <div style={{ position: "absolute", top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "6px 4px", boxShadow: "0 12px 40px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 100, minWidth: 220 }}>
+                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
+                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation("/parking"); setShowProjectMenu(false); }} />
+                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
+                  <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "4px 8px" }} />
+                  <div style={{ padding: "4px 12px 2px" }}>
+                    <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.5)", marginBottom: 4 }}>Mode</div>
+                    {(["THINK", "PLAN", "BUILD"] as const).map((m) => (
+                      <button key={m} onClick={() => { setProjectMode(m); try { localStorage.setItem(`atlas-mode-${id}`, m); } catch {} setShowProjectMenu(false); }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: projectMode === m ? "rgba(201,162,76,0.08)" : "transparent", border: "none", padding: "7px 8px", borderRadius: 6, cursor: "pointer", color: projectMode === m ? "var(--atlas-gold)" : "rgba(231,229,228,0.55)", fontSize: 12, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}
+                        onMouseEnter={(e) => { if (projectMode !== m) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                        onMouseLeave={(e) => { if (projectMode !== m) e.currentTarget.style.background = "transparent"; }}
+                      >
+                        <span>{m}</span>
+                        {projectMode === m && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Right: session + profile */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {sessionId && !isMobile && (
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(120,113,108,0.3)" }}>
+                Session active
+              </span>
+            )}
+            <button
+              onClick={() => setShowProfile(true)}
+              title="Your profile"
+              style={{ width: 28, height: 28, borderRadius: "50%", background: loadProfile().photoUrl ? "transparent" : "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)", color: "var(--atlas-gold)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 600, flexShrink: 0, transition: "all 160ms ease", overflow: "hidden", padding: 0 }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.2)"; }}
+            >
+              {(() => { const p = loadProfile(); if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />; return p.name ? p.name[0].toUpperCase() : "P"; })()}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile tab bar: CHAT | LEDGER | WORKSHOP */}
+        {isMobile && (
+          <div style={{ display: "flex", borderTop: "1px solid var(--atlas-border)", height: 38 }}>
+            {([["chat", "CHAT"], ["ledger", "LEDGER"], ["workshop", "WORKSHOP"]] as const).map(([tab, label]) => (
+              <button key={tab} onClick={() => setMobileTab(tab)}
+                style={{ flex: 1, background: "transparent", border: "none", cursor: "pointer", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: mobileTab === tab ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", borderBottom: mobileTab === tab ? "2px solid var(--atlas-gold)" : "2px solid transparent", transition: "color 150ms ease, border-color 150ms ease", paddingBottom: 2 }}
+              >
+                {label}
+                {tab === "ledger" && entryCount > 0 && (
+                  <span style={{ marginLeft: 5, fontSize: 9, background: "var(--atlas-ember)", color: "var(--atlas-fg)", borderRadius: 8, padding: "1px 5px", fontWeight: 600 }}>{entryCount}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Two-pane body ── */}
@@ -3986,41 +4040,6 @@ export default function Workspace() {
 
             <div ref={bottomRef} />
           </div>
-
-          {/* Mobile panel toggle — floats above input, reachable one-handed */}
-          {isMobile && (
-            <div style={{ position: "relative", height: 0, flexShrink: 0 }}>
-              <button
-                onClick={() => setRightOpen(v => !v)}
-                aria-label={rightOpen ? "Close panel" : "Open panel"}
-                style={{
-                  position: "absolute", bottom: 10, right: 14,
-                  width: 32, height: 32, borderRadius: 9,
-                  background: rightOpen
-                    ? "rgba(201,162,76,0.14)"
-                    : "rgba(28,25,23,0.88)",
-                  border: `1px solid ${rightOpen ? "rgba(201,162,76,0.45)" : "var(--atlas-border)"}`,
-                  backdropFilter: "blur(10px)",
-                  color: rightOpen ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "all 160ms ease", zIndex: 10,
-                  boxShadow: "0 2px 12px rgba(0,0,0,0.35)",
-                }}
-              >
-                {rightOpen ? (
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-                    <path d="M3 3l10 10M13 3L3 13" />
-                  </svg>
-                ) : (
-                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-                    <rect x="2" y="2" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                    <path d="M9 2v16" stroke="currentColor" strokeWidth="1.1" strokeDasharray="1.5 2" />
-                    <path d="M12 7h4M12 10h4M12 13h3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          )}
 
           {/* Memory chips — what Atlas is tracking this session */}
           <MemoryChips chips={memoryChips} onDismiss={dismissChip} />
