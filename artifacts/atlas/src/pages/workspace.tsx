@@ -1048,7 +1048,7 @@ function AssistantBubble({
         <div
           style={{
             display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" as const,
-            opacity: hov ? 1 : 0,
+            opacity: hov ? 1 : 0.38,
             transition: "opacity 180ms ease",
           }}
         >
