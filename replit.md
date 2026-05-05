@@ -112,7 +112,6 @@ CSS alias tokens (for original component compatibility):
 
 ### Key CSS classes
 - `.atlas-input-shell` — Glass input with breathing gold border animation
-- `.atlas-think-dots` — Three pulsing gold dots for AI thinking state
 - `.atlas-bubble-in` — Slide-up animation for new messages
 - `.atlas-catch-card` — Ember-tinted card for Decision Catch
 - `.atlas-resize-handle` — Drag handle between the two panes
