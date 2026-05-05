@@ -3,6 +3,7 @@ import { useCreateEntry } from "@workspace/api-client-react";
 import type { Project } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListEntriesQueryKey } from "@workspace/api-client-react";
+import { extractApiErrorMessage } from "../lib/atlas-utils";
 
 type Props = {
   open: boolean;
@@ -26,6 +27,7 @@ export function AddEntryDialog({ open, onClose, projectId, onCreated }: Props) {
   const [violation, setViolation] = useState(false);
   const [cost, setCost] = useState("");
   const [description, setDescription] = useState("");
+  const [apiError, setApiError] = useState<string | null>(null);
 
   if (!open) return null;
 
@@ -34,11 +36,13 @@ export function AddEntryDialog({ open, onClose, projectId, onCreated }: Props) {
     setViolation(false);
     setCost("");
     setDescription("");
+    setApiError(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    setApiError(null);
 
     try {
       await createEntry.mutateAsync({
@@ -55,8 +59,8 @@ export function AddEntryDialog({ open, onClose, projectId, onCreated }: Props) {
       reset();
       onCreated?.();
       onClose();
-    } catch {
-      // silent — keep dialog open
+    } catch (err) {
+      setApiError(extractApiErrorMessage(err));
     }
   };
 
@@ -86,10 +90,21 @@ export function AddEntryDialog({ open, onClose, projectId, onCreated }: Props) {
             <input
               autoFocus
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); if (apiError) setApiError(null); }}
               placeholder="e.g. Use UUID primary keys across all tables"
               style={inputStyle}
             />
+            {apiError && (
+              <div style={{
+                marginTop: 6, padding: "6px 10px", borderRadius: 3, fontSize: 11,
+                background: "color-mix(in srgb, var(--ember, #dc2626) 10%, transparent)",
+                border: "0.5px solid color-mix(in srgb, var(--ember, #dc2626) 35%, transparent)",
+                color: "var(--ember, #dc2626)",
+                fontFamily: "var(--font-mono)",
+              }}>
+                {apiError}
+              </div>
+            )}
           </Field>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
