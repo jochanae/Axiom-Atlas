@@ -44,6 +44,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
       <aside
         role="dialog"
         aria-label="Menu"
+        className="atlas-side-drawer"
         style={{
           position: "fixed", top: 0, left: 0,
           width: "min(88vw, 300px)",

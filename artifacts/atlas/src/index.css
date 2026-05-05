@@ -260,6 +260,16 @@
   background: rgba(245, 241, 232, 0.96);
 }
 
+/* ── Side drawer mobile sizing ──
+   The mobile footer is 64px tall + safe-area-inset-bottom and sits at zIndex 150.
+   Cap the drawer height below it so the footer (Edit profile, Sign out, etc.) is visible. */
+@media (max-width: 768px) {
+  .atlas-side-drawer {
+    height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
 /* ── Discovery cards (below-fold) ── */
 .atlas-discovery-card {
   background: var(--atlas-surface);
