@@ -136,7 +136,7 @@ export function EntryCard({
         {originEntry && entry.supersedesId && (
           <div className="px-4 pb-2">
             <a
-              href={`/ledger/${originEntry.projectId}`}
+              href={`/entry/${originEntry.id}`}
               onClick={(e) => { e.stopPropagation(); }}
               style={{
                 display: "inline-flex",
