@@ -1,7 +1,12 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { db, chatMessagesTable, sessionsTable, projectsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+
+const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
+
+const IMAGE_REQUEST_RE = /\b(generate|create|make|draw|sketch|visualize|design|mock.?up|wireframe|show me|build me)\b.{0,60}\b(image|picture|visual|ui|screen|layout|logo|icon|banner|mockup|diagram|chart|graphic|illustration)\b/i;
 
 const router: IRouter = Router();
 
@@ -449,6 +454,28 @@ router.post("/chat", async (req, res): Promise<void> => {
     .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
     .where(eq(sessionsTable.id, sessionId));
 
+  // Attempt image generation if the user's message looks like an image request
+  let imageB64: string | undefined;
+  let imageMimeType: string | undefined;
+  if (IMAGE_REQUEST_RE.test(message)) {
+    try {
+      const imagePrompt = `${message}. Clean, professional style. For a software product / startup context.`;
+      const imgResponse = await genai.models.generateContent({
+        model: "gemini-2.0-flash-preview-image-generation",
+        contents: imagePrompt,
+        config: { responseModalities: ["IMAGE", "TEXT"] },
+      });
+      const parts = imgResponse.candidates?.[0]?.content?.parts ?? [];
+      const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+      if (imgPart?.inlineData) {
+        imageB64 = imgPart.inlineData.data as string;
+        imageMimeType = imgPart.inlineData.mimeType as string;
+      }
+    } catch {
+      // Image generation is best-effort; don't fail the chat response
+    }
+  }
+
   res.json({
     content: finalContent,
     intentType: null,
@@ -458,6 +485,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     memoryUpdated: newFacts.length > 0,
     fileEdits: fileEdits.length > 0 ? fileEdits : undefined,
     fileEdit: fileEdits.length > 0 ? fileEdits[0] : undefined,
+    ...(imageB64 ? { imageB64, imageMimeType } : {}),
   });
 });
 

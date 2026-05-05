@@ -16,4 +16,8 @@ export interface UpdateProjectBody {
   memory?: string | null;
   /** @nullable */
   previewUrl?: string | null;
+  /** @nullable */
+  githubToken?: string | null;
+  /** @nullable */
+  linkedRepo?: string | null;
 }

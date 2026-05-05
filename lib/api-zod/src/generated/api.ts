@@ -24,6 +24,8 @@ export const ListProjectsResponseItem = zod.object({
   status: zod.enum(["active", "archived"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
+  githubToken: zod.string().nullish(),
+  linkedRepo: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -51,6 +53,8 @@ export const GetProjectResponse = zod.object({
   status: zod.enum(["active", "archived"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
+  githubToken: zod.string().nullish(),
+  linkedRepo: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -68,6 +72,8 @@ export const UpdateProjectBody = zod.object({
   status: zod.enum(["active", "archived"]).optional(),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
+  githubToken: zod.string().nullish(),
+  linkedRepo: zod.string().nullish(),
 });
 
 export const UpdateProjectResponse = zod.object({
@@ -77,6 +83,8 @@ export const UpdateProjectResponse = zod.object({
   status: zod.enum(["active", "archived"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
+  githubToken: zod.string().nullish(),
+  linkedRepo: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

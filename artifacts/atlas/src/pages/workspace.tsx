@@ -55,6 +55,8 @@ interface ChatMessage {
   fileEdits?: FileEdit[];
   memoryChips?: string[];
   sentAt?: string;
+  imageB64?: string;
+  imageMimeType?: string;
 }
 
 interface LinkedRepo {
@@ -648,7 +650,8 @@ function GitHubPushModal({
   const [rollingBack, setRollingBack] = useState(false);
   const [rolledBack, setRolledBack] = useState(false);
 
-  const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
+  const { data: modalProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
+  const token = modalProject?.githubToken ?? null;
 
   useEffect(() => {
     if (!linkedRepo || !token) { setLoadingOriginals(false); return; }
@@ -978,6 +981,16 @@ function AssistantBubble({
                 {chip}
               </span>
             ))}
+          </div>
+        )}
+
+        {message.imageB64 && (
+          <div style={{ marginBottom: 12 }}>
+            <img
+              src={`data:${message.imageMimeType ?? "image/png"};base64,${message.imageB64}`}
+              alt="Generated visual"
+              style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid rgba(201,162,76,0.2)", display: "block" }}
+            />
           </div>
         )}
 
@@ -1781,15 +1794,24 @@ function GhTreeNodeRow({
 function FilesTab({
   projectId,
   onFileContext,
+  onLinkedRepoChange,
 }: {
   projectId: number;
   onFileContext: (ctx: string | null) => void;
+  onLinkedRepoChange: (repo: LinkedRepo | null) => void;
 }) {
-  const linkedKey = `atlas-gh-linked-${projectId}`;
-
-  const [tokenState, setTokenState] = useState<string | null>(() => {
-    try { return localStorage.getItem("atlas-gh-token"); } catch { return null; }
+  const updateProject = useUpdateProject();
+  const { data: filesProject } = useGetProject(projectId, {
+    query: { queryKey: getGetProjectQueryKey(projectId) },
   });
+
+  const [tokenState, setTokenState] = useState<string | null>(null);
+  const tokenSynced = useRef(false);
+  useEffect(() => {
+    if (!filesProject || tokenSynced.current) return;
+    tokenSynced.current = true;
+    setTokenState(filesProject.githubToken ?? null);
+  }, [filesProject]);
   const [tokenInput, setTokenInput] = useState("");
   const [repos, setRepos] = useState<GhRepo[]>([]);
   const [reposLoading, setReposLoading] = useState(false);
@@ -1819,12 +1841,12 @@ function FilesTab({
   }, [projectId]);
 
   const saveToken = (t: string) => {
-    try { localStorage.setItem("atlas-gh-token", t); } catch {}
+    updateProject.mutate({ id: projectId, data: { githubToken: t } });
     setTokenState(t);
   };
 
   const clearToken = () => {
-    try { localStorage.removeItem("atlas-gh-token"); } catch {}
+    updateProject.mutate({ id: projectId, data: { githubToken: null } });
     setTokenState(null);
     setRepos([]); setSelectedRepo(null); setTree([]);
     setSelectedPath(null); setFileContent(null);
@@ -1872,30 +1894,30 @@ function FilesTab({
     }
   }, [ghFetch, onFileContext]);
 
-  // Auto-load linked repo once repos are available
+  // Auto-load linked repo once repos are available (from DB)
   useEffect(() => {
-    if (autoLoadedRef.current || repos.length === 0) return;
+    if (autoLoadedRef.current || repos.length === 0 || !filesProject?.linkedRepo) return;
     try {
-      const saved = localStorage.getItem(linkedKey);
-      if (!saved) return;
-      const savedRepo = JSON.parse(saved) as GhRepo;
+      const savedRepo = JSON.parse(filesProject.linkedRepo) as GhRepo;
       const match = repos.find(r => r.fullName === savedRepo.fullName);
       if (match) {
         autoLoadedRef.current = true;
         loadTree(match);
       }
     } catch {}
-  }, [repos, linkedKey, loadTree]);
+  }, [repos, filesProject?.linkedRepo, loadTree]);
 
   // Link a repo to this project and load its tree
   const pickRepo = useCallback((repo: GhRepo) => {
-    try { localStorage.setItem(linkedKey, JSON.stringify(repo)); } catch {}
+    updateProject.mutate({ id: projectId, data: { linkedRepo: JSON.stringify(repo) } });
+    onLinkedRepoChange(repo);
     loadTree(repo);
-  }, [linkedKey, loadTree]);
+  }, [projectId, updateProject, onLinkedRepoChange, loadTree]);
 
   // Unlink the repo from this project
   const unlinkRepo = useCallback(() => {
-    try { localStorage.removeItem(linkedKey); } catch {}
+    updateProject.mutate({ id: projectId, data: { linkedRepo: null } });
+    onLinkedRepoChange(null);
     autoLoadedRef.current = false;
     setSelectedRepo(null);
     setTree([]);
@@ -1903,7 +1925,7 @@ function FilesTab({
     setFileContent(null);
     setView("repos");
     onFileContext(null);
-  }, [linkedKey, onFileContext]);
+  }, [projectId, updateProject, onLinkedRepoChange, onFileContext]);
 
   const loadFile = useCallback(async (path: string) => {
     if (!selectedRepo) return;
@@ -2084,8 +2106,7 @@ function FilesTab({
           {!reposLoading && repos.map((repo) => {
             let linkedFullName: string | null = null;
             try {
-              const saved = localStorage.getItem(linkedKey);
-              linkedFullName = saved ? JSON.parse(saved).fullName : null;
+              linkedFullName = filesProject?.linkedRepo ? JSON.parse(filesProject.linkedRepo).fullName : null;
             } catch {}
             const isLinked = linkedFullName === repo.fullName;
             return (
@@ -2231,13 +2252,9 @@ function PreviewTab({ projectId }: { projectId: number }) {
   const [devReloadKey, setDevReloadKey] = useState(0);
   const devLogRef = useRef<HTMLDivElement>(null);
 
-  const linkedRepo = (() => {
-    try {
-      const raw = localStorage.getItem(`atlas-gh-linked-${projectId}`);
-      return raw ? JSON.parse(raw) as { fullName: string; defaultBranch?: string } : null;
-    } catch { return null; }
-  })();
-  const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
+  const { data: previewProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
+  const linkedRepo = (() => { try { return previewProject?.linkedRepo ? JSON.parse(previewProject.linkedRepo) as { fullName: string; defaultBranch?: string } : null; } catch { return null; } })();
+  const token = previewProject?.githubToken ?? null;
 
   // Poll dev server status when in local mode
   useEffect(() => {
@@ -2805,13 +2822,9 @@ function MapTab({ projectId }: { projectId: number }) {
   const [error, setError] = useState<string | null>(null);
   const [savedToMemory, setSavedToMemory] = useState(false);
 
-  const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
-  const linkedRepo = (() => {
-    try {
-      const raw = localStorage.getItem(`atlas-gh-linked-${projectId}`);
-      return raw ? JSON.parse(raw) as { fullName: string; defaultBranch: string } : null;
-    } catch { return null; }
-  })();
+  const { data: mapProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
+  const token = mapProject?.githubToken ?? null;
+  const linkedRepo = (() => { try { return mapProject?.linkedRepo ? JSON.parse(mapProject.linkedRepo) as { fullName: string; defaultBranch: string } : null; } catch { return null; } })();
 
   const handleScan = async () => {
     if (!linkedRepo || !token) return;
@@ -3175,6 +3188,7 @@ function RightPanel({
   fullscreen,
   onToggleFullscreen,
   onFileContext,
+  onLinkedRepoChange,
   pushHistory,
   onRollbackPush,
 }: {
@@ -3185,6 +3199,7 @@ function RightPanel({
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
   onFileContext: (ctx: string | null) => void;
+  onLinkedRepoChange: (repo: LinkedRepo | null) => void;
   pushHistory: PushRecord[];
   onRollbackPush: (record: PushRecord) => Promise<void>;
 }) {
@@ -3362,7 +3377,7 @@ function RightPanel({
       {tab === "ledger" && (
         <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} pushHistory={pushHistory} onRollbackPush={onRollbackPush} />
       )}
-      {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} />}
+      {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <MapTab projectId={projectId} />}
@@ -3394,12 +3409,7 @@ export default function Workspace() {
   const [rightFullscreen, setRightFullscreen] = useState(false);
   const [fileContext, setFileContext] = useState<string | null>(null);
   const [chatPending, setChatPending] = useState(false);
-  const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(() => {
-    try {
-      const raw = localStorage.getItem(`atlas-gh-linked-${Number(projectId)}`);
-      return raw ? JSON.parse(raw) as LinkedRepo : null;
-    } catch { return null; }
-  });
+  const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -3435,6 +3445,15 @@ export default function Workspace() {
       }))
     );
   }, [priorMessages]);
+
+  // Sync linkedRepo from project DB when project loads
+  useEffect(() => {
+    if (!project?.linkedRepo) return;
+    try {
+      const repo = JSON.parse(project.linkedRepo) as LinkedRepo;
+      setLinkedRepo(repo);
+    } catch {}
+  }, [project?.linkedRepo]);
 
   // Persist last visited project for footer LEDGER shortcut
   useEffect(() => {
@@ -3501,6 +3520,7 @@ export default function Workspace() {
             sentAt: new Date().toISOString(),
             ...(fes.length > 0 ? { fileEdits: fes, fileEdit: fes[0] } : {}),
             ...(chips.length > 0 ? { memoryChips: chips } : {}),
+            ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
           }]);
           if (cp) setActiveCatch(cp);
           if (res.memoryChips && res.memoryChips.length > 0) {
@@ -3619,7 +3639,7 @@ export default function Workspace() {
   );
 
   const handleRollbackPush = useCallback(async (record: PushRecord) => {
-    const token = (() => { try { return localStorage.getItem("atlas-gh-token"); } catch { return null; } })();
+    const token = project?.githubToken ?? null;
     if (!linkedRepo || !token || !record.originalContent) return;
     await fetch("/api/github/commit", {
       method: "PUT",
@@ -4052,6 +4072,7 @@ export default function Workspace() {
                 entries={entries || []}
                 activeCatch={activeCatch}
                 onFileContext={setFileContext}
+                onLinkedRepoChange={setLinkedRepo}
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
               />
@@ -4100,6 +4121,7 @@ export default function Workspace() {
                 fullscreen={rightFullscreen}
                 onToggleFullscreen={() => setRightFullscreen((f) => !f)}
                 onFileContext={setFileContext}
+                onLinkedRepoChange={setLinkedRepo}
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
               />

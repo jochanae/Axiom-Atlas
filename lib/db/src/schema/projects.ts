@@ -9,6 +9,8 @@ export const projectsTable = pgTable("projects", {
   status: text("status").notNull().default("active"),
   memory: text("memory"),
   previewUrl: text("preview_url"),
+  githubToken: text("github_token"),
+  linkedRepo: text("linked_repo"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

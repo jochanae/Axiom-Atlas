@@ -377,6 +377,10 @@ components:
           type: ["string", "null"]
         previewUrl:
           type: ["string", "null"]
+        githubToken:
+          type: ["string", "null"]
+        linkedRepo:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -411,6 +415,10 @@ components:
         memory:
           type: ["string", "null"]
         previewUrl:
+          type: ["string", "null"]
+        githubToken:
+          type: ["string", "null"]
+        linkedRepo:
           type: ["string", "null"]
 
     ProjectSummary:

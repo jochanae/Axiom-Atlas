@@ -26,6 +26,10 @@ export interface Project {
   memory?: string | null;
   /** @nullable */
   previewUrl?: string | null;
+  /** @nullable */
+  githubToken?: string | null;
+  /** @nullable */
+  linkedRepo?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -53,6 +57,10 @@ export interface UpdateProjectBody {
   memory?: string | null;
   /** @nullable */
   previewUrl?: string | null;
+  /** @nullable */
+  githubToken?: string | null;
+  /** @nullable */
+  linkedRepo?: string | null;
 }
 
 export interface ProjectSummary {
