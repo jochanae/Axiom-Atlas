@@ -3511,6 +3511,7 @@ export default function Workspace() {
   const [showSrcPicker, setShowSrcPicker] = useState(false);
   const [srcReadLoading, setSrcReadLoading] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [showViewMenu, setShowViewMenu] = useState(false);
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
@@ -3936,40 +3937,60 @@ export default function Workspace() {
             )}
           </div>
 
-          {/* Right: session + profile */}
+          {/* Right: view switcher (mobile) + profile */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+
+            {/* Mobile view switcher — collapses after selection */}
+            {isMobile && (
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => { setShowViewMenu(v => !v); setShowProjectMenu(false); }}
+                  style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 7, padding: "5px 9px", cursor: "pointer", color: "rgba(231,229,228,0.7)", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase" }}
+                >
+                  {mobileTab}
+                  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M2 4l4 4 4-4" /></svg>
+                  {mobileTab !== "chat" && entryCount > 0 && (
+                    <span style={{ fontSize: 8, background: "var(--atlas-ember)", color: "#fff", borderRadius: 6, padding: "1px 4px", fontWeight: 700 }}>{entryCount}</span>
+                  )}
+                </button>
+                {showViewMenu && (
+                  <>
+                    <div onClick={() => setShowViewMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 99 }} />
+                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "5px 4px", boxShadow: "0 12px 36px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 100, minWidth: 160 }}>
+                      {([["chat", "Chat"], ["ledger", "Ledger"], ["workshop", "Workshop"]] as const).map(([tab, label]) => (
+                        <button key={tab}
+                          onClick={() => { setMobileTab(tab); setShowViewMenu(false); }}
+                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: mobileTab === tab ? "rgba(201,162,76,0.08)" : "transparent", border: "none", padding: "9px 12px", borderRadius: 7, cursor: "pointer", color: mobileTab === tab ? "var(--atlas-gold)" : "rgba(231,229,228,0.75)", fontSize: 13 }}
+                          onMouseEnter={(e) => { if (mobileTab !== tab) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                          onMouseLeave={(e) => { if (mobileTab !== tab) e.currentTarget.style.background = "transparent"; }}
+                        >
+                          <span>{label}</span>
+                          {tab === "ledger" && entryCount > 0 && <span style={{ fontSize: 9, background: "var(--atlas-ember)", color: "#fff", borderRadius: 6, padding: "1px 5px", fontWeight: 700 }}>{entryCount}</span>}
+                          {mobileTab === tab && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {sessionId && !isMobile && (
               <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(120,113,108,0.3)" }}>
                 Session active
               </span>
             )}
+
+            {/* Profile avatar */}
             <button
               onClick={() => setShowProfile(true)}
               title="Your profile"
-              style={{ width: 28, height: 28, borderRadius: "50%", background: loadProfile().photoUrl ? "transparent" : "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)", color: "var(--atlas-gold)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 600, flexShrink: 0, transition: "all 160ms ease", overflow: "hidden", padding: 0 }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.2)"; }}
+              style={{ width: 30, height: 30, borderRadius: "50%", background: loadProfile().photoUrl ? "transparent" : "rgba(28,25,23,0.9)", border: "1.5px solid rgba(120,113,108,0.25)", color: "rgba(231,229,228,0.6)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontFamily: "var(--app-font-mono)", fontWeight: 600, flexShrink: 0, overflow: "hidden", padding: 0 }}
             >
               {(() => { const p = loadProfile(); if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />; return p.name ? p.name[0].toUpperCase() : "P"; })()}
             </button>
           </div>
         </div>
-
-        {/* Mobile tab bar: CHAT | LEDGER | WORKSHOP */}
-        {isMobile && (
-          <div style={{ display: "flex", borderTop: "1px solid var(--atlas-border)", height: 38 }}>
-            {([["chat", "CHAT"], ["ledger", "LEDGER"], ["workshop", "WORKSHOP"]] as const).map(([tab, label]) => (
-              <button key={tab} onClick={() => setMobileTab(tab)}
-                style={{ flex: 1, background: "transparent", border: "none", cursor: "pointer", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: mobileTab === tab ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", borderBottom: mobileTab === tab ? "2px solid var(--atlas-gold)" : "2px solid transparent", transition: "color 150ms ease, border-color 150ms ease", paddingBottom: 2 }}
-              >
-                {label}
-                {tab === "ledger" && entryCount > 0 && (
-                  <span style={{ marginLeft: 5, fontSize: 9, background: "var(--atlas-ember)", color: "var(--atlas-fg)", borderRadius: 8, padding: "1px 5px", fontWeight: 600 }}>{entryCount}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ── Two-pane body ── */}
