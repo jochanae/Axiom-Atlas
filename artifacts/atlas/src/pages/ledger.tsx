@@ -129,6 +129,17 @@ export default function Ledger() {
   const groups = useMemo(() => groupBySession(filtered), [filtered]);
   const mostRecent = entries.find((e: Entry) => e.status === "committed");
 
+  // IDs of committed entries that currently have an active draft successor
+  const activeReopenIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const e of entries) {
+      if ((e.status === "draft" || e.status === "parked") && e.supersedesId != null) {
+        ids.add(e.supersedesId);
+      }
+    }
+    return ids;
+  }, [entries]);
+
   /* ─── Actions ─── */
   const handleReopen = async (entry: Entry) => {
     setBusyId(entry.id);
@@ -345,6 +356,7 @@ export default function Ledger() {
                     entry={entry}
                     expanded={expanded === entry.id}
                     busy={busyId === entry.id}
+                    hasActiveReopen={activeReopenIds.has(entry.id)}
                     onToggle={() => setExpanded((v) => (v === entry.id ? null : entry.id))}
                     onReopen={() => handleReopen(entry)}
                     onArchive={() => handleArchive(entry)}
@@ -385,6 +397,7 @@ function EntryRow({
   entry,
   expanded,
   busy,
+  hasActiveReopen,
   onToggle,
   onReopen,
   onArchive,
@@ -393,6 +406,7 @@ function EntryRow({
   entry: Entry;
   expanded: boolean;
   busy: boolean;
+  hasActiveReopen?: boolean;
   onToggle: () => void;
   onReopen: () => void;
   onArchive: () => void;
@@ -429,6 +443,17 @@ function EntryRow({
             {entry.buildId && (
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--muted-text)", flexShrink: 0, background: "var(--surface-alt)", padding: "1px 6px", borderRadius: 3 }}>
                 {entry.buildId}
+              </span>
+            )}
+            {hasActiveReopen && (
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em",
+                color: "var(--accent-gold)", flexShrink: 0,
+                background: "color-mix(in oklab, var(--accent-gold) 10%, transparent)",
+                border: "1px solid color-mix(in oklab, var(--accent-gold) 28%, transparent)",
+                padding: "1px 7px", borderRadius: 3, textTransform: "uppercase" as const,
+              }}>
+                ↩ Reopen active
               </span>
             )}
           </div>

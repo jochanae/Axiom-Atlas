@@ -44,6 +44,7 @@ export interface EntryCardProps {
   onArchive?: (entry: Entry) => void | Promise<void>;
   onEdit?: (entry: Entry) => void;
   busy?: boolean;
+  originEntry?: { id: number; title: string; projectId: number } | null;
 }
 
 export function EntryCard({
@@ -55,6 +56,7 @@ export function EntryCard({
   onArchive,
   onEdit,
   busy = false,
+  originEntry = null,
 }: EntryCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const locked = entry.status === "committed";
@@ -122,6 +124,37 @@ export function EntryCard({
             </div>
           )}
         </header>
+
+        {/* "Reopened from" provenance link — shown on draft/reopened cards */}
+        {originEntry && entry.supersedesId && (
+          <div className="px-4 pb-2">
+            <a
+              href={`/ledger/${originEntry.projectId}`}
+              onClick={(e) => { e.stopPropagation(); }}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 10,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: "var(--atlas-gold)",
+                textDecoration: "none",
+                background: "color-mix(in srgb, var(--atlas-gold) 8%, transparent)",
+                border: "0.5px solid color-mix(in srgb, var(--atlas-gold) 25%, transparent)",
+                borderRadius: 4,
+                padding: "3px 8px",
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M10 3H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8" />
+                <path d="M15 1l-7 7" /><path d="M10 1h5v5" />
+              </svg>
+              Reopened from: {originEntry.title}
+            </a>
+          </div>
+        )}
 
         {/* Summary */}
         {entry.summary && (

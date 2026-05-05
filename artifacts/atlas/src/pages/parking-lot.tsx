@@ -46,7 +46,18 @@ export default function ParkingLot() {
     { status: "draft" },
     { query: { queryKey: ["entries", queryProjectId, "draft"], enabled } }
   );
-  const isLoading = loadingParked || loadingDraft;
+  // Load committed entries so we can resolve supersedesId → original title
+  const { data: committedEntries = [], isLoading: loadingCommitted } = useListEntries(
+    queryProjectId,
+    { status: "committed" },
+    { query: { queryKey: ["entries", queryProjectId, "committed"], enabled } }
+  );
+  const isLoading = loadingParked || loadingDraft || loadingCommitted;
+
+  // Build a lookup map: committedEntry.id → { id, title, projectId }
+  const committedMap = new Map(
+    committedEntries.map((e: Entry) => [e.id, { id: e.id, title: e.title, projectId: e.projectId }])
+  );
 
   // Merge + sort newest first
   const entries: Entry[] = [...parkedEntries, ...draftEntries].sort(
@@ -58,9 +69,11 @@ export default function ParkingLot() {
       qc.invalidateQueries({ queryKey: getListEntriesQueryKey(p.id) });
       qc.invalidateQueries({ queryKey: ["entries", p.id, "parked"] });
       qc.invalidateQueries({ queryKey: ["entries", p.id, "draft"] });
+      qc.invalidateQueries({ queryKey: ["entries", p.id, "committed"] });
     });
     qc.invalidateQueries({ queryKey: ["entries", queryProjectId, "parked"] });
     qc.invalidateQueries({ queryKey: ["entries", queryProjectId, "draft"] });
+    qc.invalidateQueries({ queryKey: ["entries", queryProjectId, "committed"] });
   };
 
   const updateEntry = useUpdateEntry({ mutation: { onSuccess: invalidateAll } });
@@ -215,6 +228,7 @@ export default function ParkingLot() {
                   onCommit={() => handleCommit(entry)}
                   onDelete={() => handleDelete(entry)}
                   onEdit={() => setEditEntry(entry)}
+                  originEntry={entry.supersedesId ? (committedMap.get(entry.supersedesId) ?? null) : null}
                 />
               ))}
             </div>
