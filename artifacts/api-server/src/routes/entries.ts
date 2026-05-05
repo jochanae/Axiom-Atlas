@@ -56,9 +56,14 @@ router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (!parsed.data.title.trim()) {
+    res.status(400).json({ error: "Title cannot be blank" });
+    return;
+  }
   const [entry] = await db.insert(entriesTable).values({
     projectId: params.data.projectId,
     ...parsed.data,
+    title: parsed.data.title.trim(),
   }).returning();
   res.status(201).json(serializeEntry(entry));
 });
@@ -88,8 +93,15 @@ router.patch("/entries/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  if (parsed.data.title !== undefined && !parsed.data.title.trim()) {
+    res.status(400).json({ error: "Title cannot be blank" });
+    return;
+  }
 
   const updateData: Record<string, unknown> = { ...parsed.data };
+  if (parsed.data.title !== undefined) {
+    updateData.title = parsed.data.title.trim();
+  }
   if (parsed.data.status === "committed") {
     updateData.lockedAt = new Date();
   }
