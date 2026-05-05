@@ -395,31 +395,22 @@
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
 
-/* ── Gold aura — gradient border on user bubbles ─────────────────────────────── */
-.atlas-user-bubble {
-  border: 1px solid transparent !important;
-  background:
-    linear-gradient(rgba(146,64,14,0.10), rgba(146,64,14,0.10)) padding-box,
-    linear-gradient(135deg, rgba(212,175,55,0.55) 0%, rgba(191,149,63,0.35) 55%, rgba(201,162,76,0.14) 100%) border-box !important;
-  box-shadow: 0 0 20px -8px rgba(212,175,55,0.10);
-}
-
-/* ── Chat timeline — vertical gold thread through messages ───────────────────── */
+/* ── Chat timeline — vertical gold thread running left of messages ───────────── */
 .atlas-chat-timeline {
   position: relative;
 }
 .atlas-chat-timeline::before {
   content: "";
   position: absolute;
-  left: 18px;
+  left: 20px;
   top: 28px;
   bottom: 28px;
   width: 1px;
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(201,162,76,0.13) 6%,
-    rgba(201,162,76,0.13) 94%,
+    rgba(201,162,76,0.22) 4%,
+    rgba(201,162,76,0.22) 96%,
     transparent 100%
   );
   pointer-events: none;
