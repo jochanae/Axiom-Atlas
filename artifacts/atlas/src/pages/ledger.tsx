@@ -94,17 +94,21 @@ export default function Ledger() {
   const { data: entries = [], isLoading } = useListEntries(projectId, {}, { query: { enabled: !!projectId, queryKey: getListEntriesQueryKey(projectId) } });
   const { data: projects = [] } = useListProjects();
 
-  // Auto-expand and scroll to an entry from ?expand=<id>
+  // Auto-expand and scroll to an entry from ?expand=<id>, then clear the param
   useEffect(() => {
     if (isLoading || entries.length === 0) return;
     const params = new URLSearchParams(search);
     const expandId = Number(params.get("expand"));
     if (!expandId) return;
+    const entry = entries.find((e) => e.id === expandId);
+    if (!entry) return;
     setExpanded(expandId);
     requestAnimationFrame(() => {
       const el = document.querySelector(`[data-entry-id="${expandId}"]`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     });
+    // Remove the param so re-renders / data refreshes don't retrigger
+    setLocation(`/ledger/${projectId}`, { replace: true });
   }, [isLoading, entries.length, search]);
 
   const invalidate = useCallback(() => {
