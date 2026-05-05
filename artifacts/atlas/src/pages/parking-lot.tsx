@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
-import { EntryCard } from "../components/EntryCard";
+import { EntryCard, buildReopenChain } from "../components/EntryCard";
 import { EditEntryDialog } from "../components/EditEntryDialog";
 import {
   useListProjects,
@@ -54,9 +54,9 @@ export default function ParkingLot() {
   );
   const isLoading = loadingParked || loadingDraft || loadingCommitted;
 
-  // Build a lookup map: committedEntry.id → { id, title, projectId }
-  const committedMap = new Map(
-    committedEntries.map((e: Entry) => [e.id, { id: e.id, title: e.title, projectId: e.projectId }])
+  // Full lookup map of ALL entries so buildReopenChain can walk the full ancestry
+  const allEntriesById = new Map<number, Entry>(
+    [...committedEntries, ...parkedEntries, ...draftEntries].map((e: Entry) => [e.id, e])
   );
 
   // Merge + sort newest first
@@ -228,7 +228,7 @@ export default function ParkingLot() {
                   onCommit={() => handleCommit(entry)}
                   onDelete={() => handleDelete(entry)}
                   onEdit={() => setEditEntry(entry)}
-                  originEntry={entry.supersedesId ? (committedMap.get(entry.supersedesId) ?? null) : null}
+                  reopenChain={buildReopenChain(entry, allEntriesById)}
                 />
               ))}
             </div>

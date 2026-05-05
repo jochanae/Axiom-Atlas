@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useParams, useLocation, useSearch, Link } from "wouter";
+import { buildReopenChain } from "../components/EntryCard";
 import {
   useListEntries,
   useListProjects,
@@ -92,6 +93,8 @@ export default function Ledger() {
 
   const search = useSearch();
   const { data: entries = [], isLoading } = useListEntries(projectId, {}, { query: { enabled: !!projectId, queryKey: getListEntriesQueryKey(projectId) } });
+  // Full lookup for walking supersedesId chains in EntryRow
+  const allEntriesById = useMemo(() => new Map(entries.map((e: Entry) => [e.id, e])), [entries]);
   const { data: projects = [] } = useListProjects();
 
   // Auto-expand and scroll to an entry from ?expand=<id>, then clear the param
@@ -375,6 +378,7 @@ export default function Ledger() {
                     expanded={expanded === entry.id}
                     busy={busyId === entry.id}
                     hasActiveReopen={activeReopenIds.has(entry.id)}
+                    reopenChain={buildReopenChain(entry, allEntriesById)}
                     onToggle={() => setExpanded((v) => (v === entry.id ? null : entry.id))}
                     onReopen={() => handleReopen(entry)}
                     onArchive={() => handleArchive(entry)}
@@ -416,6 +420,7 @@ function EntryRow({
   expanded,
   busy,
   hasActiveReopen,
+  reopenChain = [],
   onToggle,
   onReopen,
   onArchive,
@@ -425,11 +430,13 @@ function EntryRow({
   expanded: boolean;
   busy: boolean;
   hasActiveReopen?: boolean;
+  reopenChain?: { id: number; title: string; projectId: number }[];
   onToggle: () => void;
   onReopen: () => void;
   onArchive: () => void;
   onEdit: () => void;
 }) {
+  const [chainOpen, setChainOpen] = useState(false);
   const catColor = CATEGORY_CONFIG[inferCategory(entry)].color;
 
   return (
@@ -517,6 +524,68 @@ function EntryRow({
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted-text)", margin: "10px 0 0", letterSpacing: "0.06em" }}>
               Locked {relativeTime(entry.lockedAt)}
             </p>
+          )}
+
+          {/* Reopen chain — shown if this committed entry itself supersedes an older one */}
+          {entry.supersedesId != null && reopenChain.length > 0 && (
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <a
+                  href={`/ledger/${reopenChain[0].projectId}?expand=${reopenChain[0].id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    fontFamily: "var(--font-mono)", fontSize: 9.5,
+                    letterSpacing: "0.08em", textTransform: "uppercase" as const,
+                    color: "var(--accent-gold)", textDecoration: "none",
+                    background: "color-mix(in oklab, var(--accent-gold) 8%, transparent)",
+                    border: "0.5px solid color-mix(in oklab, var(--accent-gold) 25%, transparent)",
+                    borderRadius: 4, padding: "3px 8px",
+                  }}
+                >
+                  <span>↩</span> Supersedes: {reopenChain[0].title}
+                </a>
+                {reopenChain.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setChainOpen((v) => !v); }}
+                    style={{
+                      fontFamily: "var(--font-mono)", fontSize: 9,
+                      letterSpacing: "0.1em", textTransform: "uppercase" as const,
+                      color: "var(--muted-text)", background: "transparent",
+                      border: "none", padding: "2px 0", cursor: "pointer",
+                      display: "inline-flex", alignItems: "center", gap: 3,
+                    }}
+                  >
+                    {chainOpen ? "Hide history" : `Full history (${reopenChain.length})`}
+                    <span style={{ transform: chainOpen ? "rotate(180deg)" : "none", transition: "transform 140ms ease", display: "inline-block" }}>▾</span>
+                  </button>
+                )}
+              </div>
+              {chainOpen && reopenChain.length > 1 && (
+                <div style={{
+                  marginLeft: 4, paddingLeft: 10,
+                  borderLeft: "1px solid color-mix(in oklab, var(--accent-gold) 20%, transparent)",
+                  display: "flex", flexDirection: "column", gap: 4,
+                }}>
+                  {reopenChain.slice(1).map((ancestor, i) => (
+                    <a
+                      key={ancestor.id}
+                      href={`/ledger/${ancestor.projectId}?expand=${ancestor.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        fontFamily: "var(--font-mono)", fontSize: 9.5,
+                        color: `color-mix(in oklab, var(--accent-gold) ${Math.max(40, 65 - i * 15)}%, var(--muted-text))`,
+                        textDecoration: "none",
+                      }}
+                    >
+                      <span style={{ opacity: 0.5 }}>↑</span>{ancestor.title}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Actions */}

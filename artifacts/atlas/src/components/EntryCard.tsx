@@ -18,6 +18,30 @@ import { StatusGlyph, SEVERITY_LABEL } from "./StatusGlyph";
 import { CapsuleTag } from "./CapsuleTag";
 import type { Entry } from "@workspace/api-client-react";
 
+export interface ReopenChainItem {
+  id: number;
+  title: string;
+  projectId: number;
+}
+
+/** Walk supersedesId chain from an entry through a flat map of all entries. */
+export function buildReopenChain(
+  entry: Entry,
+  entriesById: Map<number, Entry>
+): ReopenChainItem[] {
+  const chain: ReopenChainItem[] = [];
+  let current: Entry = entry;
+  let safety = 0;
+  while (current.supersedesId != null && safety < 20) {
+    const parent = entriesById.get(current.supersedesId);
+    if (!parent) break;
+    chain.push({ id: parent.id, title: parent.title, projectId: parent.projectId });
+    current = parent;
+    safety++;
+  }
+  return chain;
+}
+
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -45,7 +69,8 @@ export interface EntryCardProps {
   onArchive?: (entry: Entry) => void | Promise<void>;
   onEdit?: (entry: Entry) => void;
   busy?: boolean;
-  originEntry?: { id: number; title: string; projectId: number } | null;
+  /** Full ancestor chain, nearest first. If empty/absent, no provenance is shown. */
+  reopenChain?: ReopenChainItem[];
 }
 
 export function EntryCard({
@@ -57,9 +82,10 @@ export function EntryCard({
   onArchive,
   onEdit,
   busy = false,
-  originEntry = null,
+  reopenChain = [],
 }: EntryCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [chainOpen, setChainOpen] = useState(false);
   const locked = entry.status === "committed";
   const posture = locked ? "locked" : "active";
 
@@ -132,34 +158,75 @@ export function EntryCard({
           )}
         </header>
 
-        {/* "Reopened from" provenance link — shown on draft/reopened cards */}
-        {originEntry && entry.supersedesId && (
-          <div className="px-4 pb-2">
-            <a
-              href={`/ledger/${originEntry.projectId}?expand=${originEntry.id}`}
-              onClick={(e) => { e.stopPropagation(); }}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                fontFamily: "var(--app-font-mono)",
-                fontSize: 10,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "var(--atlas-gold)",
-                textDecoration: "none",
-                background: "color-mix(in srgb, var(--atlas-gold) 8%, transparent)",
-                border: "0.5px solid color-mix(in srgb, var(--atlas-gold) 25%, transparent)",
-                borderRadius: 4,
-                padding: "3px 8px",
-              }}
-            >
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M10 3H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8" />
-                <path d="M15 1l-7 7" /><path d="M10 1h5v5" />
-              </svg>
-              Reopened from: {originEntry.title}
-            </a>
+        {/* Reopen provenance — shown when entry.supersedesId is set */}
+        {entry.supersedesId != null && reopenChain.length > 0 && (
+          <div className="px-4 pb-2" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {/* Immediate parent link — always visible */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <a
+                href={`/ledger/${reopenChain[0].projectId}?expand=${reopenChain[0].id}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  fontFamily: "var(--app-font-mono)", fontSize: 10,
+                  letterSpacing: "0.08em", textTransform: "uppercase",
+                  color: "var(--atlas-gold)", textDecoration: "none",
+                  background: "color-mix(in srgb, var(--atlas-gold) 8%, transparent)",
+                  border: "0.5px solid color-mix(in srgb, var(--atlas-gold) 25%, transparent)",
+                  borderRadius: 4, padding: "3px 8px",
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M10 3H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8" />
+                  <path d="M15 1l-7 7" /><path d="M10 1h5v5" />
+                </svg>
+                Reopened from: {reopenChain[0].title}
+              </a>
+              {/* History toggle — only shown when chain is longer than 1 */}
+              {reopenChain.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setChainOpen((v) => !v); }}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    fontFamily: "var(--app-font-mono)", fontSize: 9,
+                    letterSpacing: "0.1em", textTransform: "uppercase",
+                    color: "var(--atlas-muted)", background: "transparent",
+                    border: "none", padding: "2px 0", cursor: "pointer",
+                  }}
+                >
+                  {chainOpen ? "Hide history" : `View history (${reopenChain.length} versions)`}
+                  <span style={{ transform: chainOpen ? "rotate(180deg)" : "none", transition: "transform 140ms ease", display: "inline-block" }}>▾</span>
+                </button>
+              )}
+            </div>
+            {/* Full chain — visible when expanded */}
+            {chainOpen && reopenChain.length > 1 && (
+              <div style={{
+                marginLeft: 4,
+                paddingLeft: 10,
+                borderLeft: "1px solid color-mix(in srgb, var(--atlas-gold) 20%, transparent)",
+                display: "flex", flexDirection: "column", gap: 4,
+              }}>
+                {reopenChain.slice(1).map((ancestor, i) => (
+                  <a
+                    key={ancestor.id}
+                    href={`/ledger/${ancestor.projectId}?expand=${ancestor.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 5,
+                      fontFamily: "var(--app-font-mono)", fontSize: 9.5,
+                      letterSpacing: "0.06em",
+                      color: `color-mix(in srgb, var(--atlas-gold) ${Math.max(40, 70 - i * 15)}%, var(--atlas-muted))`,
+                      textDecoration: "none",
+                    }}
+                  >
+                    <span style={{ opacity: 0.5 }}>↑</span>
+                    {ancestor.title}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
