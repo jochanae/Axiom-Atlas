@@ -3579,6 +3579,7 @@ export default function Workspace() {
   const [srcReadLoading, setSrcReadLoading] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [showViewMenu, setShowViewMenu] = useState(false);
+  const [showModeMenu, setShowModeMenu] = useState(false);
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
@@ -3986,20 +3987,6 @@ export default function Workspace() {
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation("/parking"); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
-                  <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "4px 8px" }} />
-                  <div style={{ padding: "4px 12px 2px" }}>
-                    <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.5)", marginBottom: 4 }}>Mode</div>
-                    {(["THINK", "PLAN", "BUILD"] as const).map((m) => (
-                      <button key={m} onClick={() => { setProjectMode(m); try { localStorage.setItem(`atlas-mode-${id}`, m); } catch {} setShowProjectMenu(false); }}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: projectMode === m ? "rgba(201,162,76,0.08)" : "transparent", border: "none", padding: "7px 8px", borderRadius: 6, cursor: "pointer", color: projectMode === m ? "var(--atlas-gold)" : "rgba(231,229,228,0.55)", fontSize: 12, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}
-                        onMouseEnter={(e) => { if (projectMode !== m) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-                        onMouseLeave={(e) => { if (projectMode !== m) e.currentTarget.style.background = "transparent"; }}
-                      >
-                        <span>{m}</span>
-                        {projectMode === m && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </>
             )}
@@ -4048,6 +4035,55 @@ export default function Workspace() {
                 Session active
               </span>
             )}
+
+            {/* Mode pill — always visible, tappable */}
+            {(() => {
+              const modeConfig = {
+                THINK: { color: "#93c5fd", bg: "rgba(96,165,250,0.1)", border: "rgba(96,165,250,0.35)", desc: "Strategy & advice — no code" },
+                PLAN:  { color: "var(--atlas-gold)", bg: "rgba(201,162,76,0.1)", border: "rgba(201,162,76,0.35)", desc: "Structure & outlines" },
+                BUILD: { color: "#4ade80", bg: "rgba(74,222,128,0.1)", border: "rgba(74,222,128,0.35)", desc: "Writes code → push to GitHub" },
+              } as const;
+              const cfg = modeConfig[projectMode];
+              return (
+                <div style={{ position: "relative" }}>
+                  <button
+                    onClick={() => { setShowModeMenu(v => !v); setShowProjectMenu(false); setShowViewMenu(false); }}
+                    title={`Mode: ${projectMode} — ${cfg.desc}`}
+                    style={{ display: "flex", alignItems: "center", gap: 5, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 7, padding: "4px 8px", cursor: "pointer", color: cfg.color, fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", flexShrink: 0, transition: "all 180ms ease" }}
+                  >
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: cfg.color, flexShrink: 0, display: "inline-block" }} />
+                    {projectMode}
+                  </button>
+                  {showModeMenu && (
+                    <>
+                      <div onClick={() => setShowModeMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
+                      <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "rgba(18,15,14,0.97)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "6px 4px", boxShadow: "0 12px 40px rgba(0,0,0,0.7)", backdropFilter: "blur(16px)", zIndex: 9999, minWidth: 210 }}>
+                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(120,113,108,0.45)", padding: "4px 12px 6px" }}>Select mode</div>
+                        {(["THINK", "PLAN", "BUILD"] as const).map((m) => {
+                          const mc = modeConfig[m];
+                          const active = projectMode === m;
+                          return (
+                            <button key={m}
+                              onClick={() => { setProjectMode(m); try { localStorage.setItem(`atlas-mode-${id}`, m); } catch {} setShowModeMenu(false); }}
+                              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active ? mc.bg : "transparent", border: "none", padding: "8px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
+                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+                            >
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: mc.color, flexShrink: 0 }} />
+                              <span style={{ flex: 1, textAlign: "left" }}>
+                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? mc.color : "rgba(231,229,228,0.8)" }}>{m}</span>
+                                <span style={{ display: "block", fontSize: 10, color: "rgba(120,113,108,0.65)", marginTop: 1 }}>{mc.desc}</span>
+                              </span>
+                              {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={mc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Parking lot "P" badge */}
             <button
