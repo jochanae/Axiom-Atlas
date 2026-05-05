@@ -28,28 +28,86 @@ type Props = {
   saving?: boolean;
 };
 
+function fieldsEqual(a: EditableFields, b: EditableFields): boolean {
+  return (
+    a.title === b.title &&
+    a.summary === b.summary &&
+    a.details === b.details &&
+    a.buildId === b.buildId &&
+    a.costOfLesson === b.costOfLesson &&
+    a.touched.length === b.touched.length &&
+    a.touched.every((t, i) => t === b.touched[i])
+  );
+}
+
 export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }: Props) {
   const [fields, setFields] = useState<EditableFields>({ title: "", summary: "", details: "", buildId: "", touched: [], costOfLesson: "" });
+  const [initialFields, setInitialFields] = useState<EditableFields>({ title: "", summary: "", details: "", buildId: "", touched: [], costOfLesson: "" });
   const [tagInput, setTagInput] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Stable ref so the ESC keydown listener always calls the latest handleAttemptClose
+  const handleAttemptCloseRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        handleAttemptCloseRef.current();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   useEffect(() => {
     if (entry) {
-      setFields({
+      const initial: EditableFields = {
         title: entry.title ?? "",
         summary: entry.summary ?? "",
         details: entry.details ?? "",
         buildId: entry.buildId ?? "",
         touched: entry.touched ?? [],
         costOfLesson: entry.costOfLesson != null ? String(entry.costOfLesson) : "",
-      });
+      };
+      setFields(initial);
+      setInitialFields(initial);
       setTagInput("");
       setSaveError(null);
+      setShowDiscardConfirm(false);
     }
   }, [entry]);
 
   if (!open || !entry) return null;
+
+  const isDirty = !fieldsEqual(fields, initialFields);
+
+  const handleAttemptClose = () => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  // Keep ref in sync with latest closure on every render
+  handleAttemptCloseRef.current = handleAttemptClose;
+
+  const handleConfirmDiscard = () => {
+    setShowDiscardConfirm(false);
+    onClose();
+  };
+
+  const handleCancelDiscard = () => {
+    setShowDiscardConfirm(false);
+    // Return focus to the title field so the user can continue editing
+    setTimeout(() => titleInputRef.current?.focus(), 0);
+  };
 
   const addTag = (raw: string) => {
     const value = raw.trim();
@@ -106,7 +164,7 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
   };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) onClose();
+    if (e.target === e.currentTarget) handleAttemptClose();
   };
 
   return (
@@ -155,7 +213,7 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAttemptClose}
             style={{
               fontFamily: "var(--app-font-mono, var(--font-mono))", fontSize: 10,
               letterSpacing: "0.12em", textTransform: "uppercase",
@@ -173,6 +231,7 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
           {/* Title */}
           <FormField label="Title" hint="required">
             <input
+              ref={titleInputRef}
               value={fields.title}
               onChange={(e) => setFields((f) => ({ ...f, title: e.target.value }))}
               placeholder="Entry title…"
@@ -293,6 +352,54 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
             </div>
           )}
 
+          {/* Discard confirmation */}
+          {showDiscardConfirm && (
+            <div style={{
+              padding: "10px 12px", borderRadius: 4,
+              background: "color-mix(in srgb, var(--atlas-gold, var(--accent-gold)) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--atlas-gold, var(--accent-gold)) 30%, transparent)",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+            }}>
+              <span style={{
+                fontSize: 11, fontFamily: "var(--app-font-mono, var(--font-mono))",
+                color: "var(--atlas-fg, var(--foreground))",
+              }}>
+                Discard unsaved changes?
+              </span>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={handleCancelDiscard}
+                  style={{
+                    padding: "4px 12px", fontSize: 10,
+                    fontFamily: "var(--app-font-mono, var(--font-mono))",
+                    letterSpacing: "0.1em", textTransform: "uppercase",
+                    color: "var(--atlas-muted, var(--muted-text))",
+                    background: "transparent",
+                    border: "1px solid var(--atlas-border, var(--border))",
+                    borderRadius: 3, cursor: "pointer",
+                  }}
+                >
+                  Keep editing
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDiscard}
+                  style={{
+                    padding: "4px 12px", fontSize: 10,
+                    fontFamily: "var(--app-font-mono, var(--font-mono))",
+                    letterSpacing: "0.1em", textTransform: "uppercase",
+                    background: "var(--ember, #dc2626)",
+                    color: "#fff",
+                    border: "none", borderRadius: 3, cursor: "pointer",
+                  }}
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Footer */}
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8,
@@ -300,7 +407,7 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
           }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleAttemptClose}
               style={{
                 padding: "6px 14px", fontSize: 10,
                 fontFamily: "var(--app-font-mono, var(--font-mono))",
