@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import type { Entry } from "@workspace/api-client-react";
 import type React from "react";
+import { extractApiErrorMessage } from "../lib/atlas-utils";
 
 type EditableFields = {
   title: string;
@@ -158,8 +159,8 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
         costOfLesson: parsedCost,
       });
       onClose();
-    } catch {
-      setSaveError("Failed to save changes. Please try again.");
+    } catch (err) {
+      setSaveError(extractApiErrorMessage(err));
     }
   };
 
@@ -233,7 +234,7 @@ export function EditEntryDialog({ open, onClose, entry, onSave, saving = false }
             <input
               ref={titleInputRef}
               value={fields.title}
-              onChange={(e) => setFields((f) => ({ ...f, title: e.target.value }))}
+              onChange={(e) => { setFields((f) => ({ ...f, title: e.target.value })); if (saveError) setSaveError(null); }}
               placeholder="Entry title…"
               style={inputStyle}
             />

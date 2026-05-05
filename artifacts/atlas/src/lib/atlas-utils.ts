@@ -1,3 +1,15 @@
+export function extractApiErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
+  if (err && typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    if (e["data"] && typeof e["data"] === "object") {
+      const msg = (e["data"] as Record<string, unknown>)["message"];
+      if (typeof msg === "string" && msg.trim()) return msg.trim();
+    }
+    if (typeof e["message"] === "string" && e["message"].trim()) return e["message"].trim();
+  }
+  return fallback;
+}
+
 export function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
