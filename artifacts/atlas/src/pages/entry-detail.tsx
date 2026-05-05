@@ -1,5 +1,5 @@
 import type React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useGetEntry, useListEntries, getGetEntryQueryKey, getListEntriesQueryKey } from "@workspace/api-client-react";
 import type { Entry } from "@workspace/api-client-react";
@@ -140,6 +140,13 @@ export default function EntryDetail() {
   const { data: entry, isLoading, isError } = useGetEntry(entryId, {
     query: { enabled: !!entryId && !Number.isNaN(entryId), queryKey: getGetEntryQueryKey(entryId) },
   });
+
+  // Keep browser tab title meaningful
+  useEffect(() => {
+    const prev = document.title;
+    document.title = entry?.title ? `${entry.title} · Atlas Ledger` : "Entry · Atlas Ledger";
+    return () => { document.title = prev; };
+  }, [entry?.title]);
 
   const sMono: React.CSSProperties = { fontFamily: "var(--font-mono)" };
 
