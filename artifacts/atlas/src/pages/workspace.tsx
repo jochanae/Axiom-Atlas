@@ -4612,12 +4612,12 @@ export default function Workspace() {
                 const dx = e.changedTouches[0].clientX - touchStartX.current;
                 if (dx > 60) setRightOpen(false);
               }}
+              className="atlas-slide-in-right"
               style={{
                 position: "relative", zIndex: 1,
                 width: "100vw",
                 maxWidth: "none",
                 height: "100%",
-                animation: "atlas-slide-in-right 220ms cubic-bezier(0.4,0,0.2,1) both",
                 transition: "width 220ms ease, max-width 220ms ease",
               }}
             >

@@ -272,7 +272,7 @@
 }
 
 
-/* ── Bloom spinner keyframes ── */
+/* ── Bloom spinner keyframes + classes ── */
 @keyframes atlas-bloom-circle {
   0%, 100% { transform: scale(0.25); opacity: 0; }
   35%, 65% { transform: scale(1);    opacity: 1; }
@@ -280,6 +280,12 @@
 @keyframes atlas-bloom-blur {
   0%, 100% { transform: scale(0.15); opacity: 0; }
   35%, 65% { transform: scale(1.8);  opacity: 0.38; }
+}
+.atlas-bloom-circle {
+  animation: atlas-bloom-circle 1800ms ease-in-out infinite;
+}
+.atlas-bloom-blur {
+  animation: atlas-bloom-blur 1800ms ease-in-out infinite;
 }
 
 /* ── Message bubble in ── */
@@ -345,6 +351,9 @@
 @keyframes atlas-slide-in-right {
   from { transform: translateX(100%); }
   to   { transform: translateX(0); }
+}
+.atlas-slide-in-right {
+  animation: atlas-slide-in-right 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 /* ── Voice input pulse ── */

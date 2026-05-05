@@ -58,6 +58,7 @@ export function LoadingSpinner({
           {/* Glow blur layer behind */}
           <div
             aria-hidden
+            className="atlas-bloom-blur"
             style={{
               position: "absolute",
               inset: 0,
@@ -66,11 +67,12 @@ export function LoadingSpinner({
               filter: `blur(${blurPx}px)`,
               opacity: 0,
               transform: "scale(0.15)",
-              animation: `atlas-bloom-blur 1800ms ease-in-out ${i * 140}ms infinite`,
+              animationDelay: `${i * 140}ms`,
             }}
           />
           {/* Main circle */}
           <div
+            className="atlas-bloom-circle"
             style={{
               position: "absolute",
               inset: 0,
@@ -78,7 +80,7 @@ export function LoadingSpinner({
               background: c,
               opacity: 0,
               transform: "scale(0.25)",
-              animation: `atlas-bloom-circle 1800ms ease-in-out ${i * 140}ms infinite`,
+              animationDelay: `${i * 140}ms`,
             }}
           />
         </div>
