@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { useListProjects, useCreateProject, getListProjectsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { extractApiErrorMessage } from "../lib/atlas-utils";
 
 function relTime(iso?: string | null) {
   if (!iso) return "";
@@ -30,6 +31,7 @@ export function ProjectsSheet({ onClose }: Props) {
   const [, setLocation] = useLocation();
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const { data: projects = [] } = useListProjects();
   const createProject = useCreateProject();
   const queryClient = useQueryClient();
@@ -37,6 +39,7 @@ export function ProjectsSheet({ onClose }: Props) {
   const handleCreate = () => {
     const name = newName.trim() || "New Operation " + Math.floor(Math.random() * 1000);
     setCreating(true);
+    setCreateError(null);
     createProject.mutate({ data: { name } }, {
       onSuccess: (created) => {
         queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
@@ -47,7 +50,10 @@ export function ProjectsSheet({ onClose }: Props) {
           setLocation(`/project/${created.id}`);
         }
       },
-      onError: () => setCreating(false),
+      onError: (err) => {
+        setCreating(false);
+        setCreateError(extractApiErrorMessage(err));
+      },
     });
   };
 
@@ -137,18 +143,30 @@ export function ProjectsSheet({ onClose }: Props) {
             <div style={{ padding: "10px", borderTop: "1px solid var(--atlas-border)", background: "var(--atlas-surface)" }}>
               <input
                 value={newName}
-                onChange={(e) => setNewName(e.target.value)}
+                onChange={(e) => { setNewName(e.target.value); if (createError) setCreateError(null); }}
                 onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
                 placeholder="Project name"
                 style={{
-                  width: "100%", padding: "6px 8px", borderRadius: 6, marginBottom: 7,
-                  background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)",
+                  width: "100%", padding: "6px 8px", borderRadius: 6, marginBottom: createError ? 5 : 7,
+                  background: "var(--atlas-surface-alt)", border: `1px solid ${createError ? "rgba(146,64,14,0.5)" : "var(--atlas-border)"}`,
                   color: "var(--atlas-fg)", fontSize: 11, outline: "none",
                   fontFamily: "var(--app-font-sans)",
                 }}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "var(--atlas-gold)")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+                onFocus={(e) => (e.currentTarget.style.borderColor = createError ? "rgba(146,64,14,0.5)" : "var(--atlas-gold)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = createError ? "rgba(146,64,14,0.5)" : "var(--atlas-border)")}
               />
+              {createError && (
+                <div style={{
+                  marginBottom: 7, padding: "4px 8px", borderRadius: 4, fontSize: 10,
+                  background: "rgba(146,64,14,0.1)",
+                  border: "0.5px solid rgba(146,64,14,0.35)",
+                  color: "var(--atlas-ember)",
+                  fontFamily: "var(--app-font-mono)",
+                  lineHeight: 1.4,
+                }}>
+                  {createError}
+                </div>
+              )}
               <button
                 onClick={handleCreate}
                 disabled={creating}
