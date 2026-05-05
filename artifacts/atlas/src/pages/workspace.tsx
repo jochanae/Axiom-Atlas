@@ -4122,18 +4122,17 @@ export default function Workspace() {
             <AtlasLogo small />
           </button>
 
-          {/* Center: project name + dropdown */}
-          <div style={{ position: "relative", flex: 1, display: "flex", justifyContent: "center" }}>
+          {/* Center: project name + dropdown — absolutely centered so left/right widths don't skew it */}
+          <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", maxWidth: "min(220px, calc(100% - 260px))", overflow: "hidden" }}>
             <button
               ref={projectBtnRef}
               onClick={() => setShowProjectMenu((v) => !v)}
-              style={{ display: "flex", alignItems: "center", gap: 7, background: "transparent", border: "none", cursor: "pointer", padding: "5px 10px", borderRadius: 8, transition: "background 150ms ease", maxWidth: 260 }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, background: "transparent", border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: 8, transition: "background 150ms ease", minWidth: 0, overflow: "hidden", width: "100%" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
-              <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 7, height: 7, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
               {renaming ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
                   <input
                     ref={renameInputRef}
                     autoFocus
@@ -4150,7 +4149,7 @@ export default function Workspace() {
                       if (e.key === "Escape") { setRenaming(false); setRenameError(null); }
                     }}
                     onBlur={() => { setRenaming(false); setRenameError(null); }}
-                    style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160 }}
+                    style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160, textAlign: "center" }}
                   />
                   {renameError && (
                     <span style={{ fontSize: 10.5, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)", marginTop: 2, lineHeight: 1.3, pointerEvents: "none" }}>
@@ -4159,13 +4158,20 @@ export default function Workspace() {
                   )}
                 </div>
               ) : (
-                <span style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.92, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {project?.name ?? "…"}
-                </span>
+                <>
+                  {/* Title row: status dot + name */}
+                  <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, overflow: "hidden", width: "100%" }}>
+                    <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 6, height: 6, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
+                    <span style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.92, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
+                      {project?.name ?? "…"}
+                    </span>
+                  </span>
+                  {/* Chevron on its own line, centered below */}
+                  <svg width="10" height="6" viewBox="0 0 12 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "rgba(120,113,108,0.45)", flexShrink: 0 }}>
+                    <path d="M1 1l5 5 5-5" />
+                  </svg>
+                </>
               )}
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" style={{ color: "rgba(120,113,108,0.5)", flexShrink: 0 }}>
-                <path d="M2 4l4 4 4-4" />
-              </svg>
             </button>
 
             {/* Dropdown menu — portaled to escape any parent stacking context */}
