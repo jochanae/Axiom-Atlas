@@ -524,6 +524,7 @@ export default function Home() {
     >
       {/* Header */}
       <div
+        className="atlas-home-header"
         style={{
           position: "sticky",
           top: 0,
@@ -533,8 +534,6 @@ export default function Home() {
           justifyContent: "space-between",
           padding: "0 24px",
           borderBottom: "1px solid var(--atlas-glass-border)",
-          background: "rgba(12,10,9,0.88)",
-          backdropFilter: "blur(16px)",
           zIndex: 10,
           flexShrink: 0,
         }}
@@ -575,12 +574,13 @@ export default function Home() {
         style={{
           flex: 1,
           display: "flex",
-          alignItems: "center",
           justifyContent: "center",
-          padding: "60px 24px 144px",
+          padding: "0 24px",
         }}
       >
         <div style={{ width: "100%", maxWidth: 560 }}>
+          {/* Hero — fills the viewport, content vertically centered */}
+          <div style={{ minHeight: "calc(100vh - 50px)", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative" }}>
 
           {/* Greeting */}
           <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -810,8 +810,16 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Projects */}
-          <div style={{ marginTop: 52 }}>
+          {/* Scroll cue — pinned to bottom of hero */}
+          <div aria-hidden style={{ position: "absolute", bottom: 20, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
+            <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.28 }}>
+              ↓ scroll for your workspace
+            </div>
+          </div>
+          </div>{/* end hero */}
+
+          {/* Projects — below the fold */}
+          <div style={{ paddingTop: 40, paddingBottom: 8 }}>
             <div
               style={{
                 display: "flex",
@@ -947,6 +955,9 @@ export default function Home() {
             const p = projects?.[0];
             if (p) setLocation(`/ledger/${p.id}`);
           }}
+          onOpenParking={() => setLocation("/parking")}
+          parkedCount={0}
+          committedCount={0}
         />
       </div>
 
@@ -960,6 +971,7 @@ export default function Home() {
         onOpenProject={navigateToProject}
         onNewProject={() => { setShowNewProject(true); setShowDrawer(false); }}
         onOpenLedger={(id) => setLocation(`/ledger/${id}`)}
+        onOpenParking={() => setLocation("/parking")}
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
       />
     </div>

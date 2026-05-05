@@ -9,6 +9,7 @@ import Home from "./pages/home";
 import Projects from "./pages/projects";
 import Workspace from "./pages/workspace";
 import Ledger from "./pages/ledger";
+import ParkingLot from "./pages/parking-lot";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -145,10 +146,9 @@ function MobileFooter({ onYou }: { onYou: () => void }) {
   );
 
   return (
-    <div style={{
+    <div className="atlas-mobile-footer" style={{
       position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 150,
       height: 64, display: "flex", alignItems: "center",
-      background: "rgba(12,10,9,0.96)", backdropFilter: "blur(20px)",
       borderTop: "1px solid var(--atlas-border)",
       paddingBottom: "env(safe-area-inset-bottom, 0)",
     }}>
@@ -240,6 +240,7 @@ function Router({ onYou }: { onYou: () => void }) {
         <Route path="/projects" component={Projects} />
         <Route path="/project/:projectId" component={Workspace} />
         <Route path="/ledger/:projectId" component={Ledger} />
+        <Route path="/parking" component={ParkingLot} />
         <Route component={NotFound} />
       </Switch>
       <MobileFooter onYou={onYou} />

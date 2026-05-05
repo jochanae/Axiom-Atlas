@@ -87,6 +87,9 @@
   --atlas-border:       #252220;
   --atlas-glass-bg:     rgba(12, 10, 9, 0.72);
   --atlas-glass-border: rgba(231, 229, 228, 0.05);
+  --atlas-shadow-sm:    rgba(0,0,0,0.15);
+  --atlas-shadow-md:    rgba(0,0,0,0.30);
+  --atlas-shadow-lg:    rgba(0,0,0,0.45);
   --ease-cinematic:     cubic-bezier(0.4, 0, 0.2, 1);
 
   --app-font-sans: 'Geist', system-ui, -apple-system, sans-serif;
@@ -121,8 +124,11 @@
   --atlas-gold-border:  rgba(180, 83, 9, 0.20);
   --atlas-phosphor:     #0284C7;
   --atlas-border:       #D6CFBF;
-  --atlas-glass-bg:     rgba(245, 241, 232, 0.80);
+  --atlas-glass-bg:     rgba(245, 241, 232, 0.90);
   --atlas-glass-border: rgba(26, 23, 20, 0.08);
+  --atlas-shadow-sm:    rgba(0,0,0,0.05);
+  --atlas-shadow-md:    rgba(0,0,0,0.08);
+  --atlas-shadow-lg:    rgba(0,0,0,0.12);
 
   --background: 38 38% 93%;
   --foreground: 20 12% 10%;
@@ -172,7 +178,7 @@
 
 /* ── Atlas glass input shell ── */
 .atlas-input-shell {
-  background: rgba(16, 13, 11, 0.75);
+  background: var(--atlas-glass-bg);
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
   border: 1px solid var(--atlas-gold-border);
@@ -182,23 +188,54 @@
 }
 .atlas-input-shell:focus-within {
   animation: none;
-  border-color: rgba(201, 162, 76, 0.6);
+  border-color: var(--atlas-gold-glow);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.03),
-    0 0 0 1px rgba(201, 162, 76, 0.07),
-    0 8px 32px rgba(0,0,0,0.45),
-    0 0 28px -4px rgba(201, 162, 76, 0.32);
+    0 0 0 1px var(--atlas-gold-dim),
+    0 8px 32px var(--atlas-shadow-lg),
+    0 0 28px -4px var(--atlas-gold-glow);
 }
 
 @keyframes atlas-breathing-glow {
   0%, 100% {
-    border-color: rgba(201, 162, 76, 0.15);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3), 0 0 8px -4px rgba(201, 162, 76, 0.1);
+    border-color: var(--atlas-gold-border);
+    box-shadow: 0 4px 20px var(--atlas-shadow-md), 0 0 8px -4px var(--atlas-gold-dim);
   }
   50% {
-    border-color: rgba(201, 162, 76, 0.38);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3), 0 0 20px -3px rgba(201, 162, 76, 0.24);
+    border-color: var(--atlas-gold-glow);
+    box-shadow: 0 4px 20px var(--atlas-shadow-md), 0 0 20px -3px var(--atlas-gold-glow);
   }
+}
+
+/* ── Sticky page header (theme-aware) ── */
+.atlas-home-header {
+  background: rgba(12, 10, 9, 0.88);
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+}
+[data-theme="parchment"] .atlas-home-header {
+  background: rgba(245, 241, 232, 0.92);
+}
+
+/* ── Mobile footer (theme-aware) ── */
+.atlas-mobile-footer {
+  background: rgba(12, 10, 9, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+[data-theme="parchment"] .atlas-mobile-footer {
+  background: rgba(245, 241, 232, 0.96);
+}
+
+/* ── Discovery cards (below-fold) ── */
+.atlas-discovery-card {
+  background: var(--atlas-surface);
+  border: 1px solid var(--atlas-gold-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+[data-theme="parchment"] .atlas-discovery-card {
+  box-shadow: 0 1px 6px var(--atlas-shadow-sm);
 }
 
 /* ── Think dots ── */

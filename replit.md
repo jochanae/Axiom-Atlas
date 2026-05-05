@@ -21,12 +21,13 @@ artifacts/atlas/src/pages/
   home.tsx          — Front Door ("Where were we.", glass input, project list, BelowFoldDashboard)
   workspace.tsx     — Two-pane: left chat + right Decision Ledger canvas
   projects.tsx      — Project list (secondary, accessible via nav)
-  ledger.tsx        — Full ledger view for a project
+  ledger.tsx        — Full ledger view; breadcrumb nav, filter pills (ALL/STRUCTURE/AESTHETIC/LOGIC/GENERAL), three sections (committed/in-tension/overridden)
+  parking-lot.tsx   — Parked ideas per project; RESUME/DELETE/COMMIT actions; project switcher dropdown
 
 artifacts/atlas/src/components/
-  ProjectsDrawer.tsx    — Left slide-in panel: projects list, navigate, tools, user footer
-  UserMenuDropdown.tsx  — Avatar dropdown: identity, Obsidian/Parchment theme toggle, edit profile
-  BelowFoldDashboard.tsx — Scroll-reveal below-fold section: Atlas noticed, Momentum, Where were we
+  ProjectsDrawer.tsx    — Left slide-in panel: projects list, navigate, Parking Lot link, tools, user footer
+  UserMenuDropdown.tsx  — Avatar dropdown: Appearance toggle (moon/sun), Shortcuts, Edit profile, Sign out
+  BelowFoldDashboard.tsx — Scroll-reveal below-fold: Atlas noticed, Your Momentum, Unfinished Thoughts, Where were we
 
 artifacts/api-server/src/routes/
   projects.ts       — CRUD + summary stats

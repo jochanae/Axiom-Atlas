@@ -33,6 +33,7 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
     try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r) : {}; } catch { return {}; }
   })();
   const name: string = profile.name || "Account";
+  const email: string = profile.email || "Local session";
   const photoUrl: string = profile.photoUrl || "";
 
   useEffect(() => {
@@ -58,7 +59,7 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
     applyTheme(t);
   };
 
-  const isObsidian = theme === "obsidian";
+  const isParchment = theme === "parchment";
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
@@ -91,11 +92,11 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
           role="menu"
           style={{
             position: "absolute", top: "calc(100% + 10px)", right: 0,
-            width: 240,
+            width: 248,
             background: "var(--atlas-surface)",
             border: "1px solid rgba(201,162,76,0.18)",
             borderRadius: 14,
-            boxShadow: "0 1px 0 rgba(255,255,255,0.04) inset, 0 24px 60px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(201,162,76,0.06)",
+            boxShadow: "0 1px 0 rgba(255,255,255,0.04) inset, 0 24px 60px -20px var(--atlas-shadow-lg), 0 0 0 1px rgba(201,162,76,0.06)",
             padding: 6, zIndex: 80,
             animation: "atlas-menu-in 200ms cubic-bezier(.2,.8,.2,1)",
             transformOrigin: "top right",
@@ -103,52 +104,62 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
         >
           {/* Identity header */}
           <div style={{
-            padding: "10px 12px 10px",
+            padding: "12px 12px 12px",
             borderBottom: "1px solid rgba(201,162,76,0.10)",
             marginBottom: 4,
             display: "flex", alignItems: "center", gap: 10,
           }}>
             <div style={{
-              width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+              width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
               background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               {photoUrl ? (
                 <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
               ) : (
-                <span style={{ fontSize: 14, fontWeight: 600, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)" }}>
+                <span style={{ fontSize: 15, fontWeight: 600, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)" }}>
                   {name[0]?.toUpperCase()}
                 </span>
               )}
             </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", lineHeight: 1.3 }}>{name}</div>
-              <div style={{ fontSize: 9.5, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.55, marginTop: 2 }}>Local session</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)", lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+              <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.7 }}>{email}</div>
             </div>
           </div>
 
-          {/* Theme toggle */}
-          <div style={{ padding: "6px 6px 4px" }}>
-            <div style={{ padding: "0 6px 6px", fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.5 }}>
-              Theme
-            </div>
-            <div style={{ display: "flex", gap: 6, padding: "0 2px" }}>
-              <ThemeOption label="Obsidian" active={isObsidian} onClick={() => handleThemeChange("obsidian")} bg="#0C0A09" accent="#92400E" />
-              <ThemeOption label="Parchment" active={!isObsidian} onClick={() => handleThemeChange("parchment")} bg="#F5F1E8" accent="#8B4513" />
-            </div>
-          </div>
-
-          <div style={{ height: 1, background: "rgba(201,162,76,0.08)", margin: "6px 6px" }} />
-
+          {/* Appearance toggle */}
           <MenuRow
-            icon={
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            }
+            icon={isParchment ? <SunIcon /> : <MoonIcon />}
+            label="Appearance"
+            badge={isParchment ? "Parchment" : "Obsidian"}
+            onClick={() => handleThemeChange(isParchment ? "obsidian" : "parchment")}
+          />
+
+          {/* Shortcuts */}
+          <MenuRow
+            icon={<KeyboardIcon />}
+            label="Shortcuts"
+            badge="⌘ /"
+            onClick={() => setOpen(false)}
+          />
+
+          <div style={{ height: 1, background: "rgba(201,162,76,0.08)", margin: "4px 6px" }} />
+
+          {/* Edit profile */}
+          <MenuRow
+            icon={<UserIcon />}
             label="Edit profile"
             onClick={() => { setOpen(false); onOpenProfile?.(); }}
+          />
+
+          {/* Sign out */}
+          <MenuRow
+            icon={<SignOutIcon />}
+            label="Sign out"
+            badge="⌘ ⇧ Q"
+            danger
+            onClick={() => setOpen(false)}
           />
         </div>
       )}
@@ -168,35 +179,72 @@ if (typeof document !== "undefined") {
   applyTheme(readTheme());
 }
 
-function ThemeOption({ label, active, onClick, bg, accent }: { label: string; active: boolean; onClick: () => void; bg: string; accent: string }) {
+function MenuRow({ icon, label, badge, danger, onClick }: {
+  icon: React.ReactNode; label: string; badge?: string; danger?: boolean; onClick: () => void;
+}) {
   return (
-    <button type="button" onClick={onClick} style={{
-      flex: 1, padding: "8px 6px", borderRadius: 8, border: "none",
-      background: active ? "rgba(201,162,76,0.09)" : "transparent",
-      outline: active ? "1.5px solid rgba(201,162,76,0.38)" : "1.5px solid transparent",
-      cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-      transition: "all 160ms ease",
-    }}>
-      <div style={{ width: 40, height: 26, borderRadius: 6, background: bg, border: `2px solid ${accent}`, position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 8, background: accent, opacity: 0.55 }} />
-        <div style={{ position: "absolute", top: 5, left: 6, width: "55%", height: 3, background: `${accent}99`, borderRadius: 2 }} />
-      </div>
-      <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: active ? "var(--atlas-gold)" : "var(--atlas-muted)", letterSpacing: "0.05em", opacity: active ? 1 : 0.6 }}>
-        {label}
-      </span>
+    <button type="button" onClick={onClick}
+      style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? "rgba(239,68,68,0.06)" : "rgba(201,162,76,0.06)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      <span style={{ color: danger ? "rgba(239,68,68,0.6)" : "var(--atlas-muted)", display: "flex", flexShrink: 0, opacity: 0.8 }}>{icon}</span>
+      <span style={{ flex: 1, fontSize: 12.5, color: danger ? "rgba(239,68,68,0.9)" : "var(--atlas-fg)" }}>{label}</span>
+      {badge && (
+        <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.55, letterSpacing: "0.03em", flexShrink: 0 }}>{badge}</span>
+      )}
     </button>
   );
 }
 
-function MenuRow({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+function MoonIcon() {
   return (
-    <button type="button" onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.06)")}
-      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-    >
-      <span style={{ color: "var(--atlas-muted)", display: "flex", flexShrink: 0, opacity: 0.7 }}>{icon}</span>
-      <span style={{ fontSize: 12.5, fontFamily: "var(--app-font-sans)", color: "var(--atlas-fg)" }}>{label}</span>
-    </button>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
+}
+
+function KeyboardIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function SignOutIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
   );
 }
