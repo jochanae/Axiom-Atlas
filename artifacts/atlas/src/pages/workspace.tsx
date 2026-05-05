@@ -169,16 +169,21 @@ function useVoiceInput(onTranscript: (text: string) => void) {
 }
 
 // ── MenuBtn — reusable dropdown menu item ─────────────────────────────────────
-function MenuBtn({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+function MenuBtn({ icon, label, onClick, badge, disabled }: { icon: React.ReactNode; label: string; onClick?: () => void; badge?: string; disabled?: boolean }) {
   return (
     <button
-      onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "transparent", border: "none", padding: "9px 12px", borderRadius: 7, cursor: "pointer", color: "rgba(231,229,228,0.8)", fontSize: 13, textAlign: "left" }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={disabled ? "Coming soon" : undefined}
+      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "transparent", border: "none", padding: "9px 12px", borderRadius: 7, cursor: disabled ? "not-allowed" : "pointer", color: "var(--atlas-fg)", opacity: disabled ? 0.45 : 1, fontSize: 13, textAlign: "left" }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = "color-mix(in oklab, var(--atlas-fg) 8%, transparent)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
     >
-      <span style={{ color: "rgba(120,113,108,0.6)", display: "flex", flexShrink: 0 }}>{icon}</span>
-      {label}
+      <span style={{ color: "var(--atlas-muted)", display: "flex", flexShrink: 0, opacity: 0.7 }}>{icon}</span>
+      <span style={{ flex: 1 }}>{label}</span>
+      {badge && (
+        <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.6, letterSpacing: "0.1em", flexShrink: 0 }}>{badge}</span>
+      )}
     </button>
   );
 }
@@ -4027,7 +4032,7 @@ export default function Workspace() {
     >
 
       {/* ── Header ── */}
-      <div style={{ flexShrink: 0, background: "rgba(12,10,9,0.92)", backdropFilter: "blur(12px)" }}>
+      <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(12px)" }}>
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
         <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
 
@@ -4068,7 +4073,7 @@ export default function Workspace() {
                   style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160 }}
                 />
               ) : (
-                <span style={{ fontSize: 13, color: "rgba(231,229,228,0.88)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.92, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {project?.name ?? "…"}
                 </span>
               )}
@@ -4092,7 +4097,10 @@ export default function Workspace() {
                   }}
                 >
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
+                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2" /><path d="M13.7 9.4a1 1 0 010-2.8l.5-.2a1 1 0 00.6-1.5l-.7-1.2a1 1 0 00-1.5-.3l-.4.3a1 1 0 01-1.4-.6l-.1-.5a1 1 0 00-1-.8H8.3a1 1 0 00-1 .8l-.1.5a1 1 0 01-1.4.6l-.4-.3a1 1 0 00-1.5.3l-.7 1.2a1 1 0 00.6 1.5l.5.2a1 1 0 010 2.8l-.5.2a1 1 0 00-.6 1.5l.7 1.2a1 1 0 001.5.3l.4-.3a1 1 0 011.4.6l.1.5a1 1 0 001 .8h1.4a1 1 0 001-.8l.1-.5a1 1 0 011.4-.6l.4.3a1 1 0 001.5-.3l.7-1.2a1 1 0 00-.6-1.5l-.5-.2z" /></svg>} label="Project settings" badge="SOON" disabled />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation("/parking"); setShowProjectMenu(false); }} />
+                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="9" height="9" rx="1.5" /><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" /></svg>} label="Clone project" badge="SOON" disabled />
+                  <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
                 </div>
               </>,

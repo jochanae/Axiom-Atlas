@@ -260,6 +260,14 @@
   background: rgba(245, 241, 232, 0.96);
 }
 
+/* ── App header (workspace top bar — theme-aware) ── */
+.atlas-app-header {
+  background: rgba(12, 10, 9, 0.92);
+}
+[data-theme="parchment"] .atlas-app-header {
+  background: rgba(245, 241, 232, 0.92);
+}
+
 /* ── Side drawer mobile sizing ──
    The mobile footer is 64px tall + safe-area-inset-bottom and sits at zIndex 150.
    Cap the drawer height below it so the footer (Edit profile, Sign out, etc.) is visible. */

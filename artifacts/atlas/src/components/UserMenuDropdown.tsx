@@ -158,11 +158,12 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
             </button>
           </div>
 
-          {/* Shortcuts */}
+          {/* Shortcuts — not wired yet */}
           <MenuRow
             icon={<KeyboardIcon />}
             label="Shortcuts"
-            badge="⌘ /"
+            badge="SOON"
+            disabled
             onClick={() => setOpen(false)}
           />
 
@@ -175,11 +176,12 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
             onClick={() => { setOpen(false); onOpenProfile?.(); }}
           />
 
-          {/* Sign out */}
+          {/* Sign out — auth not wired yet */}
           <MenuRow
             icon={<SignOutIcon />}
             label="Sign out"
-            badge="⌘ ⇧ Q"
+            badge="SOON"
+            disabled
             danger
             onClick={() => setOpen(false)}
           />
@@ -201,13 +203,13 @@ if (typeof document !== "undefined") {
   applyTheme(readTheme());
 }
 
-function MenuRow({ icon, label, badge, danger, onClick }: {
-  icon: React.ReactNode; label: string; badge?: string; danger?: boolean; onClick: () => void;
+function MenuRow({ icon, label, badge, danger, disabled, onClick }: {
+  icon: React.ReactNode; label: string; badge?: string; danger?: boolean; disabled?: boolean; onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick}
-      style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = danger ? "rgba(239,68,68,0.06)" : "rgba(201,162,76,0.06)")}
+    <button type="button" onClick={disabled ? undefined : onClick} disabled={disabled} title={disabled ? "Coming soon" : undefined}
+      style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "8px 10px", borderRadius: 8, border: "none", background: "transparent", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, textAlign: "left" }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = danger ? "rgba(239,68,68,0.06)" : "rgba(201,162,76,0.06)"; }}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
       <span style={{ color: danger ? "rgba(239,68,68,0.6)" : "var(--atlas-muted)", display: "flex", flexShrink: 0, opacity: 0.8 }}>{icon}</span>
