@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
+import { EntryCard } from "../components/EntryCard";
 import {
   useListProjects,
   useListEntries,
@@ -8,13 +9,15 @@ import {
   useDeleteEntry,
   getListEntriesQueryKey,
 } from "@workspace/api-client-react";
+import type { Entry } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-// ── Architectural note (ported from original Atlas) ───────────────────────────
+// ── Architectural note (locked rule from original Atlas) ──────────────────────
 // "Ledger and Parking Lot are the same object, rendered differently based on
 //  state. Moving between them is NOT duplication. It is a status change on
-//  the same object." — locked rule from original atlas repo
+//  the same object."
 // Resume = navigate back to the source project workspace (not a status change).
+// Commit = status flip from 'parked' → 'committed' on the same row.
 
 export default function ParkingLot() {
   const [, setLocation] = useLocation();
@@ -41,8 +44,9 @@ export default function ParkingLot() {
     { query: { queryKey: ["entries", queryProjectId, "draft"], enabled } }
   );
   const isLoading = loadingParked || loadingDraft;
-  // Merge + sort newest first; draft entries get a badge
-  const entries = [...parkedEntries, ...draftEntries].sort(
+
+  // Merge + sort newest first
+  const entries: Entry[] = [...parkedEntries, ...draftEntries].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
@@ -59,7 +63,7 @@ export default function ParkingLot() {
   const updateEntry = useUpdateEntry({ mutation: { onSuccess: invalidateAll } });
   const deleteEntry = useDeleteEntry({ mutation: { onSuccess: invalidateAll } });
 
-  // Resume: navigate back to source project workspace (original behavior)
+  // Resume: navigate back to source project workspace
   const handleResume = (entry: Entry) => {
     if (entry.projectId) {
       setLocation(`/project/${entry.projectId}`);
@@ -68,17 +72,19 @@ export default function ParkingLot() {
     }
   };
 
-  const handleCommit = (id: number) => {
-    setBusyId(id);
+  // Commit: status flip parked → committed (locked_at stamped by DB)
+  const handleCommit = (entry: Entry) => {
+    setBusyId(entry.id);
     updateEntry.mutate(
-      { id, data: { status: "committed" } },
+      { id: entry.id, data: { status: "committed", severity: "committed" } },
       { onSettled: () => setBusyId(null) }
     );
   };
 
-  const handleDelete = (id: number) => {
-    setBusyId(id);
-    deleteEntry.mutate({ id }, { onSettled: () => setBusyId(null) });
+  // Delete: remove parked/draft entry
+  const handleDelete = (entry: Entry) => {
+    setBusyId(entry.id);
+    deleteEntry.mutate({ id: entry.id }, { onSettled: () => setBusyId(null) });
   };
 
   const parkedCount = entries.length;
@@ -104,7 +110,11 @@ export default function ParkingLot() {
         <button
           type="button"
           onClick={() => window.history.back()}
-          style={{ background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, padding: "4px 0", color: "var(--atlas-muted)", flexShrink: 0 }}
+          style={{
+            background: "transparent", border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "4px 0", color: "var(--atlas-muted)", flexShrink: 0,
+          }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 12H5M12 5l-7 7 7 7" />
@@ -174,22 +184,23 @@ export default function ParkingLot() {
 
           {/* Content */}
           {!activeProjectId ? (
-            <Empty message="No projects yet. Start one from home." />
+            <EmptyState message="No projects yet. Start one from home." />
           ) : isLoading ? (
-            <Loading />
+            <div style={{ display: "flex", justifyContent: "center", padding: "48px 0" }}>
+              <LoadingSpinner size="md" color="atlas" />
+            </div>
           ) : entries.length === 0 ? (
             <EmptyParked />
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {entries.map(entry => (
-                <ParkingCard
+                <EntryCard
                   key={entry.id}
                   entry={entry}
                   busy={busyId === entry.id}
-                  projectName={projects.find(p => p.id === entry.projectId)?.name}
                   onResume={() => handleResume(entry)}
-                  onCommit={() => handleCommit(entry.id)}
-                  onDelete={() => handleDelete(entry.id)}
+                  onCommit={() => handleCommit(entry)}
+                  onDelete={() => handleDelete(entry)}
                 />
               ))}
             </div>
@@ -197,206 +208,20 @@ export default function ParkingLot() {
         </div>
       </div>
 
-      {/* Footer audit line (from original Atlas) */}
+      {/* Footer audit line */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0,
-        height: 2, background: entries.length > 0 ? "rgba(201,162,76,0.45)" : "rgba(120,113,108,0.2)",
-        zIndex: 50, transition: "background 600ms ease",
+        height: 2,
+        background: entries.length > 0 ? "rgba(201,162,76,0.45)" : "rgba(120,113,108,0.2)",
+        zIndex: 50,
+        transition: "background 600ms ease",
       }} />
     </div>
   );
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-type Entry = {
-  id: number;
-  title: string;
-  summary?: string | null;
-  mode?: string | null;
-  verb?: string | null;
-  status?: string | null;
-  createdAt: string;
-  projectId?: number;
-};
-
-// ── ParkingCard ───────────────────────────────────────────────────────────────
-// "active posture" card — gold gradient border, three actions: Resume, Commit, Delete
-function ParkingCard({
-  entry,
-  busy,
-  projectName,
-  onResume,
-  onCommit,
-  onDelete,
-}: {
-  entry: Entry;
-  busy: boolean;
-  projectName?: string;
-  onResume: () => void;
-  onCommit: () => void;
-  onDelete: () => void;
-}) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  return (
-    // Outer wrapper = 0.5px padding that shows the gradient border
-    <div style={{
-      padding: "0.5px",
-      borderRadius: 8,
-      background: "linear-gradient(135deg, rgba(201,162,76,0.4) 0%, rgba(201,162,76,0.12) 45%, transparent 80%)",
-      boxShadow: "0 4px 20px -10px rgba(0,0,0,0.45)",
-    }}>
-      {/* Inner card */}
-      <div style={{
-        background: "var(--atlas-surface)",
-        borderRadius: 7.5,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-      }}>
-        {/* Card body */}
-        <div style={{ padding: "14px 16px 12px" }}>
-          {/* Top meta row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-            {entry.mode && (
-              <span style={{
-                fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                background: "rgba(201,162,76,0.08)",
-                border: "0.5px solid rgba(201,162,76,0.2)",
-                color: "rgba(201,162,76,0.75)",
-                padding: "1.5px 7px", borderRadius: 10,
-              }}>
-                {entry.mode}
-              </span>
-            )}
-            {entry.status === "draft" && (
-              <span style={{
-                fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                background: "rgba(99,102,241,0.08)",
-                border: "0.5px solid rgba(99,102,241,0.3)",
-                color: "rgba(129,140,248,0.85)",
-                padding: "1.5px 7px", borderRadius: 10,
-              }}>
-                REOPENED
-              </span>
-            )}
-            {projectName && (
-              <span style={{
-                fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em",
-                color: "rgba(120,113,108,0.5)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                marginLeft: "auto",
-              }}>
-                {projectName}
-              </span>
-            )}
-          </div>
-
-          {/* Title */}
-          <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--atlas-fg)", lineHeight: 1.45, marginBottom: entry.summary ? 8 : 0 }}>
-            {entry.title}
-          </div>
-
-          {/* Summary */}
-          {entry.summary && (
-            <p style={{ margin: 0, fontSize: 12, color: "var(--atlas-muted)", opacity: 0.65, lineHeight: 1.6, fontStyle: "italic" }}>
-              {entry.summary.length > 200 ? entry.summary.slice(0, 200) + "…" : entry.summary}
-            </p>
-          )}
-        </div>
-
-        {/* Divider */}
-        <div style={{ height: 1, background: "linear-gradient(to right, transparent, rgba(201,162,76,0.15), transparent)" }} />
-
-        {/* Action footer */}
-        <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 6 }}>
-          {/* Resume — navigate back to source session */}
-          <button
-            onClick={onResume}
-            disabled={busy}
-            title="Go back to this project's workspace"
-            style={{
-              padding: "5px 11px", borderRadius: 5, fontSize: 10,
-              fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              background: "transparent",
-              border: "0.5px solid rgba(201,162,76,0.35)",
-              color: "rgba(201,162,76,0.85)",
-              cursor: busy ? "default" : "pointer",
-              opacity: busy ? 0.5 : 1,
-              display: "flex", alignItems: "center", gap: 5,
-              transition: "all 140ms ease",
-            }}
-            onMouseEnter={(e) => { if (!busy) { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.6)"; } }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; }}
-          >
-            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 6h8M6 2l4 4-4 4" />
-            </svg>
-            Resume
-          </button>
-
-          {/* Commit to ledger */}
-          <button
-            onClick={onCommit}
-            disabled={busy}
-            style={{
-              padding: "5.5px 12px", borderRadius: 5, fontSize: 10,
-              fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
-              textTransform: "uppercase", fontWeight: 600,
-              background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)",
-              border: "0.5px solid rgba(201,162,76,0.6)",
-              color: "var(--atlas-bg)",
-              cursor: busy ? "default" : "pointer",
-              opacity: busy ? 0.5 : 1,
-              boxShadow: "0 0 10px -3px rgba(201,162,76,0.35)",
-              transition: "opacity 140ms ease",
-            }}
-          >
-            {busy ? "…" : "Commit"}
-          </button>
-
-          {/* Delete — with confirm step */}
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
-            {confirmDelete ? (
-              <>
-                <span style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.55 }}>Sure?</span>
-                <button onClick={onDelete} disabled={busy} style={dangerBtn}>Yes</button>
-                <button onClick={() => setConfirmDelete(false)} style={ghostBtn}>No</button>
-              </>
-            ) : (
-              <button onClick={() => setConfirmDelete(true)} style={ghostBtn} title="Delete this entry">
-                <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M2 3.5h10M5.5 3.5V2.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v1M11.5 3.5l-.6 7.2a1 1 0 01-1 .8H4.1a1 1 0 01-1-.8L2.5 3.5" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const ghostBtn: React.CSSProperties = {
-  background: "transparent", border: "none",
-  color: "var(--atlas-muted)", opacity: 0.4,
-  cursor: "pointer", padding: "4px 6px", borderRadius: 4,
-  fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-  textTransform: "uppercase", display: "flex", alignItems: "center",
-};
-
-const dangerBtn: React.CSSProperties = {
-  background: "transparent",
-  border: "1px solid rgba(220,80,60,0.4)",
-  color: "rgb(220,80,60)",
-  cursor: "pointer", padding: "3px 9px", borderRadius: 4,
-  fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-  textTransform: "uppercase",
-};
-
 // ── Empty states ──────────────────────────────────────────────────────────────
+
 function EmptyParked() {
   return (
     <div style={{ padding: "60px 24px", textAlign: "center" }}>
@@ -409,15 +234,17 @@ function EmptyParked() {
       }}>
         <div style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(201,162,76,0.5)" }} />
       </div>
-      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", opacity: 0.5 }}>Nothing parked.</p>
-      <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.4, maxWidth: 280, marginLeft: "auto", marginRight: "auto" }}>
+      <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", opacity: 0.5 }}>
+        Nothing parked.
+      </p>
+      <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.4, maxWidth: 280, marginInline: "auto" }}>
         Tap the tray icon on any Atlas response to save a thought without breaking your flow.
       </p>
     </div>
   );
 }
 
-function Empty({ message }: { message: string }) {
+function EmptyState({ message }: { message: string }) {
   return (
     <div style={{
       padding: "48px 24px", textAlign: "center",
@@ -428,13 +255,3 @@ function Empty({ message }: { message: string }) {
     </div>
   );
 }
-
-function Loading() {
-  return (
-    <div style={{ display: "flex", justifyContent: "center", padding: "48px 0" }}>
-      <LoadingSpinner size="md" color="atlas" />
-    </div>
-  );
-}
-
-import type React from "react";

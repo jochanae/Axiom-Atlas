@@ -15,9 +15,25 @@ export interface CreateEntryBody {
   title: string;
   /** @nullable */
   summary?: string | null;
+  /** @nullable */
+  details?: string | null;
   severity: CreateEntryBodySeverity;
   /** @nullable */
   verb?: string | null;
+  /** @nullable */
+  buildId?: string | null;
+  /** @nullable */
+  touched?: string[] | null;
+  /** @nullable */
+  costOfLesson?: number | null;
+  /** @nullable */
+  deviationReason?: string | null;
+  /** @nullable */
+  catchAgainstId?: number | null;
+  /** @nullable */
+  supersedesId?: number | null;
+  /** @nullable */
+  cardSchemaVersion?: number | null;
   /** @nullable */
   mode?: string | null;
 }

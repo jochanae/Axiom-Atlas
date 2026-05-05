@@ -533,15 +533,35 @@ components:
           type: string
         summary:
           type: ["string", "null"]
+        details:
+          type: ["string", "null"]
         severity:
           type: string
           enum: [blocker, parked, committed, neutral]
         verb:
           type: ["string", "null"]
+        buildId:
+          type: ["string", "null"]
+        touched:
+          type: ["array", "null"]
+          items:
+            type: string
         isViolation:
           type: boolean
+        costOfLesson:
+          type: ["number", "null"]
         deviation:
           type: boolean
+        deviationReason:
+          type: ["string", "null"]
+        catchAgainstId:
+          type: ["integer", "null"]
+        supersedesId:
+          type: ["integer", "null"]
+        cardSchemaVersion:
+          type: ["integer", "null"]
+        lockedAt:
+          type: ["string", "null"]
         mode:
           type: ["string", "null"]
         createdAt:
@@ -571,11 +591,29 @@ components:
           type: string
         summary:
           type: ["string", "null"]
+        details:
+          type: ["string", "null"]
         severity:
           type: string
           enum: [blocker, parked, committed, neutral]
         verb:
           type: ["string", "null"]
+        buildId:
+          type: ["string", "null"]
+        touched:
+          type: ["array", "null"]
+          items:
+            type: string
+        costOfLesson:
+          type: ["number", "null"]
+        deviationReason:
+          type: ["string", "null"]
+        catchAgainstId:
+          type: ["integer", "null"]
+        supersedesId:
+          type: ["integer", "null"]
+        cardSchemaVersion:
+          type: ["integer", "null"]
         mode:
           type: ["string", "null"]
       required:
@@ -593,9 +631,23 @@ components:
           type: string
         summary:
           type: ["string", "null"]
+        details:
+          type: ["string", "null"]
         severity:
           type: string
           enum: [blocker, parked, committed, neutral]
+        verb:
+          type: ["string", "null"]
+        buildId:
+          type: ["string", "null"]
+        touched:
+          type: ["array", "null"]
+          items:
+            type: string
+        costOfLesson:
+          type: ["number", "null"]
+        deviationReason:
+          type: ["string", "null"]
 
     ChatRequest:
       type: object

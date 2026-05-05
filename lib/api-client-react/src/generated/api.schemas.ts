@@ -153,11 +153,29 @@ export interface Entry {
   title: string;
   /** @nullable */
   summary?: string | null;
+  /** @nullable */
+  details?: string | null;
   severity: EntrySeverity;
   /** @nullable */
   verb?: string | null;
+  /** @nullable */
+  buildId?: string | null;
+  /** @nullable */
+  touched?: string[] | null;
   isViolation: boolean;
+  /** @nullable */
+  costOfLesson?: number | null;
   deviation: boolean;
+  /** @nullable */
+  deviationReason?: string | null;
+  /** @nullable */
+  catchAgainstId?: number | null;
+  /** @nullable */
+  supersedesId?: number | null;
+  /** @nullable */
+  cardSchemaVersion?: number | null;
+  /** @nullable */
+  lockedAt?: string | null;
   /** @nullable */
   mode?: string | null;
   createdAt: string;
@@ -190,9 +208,25 @@ export interface CreateEntryBody {
   title: string;
   /** @nullable */
   summary?: string | null;
+  /** @nullable */
+  details?: string | null;
   severity: CreateEntryBodySeverity;
   /** @nullable */
   verb?: string | null;
+  /** @nullable */
+  buildId?: string | null;
+  /** @nullable */
+  touched?: string[] | null;
+  /** @nullable */
+  costOfLesson?: number | null;
+  /** @nullable */
+  deviationReason?: string | null;
+  /** @nullable */
+  catchAgainstId?: number | null;
+  /** @nullable */
+  supersedesId?: number | null;
+  /** @nullable */
+  cardSchemaVersion?: number | null;
   /** @nullable */
   mode?: string | null;
 }
@@ -222,7 +256,19 @@ export interface UpdateEntryBody {
   title?: string;
   /** @nullable */
   summary?: string | null;
+  /** @nullable */
+  details?: string | null;
   severity?: UpdateEntryBodySeverity;
+  /** @nullable */
+  verb?: string | null;
+  /** @nullable */
+  buildId?: string | null;
+  /** @nullable */
+  touched?: string[] | null;
+  /** @nullable */
+  costOfLesson?: number | null;
+  /** @nullable */
+  deviationReason?: string | null;
 }
 
 export type ChatHistoryItemRole =
