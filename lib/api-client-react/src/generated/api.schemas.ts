@@ -178,6 +178,8 @@ export interface Entry {
   lockedAt?: string | null;
   /** @nullable */
   mode?: string | null;
+  /** @nullable */
+  sourceMessageId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -229,6 +231,8 @@ export interface CreateEntryBody {
   cardSchemaVersion?: number | null;
   /** @nullable */
   mode?: string | null;
+  /** @nullable */
+  sourceMessageId?: number | null;
 }
 
 export type UpdateEntryBodyStatus =
@@ -269,6 +273,8 @@ export interface UpdateEntryBody {
   costOfLesson?: number | null;
   /** @nullable */
   deviationReason?: string | null;
+  /** @nullable */
+  sourceMessageId?: number | null;
 }
 
 export type ChatHistoryItemRole =

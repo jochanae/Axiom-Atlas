@@ -1258,6 +1258,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
   const updateEntry = useUpdateEntry();
   const [done, setDone] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const handleResolve = () => {
     if (done) return;
@@ -1281,6 +1282,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
   const sentences = summary.split(/(?<=[.!?])\s+/);
   const shortDef = sentences.slice(0, 2).join(" ") || summary;
   const context = sentences.length > 2 ? sentences.slice(2).join(" ") : "";
+  const hasDetails = !!(entry.details || (entry.touched && entry.touched.length > 0));
 
   return (
     <div style={{ marginBottom: 2, position: "relative", opacity: done ? 0.4 : 1, transition: "opacity 300ms ease" }}>
@@ -1322,10 +1324,20 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
       {expanded && (
         <div style={{ marginLeft: 20, marginBottom: 14, background: "rgba(22,19,17,0.8)", border: "1px solid rgba(201,162,76,0.12)", borderRadius: 10, padding: "14px 16px" }}>
           {/* Category tags + status badge */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" as const }}>
             <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "rgba(120,113,108,0.45)", textTransform: "uppercase" as const }}>
               {modeLabel} · {typeLabel}
             </span>
+            {entry.buildId && (
+              <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(120,113,108,0.1)", border: "0.5px solid rgba(120,113,108,0.2)", color: "rgba(120,113,108,0.65)", padding: "1px 7px", borderRadius: 10 }}>
+                #{entry.buildId}
+              </span>
+            )}
+            {entry.costOfLesson && (
+              <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.55)" }}>
+                cost: {entry.costOfLesson}
+              </span>
+            )}
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: entry.isViolation ? "rgba(239,68,68,0.08)" : "rgba(74,222,128,0.07)", border: `1px solid ${entry.isViolation ? "rgba(239,68,68,0.18)" : "rgba(74,222,128,0.18)"}`, color: entry.isViolation ? "rgba(239,68,68,0.75)" : "rgba(74,222,128,0.75)", padding: "2px 9px", borderRadius: 20, textTransform: "uppercase" as const }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
               {entry.isViolation ? "BLOCKER" : "REVERSIBLE"}
@@ -1354,6 +1366,63 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
                 {context}
               </div>
             </>
+          )}
+
+          {/* Details toggle */}
+          {hasDetails && (
+            <button
+              type="button"
+              onClick={() => setShowDetails(v => !v)}
+              style={{
+                marginBottom: 10, background: "transparent", border: "none",
+                cursor: "pointer", padding: 0,
+                display: "flex", alignItems: "center", gap: 4,
+                fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                color: "rgba(120,113,108,0.5)", textTransform: "uppercase" as const,
+              }}
+            >
+              <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
+                style={{ transform: showDetails ? "rotate(180deg)" : "none", transition: "transform 160ms ease", flexShrink: 0 }}>
+                <path d="M2 4l4 4 4-4" />
+              </svg>
+              Details
+            </button>
+          )}
+
+          {/* Details panel */}
+          {hasDetails && showDetails && (
+            <div style={{
+              marginBottom: 12,
+              background: "rgba(12,10,9,0.6)",
+              border: "1px solid rgba(201,162,76,0.1)",
+              borderRadius: 6,
+              padding: "10px 12px",
+            }}>
+              {entry.details && (
+                <pre style={{
+                  margin: 0, marginBottom: (entry.touched && entry.touched.length > 0) ? 10 : 0,
+                  fontSize: 11, fontFamily: "var(--app-font-mono)",
+                  color: "rgba(231,229,228,0.55)", lineHeight: 1.6,
+                  whiteSpace: "pre-wrap", wordBreak: "break-word",
+                }}>
+                  {entry.details}
+                </pre>
+              )}
+              {entry.touched && entry.touched.length > 0 && (
+                <>
+                  <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(120,113,108,0.45)", marginBottom: 6 }}>
+                    Touched files
+                  </div>
+                  <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 3 }}>
+                    {entry.touched.map((f, i) => (
+                      <li key={i} style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.6)", letterSpacing: "0.03em" }}>
+                        · {f}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
           )}
 
           {/* Source */}

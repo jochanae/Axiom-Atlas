@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, numeric, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { projectsTable } from "./projects";
@@ -17,14 +17,15 @@ export const entriesTable = pgTable("entries", {
   buildId: text("build_id"),
   touched: text("touched").array(),
   isViolation: boolean("is_violation").notNull().default(false),
-  costOfLesson: real("cost_of_lesson"),
+  costOfLesson: numeric("cost_of_lesson"),
   deviation: boolean("deviation").notNull().default(false),
   deviationReason: text("deviation_reason"),
   catchAgainstId: integer("catch_against_id"),
-  supersedesId: integer("supersedes_id"),
+  supersedesId: integer("supersedes_id").references((): AnyPgColumn => entriesTable.id, { onDelete: "set null" }),
   cardSchemaVersion: integer("card_schema_version").default(1),
   lockedAt: timestamp("locked_at", { withTimezone: true }),
   mode: text("mode"),
+  sourceMessageId: integer("source_message_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

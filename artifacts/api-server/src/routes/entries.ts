@@ -9,9 +9,19 @@ import {
   DeleteEntryParams,
   ListEntriesParams,
   ListEntriesQueryParams,
+  ReopenEntryParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+function serializeEntry(e: typeof entriesTable.$inferSelect) {
+  return {
+    ...e,
+    createdAt: e.createdAt.toISOString(),
+    updatedAt: e.updatedAt.toISOString(),
+    lockedAt: e.lockedAt ? e.lockedAt.toISOString() : null,
+  };
+}
 
 router.get("/projects/:projectId/entries", async (req, res): Promise<void> => {
   const params = ListEntriesParams.safeParse(req.params);
@@ -32,11 +42,7 @@ router.get("/projects/:projectId/entries", async (req, res): Promise<void> => {
     .where(and(...conditions))
     .orderBy(entriesTable.createdAt);
 
-  res.json(entries.map(e => ({
-    ...e,
-    createdAt: e.createdAt.toISOString(),
-    updatedAt: e.updatedAt.toISOString(),
-  })));
+  res.json(entries.map(serializeEntry));
 });
 
 router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
@@ -54,11 +60,7 @@ router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
     projectId: params.data.projectId,
     ...parsed.data,
   }).returning();
-  res.status(201).json({
-    ...entry,
-    createdAt: entry.createdAt.toISOString(),
-    updatedAt: entry.updatedAt.toISOString(),
-  });
+  res.status(201).json(serializeEntry(entry));
 });
 
 router.patch("/entries/:id", async (req, res): Promise<void> => {
@@ -72,16 +74,18 @@ router.patch("/entries/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [entry] = await db.update(entriesTable).set(parsed.data).where(eq(entriesTable.id, params.data.id)).returning();
+
+  const updateData: Record<string, unknown> = { ...parsed.data };
+  if (parsed.data.status === "committed") {
+    updateData.lockedAt = new Date();
+  }
+
+  const [entry] = await db.update(entriesTable).set(updateData).where(eq(entriesTable.id, params.data.id)).returning();
   if (!entry) {
     res.status(404).json({ error: "Entry not found" });
     return;
   }
-  res.json({
-    ...entry,
-    createdAt: entry.createdAt.toISOString(),
-    updatedAt: entry.updatedAt.toISOString(),
-  });
+  res.json(serializeEntry(entry));
 });
 
 router.delete("/entries/:id", async (req, res): Promise<void> => {
@@ -92,6 +96,45 @@ router.delete("/entries/:id", async (req, res): Promise<void> => {
   }
   await db.delete(entriesTable).where(eq(entriesTable.id, params.data.id));
   res.sendStatus(204);
+});
+
+router.post("/entries/:id/reopen", async (req, res): Promise<void> => {
+  const params = ReopenEntryParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const [original] = await db.select().from(entriesTable).where(eq(entriesTable.id, params.data.id));
+  if (!original) {
+    res.status(404).json({ error: "Entry not found" });
+    return;
+  }
+
+  if (original.status !== "committed") {
+    res.status(409).json({ error: "Only committed entries can be reopened" });
+    return;
+  }
+
+  const [newEntry] = await db.insert(entriesTable).values({
+    projectId: original.projectId,
+    sessionId: original.sessionId,
+    status: "draft",
+    title: original.title,
+    summary: original.summary,
+    details: original.details,
+    verb: original.verb,
+    mode: original.mode,
+    severity: original.severity,
+    isViolation: original.isViolation,
+    deviation: original.deviation,
+    buildId: original.buildId,
+    touched: original.touched,
+    costOfLesson: original.costOfLesson,
+    supersedesId: original.id,
+  }).returning();
+
+  res.status(201).json(serializeEntry(newEntry));
 });
 
 export default router;

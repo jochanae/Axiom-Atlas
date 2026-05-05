@@ -230,6 +230,7 @@ export const ListEntriesResponseItem = zod.object({
   cardSchemaVersion: zod.number().nullish(),
   lockedAt: zod.string().nullish(),
   mode: zod.string().nullish(),
+  sourceMessageId: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -258,6 +259,7 @@ export const CreateEntryBody = zod.object({
   supersedesId: zod.number().nullish(),
   cardSchemaVersion: zod.number().nullish(),
   mode: zod.string().nullish(),
+  sourceMessageId: zod.number().nullish(),
 });
 
 /**
@@ -278,6 +280,7 @@ export const UpdateEntryBody = zod.object({
   touched: zod.array(zod.string()).nullish(),
   costOfLesson: zod.number().nullish(),
   deviationReason: zod.string().nullish(),
+  sourceMessageId: zod.number().nullish(),
 });
 
 export const UpdateEntryResponse = zod.object({
@@ -301,6 +304,7 @@ export const UpdateEntryResponse = zod.object({
   cardSchemaVersion: zod.number().nullish(),
   lockedAt: zod.string().nullish(),
   mode: zod.string().nullish(),
+  sourceMessageId: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -309,6 +313,13 @@ export const UpdateEntryResponse = zod.object({
  * @summary Delete a ledger entry
  */
 export const DeleteEntryParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
+ * @summary Reopen a committed entry as a new draft
+ */
+export const ReopenEntryParams = zod.object({
   id: zod.coerce.number(),
 });
 

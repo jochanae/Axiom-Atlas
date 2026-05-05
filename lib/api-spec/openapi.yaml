@@ -332,6 +332,27 @@ paths:
         "204":
           description: Deleted
 
+  /entries/{id}/reopen:
+    post:
+      operationId: reopenEntry
+      tags: [entries]
+      summary: Reopen a committed entry as a new draft
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: New draft entry with supersedes_id set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entry"
+        "404":
+          description: Not found
+
   /chat:
     post:
       operationId: sendMessage
@@ -564,6 +585,8 @@ components:
           type: ["string", "null"]
         mode:
           type: ["string", "null"]
+        sourceMessageId:
+          type: ["integer", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -616,6 +639,8 @@ components:
           type: ["integer", "null"]
         mode:
           type: ["string", "null"]
+        sourceMessageId:
+          type: ["integer", "null"]
       required:
         - title
         - status
@@ -648,6 +673,8 @@ components:
           type: ["number", "null"]
         deviationReason:
           type: ["string", "null"]
+        sourceMessageId:
+          type: ["integer", "null"]
 
     ChatRequest:
       type: object

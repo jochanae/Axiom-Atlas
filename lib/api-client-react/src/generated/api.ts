@@ -1427,6 +1427,90 @@ export const useDeleteEntry = <
 };
 
 /**
+ * @summary Reopen a committed entry as a new draft
+ */
+export const getReopenEntryUrl = (id: number) => {
+  return `/api/entries/${id}/reopen`;
+};
+
+export const reopenEntry = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Entry> => {
+  return customFetch<Entry>(getReopenEntryUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getReopenEntryMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reopenEntry>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reopenEntry>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["reopenEntry"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reopenEntry>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return reopenEntry(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReopenEntryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reopenEntry>>
+>;
+
+export type ReopenEntryMutationError = ErrorType<void>;
+
+/**
+ * @summary Reopen a committed entry as a new draft
+ */
+export const useReopenEntry = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reopenEntry>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reopenEntry>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getReopenEntryMutationOptions(options));
+};
+
+/**
  * @summary Send a message and get an AI response
  */
 export const getSendMessageUrl = () => {
