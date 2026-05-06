@@ -2,7 +2,17 @@ import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import { db, projectsTable, entriesTable } from "@workspace/db";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 const router: IRouter = Router();
+
+router.options("/import", (_req, res) => {
+  res.set(CORS_HEADERS).sendStatus(200);
+});
 
 const ImportDecisionSchema = z.object({
   tier: z.number().int().min(1).max(3),
@@ -70,7 +80,7 @@ router.post("/import", async (req, res): Promise<void> => {
     );
   }
 
-  res.status(201).json({ projectId: project.id });
+  res.set(CORS_HEADERS).status(201).json({ projectId: project.id });
 });
 
 export default router;
