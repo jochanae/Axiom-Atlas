@@ -3728,6 +3728,18 @@ export default function Workspace() {
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
+
+  const [showAxiomBanner, setShowAxiomBanner] = useState(() => {
+    try {
+      const dismissed = localStorage.getItem(`atlas-axiom-banner-${id}`);
+      if (dismissed) return false;
+      return new URLSearchParams(window.location.search).get("source") === "axiom";
+    } catch { return false; }
+  });
+  const dismissAxiomBanner = () => {
+    try { localStorage.setItem(`atlas-axiom-banner-${id}`, "1"); } catch { /* ignore */ }
+    setShowAxiomBanner(false);
+  };
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const updateProjectHeader = useUpdateProject();
@@ -4375,6 +4387,36 @@ export default function Workspace() {
         </div>
 
       </div>
+
+      {/* ── Axiom handoff banner ── */}
+      {showAxiomBanner && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "9px 18px",
+            background: "rgba(201,162,76,0.07)",
+            borderBottom: "1px solid rgba(201,162,76,0.18)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, display: "inline-block" }} />
+            <span style={{ fontSize: 12, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.03em" }}>
+              Spec loaded from Axiom — your architecture decisions are committed.
+            </span>
+          </div>
+          <button
+            onClick={dismissAxiomBanner}
+            style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(201,162,76,0.5)", fontSize: 16, lineHeight: 1, padding: "2px 4px", flexShrink: 0 }}
+            title="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* ── Two-pane body ── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>

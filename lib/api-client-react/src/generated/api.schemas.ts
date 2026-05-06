@@ -333,6 +333,27 @@ export interface ChatResponse {
   messageId: number;
 }
 
+export interface AxiomImportDecision {
+  /**
+   * @minimum 1
+   * @maximum 3
+   */
+  tier: number;
+  text: string;
+}
+
+export interface AxiomImportBody {
+  project_name: string;
+  builder?: string;
+  nodes_resolved?: string[];
+  manifest?: string;
+  decisions?: AxiomImportDecision[];
+}
+
+export interface AxiomImportResponse {
+  projectId: number;
+}
+
 export type ListEntriesParams = {
   status?: ListEntriesStatus;
 };

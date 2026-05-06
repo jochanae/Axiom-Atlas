@@ -17,6 +17,8 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AxiomImportBody,
+  AxiomImportResponse,
   ChatRequest,
   ChatResponse,
   CreateEntryBody,
@@ -119,6 +121,92 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Receive a handoff payload from Axiom and seed a new Atlas project
+ */
+export const getAxiomImportUrl = () => {
+  return `/api/import`;
+};
+
+export const axiomImport = async (
+  axiomImportBody: AxiomImportBody,
+  options?: RequestInit,
+): Promise<AxiomImportResponse> => {
+  return customFetch<AxiomImportResponse>(getAxiomImportUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(axiomImportBody),
+  });
+};
+
+export const getAxiomImportMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof axiomImport>>,
+    TError,
+    { data: BodyType<AxiomImportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof axiomImport>>,
+  TError,
+  { data: BodyType<AxiomImportBody> },
+  TContext
+> => {
+  const mutationKey = ["axiomImport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof axiomImport>>,
+    { data: BodyType<AxiomImportBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return axiomImport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AxiomImportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof axiomImport>>
+>;
+export type AxiomImportMutationBody = BodyType<AxiomImportBody>;
+export type AxiomImportMutationError = ErrorType<void>;
+
+/**
+ * @summary Receive a handoff payload from Axiom and seed a new Atlas project
+ */
+export const useAxiomImport = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof axiomImport>>,
+    TError,
+    { data: BodyType<AxiomImportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof axiomImport>>,
+  TError,
+  { data: BodyType<AxiomImportBody> },
+  TContext
+> => {
+  return useMutation(getAxiomImportMutationOptions(options));
+};
 
 /**
  * @summary List all saved thoughts

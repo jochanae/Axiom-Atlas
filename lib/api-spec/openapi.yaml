@@ -19,6 +19,8 @@ tags:
     description: Decision ledger entries
   - name: chat
     description: AI chat
+  - name: import
+    description: Axiom handoff import
 paths:
   /healthz:
     get:
@@ -32,6 +34,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /import:
+    post:
+      operationId: axiomImport
+      tags: [import]
+      summary: Receive a handoff payload from Axiom and seed a new Atlas project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AxiomImportBody"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AxiomImportResponse"
+        "400":
+          description: Invalid payload
 
   /thoughts:
     get:
@@ -836,3 +859,44 @@ components:
       required:
         - content
         - messageId
+
+    AxiomImportDecision:
+      type: object
+      properties:
+        tier:
+          type: integer
+          minimum: 1
+          maximum: 3
+        text:
+          type: string
+      required:
+        - tier
+        - text
+
+    AxiomImportBody:
+      type: object
+      properties:
+        project_name:
+          type: string
+        builder:
+          type: string
+        nodes_resolved:
+          type: array
+          items:
+            type: string
+        manifest:
+          type: string
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AxiomImportDecision"
+      required:
+        - project_name
+
+    AxiomImportResponse:
+      type: object
+      properties:
+        projectId:
+          type: integer
+      required:
+        - projectId

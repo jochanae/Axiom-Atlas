@@ -9,6 +9,7 @@ import imageRouter from "./image";
 import devserverRouter from "./devserver";
 import selfRouter from "./self";
 import thoughtsRouter from "./thoughts";
+import importRouter from "./import";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(imageRouter);
 router.use(devserverRouter);
 router.use(selfRouter);
 router.use(thoughtsRouter);
+router.use(importRouter);
 
 export default router;

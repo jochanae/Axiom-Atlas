@@ -15,6 +15,26 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Receive a handoff payload from Axiom and seed a new Atlas project
+ */
+export const axiomImportBodyDecisionsItemTierMax = 3;
+
+export const AxiomImportBody = zod.object({
+  project_name: zod.string(),
+  builder: zod.string().optional(),
+  nodes_resolved: zod.array(zod.string()).optional(),
+  manifest: zod.string().optional(),
+  decisions: zod
+    .array(
+      zod.object({
+        tier: zod.number().min(1).max(axiomImportBodyDecisionsItemTierMax),
+        text: zod.string(),
+      }),
+    )
+    .optional(),
+});
+
+/**
  * @summary List all saved thoughts
  */
 export const ListThoughtsResponseItem = zod.object({
