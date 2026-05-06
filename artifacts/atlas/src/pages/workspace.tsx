@@ -2042,6 +2042,8 @@ function FilesTab({
   const [disconnectConfirm, setDisconnectConfirm] = useState(false);
   const [clearTokenError, setClearTokenError] = useState<string | null>(null);
   const [unlinkRepoError, setUnlinkRepoError] = useState<string | null>(null);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isUnlinking, setIsUnlinking] = useState(false);
   const autoLoadedRef = useRef(false);
 
   // Reset auto-load gate when project switches
@@ -2071,10 +2073,13 @@ function FilesTab({
 
   const clearToken = () => {
     setClearTokenError(null);
+    setIsDisconnecting(true);
     updateProject.mutate(
       { id: projectId, data: { githubToken: null } },
       {
         onSuccess: () => {
+          setIsDisconnecting(false);
+          setDisconnectConfirm(false);
           setTokenState(null);
           setRepos([]); setSelectedRepo(null); setTree([]);
           setSelectedPath(null); setFileContent(null);
@@ -2082,6 +2087,7 @@ function FilesTab({
           onFileContext(null);
         },
         onError: (err: any) => {
+          setIsDisconnecting(false);
           const msg = err?.response?.data?.error ?? err?.message ?? "Failed to disconnect GitHub";
           setClearTokenError(msg);
           setDisconnectConfirm(false);
@@ -2164,10 +2170,12 @@ function FilesTab({
   // Unlink the repo from this project
   const unlinkRepo = useCallback(() => {
     setUnlinkRepoError(null);
+    setIsUnlinking(true);
     updateProject.mutate(
       { id: projectId, data: { linkedRepo: null } },
       {
         onSuccess: () => {
+          setIsUnlinking(false);
           onLinkedRepoChange(null);
           autoLoadedRef.current = false;
           setSelectedRepo(null);
@@ -2178,6 +2186,7 @@ function FilesTab({
           onFileContext(null);
         },
         onError: (err: any) => {
+          setIsUnlinking(false);
           const msg = err?.response?.data?.error ?? err?.message ?? "Failed to unlink repo";
           setUnlinkRepoError(msg);
         },
@@ -2320,12 +2329,13 @@ function FilesTab({
           {selectedRepo && (
             <button
               onClick={unlinkRepo}
+              disabled={isUnlinking}
               title="Unlink repo from this project"
-              style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", opacity: 0.35, padding: "2px 4px" }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.35")}
+              style={{ background: "transparent", border: "none", cursor: isUnlinking ? "default" : "pointer", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", opacity: isUnlinking ? 0.55 : 0.35, padding: "2px 4px" }}
+              onMouseEnter={(e) => { if (!isUnlinking) e.currentTarget.style.opacity = "0.8"; }}
+              onMouseLeave={(e) => { if (!isUnlinking) e.currentTarget.style.opacity = "0.35"; }}
             >
-              unlink
+              {isUnlinking ? "unlinking…" : "unlink"}
             </button>
           )}
           {disconnectConfirm ? (
@@ -2333,12 +2343,14 @@ function FilesTab({
               <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "rgba(252,165,165,0.85)", letterSpacing: "0.04em" }}>Disconnect GitHub?</span>
               <button
                 onClick={() => setDisconnectConfirm(false)}
-                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, cursor: "pointer", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", padding: "1px 6px", opacity: 0.7 }}
+                disabled={isDisconnecting}
+                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, cursor: isDisconnecting ? "default" : "pointer", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", padding: "1px 6px", opacity: isDisconnecting ? 0.35 : 0.7 }}
               >Cancel</button>
               <button
-                onClick={() => { setDisconnectConfirm(false); clearToken(); }}
-                style={{ background: "rgba(220,38,38,0.2)", border: "1px solid rgba(220,38,38,0.35)", borderRadius: 4, cursor: "pointer", color: "rgba(252,165,165,0.9)", fontSize: 9, fontFamily: "var(--app-font-mono)", padding: "1px 6px" }}
-              >Disconnect</button>
+                onClick={clearToken}
+                disabled={isDisconnecting}
+                style={{ background: "rgba(220,38,38,0.2)", border: "1px solid rgba(220,38,38,0.35)", borderRadius: 4, cursor: isDisconnecting ? "default" : "pointer", color: "rgba(252,165,165,0.9)", fontSize: 9, fontFamily: "var(--app-font-mono)", padding: "1px 6px", opacity: isDisconnecting ? 0.55 : 1 }}
+              >{isDisconnecting ? "disconnecting…" : "Disconnect"}</button>
             </div>
           ) : (
             <button
