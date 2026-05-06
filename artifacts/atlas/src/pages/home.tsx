@@ -653,6 +653,7 @@ export default function Home() {
                     top: 0,
                     left: 0,
                     right: 44,
+                    zIndex: 2,
                     color: "var(--atlas-muted)",
                     fontSize: 15,
                     lineHeight: 1.55,
