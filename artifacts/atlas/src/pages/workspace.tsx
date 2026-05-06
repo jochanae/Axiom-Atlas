@@ -4155,8 +4155,10 @@ export default function Workspace() {
                     ref={renameInputRef}
                     autoFocus
                     value={renameDraft}
+                    disabled={updateProjectHeader.isPending}
                     onChange={(e) => { setRenameDraft(e.target.value); setRenameError(null); }}
                     onKeyDown={(e) => {
+                      if (updateProjectHeader.isPending) return;
                       if (e.key === "Enter") {
                         const newName = renameDraft.trim() || (project?.name ?? "");
                         updateProjectHeader.mutate({ id, data: { name: newName } }, {
@@ -4166,8 +4168,8 @@ export default function Workspace() {
                       }
                       if (e.key === "Escape") { setRenaming(false); setRenameError(null); }
                     }}
-                    onBlur={() => { setRenaming(false); setRenameError(null); }}
-                    style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160, textAlign: "center" }}
+                    onBlur={() => { if (updateProjectHeader.isPending) return; setRenaming(false); setRenameError(null); }}
+                    style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160, textAlign: "center", opacity: updateProjectHeader.isPending ? 0.5 : 1, transition: "opacity 150ms ease" }}
                   />
                   {renameError && (
                     <span style={{ fontSize: 10.5, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)", marginTop: 2, lineHeight: 1.3, pointerEvents: "none" }}>
