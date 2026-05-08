@@ -68,7 +68,7 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
         onClick={() => setOpen(o => !o)}
         title="Account"
         style={{
-          width: 36, height: 36, borderRadius: "22%",
+          width: 42, height: 42, borderRadius: "22%",
           border: `1.5px dashed ${open ? "rgba(201,162,76,0.65)" : "rgba(201,162,76,0.35)"}`,
           background: photoUrl ? "transparent" : open ? "rgba(201,162,76,0.1)" : "rgba(201,162,76,0.04)",
           display: "flex", alignItems: "center", justifyContent: "center",
