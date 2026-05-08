@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import {
@@ -410,6 +411,95 @@ function HomeProfileSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── First-run overlay ────────────────────────────────────────────────────────
+function FirstRunOverlay({
+  loading,
+  onSpecMode,
+  onWorkspace,
+}: {
+  loading: boolean;
+  onSpecMode: () => void;
+  onWorkspace: () => void;
+}) {
+  const [hoveredSpec, setHoveredSpec] = useState(false);
+  const [hoveredWs, setHoveredWs] = useState(false);
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        background: "rgba(13,11,9,0.95)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          width: "100%",
+          maxWidth: 320,
+          padding: "0 24px",
+        }}
+      >
+        {/* Gold filled — Start Speccing */}
+        <button
+          disabled={loading}
+          onClick={onSpecMode}
+          onMouseEnter={() => setHoveredSpec(true)}
+          onMouseLeave={() => setHoveredSpec(false)}
+          style={{
+            width: "100%",
+            padding: "16px 24px",
+            background: hoveredSpec ? "#C9A24C" : "#D4AF37",
+            border: "none",
+            borderRadius: 10,
+            color: "#0C0A09",
+            fontSize: 14,
+            fontWeight: 700,
+            fontFamily: "var(--app-font-mono, 'IBM Plex Mono', monospace)",
+            letterSpacing: "0.04em",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.55 : 1,
+            transition: "background 160ms ease, opacity 160ms ease",
+          }}
+        >
+          Start Speccing →
+        </button>
+
+        {/* Gold outlined — Go to Workspace */}
+        <button
+          disabled={loading}
+          onClick={onWorkspace}
+          onMouseEnter={() => setHoveredWs(true)}
+          onMouseLeave={() => setHoveredWs(false)}
+          style={{
+            width: "100%",
+            padding: "16px 24px",
+            background: hoveredWs ? "rgba(212,175,55,0.07)" : "transparent",
+            border: "1px solid #D4AF37",
+            borderRadius: 10,
+            color: "#D4AF37",
+            fontSize: 14,
+            fontWeight: 700,
+            fontFamily: "var(--app-font-mono, 'IBM Plex Mono', monospace)",
+            letterSpacing: "0.04em",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.55 : 1,
+            transition: "background 160ms ease, opacity 160ms ease",
+          }}
+        >
+          Go to Workspace
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 // ── Home ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [input, setInput] = useState("");
@@ -458,7 +548,15 @@ export default function Home() {
     try { sessionStorage.removeItem("atlas-from-landing"); } catch {}
   }, []);
 
-  const showChoiceScreen = false;
+  // First-run overlay — only for new users with no projects, only once per session
+  const [overlayDismissed, setOverlayDismissed] = useState(() => {
+    try { return !!sessionStorage.getItem("atlas-choice-shown"); } catch { return false; }
+  });
+  const dismissOverlay = () => {
+    try { sessionStorage.setItem("atlas-choice-shown", "1"); } catch {}
+    setOverlayDismissed(true);
+  };
+  const showOverlay = !isLoading && projects !== undefined && projects.length === 0 && !overlayDismissed;
 
   const navigateToProject = useCallback(
     (projectId: number) => {
@@ -606,67 +704,37 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Choice screen — new users arriving from landing with no projects */}
-      {showChoiceScreen && (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 24px", gap: 28 }}>
-          <div style={{ textAlign: "center" }}>
-            <p style={{ fontSize: 9.5, letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(212,175,55,0.45)", fontFamily: "var(--app-font-mono)", marginBottom: 10, margin: "0 0 10px" }}>
-              First session
-            </p>
-            <h2 style={{ fontSize: "clamp(1.4rem, 5vw, 2rem)", fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 500, color: "#e8dcc8", letterSpacing: "0.02em", lineHeight: 1.2, margin: 0 }}>
-              How do you want to start?
-            </h2>
-          </div>
-          <div style={{ display: "flex", gap: 12, width: "100%", maxWidth: 460 }}>
-            <button
-              disabled={loading}
-              onClick={() => {
-                createProject.mutate({ data: { name: "My Project" } }, {
-                  onSuccess: (p) => {
-                    queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                    sessionStorage.setItem("atlas-open-tab", "map");
-                    setLocation(`/project/${p.id}`);
-                  },
-                });
-              }}
-              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "20px 18px", background: "rgba(212,175,55,0.04)", border: "1px solid rgba(212,175,55,0.22)", borderRadius: 12, cursor: loading ? "not-allowed" : "pointer", textAlign: "left", opacity: loading ? 0.6 : 1, transition: "all 200ms ease" }}
-              onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = "rgba(212,175,55,0.09)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; } }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(212,175,55,0.04)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.22)"; }}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(212,175,55,0.1)", border: "1px solid rgba(212,175,55,0.3)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, color: "#D4AF37", fontSize: 16 }}>◈</div>
-              <p style={{ fontSize: 12.5, fontWeight: 700, color: "#D4AF37", marginBottom: 6, letterSpacing: "0.02em" }}>Spec it first</p>
-              <p style={{ fontSize: 11, color: "rgba(120,113,108,0.75)", lineHeight: 1.5, margin: 0 }}>Structure your idea. Zero wasted code.</p>
-            </button>
-            <button
-              disabled={loading}
-              onClick={() => {
-                createProject.mutate({ data: { name: "My Project" } }, {
-                  onSuccess: (p) => {
-                    queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                    setLocation(`/project/${p.id}`);
-                  },
-                });
-              }}
-              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "20px 18px", background: "transparent", border: "1px solid rgba(120,113,108,0.2)", borderRadius: 12, cursor: loading ? "not-allowed" : "pointer", textAlign: "left", opacity: loading ? 0.6 : 1, transition: "all 200ms ease" }}
-              onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = "rgba(120,113,108,0.06)"; e.currentTarget.style.borderColor = "rgba(120,113,108,0.4)"; } }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(120,113,108,0.2)"; }}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(120,113,108,0.07)", border: "1px solid rgba(120,113,108,0.22)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, color: "rgba(120,113,108,0.65)", fontSize: 15 }}>▶</div>
-              <p style={{ fontSize: 12.5, fontWeight: 700, color: "#e8dcc8", marginBottom: 6, letterSpacing: "0.02em" }}>Go straight to workspace</p>
-              <p style={{ fontSize: 11, color: "rgba(120,113,108,0.75)", lineHeight: 1.5, margin: 0 }}>Start building. Spec Mode is always here.</p>
-            </button>
-          </div>
-          <p style={{ fontSize: 9.5, color: "rgba(120,113,108,0.4)", letterSpacing: "0.08em", fontFamily: "var(--app-font-mono)", textAlign: "center", margin: 0 }}>
-            SPEC MODE IS ALWAYS AVAILABLE. NEVER REQUIRED.
-          </p>
-        </div>
+      {/* First-run overlay — new users with no projects, once per session */}
+      {showOverlay && (
+        <FirstRunOverlay
+          loading={loading}
+          onSpecMode={() => {
+            createProject.mutate({ data: { name: "My Project" } }, {
+              onSuccess: (p) => {
+                dismissOverlay();
+                queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                sessionStorage.setItem("atlas-open-tab", "map");
+                setLocation(`/project/${p.id}`);
+              },
+            });
+          }}
+          onWorkspace={() => {
+            createProject.mutate({ data: { name: "My Project" } }, {
+              onSuccess: (p) => {
+                dismissOverlay();
+                queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                setLocation(`/project/${p.id}`);
+              },
+            });
+          }}
+        />
       )}
 
       {/* Main content */}
       <div
         style={{
           flex: 1,
-          display: showChoiceScreen ? "none" : "flex",
+          display: "flex",
           justifyContent: "center",
           padding: "0 24px",
         }}
@@ -716,79 +784,6 @@ export default function Home() {
             >
               I'm here. What's on your mind?
             </p>
-          </div>
-
-          {/* Entry point CTAs */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, margin: "28px 0 8px" }}>
-            {/* Primary: Start Speccing */}
-            <button
-              onClick={() => {
-                const lastId = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
-                const targetId = lastId || (projects ?? [])[0]?.id;
-                if (targetId) {
-                  sessionStorage.setItem("atlas-open-tab", "map");
-                  setLocation(`/project/${targetId}`);
-                } else {
-                  createProject.mutate(
-                    { data: { name: "New Project" } },
-                    {
-                      onSuccess: (p) => {
-                        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                        sessionStorage.setItem("atlas-open-tab", "map");
-                        setLocation(`/project/${p.id}`);
-                      },
-                    }
-                  );
-                }
-              }}
-              style={{
-                width: "100%", maxWidth: 280,
-                padding: "14px 24px",
-                background: "#D4AF37", color: "#0C0A09",
-                border: "none", borderRadius: 10,
-                fontFamily: "var(--app-font-mono)", fontSize: 12, fontWeight: 800,
-                letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer",
-                transition: "background 160ms",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(212,175,55,0.88)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#D4AF37")}
-            >
-              Start Speccing →
-            </button>
-
-            {/* Secondary: Go to Workspace */}
-            <button
-              onClick={() => {
-                const lastId = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
-                const targetId = lastId || (projects ?? [])[0]?.id;
-                if (targetId) {
-                  setLocation(`/project/${targetId}`);
-                } else {
-                  createProject.mutate(
-                    { data: { name: "New Project" } },
-                    {
-                      onSuccess: (p) => {
-                        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                        setLocation(`/project/${p.id}`);
-                      },
-                    }
-                  );
-                }
-              }}
-              style={{
-                width: "100%", maxWidth: 280,
-                padding: "13px 24px",
-                background: "transparent", color: "#D4AF37",
-                border: "1px solid rgba(212,175,55,0.45)", borderRadius: 10,
-                fontFamily: "var(--app-font-mono)", fontSize: 12, fontWeight: 700,
-                letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer",
-                transition: "border-color 160ms, background 160ms",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.8)"; e.currentTarget.style.background = "rgba(212,175,55,0.06)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; e.currentTarget.style.background = "transparent"; }}
-            >
-              Go to Workspace
-            </button>
           </div>
 
           {/* Ambient bloom spinner */}
