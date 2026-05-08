@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 
 import Home from "./pages/home";
 import Landing from "./pages/landing";
+import Login from "./pages/login";
 import Projects from "./pages/projects";
 import Workspace from "./pages/workspace";
 import Ledger from "./pages/ledger";
@@ -36,6 +37,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/login" component={Login} />
       <Route path="/home" component={Home} />
       <Route path="/projects" component={Projects} />
       <Route path="/project/:projectId" component={Workspace} />
