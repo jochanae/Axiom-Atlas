@@ -4070,7 +4070,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectI
   const [nodes, setNodes] = useState<ArchNode[]>([]);
   const [showChat, setShowChat] = useState(true);
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
-  const [intent, setIntent] = useState("");
+  const [signals, setSignals] = useState<string[]>([""]);
+  const [activeSignalIdx, setActiveSignalIdx] = useState(0);
+  const intent = signals[activeSignalIdx] ?? "";
+  const setIntent = (val: string) => setSignals(prev => prev.map((s, i) => i === activeSignalIdx ? val : s));
   const platform = detectPlatform();
   const { data: activeProject } = useGetProject(projectId ?? 0, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId ?? 0) },
@@ -4131,14 +4134,14 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectI
           {showChat ? "▼ Hide Chat — See Full Map" : "▲ Show Chat — Intent Capture"}
         </button>
         <button
-          onClick={() => setShowChat(false)}
+          onClick={() => setShowChat(v => !v)}
           style={{
             background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.18)",
             borderRadius: 6, padding: "3px 10px", cursor: "pointer",
             color: "rgba(212,175,55,0.65)", fontSize: 9.5,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           }}>
-          ⛶ Fullscreen
+          {showChat ? "⛶ Fullscreen" : "⊠ Restore"}
         </button>
       </div>
 
@@ -4153,26 +4156,47 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectI
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#D4AF37", animation: "intent-dot-pulse 2s ease-in-out infinite", flexShrink: 0 }} />
               <span style={{ fontSize: 11, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.12em" }}>INTENT CAPTURE</span>
             </div>
-            <button style={{
-              background: "rgba(212,175,55,0.09)", border: "1px solid rgba(212,175,55,0.3)",
-              borderRadius: 8, padding: "5px 12px", cursor: "pointer",
-              color: "#D4AF37", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em",
-              fontFamily: "var(--app-font-mono)",
-            }}>
-              New Signal
+            <button
+              onClick={() => {
+                setSignals(prev => [...prev, ""]);
+                setActiveSignalIdx(signals.length);
+              }}
+              style={{
+                background: "rgba(212,175,55,0.09)", border: "1px solid rgba(212,175,55,0.3)",
+                borderRadius: 8, padding: "5px 12px", cursor: "pointer",
+                color: "#D4AF37", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em",
+                fontFamily: "var(--app-font-mono)",
+              }}>
+              + Signal
             </button>
           </div>
 
           {/* Signal selector */}
           <div style={{ padding: "0 14px 8px", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            <span style={{ color: "rgba(212,175,55,0.38)", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>‹</span>
-            <select style={{
-              flex: 1, background: "rgba(20,18,14,0.92)", border: "1px solid rgba(212,175,55,0.13)",
-              borderRadius: 6, padding: "4px 8px", color: "rgba(212,175,55,0.65)", fontSize: 10,
-              fontFamily: "var(--app-font-mono)", cursor: "pointer",
-            }}>
-              <option>Signal #1</option>
+            <button
+              onClick={() => setActiveSignalIdx(i => Math.max(0, i - 1))}
+              disabled={activeSignalIdx === 0}
+              style={{ color: activeSignalIdx === 0 ? "rgba(212,175,55,0.18)" : "rgba(212,175,55,0.55)", fontSize: 16, cursor: activeSignalIdx === 0 ? "default" : "pointer", lineHeight: 1, background: "none", border: "none", padding: "0 2px" }}>
+              ‹
+            </button>
+            <select
+              value={activeSignalIdx}
+              onChange={e => setActiveSignalIdx(Number(e.target.value))}
+              style={{
+                flex: 1, background: "rgba(20,18,14,0.92)", border: "1px solid rgba(212,175,55,0.13)",
+                borderRadius: 6, padding: "4px 8px", color: "rgba(212,175,55,0.65)", fontSize: 10,
+                fontFamily: "var(--app-font-mono)", cursor: "pointer",
+              }}>
+              {signals.map((_, i) => (
+                <option key={i} value={i}>Signal #{i + 1}{signals[i].trim() ? ` — ${signals[i].trim().slice(0, 28)}${signals[i].trim().length > 28 ? "…" : ""}` : ""}</option>
+              ))}
             </select>
+            <button
+              onClick={() => setActiveSignalIdx(i => Math.min(signals.length - 1, i + 1))}
+              disabled={activeSignalIdx === signals.length - 1}
+              style={{ color: activeSignalIdx === signals.length - 1 ? "rgba(212,175,55,0.18)" : "rgba(212,175,55,0.55)", fontSize: 16, cursor: activeSignalIdx === signals.length - 1 ? "default" : "pointer", lineHeight: 1, background: "none", border: "none", padding: "0 2px" }}>
+              ›
+            </button>
           </div>
 
           {/* Prompt card */}
@@ -4667,7 +4691,45 @@ export default function Workspace() {
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
   const [rightOpen, setRightOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const chatWidth = "45%";
+  const [chatWidthPct, setChatWidthPct] = useState(45);
+  const resizeDrag = useRef({ active: false, startX: 0, startPct: 45 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const startResize = useCallback((clientX: number) => {
+    resizeDrag.current = { active: true, startX: clientX, startPct: chatWidthPct };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [chatWidthPct]);
+
+  const doResize = useCallback((clientX: number) => {
+    if (!resizeDrag.current.active || !containerRef.current) return;
+    const totalW = containerRef.current.offsetWidth;
+    const delta = clientX - resizeDrag.current.startX;
+    const newPct = Math.min(70, Math.max(25, resizeDrag.current.startPct + (delta / totalW) * 100));
+    setChatWidthPct(newPct);
+  }, []);
+
+  const endResize = useCallback(() => {
+    resizeDrag.current.active = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => doResize(e.clientX);
+    const onTouchMove = (e: TouchEvent) => { if (resizeDrag.current.active) { e.preventDefault(); doResize(e.touches[0].clientX); } };
+    const onUp = () => endResize();
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onUp);
+    };
+  }, [doResize, endResize]);
 
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [rightFullscreen, setRightFullscreen] = useState(false);
@@ -5478,7 +5540,7 @@ export default function Workspace() {
       )}
 
       {/* ── Two-pane body ── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
+      <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
 
         {/* ZIP drag overlay */}
         <ZipDragOverlay visible={isDragOver} />
@@ -5486,7 +5548,7 @@ export default function Workspace() {
         {/* Left: Chat */}
         <div
           style={{
-            width: isMobile ? "100%" : chatWidth,
+            width: isMobile ? "100%" : `${chatWidthPct}%`,
             minWidth: isMobile ? 0 : 300,
             flexShrink: 0,
             display: "flex",
@@ -5829,8 +5891,23 @@ export default function Workspace() {
         {!isMobile && (
           <>
             <div
-              style={{ width: 1, flexShrink: 0, background: "var(--atlas-border)" }}
-            />
+              onMouseDown={(e) => { e.preventDefault(); startResize(e.clientX); }}
+              onTouchStart={(e) => { startResize(e.touches[0].clientX); }}
+              onDoubleClick={() => setChatWidthPct(45)}
+              title="Drag to resize · Double-tap to reset"
+              style={{
+                width: 8, flexShrink: 0, cursor: "col-resize",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: "transparent",
+                transition: "background 150ms",
+                zIndex: 10,
+                touchAction: "none",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.08)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              <div style={{ width: 1, height: "40%", background: "var(--atlas-border)", borderRadius: 1 }} />
+            </div>
             <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
               <RightPanel
                 projectId={id}
