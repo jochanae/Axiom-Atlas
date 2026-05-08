@@ -536,7 +536,7 @@ function UserBubble({
             style={{
               fontFamily: "var(--app-font-mono)", fontSize: 9,
               letterSpacing: "0.15em", textTransform: "uppercase",
-              color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 8, textAlign: "right",
+              color: "var(--atlas-muted)", opacity: 0.75, marginBottom: 8, textAlign: "right",
             }}
           >
             YOU{sentAt ? ` · ${formatTimestamp(sentAt)}` : ""}
@@ -1110,12 +1110,12 @@ function AssistantBubble({
             display: "flex", alignItems: "center", gap: 6,
             fontFamily: "var(--app-font-mono)", fontSize: 9,
             letterSpacing: "0.12em", textTransform: "uppercase",
-            color: "var(--atlas-gold)", opacity: 0.65, marginBottom: 7,
+            color: "var(--atlas-gold)", opacity: 0.85, marginBottom: 7,
           }}
         >
           <span>Atlas</span>
           {message.sentAt && (
-            <span style={{ opacity: 0.55 }}>
+            <span style={{ opacity: 0.75 }}>
               · {(() => {
                 const diff = Date.now() - new Date(message.sentAt).getTime();
                 const m = Math.floor(diff / 60000);
@@ -4337,7 +4337,7 @@ function MobileTabBar({
               background: "transparent",
               border: "none",
               cursor: "pointer",
-              color: active ? "var(--atlas-gold)" : "rgba(120,113,108,0.55)",
+              color: active ? "var(--atlas-gold)" : "rgba(210,205,200,0.65)",
               transition: "color 180ms ease",
               position: "relative",
               WebkitTapHighlightColor: "transparent",
@@ -5332,12 +5332,12 @@ export default function Workspace() {
 
           {/* Ledger status bar */}
           <div className="atlas-ledger-bar">
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: entryCount > 0 ? "var(--atlas-gold)" : "rgba(120,113,108,0.35)", flexShrink: 0, display: "inline-block", boxShadow: entryCount > 0 ? "0 0 6px rgba(201,162,76,0.45)" : "none", transition: "all 400ms ease" }} />
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: entryCount > 0 ? "rgba(201,162,76,0.65)" : "rgba(120,113,108,0.35)", transition: "color 400ms ease" }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: entryCount > 0 ? "var(--atlas-gold)" : "rgba(200,190,185,0.45)", flexShrink: 0, display: "inline-block", boxShadow: entryCount > 0 ? "0 0 6px rgba(201,162,76,0.45)" : "none", transition: "all 400ms ease" }} />
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: entryCount > 0 ? "rgba(212,175,55,0.82)" : "rgba(200,190,185,0.6)", transition: "color 400ms ease" }}>
               [{entryCount}] Ledger Entries
             </span>
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.3)" }}>·</span>
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: chatPending ? "rgba(74,222,128,0.55)" : "rgba(120,113,108,0.3)", transition: "color 300ms ease" }}>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(200,190,185,0.5)" }}>·</span>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: chatPending ? "rgba(74,222,128,0.75)" : "rgba(200,190,185,0.6)", transition: "color 300ms ease" }}>
               {chatPending ? "Generating" : "Session Active"}
             </span>
           </div>
@@ -5418,7 +5418,7 @@ export default function Workspace() {
                     style={{
                       position: "absolute", top: 0, left: 0,
                       color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1.6,
-                      opacity: 0.5, pointerEvents: "none",
+                      opacity: 0.82, pointerEvents: "none",
                       fontFamily: "var(--app-font-sans)",
                     }}
                   >
