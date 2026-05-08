@@ -516,3 +516,34 @@
 [data-theme="parchment"] .atlas-ledger-bar {
   background: rgba(245,241,232,0.75);
 }
+
+/* ── Landing page: allow scrolling (overrides global overflow:hidden) ──────── */
+.atlas-landing-active,
+.atlas-landing-active body,
+.atlas-landing-active #root {
+  overflow: auto !important;
+  height: auto !important;
+}
+
+/* ── Landing page animation keyframes ─────────────────────────────────────── */
+@keyframes atlas-lp-gold-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(212,175,55,0.3); }
+  50%       { box-shadow: 0 0 24px rgba(212,175,55,0.6); }
+}
+@keyframes atlas-lp-amber-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(212,160,70,0.4); }
+  50%       { box-shadow: 0 0 20px rgba(212,160,70,0.7); }
+}
+@keyframes atlas-lp-node-resolve {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+@keyframes atlas-lp-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.atlas-lp-gold-pulse  { animation: atlas-lp-gold-pulse  2s ease-in-out infinite; }
+.atlas-lp-amber-pulse { animation: atlas-lp-amber-pulse 2s ease-in-out infinite; }
+.atlas-lp-node-resolve { animation: atlas-lp-node-resolve 0.4s ease-out; }

@@ -1,0 +1,1007 @@
+import { useState, useEffect, useRef, type CSSProperties } from "react";
+import { useLocation } from "wouter";
+import { LandingHeader } from "@/components/landing/LandingHeader";
+
+export default function LandingPage() {
+  const [, setLocation] = useLocation();
+
+  const handleEnter = () => {
+    setLocation("/");
+  };
+
+  // Landing page needs scrolling — override Atlas's overflow:hidden
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById("root");
+
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      rootOverflow: root?.style.overflow ?? "",
+      htmlHeight: html.style.height,
+      bodyHeight: body.style.height,
+      rootHeight: root?.style.height ?? "",
+    };
+
+    html.style.overflow = "auto";
+    body.style.overflow = "auto";
+    if (root) root.style.overflow = "auto";
+    html.style.height = "auto";
+    body.style.height = "auto";
+    if (root) root.style.height = "auto";
+
+    return () => {
+      html.style.overflow = prev.htmlOverflow;
+      body.style.overflow = prev.bodyOverflow;
+      if (root) root.style.overflow = prev.rootOverflow;
+      html.style.height = prev.htmlHeight;
+      body.style.height = prev.bodyHeight;
+      if (root) root.style.height = prev.rootHeight;
+    };
+  }, []);
+
+  return (
+    <div className="relative w-full overflow-x-hidden" style={{ background: "#050505" }}>
+      <LandingHeader onSignIn={handleEnter} />
+
+      {/* Noise grain overlay */}
+      <div
+        className="fixed inset-0 z-[1] pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+          backgroundSize: "128px 128px",
+        }}
+      />
+
+      {/* Persistent 1px gold architectural grid */}
+      <div
+        className="fixed inset-0 z-[2] pointer-events-none"
+        style={{
+          opacity: 0.06,
+          backgroundImage:
+            "linear-gradient(#D4AF37 1px, transparent 1px), linear-gradient(90deg, #D4AF37 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }}
+      />
+
+      {/* Purple ambient glow */}
+      <div
+        className="fixed inset-0 z-[3] pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 50% at 50% 45%, rgba(91,33,182,0.12) 0%, transparent 70%)",
+        }}
+      />
+
+      {/* Hero Section */}
+      <HeroSection onEnter={handleEnter} />
+
+      {/* Section 2: The Interrogation */}
+      <InterrogationSection />
+
+      {/* Section 3: The Thinking Flow */}
+      <ThinkingFlowSection />
+
+      {/* Section 4: The Wall of Gold */}
+      <WallOfGoldSection onEnter={handleEnter} />
+    </div>
+  );
+}
+
+/* ─── Hero: "The Threshold" ─── */
+function HeroSection({ onEnter }: { onEnter: () => void }) {
+  return (
+    <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6" style={{ paddingTop: 56 }}>
+      {/* Logic Core — animated SVG */}
+      <LogicCore />
+
+      {/* Headline */}
+      <div className="relative z-10 max-w-4xl text-center">
+        <h1
+          className="leading-[0.92] tracking-[-0.02em] mb-6"
+          style={{
+            fontFamily: "'Cormorant Garamond', Georgia, serif",
+            fontWeight: 500,
+            color: "#e8dcc8",
+            fontSize: "clamp(2.5rem, 8vw, 7rem)",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}
+        >
+          Build nothing
+          <br />
+          until it's{" "}
+          <span
+            style={{
+              fontStyle: "italic",
+              color: "#D4AF37",
+            }}
+          >
+            structurally
+            <br />
+            sound.
+          </span>
+        </h1>
+
+        {/* System tag — monospace */}
+        <p
+          className="mb-10 tracking-[0.3em] uppercase"
+          style={{
+            fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+            fontSize: "clamp(0.6rem, 1.2vw, 0.75rem)",
+            color: "#6b5f50",
+          }}
+        >
+          Atlas // Decision_Enforcement v1.0
+        </p>
+
+        {/* CTA */}
+        <button
+          onClick={onEnter}
+          className="group relative px-10 py-4 uppercase tracking-[0.25em] transition-all duration-700"
+          style={{
+            fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+            fontSize: "0.75rem",
+            fontWeight: 500,
+            color: "#D4AF37",
+            border: "1px solid rgba(212,175,55,0.4)",
+            background: "transparent",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(212,175,55,0.08)";
+            e.currentTarget.style.borderColor = "rgba(212,175,55,0.7)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.borderColor = "rgba(212,175,55,0.4)";
+          }}
+        >
+          Enter Atlas
+          {/* Pulse ring */}
+          <span
+            className="absolute inset-0 rounded-sm pointer-events-none atlas-lp-gold-pulse"
+            style={{ opacity: 0.4 }}
+          />
+        </button>
+      </div>
+
+      {/* Bottom-left system readout */}
+      <div
+        className="absolute bottom-8 left-8 hidden md:block"
+        style={{
+          fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+          fontSize: "0.65rem",
+          color: "#3d3529",
+          letterSpacing: "0.15em",
+          lineHeight: 1.8,
+        }}
+      >
+        SYSTEM: ATLAS_01
+        <br />
+        ORIGIN: DECISION_ENGINE
+        <br />
+        STATUS: ENFORCING_CLARITY
+      </div>
+
+      {/* Scroll hint */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-30">
+        <div
+          className="w-px h-8"
+          style={{
+            background: "linear-gradient(to bottom, transparent, #D4AF37)",
+          }}
+        />
+        <span
+          style={{
+            fontFamily: "'IBM Plex Mono', monospace",
+            fontSize: "0.55rem",
+            letterSpacing: "0.2em",
+            color: "#D4AF37",
+          }}
+        >
+          SCROLL
+        </span>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Section 2: The Interrogation ─── */
+function InterrogationSection() {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setVisible(true); },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const mono: CSSProperties = {
+    fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+  };
+
+  const serif: CSSProperties = {
+    fontFamily: "'Cormorant Garamond', Georgia, serif",
+  };
+
+  const stats = [
+    { value: "62%", label: "of builds get re-scoped mid-sprint", delay: "0.15s" },
+    { value: "3.2×", label: "longer to ship without a structural spec", delay: "0.35s" },
+    { value: "$41K", label: "average do-over tax per failed feature", delay: "0.55s" },
+  ];
+
+  return (
+    <section
+      ref={sectionRef}
+      className="relative z-10 py-28 md:py-40 px-6"
+    >
+      {/* Divider line */}
+      <div
+        className="absolute top-0 left-1/2 -translate-x-1/2 h-px transition-all duration-[1.2s] ease-out"
+        style={{
+          width: visible ? "80%" : "0%",
+          background: "linear-gradient(90deg, transparent, rgba(212,175,55,0.3), transparent)",
+        }}
+      />
+
+      <div className="max-w-4xl mx-auto">
+        {/* System label */}
+        <p
+          className="uppercase tracking-[0.35em] mb-12 transition-all duration-700"
+          style={{
+            ...mono,
+            fontSize: "0.65rem",
+            color: "#6b5f50",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(12px)",
+          }}
+        >
+          02 // The_Interrogation
+        </p>
+
+        {/* Confrontational headline */}
+        <h2
+          className="uppercase leading-[1.0] mb-8 transition-all duration-[0.9s] ease-out"
+          style={{
+            ...serif,
+            fontWeight: 600,
+            fontSize: "clamp(1.8rem, 5vw, 4rem)",
+            letterSpacing: "0.03em",
+            color: "#e8dcc8",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(20px)",
+          }}
+        >
+          How many times have you
+          <br />
+          <span style={{ color: "#D4AF37", fontStyle: "italic" }}>
+            built the wrong thing?
+          </span>
+        </h2>
+
+        {/* Body copy */}
+        <p
+          className="leading-[1.8] mb-16 max-w-2xl transition-all duration-700 delay-200"
+          style={{
+            ...mono,
+            fontSize: "clamp(0.75rem, 1.4vw, 0.9rem)",
+            color: "#8a7e6e",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(16px)",
+          }}
+        >
+          You had the idea. You had the energy. You started building.
+          <br /><br />
+          Then three sprints in, someone asks a question you should have
+          answered on day one. The architecture cracks. The scope shifts.
+          The timeline doubles.
+          <br /><br />
+          That's the <span style={{ color: "#D4AF37" }}>do-over tax</span>.
+          And you've been paying it on every project.
+        </p>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-10">
+          {stats.map((stat) => (
+            <div
+              key={stat.value}
+              className="relative p-6 transition-all duration-700 ease-out"
+              style={{
+                background: "rgba(212,175,55,0.03)",
+                border: "1px solid rgba(212,175,55,0.12)",
+                opacity: visible ? 1 : 0,
+                transform: visible ? "translateY(0)" : "translateY(24px)",
+                transitionDelay: stat.delay,
+              }}
+            >
+              {/* Corner accents */}
+              <div className="absolute top-0 left-0 w-3 h-px" style={{ background: "#D4AF37" }} />
+              <div className="absolute top-0 left-0 h-3 w-px" style={{ background: "#D4AF37" }} />
+              <div className="absolute bottom-0 right-0 w-3 h-px" style={{ background: "#D4AF37" }} />
+              <div className="absolute bottom-0 right-0 h-3 w-px" style={{ background: "#D4AF37" }} />
+
+              <p
+                className="mb-2"
+                style={{
+                  ...mono,
+                  fontSize: "clamp(1.8rem, 3vw, 2.5rem)",
+                  fontWeight: 600,
+                  color: "#D4AF37",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                {stat.value}
+              </p>
+              <p
+                style={{
+                  ...mono,
+                  fontSize: "0.7rem",
+                  color: "#6b5f50",
+                  letterSpacing: "0.05em",
+                  lineHeight: 1.5,
+                }}
+              >
+                {stat.label}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Closing punch */}
+        <p
+          className="mt-16 text-center uppercase tracking-[0.25em] transition-all duration-700"
+          style={{
+            ...serif,
+            fontSize: "clamp(1rem, 2.5vw, 1.5rem)",
+            fontWeight: 500,
+            color: "#e8dcc8",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(12px)",
+            transitionDelay: "0.7s",
+          }}
+        >
+          Atlas makes that{" "}
+          <span style={{ color: "#D4AF37", fontStyle: "italic" }}>
+            impossible.
+          </span>
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Section 3: The Thinking Flow ─── */
+function ThinkingFlowSection() {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [activeStep, setActiveStep] = useState(-1);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          setTimeout(() => setActiveStep(0), 300);
+          setTimeout(() => setActiveStep(1), 900);
+          setTimeout(() => setActiveStep(2), 1500);
+        }
+      },
+      { threshold: 0.12 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const mono: CSSProperties = {
+    fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+  };
+  const serif: CSSProperties = {
+    fontFamily: "'Cormorant Garamond', Georgia, serif",
+  };
+
+  const steps = [
+    {
+      phase: "INPUT",
+      title: "Chaos",
+      description: "Raw ideas, half-formed features, scattered requirements. The mess every project starts with.",
+      visual: "scatter",
+      color: "#8a7e6e",
+      goldAccent: false,
+    },
+    {
+      phase: "PROCESS",
+      title: "Filter",
+      description: "Atlas interrogates every assumption. Structural questions surface gaps. Weak ideas collapse. Strong ones crystallize.",
+      visual: "funnel",
+      color: "#D4AF37",
+      goldAccent: true,
+    },
+    {
+      phase: "OUTPUT",
+      title: "Blueprint",
+      description: "A complete structural specification. Every dependency mapped. Every decision justified. Permanently enforced.",
+      visual: "grid",
+      color: "#D4AF37",
+      goldAccent: true,
+    },
+  ];
+
+  return (
+    <section
+      ref={sectionRef}
+      className="relative z-10 py-28 md:py-40 px-6"
+    >
+      {/* Divider */}
+      <div
+        className="absolute top-0 left-1/2 -translate-x-1/2 h-px transition-all duration-[1.2s] ease-out"
+        style={{
+          width: visible ? "80%" : "0%",
+          background: "linear-gradient(90deg, transparent, rgba(212,175,55,0.3), transparent)",
+        }}
+      />
+
+      <div className="max-w-5xl mx-auto">
+        {/* Section label */}
+        <p
+          className="uppercase tracking-[0.35em] mb-6 transition-all duration-700"
+          style={{
+            ...mono,
+            fontSize: "0.65rem",
+            color: "#6b5f50",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(12px)",
+          }}
+        >
+          03 // The_Thinking_Flow
+        </p>
+
+        {/* Headline */}
+        <h2
+          className="uppercase leading-[1.0] mb-6 transition-all duration-[0.9s] ease-out"
+          style={{
+            ...serif,
+            fontWeight: 600,
+            fontSize: "clamp(1.6rem, 4.5vw, 3.5rem)",
+            letterSpacing: "0.03em",
+            color: "#e8dcc8",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(20px)",
+          }}
+        >
+          From noise to{" "}
+          <span style={{ color: "#D4AF37", fontStyle: "italic" }}>architecture.</span>
+        </h2>
+
+        <p
+          className="mb-20 max-w-xl transition-all duration-700 delay-200"
+          style={{
+            ...mono,
+            fontSize: "clamp(0.7rem, 1.2vw, 0.85rem)",
+            color: "#6b5f50",
+            lineHeight: 1.7,
+            opacity: visible ? 1 : 0,
+            transform: visible ? "translateY(0)" : "translateY(12px)",
+          }}
+        >
+          Every idea enters as chaos. Atlas forces it through a structural filter.
+          What survives becomes a blueprint.
+        </p>
+
+        {/* Flow steps */}
+        <div className="relative">
+          {/* Connecting line */}
+          <div
+            className="absolute left-6 md:left-1/2 top-0 bottom-0 w-px transition-all duration-[2s] ease-out"
+            style={{
+              background: visible
+                ? "linear-gradient(to bottom, #6b5f50, #D4AF37, #D4AF37)"
+                : "transparent",
+              opacity: visible ? 0.3 : 0,
+              transform: "translateX(-50%)",
+            }}
+          />
+
+          <div className="space-y-16 md:space-y-24">
+            {steps.map((step, i) => {
+              const isActive = activeStep >= i;
+              const isRight = i % 2 === 1;
+
+              return (
+                <div
+                  key={step.phase}
+                  className={`relative flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-12 transition-all duration-700 ease-out ${
+                    isRight ? "md:flex-row-reverse" : ""
+                  }`}
+                  style={{
+                    opacity: isActive ? 1 : 0,
+                    transform: isActive ? "translateY(0)" : "translateY(30px)",
+                  }}
+                >
+                  {/* Phase node */}
+                  <div
+                    className="absolute left-6 md:left-1/2 w-3 h-3 rounded-full transition-all duration-500 z-10"
+                    style={{
+                      background: isActive ? step.color : "#2a2520",
+                      border: `1px solid ${isActive ? step.color : "#3d3529"}`,
+                      transform: "translate(-50%, 0)",
+                      boxShadow: isActive && step.goldAccent
+                        ? `0 0 12px ${step.color}40`
+                        : "none",
+                    }}
+                  />
+
+                  {/* Visual */}
+                  <div className="flex-shrink-0 ml-14 md:ml-0 md:w-[45%] flex justify-center">
+                    <FlowVisual type={step.visual} active={isActive} />
+                  </div>
+
+                  {/* Content */}
+                  <div className="ml-14 md:ml-0 md:w-[45%]">
+                    <p
+                      className="uppercase tracking-[0.3em] mb-2"
+                      style={{
+                        ...mono,
+                        fontSize: "0.6rem",
+                        color: step.goldAccent ? "#D4AF37" : "#6b5f50",
+                      }}
+                    >
+                      {step.phase}
+                    </p>
+                    <h3
+                      className="uppercase mb-3"
+                      style={{
+                        ...serif,
+                        fontSize: "clamp(1.4rem, 3vw, 2.2rem)",
+                        fontWeight: 600,
+                        color: step.goldAccent ? "#D4AF37" : "#e8dcc8",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {step.title}
+                    </h3>
+                    <p
+                      style={{
+                        ...mono,
+                        fontSize: "clamp(0.7rem, 1.1vw, 0.8rem)",
+                        color: "#8a7e6e",
+                        lineHeight: 1.7,
+                      }}
+                    >
+                      {step.description}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Flow Visuals ─── */
+function FlowVisual({ type, active }: { type: string; active: boolean }) {
+  const size = 140;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  if (type === "scatter") {
+    const dots = [
+      { x: 20, y: 35 }, { x: 95, y: 18 }, { x: 55, y: 72 },
+      { x: 110, y: 55 }, { x: 38, y: 105 }, { x: 82, y: 95 },
+      { x: 15, y: 70 }, { x: 120, y: 110 }, { x: 60, y: 25 },
+      { x: 100, y: 80 }, { x: 30, y: 60 }, { x: 75, y: 45 },
+    ];
+    return (
+      <svg viewBox={`0 0 ${size} ${size}`} className="w-28 h-28 md:w-36 md:h-36" style={{ opacity: active ? 0.6 : 0.1 }}>
+        {dots.map((d, i) => (
+          <circle
+            key={i}
+            cx={d.x}
+            cy={d.y}
+            r={active ? 2.5 : 1}
+            fill="#8a7e6e"
+            style={{
+              transition: `all 0.5s ease-out ${i * 0.05}s`,
+              opacity: active ? 0.6 : 0.2,
+            }}
+          />
+        ))}
+      </svg>
+    );
+  }
+
+  if (type === "funnel") {
+    return (
+      <svg viewBox={`0 0 ${size} ${size}`} className="w-28 h-28 md:w-36 md:h-36" style={{ opacity: active ? 0.7 : 0.1 }}>
+        <defs>
+          <radialGradient id="funnelGlow" cx="50%" cy="50%" r="40%">
+            <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="#D4AF37" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx={cx} cy={cy} r="50" fill="url(#funnelGlow)" />
+        {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((angle) => {
+          const rad = (angle * Math.PI) / 180;
+          const outerR = 65;
+          const innerR = 8;
+          return (
+            <line
+              key={angle}
+              x1={cx + Math.cos(rad) * outerR}
+              y1={cy + Math.sin(rad) * outerR}
+              x2={cx + Math.cos(rad) * innerR}
+              y2={cy + Math.sin(rad) * innerR}
+              stroke="#D4AF37"
+              strokeWidth="0.6"
+              opacity={active ? 0.5 : 0.1}
+              style={{ transition: `all 0.6s ease-out` }}
+            />
+          );
+        })}
+        <circle cx={cx} cy={cy} r="4" fill="#D4AF37" opacity={active ? 0.8 : 0.1} style={{ transition: "all 0.6s" }} />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-28 h-28 md:w-36 md:h-36" style={{ opacity: active ? 0.7 : 0.1 }}>
+      {Array.from({ length: 16 }).map((_, i) => {
+        const col = i % 4;
+        const row = Math.floor(i / 4);
+        const x = 20 + col * 28;
+        const y = 20 + row * 28;
+        return (
+          <rect
+            key={i}
+            x={x}
+            y={y}
+            width="20"
+            height="20"
+            fill="none"
+            stroke="#D4AF37"
+            strokeWidth="0.6"
+            opacity={active ? 0.5 : 0.1}
+            style={{ transition: `all 0.4s ease-out ${i * 0.04}s` }}
+          />
+        );
+      })}
+      <line x1="30" y1="30" x2="58" y2="30" stroke="#D4AF37" strokeWidth="0.4" opacity={active ? 0.3 : 0} />
+      <line x1="30" y1="30" x2="30" y2="58" stroke="#D4AF37" strokeWidth="0.4" opacity={active ? 0.3 : 0} />
+      <line x1="86" y1="58" x2="114" y2="58" stroke="#D4AF37" strokeWidth="0.4" opacity={active ? 0.3 : 0} />
+      <line x1="58" y1="86" x2="58" y2="114" stroke="#D4AF37" strokeWidth="0.4" opacity={active ? 0.3 : 0} />
+    </svg>
+  );
+}
+
+/* ─── Section 4: The Wall of Gold ─── */
+function WallOfGoldSection({ onEnter }: { onEnter: () => void }) {
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setVisible(true); },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const serif: CSSProperties = {
+    fontFamily: "'Cormorant Garamond', Georgia, serif",
+  };
+  const mono: CSSProperties = {
+    fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
+  };
+
+  const principles = [
+    "Every dependency mapped before a single line is written.",
+    "Every assumption interrogated until it proves itself.",
+    "Every decision justified — or eliminated.",
+  ];
+
+  return (
+    <section
+      ref={sectionRef}
+      className="relative z-10"
+    >
+      {/* The gold block */}
+      <div
+        className="relative overflow-hidden py-24 md:py-36 px-6"
+        style={{ background: "#D4AF37" }}
+      >
+        {/* Subtle dark grain overlay for texture */}
+        <div
+          className="absolute inset-0 pointer-events-none opacity-[0.06]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+            backgroundSize: "128px 128px",
+            mixBlendMode: "multiply",
+          }}
+        />
+
+        {/* Architectural grid — dark on gold */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            opacity: 0.06,
+            backgroundImage:
+              "linear-gradient(#050505 1px, transparent 1px), linear-gradient(90deg, #050505 1px, transparent 1px)",
+            backgroundSize: "60px 60px",
+          }}
+        />
+
+        <div className="relative max-w-4xl mx-auto">
+          {/* System label */}
+          <p
+            className="uppercase tracking-[0.35em] mb-12 transition-all duration-700"
+            style={{
+              ...mono,
+              fontSize: "0.65rem",
+              color: "#050505",
+              opacity: visible ? 0.5 : 0,
+              transform: visible ? "translateY(0)" : "translateY(12px)",
+            }}
+          >
+            04 // The_Declaration
+          </p>
+
+          {/* Heavy headline */}
+          <h2
+            className="uppercase leading-[0.95] mb-16 transition-all duration-[1s] ease-out"
+            style={{
+              ...serif,
+              fontWeight: 600,
+              fontSize: "clamp(2rem, 6vw, 5rem)",
+              letterSpacing: "0.02em",
+              color: "#050505",
+              opacity: visible ? 1 : 0,
+              transform: visible ? "translateY(0)" : "translateY(24px)",
+            }}
+          >
+            This is not
+            <br />
+            a project
+            <br />
+            management tool.
+          </h2>
+
+          {/* Subheadline */}
+          <p
+            className="leading-[1.6] mb-16 max-w-2xl transition-all duration-700"
+            style={{
+              ...serif,
+              fontWeight: 500,
+              fontSize: "clamp(1.1rem, 2.5vw, 1.6rem)",
+              color: "#050505",
+              opacity: visible ? 0.85 : 0,
+              transform: visible ? "translateY(0)" : "translateY(16px)",
+              transitionDelay: "0.2s",
+              fontStyle: "italic",
+            }}
+          >
+            Atlas is decision infrastructure. The enforcement layer between
+            your idea and everything that gets built after it.
+          </p>
+
+          {/* Principles — staggered */}
+          <div className="space-y-6 mb-20">
+            {principles.map((p, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-4 transition-all duration-700 ease-out"
+                style={{
+                  opacity: visible ? 1 : 0,
+                  transform: visible ? "translateX(0)" : "translateX(-20px)",
+                  transitionDelay: `${0.3 + i * 0.15}s`,
+                }}
+              >
+                <span
+                  className="mt-[0.6em] flex-shrink-0 w-4 h-px"
+                  style={{ background: "#050505", opacity: 0.4 }}
+                />
+                <p
+                  style={{
+                    ...mono,
+                    fontSize: "clamp(0.7rem, 1.3vw, 0.85rem)",
+                    color: "#050505",
+                    lineHeight: 1.7,
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {p}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Closing CTA */}
+          <div
+            className="text-center transition-all duration-700"
+            style={{
+              opacity: visible ? 1 : 0,
+              transform: visible ? "translateY(0)" : "translateY(16px)",
+              transitionDelay: "0.7s",
+            }}
+          >
+            <button
+              onClick={onEnter}
+              className="group relative px-12 py-5 uppercase tracking-[0.25em] transition-all duration-500"
+              style={{
+                ...mono,
+                fontSize: "0.75rem",
+                fontWeight: 500,
+                color: "#D4AF37",
+                background: "#050505",
+                border: "none",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "#1a1a1a";
+                e.currentTarget.style.boxShadow = "0 0 40px rgba(5,5,5,0.4)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "#050505";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            >
+              Enter Atlas
+            </button>
+
+            <p
+              className="mt-6 uppercase tracking-[0.2em]"
+              style={{
+                ...mono,
+                fontSize: "0.6rem",
+                color: "#050505",
+                opacity: 0.4,
+              }}
+            >
+              Where every decision is permanent.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom signature strip */}
+      <div
+        className="py-10 px-6 flex flex-col items-center gap-3"
+        style={{ background: "#050505" }}
+      >
+        <p
+          className="uppercase tracking-[0.4em]"
+          style={{
+            ...mono,
+            fontSize: "0.55rem",
+            color: "#3d3529",
+          }}
+        >
+          Atlas — by Into Innovations
+        </p>
+        <div
+          className="w-6 h-px"
+          style={{ background: "rgba(212,175,55,0.2)" }}
+        />
+        <p
+          style={{
+            ...mono,
+            fontSize: "0.5rem",
+            color: "#2a2520",
+            letterSpacing: "0.15em",
+          }}
+        >
+          © {new Date().getFullYear()} Into Innovations LLC. All rights reserved.
+        </p>
+        <div
+          style={{
+            display: "flex",
+            gap: "16px",
+            justifyContent: "center",
+            marginTop: "8px",
+          }}
+        >
+          {[
+            { label: "Terms", href: "/terms" },
+            { label: "Privacy", href: "/privacy" },
+            { label: "Help & FAQ", href: "/help" },
+          ].map(({ label, href }) => (
+            <a
+              key={href}
+              href={href}
+              style={{ fontSize: "0.5rem", color: "#3a3530", letterSpacing: "0.1em", textDecoration: "underline" }}
+            >
+              {label}
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ─── Logic Core: Animated SVG wireframe ─── */
+function LogicCore() {
+  const [rotation, setRotation] = useState(0);
+
+  useEffect(() => {
+    let frame: number;
+    const animate = () => {
+      setRotation((r) => (r + 0.15) % 360);
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const size = 120;
+  const cx = 200;
+  const cy = 200;
+  const rad = (rotation * Math.PI) / 180;
+  const radY = (rotation * 0.7 * Math.PI) / 180;
+
+  const project = (x: number, y: number, z: number) => {
+    const x1 = x * Math.cos(radY) - z * Math.sin(radY);
+    const z1 = x * Math.sin(radY) + z * Math.cos(radY);
+    const y1 = y * Math.cos(rad * 0.3) - z1 * Math.sin(rad * 0.3);
+    const z2 = y * Math.sin(rad * 0.3) + z1 * Math.cos(rad * 0.3);
+    const scale = 400 / (400 + z2);
+    return { x: cx + x1 * scale, y: cy + y1 * scale, opacity: 0.3 + 0.7 * scale };
+  };
+
+  const s = size;
+  const vertices = [
+    project(-s, -s, -s), project(s, -s, -s), project(s, s, -s), project(-s, s, -s),
+    project(-s, -s, s), project(s, -s, s), project(s, s, s), project(-s, s, s),
+  ];
+
+  const edges = [
+    [0, 1], [1, 2], [2, 3], [3, 0],
+    [4, 5], [5, 6], [6, 7], [7, 4],
+    [0, 4], [1, 5], [2, 6], [3, 7],
+  ];
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[5]">
+      <svg
+        viewBox="0 0 400 400"
+        className="w-[280px] h-[280px] md:w-[420px] md:h-[420px] lg:w-[500px] lg:h-[500px]"
+        style={{ opacity: 0.25 }}
+      >
+        <defs>
+          <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="#D4AF37" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx={cx} cy={cy} r="180" fill="url(#coreGlow)" />
+        {edges.map(([a, b], i) => (
+          <line
+            key={i}
+            x1={vertices[a].x}
+            y1={vertices[a].y}
+            x2={vertices[b].x}
+            y2={vertices[b].y}
+            stroke="#D4AF37"
+            strokeWidth="0.8"
+            opacity={Math.min(vertices[a].opacity, vertices[b].opacity)}
+          />
+        ))}
+        {vertices.map((v, i) => (
+          <circle key={i} cx={v.x} cy={v.y} r="2" fill="#D4AF37" opacity={v.opacity} />
+        ))}
+      </svg>
+    </div>
+  );
+}

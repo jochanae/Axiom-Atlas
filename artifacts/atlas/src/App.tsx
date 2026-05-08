@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
 import Home from "./pages/home";
+import Landing from "./pages/landing";
 import Projects from "./pages/projects";
 import Workspace from "./pages/workspace";
 import Ledger from "./pages/ledger";
@@ -244,6 +245,7 @@ function Router({ onYou, onProjects }: { onYou: () => void; onProjects: () => vo
     <>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/landing" component={Landing} />
         <Route path="/projects" component={Projects} />
         <Route path="/project/:projectId" component={Workspace} />
         <Route path="/ledger/:projectId" component={Ledger} />
