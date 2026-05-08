@@ -421,8 +421,6 @@ function FirstRunOverlay({
   onSpecMode: () => void;
   onWorkspace: () => void;
 }) {
-  const [hoveredSpec, setHoveredSpec] = useState(false);
-  const [hoveredWs, setHoveredWs] = useState(false);
   return createPortal(
     <div
       style={{
@@ -433,6 +431,7 @@ function FirstRunOverlay({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        animation: "atlas-overlay-fadein 500ms ease forwards",
       }}
     >
       <div
@@ -449,14 +448,12 @@ function FirstRunOverlay({
         <button
           disabled={loading}
           onClick={onSpecMode}
-          onMouseEnter={() => setHoveredSpec(true)}
-          onMouseLeave={() => setHoveredSpec(false)}
           style={{
             width: "100%",
             padding: "16px 24px",
-            background: hoveredSpec ? "#C9A24C" : "#D4AF37",
+            background: "#D4AF37",
             border: "none",
-            borderRadius: 10,
+            borderRadius: 12,
             color: "#0C0A09",
             fontSize: 14,
             fontWeight: 700,
@@ -464,8 +461,11 @@ function FirstRunOverlay({
             letterSpacing: "0.04em",
             cursor: loading ? "not-allowed" : "pointer",
             opacity: loading ? 0.55 : 1,
-            transition: "background 160ms ease, opacity 160ms ease",
+            animation: "atlas-btn-rise 500ms cubic-bezier(0.34,1.56,0.64,1) 200ms both, atlas-btn-glow 2.8s ease-in-out 800ms infinite",
+            transition: "background 160ms ease",
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#C9A24C"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#D4AF37"; }}
         >
           Start Speccing →
         </button>
@@ -474,14 +474,12 @@ function FirstRunOverlay({
         <button
           disabled={loading}
           onClick={onWorkspace}
-          onMouseEnter={() => setHoveredWs(true)}
-          onMouseLeave={() => setHoveredWs(false)}
           style={{
             width: "100%",
             padding: "16px 24px",
-            background: hoveredWs ? "rgba(212,175,55,0.07)" : "transparent",
+            background: "transparent",
             border: "1px solid #D4AF37",
-            borderRadius: 10,
+            borderRadius: 12,
             color: "#D4AF37",
             fontSize: 14,
             fontWeight: 700,
@@ -489,8 +487,11 @@ function FirstRunOverlay({
             letterSpacing: "0.04em",
             cursor: loading ? "not-allowed" : "pointer",
             opacity: loading ? 0.55 : 1,
-            transition: "background 160ms ease, opacity 160ms ease",
+            animation: "atlas-btn-rise 500ms cubic-bezier(0.34,1.56,0.64,1) 320ms both",
+            transition: "background 160ms ease, border-color 160ms ease",
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.07)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "#D4AF37"; }}
         >
           Go to Workspace
         </button>
