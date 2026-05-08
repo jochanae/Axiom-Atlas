@@ -442,6 +442,20 @@
   animation: atlas-cursor-blink 700ms step-end infinite;
 }
 
+/* ── First-run overlay animations ── */
+@keyframes atlas-overlay-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes atlas-btn-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes atlas-btn-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,0); }
+  50%       { box-shadow: 0 0 22px 5px rgba(212,175,55,0.28); }
+}
+
 /* ── Utility ── */
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
