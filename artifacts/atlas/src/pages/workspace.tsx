@@ -4174,9 +4174,21 @@ export default function Workspace() {
     >
 
       {/* ── Header ── */}
+      <style>{`
+        @keyframes header-pulse {
+          0%, 100% {
+            box-shadow: 0 1px 20px rgba(88, 28, 135, 0.15);
+            border-bottom-color: rgba(88, 28, 135, 0.3);
+          }
+          50% {
+            box-shadow: 0 1px 35px rgba(88, 28, 135, 0.28);
+            border-bottom-color: rgba(88, 28, 135, 0.5);
+          }
+        }
+      `}</style>
       <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(12px)" }}>
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
-        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid var(--atlas-border)" }}>
+        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(88, 28, 135, 0.3)", boxShadow: "0 1px 20px rgba(88, 28, 135, 0.15)", animation: "header-pulse 3s ease-in-out infinite" }}>
 
           {/* Left: drawer button + Atlas logo → home */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>

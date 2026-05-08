@@ -506,7 +506,8 @@ export default function Home() {
     <div
       style={{
         height: "100vh",
-        background: "var(--atlas-bg)",
+        backgroundColor: "var(--atlas-bg)",
+        backgroundImage: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88, 28, 135, 0.18) 0%, transparent 70%)",
         display: "flex",
         flexDirection: "column",
         overflowY: "auto",
@@ -974,10 +975,10 @@ export default function Home() {
             <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>Projects</span>
           </button>
 
-          {/* CENTER — AXIOM raised button */}
+          {/* CENTER — AXIOM raised button → Spec Mode */}
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <button
-              title="Axiom"
+              title="Spec Mode"
               style={{
                 width: 56, height: 56, borderRadius: "50%",
                 background: "#0D0B09", border: "2px solid #D4AF37",
@@ -986,7 +987,7 @@ export default function Home() {
                 animation: "homeAxiomPulse 2.5s ease-in-out infinite",
                 flexShrink: 0,
               }}
-              onClick={() => {}}
+              onClick={() => setLocation("/workshop")}
             >
               <svg viewBox="0 0 512 512" width="40" height="40">
                 <defs>
