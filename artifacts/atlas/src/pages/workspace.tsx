@@ -2474,28 +2474,41 @@ function FilesTab({
             </button>
           )}
           {disconnectConfirm ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 6, padding: "3px 7px" }}>
-              <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "rgba(252,165,165,0.85)", letterSpacing: "0.04em" }}>Disconnect GitHub?</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 6, padding: "4px 8px" }}>
+              <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(252,165,165,0.85)", letterSpacing: "0.04em" }}>Remove token?</span>
               <button
                 onClick={() => setDisconnectConfirm(false)}
                 disabled={isDisconnecting}
-                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, cursor: isDisconnecting ? "default" : "pointer", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", padding: "1px 6px", opacity: isDisconnecting ? 0.35 : 0.7 }}
+                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 5, cursor: isDisconnecting ? "default" : "pointer", color: "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", padding: "3px 8px", opacity: isDisconnecting ? 0.35 : 0.8, minHeight: 28 }}
               >Cancel</button>
               <button
                 onClick={clearToken}
                 disabled={isDisconnecting}
-                style={{ background: "rgba(220,38,38,0.2)", border: "1px solid rgba(220,38,38,0.35)", borderRadius: 4, cursor: isDisconnecting ? "default" : "pointer", color: "rgba(252,165,165,0.9)", fontSize: 9, fontFamily: "var(--app-font-mono)", padding: "1px 6px", opacity: isDisconnecting ? 0.55 : 1 }}
-              >{isDisconnecting ? "disconnecting…" : "Disconnect"}</button>
+                style={{ background: "rgba(220,38,38,0.2)", border: "1px solid rgba(220,38,38,0.4)", borderRadius: 5, cursor: isDisconnecting ? "default" : "pointer", color: "rgba(252,165,165,0.95)", fontSize: 10, fontFamily: "var(--app-font-mono)", padding: "3px 8px", opacity: isDisconnecting ? 0.55 : 1, minHeight: 28 }}
+              >{isDisconnecting ? "removing…" : "Remove"}</button>
             </div>
           ) : (
             <button
               onClick={() => setDisconnectConfirm(true)}
-              title="Disconnect GitHub"
-              style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1, opacity: 0.3, padding: "0 2px" }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.3")}
+              title="Change GitHub token"
+              style={{
+                display: "flex", alignItems: "center", gap: 4,
+                background: "rgba(212,175,55,0.06)",
+                border: "1px solid rgba(212,175,55,0.18)",
+                borderRadius: 6, cursor: "pointer",
+                color: "rgba(212,175,55,0.65)", fontSize: 9.5,
+                fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+                padding: "4px 8px", minHeight: 28,
+                transition: "all 140ms ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.12)"; e.currentTarget.style.color = "rgba(212,175,55,0.9)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.06)"; e.currentTarget.style.color = "rgba(212,175,55,0.65)"; }}
             >
-              ×
+              <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <circle cx="5" cy="8" r="2.5" /><path d="M7.5 8h4M10 6v4" />
+                <path d="M3 5.5L5.5 3 8 5.5" />
+              </svg>
+              token
             </button>
           )}
         </div>
