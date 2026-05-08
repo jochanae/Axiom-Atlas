@@ -3711,7 +3711,7 @@ function QuickPromptSheet({
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ onHomeNav }: { onHomeNav: () => void }) {
+function SystemMapWithCockpit({ onHomeNav, onSendIntent }: { onHomeNav: () => void; onSendIntent?: (text: string) => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
   const [showChat, setShowChat] = useState(true);
@@ -3829,7 +3829,7 @@ function SystemMapWithCockpit({ onHomeNav }: { onHomeNav: () => void }) {
                 value={intent}
                 onChange={e => setIntent(e.target.value)}
                 placeholder="Define your intent..."
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (intent.trim()) setIntent(""); } }}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (intent.trim()) { onSendIntent?.(intent.trim()); setIntent(""); } } }}
                 style={{
                   flex: 1, background: "transparent", border: "none", outline: "none",
                   resize: "none", padding: "12px 14px",
@@ -3857,6 +3857,7 @@ function SystemMapWithCockpit({ onHomeNav }: { onHomeNav: () => void }) {
                     </svg>
                   </button>
                   <button
+                    onClick={() => { if (intent.trim()) { onSendIntent?.(intent.trim()); setIntent(""); } }}
                     style={{
                       width: 30, height: 30, borderRadius: 8,
                       background: intent.trim() ? "rgba(212,175,55,0.14)" : "transparent",
@@ -3910,6 +3911,8 @@ function RightPanel({
   pushHistory,
   onRollbackPush,
   onHomeNav,
+  forceTab,
+  onSendIntent,
 }: {
   projectId: number;
   entries: Entry[];
@@ -3922,6 +3925,8 @@ function RightPanel({
   pushHistory: PushRecord[];
   onRollbackPush: (record: PushRecord) => Promise<void>;
   onHomeNav: () => void;
+  forceTab?: RightTab;
+  onSendIntent?: (text: string) => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -3933,6 +3938,10 @@ function RightPanel({
     } catch {}
     return "ledger";
   });
+
+  useEffect(() => {
+    if (forceTab) setTab(forceTab);
+  }, [forceTab]);
 
   const tabs: { id: RightTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     {
@@ -4109,7 +4118,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit onHomeNav={onHomeNav} />}
+      {tab === "map" && <SystemMapWithCockpit onHomeNav={onHomeNav} onSendIntent={onSendIntent} />}
     </div>
   );
 }
@@ -4157,7 +4166,7 @@ export default function Workspace() {
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
-  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "workshop">("chat");
+  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "workshop" | "map">("chat");
   const [showDrawer, setShowDrawer] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -4366,6 +4375,12 @@ export default function Workspace() {
       }, 80);
     }
   }, [sessionId, id, doSend]);
+
+  const sendFromIntentCapture = useCallback((text: string) => {
+    if (!text.trim() || !sessionId || chatPending) return;
+    doSend(text.trim(), sessionId, messages);
+    if (isMobile) { setMobileTab("chat"); setRightOpen(false); }
+  }, [sessionId, chatPending, messages, doSend, isMobile]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -4683,7 +4698,8 @@ export default function Workspace() {
                       { id: "chat" as const, label: "Chat", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg> },
                       { id: "ledger" as const, label: "Ledger", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="13" y2="16" /></svg> },
                       { id: "workshop" as const, label: "Workshop", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg> },
-                    ] as { id: "chat" | "ledger" | "workshop"; label: string; icon: React.ReactNode }[]).map(({ id, label, icon }) => {
+                      { id: "map" as const, label: "Map", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" /></svg> },
+                    ] as { id: "chat" | "ledger" | "workshop" | "map"; label: string; icon: React.ReactNode }[]).map(({ id, label, icon }) => {
                       const active = mobileTab === id;
                       return (
                         <button
@@ -5228,6 +5244,8 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
+                forceTab={isMobile && mobileTab === "map" ? "map" : undefined}
+                onSendIntent={sendFromIntentCapture}
               />
             </div>
           </>
@@ -5278,6 +5296,8 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
+                forceTab={mobileTab === "map" ? "map" : undefined}
+                onSendIntent={sendFromIntentCapture}
               />
             </div>
           </div>
