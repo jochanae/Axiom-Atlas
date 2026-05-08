@@ -4274,6 +4274,91 @@ export default function Workspace() {
     } catch {}
   }, [project?.linkedRepo]);
 
+  // Auto-load key repo files into AI context on session start.
+  // Fires once per project whenever a linked repo + token exist — regardless
+  // of which tab the user has open.  The user never has to manually open files.
+  const repoCtxLoadedFor = useRef<number | null>(null);
+  useEffect(() => {
+    if (!project?.linkedRepo || !project?.githubToken) return;
+    if (repoCtxLoadedFor.current === id) return;
+
+    let cancelled = false;
+    const parsedRepo = (() => {
+      try { return JSON.parse(project.linkedRepo) as { fullName: string; defaultBranch: string }; }
+      catch { return null; }
+    })();
+    if (!parsedRepo) return;
+
+    const token = project.githubToken;
+    const branch = parsedRepo.defaultBranch ?? "main";
+
+    // Priority-ordered key files — first ones win when we cap at 5
+    const KEY_FILES = [
+      "package.json",
+      "README.md", "readme.md", "README.mdx",
+      "src/index.tsx", "src/index.ts",
+      "src/main.tsx", "src/main.ts",
+      "src/App.tsx", "src/App.ts",
+      "src/app.tsx", "src/app.ts",
+      "tsconfig.json",
+      "index.ts", "index.tsx",
+    ];
+
+    (async () => {
+      try {
+        // 1. Fetch flat tree to discover which key files actually exist
+        const treeRes = await fetch(
+          `/api/github/tree?repo=${encodeURIComponent(parsedRepo.fullName)}&branch=${encodeURIComponent(branch)}`,
+          { headers: { "x-github-token": token } }
+        );
+        if (!treeRes.ok || cancelled) return;
+        const treeData = await treeRes.json() as { branch: string; tree: Array<{ path: string; type: string }> };
+        const blobSet = new Set(treeData.tree.filter(i => i.type === "blob").map(i => i.path));
+        const resolvedBranch = treeData.branch ?? branch;
+
+        const toFetch = KEY_FILES.filter(p => blobSet.has(p)).slice(0, 5);
+        if (toFetch.length === 0 || cancelled) return;
+
+        // 2. Fetch each key file in parallel
+        const results = await Promise.allSettled(
+          toFetch.map(p =>
+            fetch(
+              `/api/github/file?repo=${encodeURIComponent(parsedRepo.fullName)}&path=${encodeURIComponent(p)}&branch=${encodeURIComponent(resolvedBranch)}`,
+              { headers: { "x-github-token": token } }
+            ).then(r => r.ok ? r.json() as Promise<{ path: string; content: string; lines: number }> : null)
+          )
+        );
+
+        if (cancelled) return;
+
+        // 3. Build combined context string
+        const parts: string[] = [
+          `Repo: ${parsedRepo.fullName} (branch: ${resolvedBranch})\nKey files loaded automatically — no manual file opening needed.\n`,
+        ];
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          if (r.status === "fulfilled" && r.value) {
+            const file = r.value;
+            const lines = file.content.split("\n");
+            const body = lines.length > 200
+              ? lines.slice(0, 200).join("\n") + "\n// ... (truncated)"
+              : file.content;
+            parts.push(`File: ${file.path}\n\`\`\`\n${body}\n\`\`\``);
+          }
+        }
+
+        if (parts.length > 1 && !cancelled) {
+          repoCtxLoadedFor.current = id;
+          setFileContext(parts.join("\n\n"));
+        }
+      } catch {
+        // Silent — never break the workspace if GitHub fetch fails
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [id, project?.linkedRepo, project?.githubToken]);
+
   // Persist last visited project for footer LEDGER shortcut
   useEffect(() => {
     if (id) { try { localStorage.setItem("atlas-last-project", String(id)); } catch {} }
