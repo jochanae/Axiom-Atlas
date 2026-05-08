@@ -1,0 +1,19 @@
+name: Sync atlas-v2 branch
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Force-push main to atlas-v2 on jochanae/atlas
+        run: |
+          git clone --mirror "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/atlas.git" repo.git
+          cd repo.git
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/atlas.git" refs/heads/main:refs/heads/atlas-v2
