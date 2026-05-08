@@ -537,12 +537,12 @@ export default function Home() {
             style={{
               width: 28, height: 28, borderRadius: 7,
               background: "transparent", border: "none",
-              color: "rgba(120,113,108,0.45)", cursor: "pointer",
+              color: "rgba(201,162,76,0.55)", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
               transition: "color 160ms ease", flexShrink: 0,
             }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(201,162,76,0.55)")}
           >
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
               <rect x="2" y="2" width="16" height="16" rx="2.5" />
@@ -553,9 +553,14 @@ export default function Home() {
           <AtlasLogo />
         </div>
 
-        {/* Right side: timestamp + avatar pair */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Center: timestamp absolutely centered */}
+        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none" }}>
           <InlineTimestamp />
+        </div>
+
+        {/* Right side: avatar pair */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "none" }} />
           {/* Avatar + new-project as a tight pair */}
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
