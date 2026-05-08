@@ -4185,6 +4185,16 @@ export default function Workspace() {
     try { localStorage.setItem(`atlas-axiom-banner-${id}`, "1"); } catch { /* ignore */ }
     setShowAxiomBanner(false);
   };
+
+  // Auto-set BUILD mode when arriving via Axiom handoff
+  useEffect(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get("source") === "axiom") {
+        setProjectMode("BUILD");
+        localStorage.setItem(`atlas-mode-${id}`, "BUILD");
+      }
+    } catch { /* ignore */ }
+  }, [id]);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const updateProjectHeader = useUpdateProject();
@@ -4302,7 +4312,7 @@ export default function Workspace() {
         sessionId: sid,
         projectId: id,
         message: text,
-        mode: "think",
+        mode: projectMode.toLowerCase(),
         history,
         entries: ledgerEntries,
         ...(activeCtx ? { fileContext: activeCtx } : {}),
@@ -4347,7 +4357,7 @@ export default function Workspace() {
         })
         .finally(() => setChatPending(false));
     },
-    [entries, id, fileContext]
+    [entries, id, fileContext, projectMode]
   );
 
   const handleRegenerate = useCallback(
