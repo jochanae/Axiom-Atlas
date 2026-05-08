@@ -553,9 +553,39 @@ export default function Home() {
           <AtlasLogo />
         </div>
 
-        {/* Right side: timestamp + user menu */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* Right side: timestamp + new project + user menu */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <InlineTimestamp />
+          <button
+            title="New project"
+            disabled={loading}
+            onClick={() => {
+              createProject.mutate(
+                { data: { name: "New Project" } },
+                {
+                  onSuccess: (p) => {
+                    queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                    setLocation(`/project/${p.id}`);
+                  },
+                }
+              );
+            }}
+            style={{
+              width: 28, height: 28, borderRadius: "22%",
+              border: "1.5px dashed rgba(201,162,76,0.35)",
+              background: "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: loading ? "not-allowed" : "pointer",
+              color: "rgba(201,162,76,0.6)",
+              fontSize: 18, lineHeight: 1, fontWeight: 300,
+              transition: "all 160ms ease", flexShrink: 0,
+              opacity: loading ? 0.4 : 1,
+            }}
+            onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.borderColor = "rgba(201,162,76,0.65)"; e.currentTarget.style.color = "#C9A24C"; } }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; e.currentTarget.style.color = "rgba(201,162,76,0.6)"; }}
+          >
+            +
+          </button>
           <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
         </div>
       </div>

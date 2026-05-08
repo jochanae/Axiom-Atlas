@@ -68,19 +68,21 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
         onClick={() => setOpen(o => !o)}
         title="Account"
         style={{
-          width: 30, height: 30, borderRadius: "50%",
-          border: `1px solid ${open ? "rgba(201,162,76,0.4)" : "rgba(201,162,76,0.18)"}`,
-          background: photoUrl ? "transparent" : open ? "rgba(201,162,76,0.14)" : "rgba(201,162,76,0.07)",
+          width: 36, height: 36, borderRadius: "22%",
+          border: `1.5px dashed ${open ? "rgba(201,162,76,0.65)" : "rgba(201,162,76,0.35)"}`,
+          background: photoUrl ? "transparent" : open ? "rgba(201,162,76,0.1)" : "rgba(201,162,76,0.04)",
           display: "flex", alignItems: "center", justifyContent: "center",
           cursor: "pointer", overflow: "hidden", flexShrink: 0,
-          outline: open ? "2px solid rgba(201,162,76,0.45)" : "none",
-          outlineOffset: 2, transition: "all 160ms ease",
+          transition: "all 160ms ease", padding: 0,
+          boxShadow: open ? "0 0 0 3px rgba(201,162,76,0.12)" : "none",
         }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.6)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = open ? "rgba(201,162,76,0.65)" : "rgba(201,162,76,0.35)"; }}
       >
         {photoUrl ? (
-          <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "20%" }} />
         ) : (
-          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden>
             <circle cx="10" cy="7.5" r="3.2" stroke="#C9A24C" strokeWidth="1.2" />
             <path d="M3 18.5c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#C9A24C" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
