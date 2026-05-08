@@ -11,7 +11,6 @@ import type { Project } from "@workspace/api-client-react";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
-import { CockpitBar } from "../components/CockpitBar";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
 
 const PLACEHOLDERS = [
@@ -526,6 +525,7 @@ export default function Home() {
           justifyContent: "space-between",
           padding: "0 24px",
           borderBottom: "1px solid var(--atlas-glass-border)",
+          boxShadow: "0 1px 0 0 rgba(88,28,135,0.4), 0 2px 16px rgba(88,28,135,0.12)",
           zIndex: 10,
           flexShrink: 0,
         }}
@@ -611,8 +611,23 @@ export default function Home() {
           {/* Hero — fills the viewport above the mobile nav, content vertically centered */}
           <div style={{ minHeight: "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative", paddingBottom: 120 }}>
 
+          {/* Purple atmospheric pulse — behind everything */}
+          <div style={{
+            position: "absolute",
+            top: "38%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: "110%",
+            height: 340,
+            background: "radial-gradient(circle, rgba(88,28,135,0.30) 0%, rgba(88,28,135,0.08) 45%, rgba(0,0,0,0) 70%)",
+            filter: "blur(28px)",
+            pointerEvents: "none",
+            animation: "homePurpleAtmosphere 7s ease-in-out infinite",
+            zIndex: 0,
+          }} />
+
           {/* Greeting */}
-          <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ textAlign: "center", marginBottom: 24, position: "relative", zIndex: 1 }}>
             <h1
               style={{
                 fontSize: 30,
@@ -895,68 +910,134 @@ export default function Home() {
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
       />
 
-      {/* Fixed bottom nav via CockpitBar */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100 }}>
-        <CockpitBar
-          readinessScore={0}
-          nodes={[]}
-          showReadinessStrip={false}
-          navLeft={
-            <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-              {/* HOME — active */}
-              <button
-                onClick={() => {}}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(212,175,55,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                  <polyline points="9,22 9,12 15,12 15,22" />
-                </svg>
-                <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(212,175,55,0.9)", fontWeight: 700 }}>Home</span>
-              </button>
-              {/* PROJECTS */}
-              <button
-                onClick={() => setShowDrawer(true)}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                </svg>
-                <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>Projects</span>
-              </button>
-            </div>
-          }
-          navRight={
-            <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-              {/* LEDGER */}
-              <button
-                onClick={() => {
-                  const p = (projects ?? [])[0];
-                  if (p) setLocation(`/ledger/${p.id}`);
-                }}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
-                  <path d="M9 7h6M9 11h6M9 15h4" strokeWidth="1.2" />
-                </svg>
-                <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>Ledger</span>
-              </button>
-              {/* YOU */}
-              <button
-                onClick={() => setShowProfile(true)}
-                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0 }}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-                <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>You</span>
-              </button>
-            </div>
-          }
-        />
+      {/* Fixed 5-item bottom nav — true flex row, even spacing */}
+      <style>{`
+        @keyframes homePurpleAtmosphere {
+          0%, 100% { opacity: 0.45; }
+          50%       { opacity: 1; }
+        }
+        @keyframes homeAxiomPulse {
+          0%, 100% { box-shadow: 0 0 14px rgba(212,175,55,0.28), 0 0 0 0 rgba(88,28,135,0.18); }
+          50%       { box-shadow: 0 0 26px rgba(212,175,55,0.52), 0 0 14px 4px rgba(88,28,135,0.28); }
+        }
+      `}</style>
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, overflow: "visible" }}>
+        {/* Arch SVG — visual layer only */}
+        <svg
+          style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: 76, overflow: "visible", pointerEvents: "none" }}
+          preserveAspectRatio="none"
+          viewBox="0 0 390 64"
+        >
+          <path
+            d="M0,0 L148,0 C163,0 172,22 195,22 C218,22 227,0 242,0 L390,0 L390,64 L0,64 Z"
+            fill="rgba(13,11,9,0.97)"
+          />
+          <path
+            d="M0,0.5 L148,0.5 C163,0.5 172,22 195,22 C218,22 227,0.5 242,0.5 L390,0.5"
+            fill="none"
+            stroke="rgba(212,175,55,0.2)"
+            strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+
+        {/* 5-item flex row — interaction layer */}
+        <div style={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          height: 64,
+          paddingBottom: "max(env(safe-area-inset-bottom), 6px)",
+          zIndex: 1,
+        }}>
+
+          {/* HOME — active/gold */}
+          <button
+            onClick={() => {}}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(212,175,55,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+              <polyline points="9,22 9,12 15,12 15,22" />
+            </svg>
+            <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(212,175,55,0.9)", fontWeight: 700 }}>Home</span>
+          </button>
+
+          {/* PROJECTS */}
+          <button
+            onClick={() => setShowDrawer(true)}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+            </svg>
+            <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>Projects</span>
+          </button>
+
+          {/* CENTER — AXIOM raised button */}
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <button
+              title="Axiom"
+              style={{
+                width: 56, height: 56, borderRadius: "50%",
+                background: "#0D0B09", border: "2px solid #D4AF37",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", marginTop: -26,
+                animation: "homeAxiomPulse 2.5s ease-in-out infinite",
+                flexShrink: 0,
+              }}
+              onClick={() => {}}
+            >
+              <svg viewBox="0 0 512 512" width="40" height="40">
+                <defs>
+                  <radialGradient id="hnpg" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
+                    <stop offset="100%" stopColor="#0D0B09" stopOpacity="0" />
+                  </radialGradient>
+                  <radialGradient id="hngs" cx="50%" cy="40%" r="50%">
+                    <stop offset="0%" stopColor="#F5D97A" />
+                    <stop offset="50%" stopColor="#D4AF37" />
+                    <stop offset="100%" stopColor="#A07820" />
+                  </radialGradient>
+                </defs>
+                <rect width="512" height="512" rx="90" fill="#0D0B09" />
+                <rect width="512" height="512" rx="90" fill="url(#hnpg)" />
+                <polygon points="256,110 170,402 212,402 274,172" fill="url(#hngs)" />
+                <polygon points="256,110 342,402 300,402 238,172" fill="url(#hngs)" />
+                <rect x="180" y="282" width="152" height="34" rx="5" fill="url(#hngs)" />
+              </svg>
+            </button>
+          </div>
+
+          {/* LEDGER */}
+          <button
+            onClick={() => {
+              const p = (projects ?? [])[0];
+              if (p) setLocation(`/ledger/${p.id}`);
+            }}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+              <path d="M9 7h6M9 11h6M9 15h4" strokeWidth="1.2" />
+            </svg>
+            <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>Ledger</span>
+          </button>
+
+          {/* YOU */}
+          <button
+            onClick={() => setShowProfile(true)}
+            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>You</span>
+          </button>
+
+        </div>
       </div>
     </div>
   );
