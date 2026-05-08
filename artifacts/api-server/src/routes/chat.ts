@@ -385,6 +385,34 @@ router.post("/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n--- CODE CONTEXT ---\n${fileContext}\n--- END CODE CONTEXT ---`;
   }
 
+  // Mode-specific instructions — these override the default disposition
+  const activeMode = (body.mode ?? "think").toLowerCase();
+  const modeInstructions: Record<string, string> = {
+    build: `\n\n--- ACTIVE MODE: BUILD ---
+You are now in BUILD mode. This changes how you respond:
+• Every answer that involves code MUST include a FILE_EDIT block with the complete corrected file — no partial snippets, no "// rest stays the same".
+• Be production-ready. Write code that works the first time.
+• Explain what you changed and why in plain English BEFORE the FILE_EDIT blocks.
+• Multiple files changed? Emit multiple FILE_EDIT blocks back-to-back.
+• GitHub push is enabled — the user will push your FILE_EDIT output directly to their repo.
+• Do NOT stop short with explanations. If you can write the code, write it.`,
+    plan: `\n\n--- ACTIVE MODE: PLAN ---
+You are now in PLAN mode. This changes how you respond:
+• Focus on structure, architecture, and sequence — not implementation.
+• Use numbered lists, component trees, data schemas, and user flows.
+• Map out what needs to exist before writing any code.
+• No FILE_EDIT blocks unless the user explicitly asks for code.
+• Think like a tech lead scoping a sprint.`,
+    think: `\n\n--- ACTIVE MODE: THINK ---
+You are now in THINK mode. This changes how you respond:
+• This is strategic advice — no code writing.
+• Help the user reason through decisions, tradeoffs, and direction.
+• Ask clarifying questions when the path isn't clear.
+• Be a thinking partner, not a builder. Challenge assumptions.
+• No FILE_EDIT blocks.`,
+  };
+  systemPrompt += modeInstructions[activeMode] ?? modeInstructions.think;
+
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = {
     type: "image";
