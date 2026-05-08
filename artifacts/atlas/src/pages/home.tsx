@@ -718,6 +718,79 @@ export default function Home() {
             </p>
           </div>
 
+          {/* Entry point CTAs */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, margin: "28px 0 8px" }}>
+            {/* Primary: Start Speccing */}
+            <button
+              onClick={() => {
+                const lastId = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
+                const targetId = lastId || (projects ?? [])[0]?.id;
+                if (targetId) {
+                  sessionStorage.setItem("atlas-open-tab", "map");
+                  setLocation(`/project/${targetId}`);
+                } else {
+                  createProject.mutate(
+                    { data: { name: "New Project" } },
+                    {
+                      onSuccess: (p) => {
+                        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                        sessionStorage.setItem("atlas-open-tab", "map");
+                        setLocation(`/project/${p.id}`);
+                      },
+                    }
+                  );
+                }
+              }}
+              style={{
+                width: "100%", maxWidth: 280,
+                padding: "14px 24px",
+                background: "#D4AF37", color: "#0C0A09",
+                border: "none", borderRadius: 10,
+                fontFamily: "var(--app-font-mono)", fontSize: 12, fontWeight: 800,
+                letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer",
+                transition: "background 160ms",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(212,175,55,0.88)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "#D4AF37")}
+            >
+              Start Speccing →
+            </button>
+
+            {/* Secondary: Go to Workspace */}
+            <button
+              onClick={() => {
+                const lastId = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
+                const targetId = lastId || (projects ?? [])[0]?.id;
+                if (targetId) {
+                  setLocation(`/project/${targetId}`);
+                } else {
+                  createProject.mutate(
+                    { data: { name: "New Project" } },
+                    {
+                      onSuccess: (p) => {
+                        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                        setLocation(`/project/${p.id}`);
+                      },
+                    }
+                  );
+                }
+              }}
+              style={{
+                width: "100%", maxWidth: 280,
+                padding: "13px 24px",
+                background: "transparent", color: "#D4AF37",
+                border: "1px solid rgba(212,175,55,0.45)", borderRadius: 10,
+                fontFamily: "var(--app-font-mono)", fontSize: 12, fontWeight: 700,
+                letterSpacing: "0.12em", textTransform: "uppercase", cursor: "pointer",
+                transition: "border-color 160ms, background 160ms",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.8)"; e.currentTarget.style.background = "rgba(212,175,55,0.06)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; e.currentTarget.style.background = "transparent"; }}
+            >
+              Go to Workspace
+            </button>
+          </div>
+
           {/* Ambient bloom spinner */}
           <div
             style={{
