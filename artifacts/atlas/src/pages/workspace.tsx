@@ -5106,7 +5106,7 @@ export default function Workspace() {
 
   return (
     <div
-      style={{ height: isMobile ? "calc(100dvh - 64px)" : "100vh", display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden", position: "relative" }}
+      style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden", zIndex: 0 }}
       onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
       onDrop={async (e) => {
