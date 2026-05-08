@@ -129,7 +129,8 @@ function MobileFooter({ onYou, onProjects }: { onYou: () => void; onProjects: ()
   if (!isMobile) return null;
 
   const lastProject = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
-  const isHome = location === "/home" || location === "";
+  if (location === "/" || location === "") return null;
+  const isHome = location === "/home";
   const isProjects = location.startsWith("/projects");
   const isLedger = location.startsWith("/ledger");
   const isWorkspace = location.startsWith("/project");

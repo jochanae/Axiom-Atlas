@@ -64,11 +64,6 @@ function HeroSection({ onEnter }: { onEnter: () => void }) {
       <LogicCore />
 
       <div className="relative z-10 max-w-4xl text-center">
-        {/* Logo mark above headline */}
-        <div className="flex justify-center mb-8">
-          <img src="/axiom-logo.svg" alt="Axiom" style={{ width: 72, height: 72, borderRadius: "22%", boxShadow: "0 0 40px rgba(91,33,182,0.25)" }} />
-        </div>
-
         <h1 className="leading-[0.92] mb-6" style={{
           fontFamily: "'Cormorant Garamond', Georgia, serif",
           fontWeight: 500,
@@ -120,20 +115,25 @@ function HeroSection({ onEnter }: { onEnter: () => void }) {
 
         <button
           onClick={onEnter}
-          className="group relative px-10 py-4 uppercase tracking-[0.25em] transition-all duration-700"
+          className="group relative uppercase transition-all duration-700"
           style={{
             fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
-            fontSize: "0.75rem",
-            fontWeight: 500,
+            fontSize: "clamp(0.7rem, 1.5vw, 0.85rem)",
+            fontWeight: 600,
+            letterSpacing: "0.3em",
             color: "#D4AF37",
-            border: "1px solid rgba(212,175,55,0.4)",
+            border: "1px solid rgba(212,175,55,0.45)",
             background: "transparent",
+            width: "100%",
+            maxWidth: 420,
+            padding: "18px 24px",
+            display: "block",
+            margin: "0 auto",
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.08)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.7)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.4)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.07)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; }}
         >
           Enter Axiom
-          <span className="absolute inset-0 rounded-sm pointer-events-none atlas-lp-gold-pulse" style={{ opacity: 0.4 }} />
         </button>
       </div>
 
