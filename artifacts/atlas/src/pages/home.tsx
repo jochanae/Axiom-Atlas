@@ -453,6 +453,26 @@ export default function Home() {
   const { data: projects, isLoading } = useListProjects();
   const createProject = useCreateProject();
 
+  const [fromLanding] = useState(() => {
+    try {
+      const v = sessionStorage.getItem("atlas-from-landing");
+      if (v) sessionStorage.removeItem("atlas-from-landing");
+      return v === "1";
+    } catch { return false; }
+  });
+
+  useEffect(() => {
+    if (!fromLanding) return;
+    if (isLoading) return;
+    if (projects && projects.length > 0) {
+      const lastId = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
+      const target = lastId || String(projects[0].id);
+      setLocation(`/project/${target}`);
+    }
+  }, [fromLanding, projects, isLoading, setLocation]);
+
+  const showChoiceScreen = fromLanding && !isLoading && (!projects || projects.length === 0);
+
   const navigateToProject = useCallback(
     (projectId: number) => {
       if (input.trim()) {
@@ -599,11 +619,67 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Choice screen — new users arriving from landing with no projects */}
+      {showChoiceScreen && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 24px", gap: 28 }}>
+          <div style={{ textAlign: "center" }}>
+            <p style={{ fontSize: 9.5, letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(212,175,55,0.45)", fontFamily: "var(--app-font-mono)", marginBottom: 10, margin: "0 0 10px" }}>
+              First session
+            </p>
+            <h2 style={{ fontSize: "clamp(1.4rem, 5vw, 2rem)", fontFamily: "'Cormorant Garamond', Georgia, serif", fontWeight: 500, color: "#e8dcc8", letterSpacing: "0.02em", lineHeight: 1.2, margin: 0 }}>
+              How do you want to start?
+            </h2>
+          </div>
+          <div style={{ display: "flex", gap: 12, width: "100%", maxWidth: 460 }}>
+            <button
+              disabled={loading}
+              onClick={() => {
+                createProject.mutate({ data: { name: "My Project" } }, {
+                  onSuccess: (p) => {
+                    queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                    sessionStorage.setItem("atlas-open-tab", "map");
+                    setLocation(`/project/${p.id}`);
+                  },
+                });
+              }}
+              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "20px 18px", background: "rgba(212,175,55,0.04)", border: "1px solid rgba(212,175,55,0.22)", borderRadius: 12, cursor: loading ? "not-allowed" : "pointer", textAlign: "left", opacity: loading ? 0.6 : 1, transition: "all 200ms ease" }}
+              onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = "rgba(212,175,55,0.09)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; } }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(212,175,55,0.04)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.22)"; }}
+            >
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(212,175,55,0.1)", border: "1px solid rgba(212,175,55,0.3)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, color: "#D4AF37", fontSize: 16 }}>◈</div>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: "#D4AF37", marginBottom: 6, letterSpacing: "0.02em" }}>Spec it first</p>
+              <p style={{ fontSize: 11, color: "rgba(120,113,108,0.75)", lineHeight: 1.5, margin: 0 }}>Structure your idea. Zero wasted code.</p>
+            </button>
+            <button
+              disabled={loading}
+              onClick={() => {
+                createProject.mutate({ data: { name: "My Project" } }, {
+                  onSuccess: (p) => {
+                    queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                    setLocation(`/project/${p.id}`);
+                  },
+                });
+              }}
+              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "20px 18px", background: "transparent", border: "1px solid rgba(120,113,108,0.2)", borderRadius: 12, cursor: loading ? "not-allowed" : "pointer", textAlign: "left", opacity: loading ? 0.6 : 1, transition: "all 200ms ease" }}
+              onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = "rgba(120,113,108,0.06)"; e.currentTarget.style.borderColor = "rgba(120,113,108,0.4)"; } }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(120,113,108,0.2)"; }}
+            >
+              <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(120,113,108,0.07)", border: "1px solid rgba(120,113,108,0.22)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, color: "rgba(120,113,108,0.65)", fontSize: 15 }}>▶</div>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: "#e8dcc8", marginBottom: 6, letterSpacing: "0.02em" }}>Go straight to workspace</p>
+              <p style={{ fontSize: 11, color: "rgba(120,113,108,0.75)", lineHeight: 1.5, margin: 0 }}>Start building. Spec Mode is always here.</p>
+            </button>
+          </div>
+          <p style={{ fontSize: 9.5, color: "rgba(120,113,108,0.4)", letterSpacing: "0.08em", fontFamily: "var(--app-font-mono)", textAlign: "center", margin: 0 }}>
+            SPEC MODE IS ALWAYS AVAILABLE. NEVER REQUIRED.
+          </p>
+        </div>
+      )}
+
       {/* Main content */}
       <div
         style={{
           flex: 1,
-          display: "flex",
+          display: showChoiceScreen ? "none" : "flex",
           justifyContent: "center",
           padding: "0 24px",
         }}

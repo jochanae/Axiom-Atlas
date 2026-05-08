@@ -4,7 +4,10 @@ import { LandingHeader } from "@/components/landing/LandingHeader";
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
-  const handleEnter = () => setLocation("/home");
+  const handleEnter = () => {
+    try { sessionStorage.setItem("atlas-from-landing", "1"); } catch {}
+    setLocation("/home");
+  };
 
   useEffect(() => {
     const html = document.documentElement;

@@ -3487,23 +3487,411 @@ function UserProfilePanel({ onClose, isMobile = false }: { onClose: () => void; 
   );
 }
 
+// ── Platform detection ────────────────────────────────────────────────────────
+function detectPlatform(): string {
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  if (host.includes("lovable")) return "LOVABLE";
+  if (host.includes("replit") || host.includes("repl.co") || host.includes("replit.app")) return "REPLIT";
+  if (host.includes("cursor")) return "CURSOR";
+  if (host.includes("vercel")) return "VERCEL";
+  if (host.includes("netlify")) return "NETLIFY";
+  if (host.includes("localhost") || host.includes("127.0.0.1")) return "LOCAL";
+  return "WEB";
+}
+
+// ── QuickPromptSheet ──────────────────────────────────────────────────────────
+function QuickPromptSheet({
+  platform,
+  readinessScore,
+  onClose,
+}: {
+  platform: string;
+  readinessScore: number;
+  onClose: () => void;
+}) {
+  const [qTab, setQTab] = useState<"axiom" | "spec" | "quick">("quick");
+  const PLATFORMS = ["Replit", "Lovable", "Cursor", "Vercel", "GitHub Codespaces", "Local Dev"];
+  const defaultPlatform = PLATFORMS.find(p => p.toUpperCase() === platform) ?? "Replit";
+  const [buildWhere, setBuildWhere] = useState(defaultPlatform);
+  const [task, setTask] = useState("");
+  const cockpitH = 72;
+
+  return (
+    <>
+      <div
+        style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+        onClick={onClose}
+      />
+      <div style={{
+        position: "fixed", left: 0, right: 0, zIndex: 60, bottom: cockpitH,
+        background: "rgba(13,11,9,0.99)",
+        border: "1px solid rgba(212,175,55,0.22)",
+        borderRadius: "16px 16px 0 0",
+        animation: "slideUpCb 220ms ease",
+        display: "flex", flexDirection: "column",
+        maxHeight: "72vh",
+      }}>
+        {/* Drag handle */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(212,175,55,0.18)" }} />
+        </div>
+
+        {/* Tab row */}
+        <div style={{ display: "flex", alignItems: "center", padding: "0 16px", borderBottom: "1px solid rgba(212,175,55,0.10)" }}>
+          {(["axiom", "spec", "quick"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setQTab(t)}
+              style={{
+                padding: "10px 14px 12px", background: "transparent",
+                border: "none",
+                borderBottom: `2px solid ${qTab === t ? "#D4AF37" : "transparent"}`,
+                cursor: "pointer",
+                color: qTab === t ? "#D4AF37" : "rgba(120,113,108,0.6)",
+                fontSize: 11, fontWeight: 700, letterSpacing: "0.1em",
+                textTransform: "uppercase" as const,
+                fontFamily: "var(--app-font-mono)",
+                marginBottom: -1,
+                transition: "color 150ms",
+              }}
+            >
+              {t}
+            </button>
+          ))}
+          <div style={{ flex: 1 }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#D4AF37", marginRight: 14 }}>
+            {readinessScore}%
+          </span>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.55)", fontSize: 22, lineHeight: 1, padding: "2px 0 2px 4px" }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflow: "auto", padding: "20px 16px 16px" }}>
+          {qTab === "quick" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div>
+                <p style={{ fontSize: 9, fontWeight: 700, color: "rgba(120,113,108,0.75)", letterSpacing: "0.15em", textTransform: "uppercase" as const, marginBottom: 8, fontFamily: "var(--app-font-mono)" }}>
+                  WHERE ARE YOU BUILDING?
+                </p>
+                <select
+                  value={buildWhere}
+                  onChange={e => setBuildWhere(e.target.value)}
+                  style={{
+                    width: "100%", padding: "14px 12px",
+                    background: "rgba(28,25,23,0.95)",
+                    border: "1px solid rgba(212,175,55,0.18)",
+                    borderRadius: 10, color: "var(--atlas-fg)", fontSize: 13,
+                    cursor: "pointer", fontFamily: "inherit",
+                  }}
+                >
+                  {PLATFORMS.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const }}>
+                <button style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: "#D4AF37", fontSize: 11, letterSpacing: "0.04em",
+                  fontFamily: "var(--app-font-mono)", padding: 0,
+                }}>
+                  + Add project context (optional)
+                </button>
+                <button style={{
+                  padding: "5px 12px", borderRadius: 8,
+                  background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.32)",
+                  color: "#D4AF37", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                  letterSpacing: "0.04em", fontFamily: "var(--app-font-mono)",
+                }}>
+                  Load Project ▾
+                </button>
+              </div>
+
+              <div>
+                <p style={{ fontSize: 9, fontWeight: 700, color: "rgba(120,113,108,0.75)", letterSpacing: "0.15em", textTransform: "uppercase" as const, marginBottom: 8, fontFamily: "var(--app-font-mono)" }}>
+                  WHAT DO YOU NEED TO DO?
+                </p>
+                <div style={{ background: "rgba(28,25,23,0.95)", border: "1px solid rgba(212,175,55,0.18)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
+                  <textarea
+                    value={task}
+                    onChange={e => setTask(e.target.value)}
+                    placeholder="Describe what you need to do in plain language..."
+                    style={{
+                      width: "100%", minHeight: 108, background: "transparent",
+                      border: "none", outline: "none", resize: "none",
+                      padding: "14px 50px 14px 14px",
+                      color: "var(--atlas-fg)", fontSize: 13, lineHeight: 1.6,
+                      fontFamily: "inherit", boxSizing: "border-box" as const,
+                    }}
+                  />
+                  <button style={{
+                    position: "absolute", bottom: 10, right: 10,
+                    width: 30, height: 30, borderRadius: 8,
+                    background: task.trim() ? "rgba(212,175,55,0.14)" : "transparent",
+                    border: `1px solid ${task.trim() ? "rgba(212,175,55,0.38)" : "rgba(120,113,108,0.28)"}`,
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: task.trim() ? "#D4AF37" : "rgba(120,113,108,0.38)",
+                  }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {qTab === "axiom" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: 13, color: "var(--atlas-fg)", lineHeight: 1.65 }}>
+                The System Map is live. Tap any node to mark it resolved. Your readiness score updates in real time.
+              </p>
+              <p style={{ fontSize: 11, color: "rgba(120,113,108,0.65)", lineHeight: 1.65 }}>
+                All six architecture layers must be resolved before Axiom considers your project structurally sound.
+              </p>
+            </div>
+          )}
+
+          {qTab === "spec" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: 13, color: "var(--atlas-fg)", lineHeight: 1.65 }}>
+                Three structured sprints walk you through every architectural layer before you write a line of code.
+              </p>
+              <p style={{ fontSize: 11, color: "rgba(120,113,108,0.65)", lineHeight: 1.65 }}>
+                Sprint 1: Auth + Data → Sprint 2: API + State → Sprint 3: UI + Logic
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom action row */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "12px 16px", borderTop: "1px solid rgba(212,175,55,0.07)",
+        }}>
+          <button
+            onClick={onClose}
+            style={{
+              display: "flex", alignItems: "center", gap: 4,
+              padding: "8px 16px", borderRadius: 20,
+              background: "rgba(120,113,108,0.09)", border: "1px solid rgba(120,113,108,0.2)",
+              color: "rgba(120,113,108,0.75)", fontSize: 12, cursor: "pointer",
+              fontFamily: "var(--app-font-mono)",
+            }}
+          >
+            ‹ Chat
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {(["🎙", "↺", "/", "⬆"] as const).map((icon, i) => (
+              <button
+                key={i}
+                style={{
+                  width: 36, height: 36, borderRadius: "50%",
+                  background: "rgba(120,113,108,0.09)", border: "1px solid rgba(120,113,108,0.2)",
+                  cursor: "pointer", color: "rgba(120,113,108,0.65)",
+                  fontSize: i === 2 ? 16 : 14, fontWeight: i === 2 ? 700 : 400,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
 function SystemMapWithCockpit({ onHomeNav }: { onHomeNav: () => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
+  const [showChat, setShowChat] = useState(true);
+  const [showQuickPrompt, setShowQuickPrompt] = useState(false);
+  const [intent, setIntent] = useState("");
+  const platform = detectPlatform();
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+
+      {/* Map area */}
+      <div style={{ position: "relative", flex: showChat ? "0 0 42%" : 1, minHeight: 0, overflow: "hidden", transition: "flex 350ms ease" }}>
         <SystemMap
           onReadinessChange={setReadinessScore}
           onNodesChange={setNodes}
           compact
         />
+        {/* Platform detected badge — overlaid below the % READY badge */}
+        <div style={{
+          position: "absolute", left: 14, top: 46, zIndex: 10,
+          fontSize: 9, fontWeight: 700, color: "rgba(212,175,55,0.7)",
+          background: "rgba(212,175,55,0.07)", border: "0.5px solid rgba(212,175,55,0.22)",
+          borderRadius: 20, padding: "1px 8px", letterSpacing: "0.08em",
+          pointerEvents: "none",
+        }}>
+          {platform} DETECTED
+        </div>
       </div>
+
+      {/* Toggle bar */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "5px 12px",
+        background: "rgba(13,11,9,0.97)",
+        borderTop: "1px solid rgba(212,175,55,0.09)",
+        borderBottom: "1px solid rgba(212,175,55,0.05)",
+        flexShrink: 0,
+      }}>
+        <button
+          onClick={() => setShowChat(v => !v)}
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: "rgba(212,175,55,0.6)", fontSize: 10.5,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+          }}
+        >
+          {showChat ? "▼ Hide Chat — See Full Map" : "▲ Show Chat — Intent Capture"}
+        </button>
+        <button style={{
+          background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.18)",
+          borderRadius: 6, padding: "3px 10px", cursor: "pointer",
+          color: "rgba(212,175,55,0.65)", fontSize: 9.5,
+          fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+        }}>
+          ⛶ Fullscreen
+        </button>
+      </div>
+
+      {/* INTENT CAPTURE */}
+      {showChat && (
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: "rgba(13,11,9,0.97)" }}>
+          <style>{`@keyframes intent-dot-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}`}</style>
+
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 6px", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#D4AF37", animation: "intent-dot-pulse 2s ease-in-out infinite", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.12em" }}>INTENT CAPTURE</span>
+            </div>
+            <button style={{
+              background: "rgba(212,175,55,0.09)", border: "1px solid rgba(212,175,55,0.3)",
+              borderRadius: 8, padding: "5px 12px", cursor: "pointer",
+              color: "#D4AF37", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em",
+              fontFamily: "var(--app-font-mono)",
+            }}>
+              New Signal
+            </button>
+          </div>
+
+          {/* Signal selector */}
+          <div style={{ padding: "0 14px 8px", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <span style={{ color: "rgba(212,175,55,0.38)", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>‹</span>
+            <select style={{
+              flex: 1, background: "rgba(20,18,14,0.92)", border: "1px solid rgba(212,175,55,0.13)",
+              borderRadius: 6, padding: "4px 8px", color: "rgba(212,175,55,0.65)", fontSize: 10,
+              fontFamily: "var(--app-font-mono)", cursor: "pointer",
+            }}>
+              <option>Signal #1</option>
+            </select>
+          </div>
+
+          {/* Prompt card */}
+          <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: "0 14px 12px" }}>
+            <div style={{
+              height: "100%", display: "flex", flexDirection: "column",
+              background: "rgba(20,18,14,0.92)",
+              border: "1px solid rgba(212,175,55,0.16)",
+              borderRadius: 12, overflow: "hidden",
+            }}>
+              {/* Card header — platform badge */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "9px 14px 7px",
+                borderBottom: "1px solid rgba(212,175,55,0.07)",
+                flexShrink: 0,
+              }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#0D0B09", background: "#D4AF37", borderRadius: 4, padding: "2px 7px", letterSpacing: "0.08em" }}>
+                  {platform}
+                </span>
+                <span style={{ fontSize: 10.5, color: "rgba(120,113,108,0.65)", letterSpacing: "0.04em" }}>prompt aimed</span>
+              </div>
+
+              {/* Textarea */}
+              <textarea
+                value={intent}
+                onChange={e => setIntent(e.target.value)}
+                placeholder="Define your intent..."
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (intent.trim()) setIntent(""); } }}
+                style={{
+                  flex: 1, background: "transparent", border: "none", outline: "none",
+                  resize: "none", padding: "12px 14px",
+                  color: "var(--atlas-fg)", fontSize: 13, lineHeight: 1.6,
+                  fontFamily: "inherit",
+                }}
+              />
+
+              {/* Card footer */}
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "7px 14px",
+                borderTop: "1px solid rgba(212,175,55,0.05)",
+                flexShrink: 0,
+              }}>
+                <button style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.45)", padding: 4 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                  </svg>
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.45)", padding: 4 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                  </button>
+                  <button
+                    style={{
+                      width: 30, height: 30, borderRadius: 8,
+                      background: intent.trim() ? "rgba(212,175,55,0.14)" : "transparent",
+                      border: `1px solid ${intent.trim() ? "rgba(212,175,55,0.38)" : "rgba(120,113,108,0.22)"}`,
+                      cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: intent.trim() ? "#D4AF37" : "rgba(120,113,108,0.32)",
+                      transition: "all 150ms",
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Prompt sheet */}
+      {showQuickPrompt && (
+        <QuickPromptSheet
+          platform={platform}
+          readinessScore={readinessScore}
+          onClose={() => setShowQuickPrompt(false)}
+        />
+      )}
+
       <CockpitBar
         readinessScore={readinessScore}
         nodes={nodes}
         onHomeNav={onHomeNav}
+        onAxiomOpen={() => setShowQuickPrompt(true)}
       />
     </div>
   );

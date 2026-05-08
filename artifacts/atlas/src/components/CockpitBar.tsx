@@ -5,6 +5,7 @@ interface CockpitBarProps {
   readinessScore: number;
   nodes: ArchNode[];
   onHomeNav?: () => void;
+  onAxiomOpen?: () => void;
   navLeft?: ReactNode;
   navRight?: ReactNode;
   showReadinessStrip?: boolean;
@@ -37,6 +38,7 @@ export function CockpitBar({
   readinessScore,
   nodes,
   onHomeNav,
+  onAxiomOpen,
   navLeft,
   navRight,
   showReadinessStrip = true,
@@ -123,7 +125,7 @@ export function CockpitBar({
         </div>
       )}
 
-      {/* Help card (default left action) */}
+      {/* Help card */}
       {showHelp && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 30 }} onClick={() => setShowHelp(false)} />
@@ -164,7 +166,7 @@ export function CockpitBar({
         </>
       )}
 
-      {/* Export sheet (default right action) */}
+      {/* Export sheet */}
       {showExport && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} onClick={() => setShowExport(false)} />
@@ -195,9 +197,9 @@ export function CockpitBar({
           <path d="M0,0.5 L148,0.5 C163,0.5 172,22 195,22 C218,22 227,0.5 242,0.5 L390,0.5" fill="none" stroke="rgba(212,175,55,0.22)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </svg>
 
-        {/* Raised A button — center */}
+        {/* Raised A button — center → opens Quick Prompt */}
         <button
-          title="Axiom"
+          title="Quick Prompt"
           style={{
             position: "absolute", top: -28, left: "50%",
             transform: "translateX(-50%)",
@@ -208,7 +210,7 @@ export function CockpitBar({
             animation: hasSession ? "axiom-pulse-bar 2s ease-in-out infinite" : "none",
             boxShadow: "0 0 20px rgba(212,175,55,0.3), 0 4px 12px rgba(0,0,0,0.5)",
           }}
-          onClick={() => {}}
+          onClick={() => onAxiomOpen?.()}
         >
           <AxiomLogoSVG />
         </button>
@@ -218,7 +220,7 @@ export function CockpitBar({
           AXIOM
         </span>
 
-        {/* Left side — navLeft if provided, else default ? help button */}
+        {/* Left side */}
         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "42%", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}>
           {navLeft !== undefined ? navLeft : (
             <button
@@ -231,7 +233,7 @@ export function CockpitBar({
           )}
         </div>
 
-        {/* Right side — navRight if provided, else default → Atlas + export */}
+        {/* Right side */}
         <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "42%", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}>
           {navRight !== undefined ? navRight : (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
