@@ -11,9 +11,11 @@ import selfRouter from "./self";
 import thoughtsRouter from "./thoughts";
 import importRouter from "./import";
 import vaultRouter from "./vault";
+import authRouter from "./auth";
 
 const router: IRouter = Router();
 
+router.use(authRouter);
 router.use(healthRouter);
 router.use(projectsRouter);
 router.use(sessionsRouter);
