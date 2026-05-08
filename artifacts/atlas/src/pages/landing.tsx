@@ -56,6 +56,8 @@ export default function LandingPage() {
       <InterrogationSection />
       <HandoffSection />
       <WallOfGoldSection onEnter={handleEnter} />
+      <PricingSection onEnter={handleEnter} />
+      <LandingFooter />
     </div>
   );
 }
@@ -218,7 +220,7 @@ function InterrogationSection() {
           The timeline doubles.
           <br /><br />
           That's the <span style={{ color: "#D4AF37" }}>do-over tax</span>.
-          Axiom makes it structurally impossible.
+          Axiom makes it much harder to fall into.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-10">
@@ -241,6 +243,12 @@ function InterrogationSection() {
             </div>
           ))}
         </div>
+        <p className="mt-6 transition-all duration-700" style={{
+          ...mono, fontSize: "0.55rem", color: "#3d3529", letterSpacing: "0.08em",
+          opacity: visible ? 0.6 : 0, transitionDelay: "0.8s",
+        }}>
+          * Based on industry research and aggregate builder estimates.
+        </p>
 
         <p className="mt-16 text-center uppercase tracking-[0.25em] transition-all duration-700" style={{
           ...serif, fontSize: "clamp(1rem, 2.5vw, 1.5rem)", fontWeight: 500, color: "#e8dcc8",
@@ -248,7 +256,7 @@ function InterrogationSection() {
           transitionDelay: "0.7s",
         }}>
           Axiom makes that{" "}
-          <span style={{ color: "#D4AF37", fontStyle: "italic" }}>impossible.</span>
+          <span style={{ color: "#D4AF37", fontStyle: "italic" }}>a lot harder to do.</span>
         </p>
       </div>
     </section>
@@ -654,23 +662,205 @@ function WallOfGoldSection({ onEnter }: { onEnter: () => void }) {
         </div>
       </div>
 
-      {/* Footer strip */}
-      <div className="py-10 px-6 flex flex-col items-center gap-3" style={{ background: "#050505" }}>
-        <img src="/axiom-logo.svg" alt="Axiom" style={{ width: 28, height: 28, borderRadius: "20%", opacity: 0.6 }} />
-        <p className="uppercase tracking-[0.4em]" style={{ ...mono, fontSize: "0.55rem", color: "#3d3529" }}>
-          Axiom — by Into Innovations
+    </section>
+  );
+}
+
+/* ─── Pricing ─── */
+function PricingSection({ onEnter }: { onEnter: () => void }) {
+  const [visRef, setVisRef] = useState(false);
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const mono: CSSProperties = { fontFamily: "'IBM Plex Mono', 'Courier New', monospace" };
+  const serif: CSSProperties = { fontFamily: "'Cormorant Garamond', Georgia, serif" };
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisRef(true); }, { threshold: 0.1 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const tiers = [
+    {
+      name: "Free",
+      priceLabel: "Free",
+      sub: "Always",
+      bullets: ["3 projects", "50 messages / month", "Decision Catch engine", "Decision Ledger"],
+      cta: "Start free",
+      highlight: false,
+    },
+    {
+      name: "Pro",
+      priceLabel: "$19",
+      sub: "/ month",
+      bullets: ["Unlimited projects", "Unlimited messages", "GitHub integration", "Session memory"],
+      cta: "Get Pro",
+      highlight: true,
+    },
+    {
+      name: "Teams",
+      priceLabel: "$49",
+      sub: "/ month",
+      bullets: ["Everything in Pro", "Team workspace", "Shared decision ledger", "Admin controls"],
+      cta: "Talk to us",
+      highlight: false,
+    },
+  ];
+
+  return (
+    <section
+      id="pricing"
+      ref={sectionRef}
+      className="relative z-10 py-28 md:py-36 px-6"
+    >
+      {/* Top divider */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px transition-all duration-[1.2s] ease-out" style={{
+        width: visRef ? "80%" : "0%",
+        background: "linear-gradient(90deg, transparent, rgba(212,175,55,0.3), transparent)",
+      }} />
+
+      <div className="max-w-4xl mx-auto">
+        {/* Section label */}
+        <p className="uppercase tracking-[0.35em] mb-8 transition-all duration-700" style={{
+          ...mono, fontSize: "0.65rem", color: "#6b5f50",
+          opacity: visRef ? 1 : 0, transform: visRef ? "translateY(0)" : "translateY(12px)",
+        }}>
+          05 // Pricing
         </p>
-        <div className="w-6 h-px" style={{ background: "rgba(212,175,55,0.2)" }} />
-        <p style={{ ...mono, fontSize: "0.5rem", color: "#2a2520", letterSpacing: "0.15em" }}>
-          © {new Date().getFullYear()} Into Innovations LLC. All rights reserved.
+
+        {/* Headline */}
+        <h2 className="uppercase leading-[1.0] mb-4 transition-all duration-[0.9s] ease-out" style={{
+          ...serif, fontWeight: 600, fontSize: "clamp(1.8rem, 5vw, 4rem)", letterSpacing: "0.03em", color: "#e8dcc8",
+          opacity: visRef ? 1 : 0, transform: visRef ? "translateY(0)" : "translateY(20px)",
+        }}>
+          Simple pricing.{" "}
+          <span style={{ color: "#D4AF37", fontStyle: "italic" }}>No surprises.</span>
+        </h2>
+        <p className="mb-16 transition-all duration-700 delay-200" style={{
+          ...mono, fontSize: "clamp(0.7rem, 1.2vw, 0.85rem)", color: "#6b5f50",
+          opacity: visRef ? 1 : 0, transform: visRef ? "translateY(0)" : "translateY(12px)",
+        }}>
+          Start free. Upgrade when it earns its keep.
         </p>
-        <div style={{ display: "flex", gap: "16px", justifyContent: "center", marginTop: "8px" }}>
-          {[{ label: "Terms", href: "/terms" }, { label: "Privacy", href: "/privacy" }, { label: "Help & FAQ", href: "/help" }].map(({ label, href }) => (
-            <a key={href} href={href} style={{ fontSize: "0.5rem", color: "#3a3530", letterSpacing: "0.1em", textDecoration: "underline" }}>{label}</a>
+
+        {/* Tier cards */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
+          {tiers.map((tier, i) => (
+            <LandingTierCard key={tier.name} tier={tier} mono={mono} serif={serif} onEnter={onEnter}
+              visible={visRef} delay={`${0.1 + i * 0.15}s`} />
           ))}
         </div>
+
+        {/* Fine print */}
+        <p className="mt-8 text-center transition-all duration-700" style={{
+          ...mono, fontSize: "0.55rem", color: "#3d3529", letterSpacing: "0.1em",
+          opacity: visRef ? 0.7 : 0, transitionDelay: "0.6s",
+        }}>
+          All plans include end-to-end encryption · Cancel anytime
+        </p>
       </div>
     </section>
+  );
+}
+
+type LandingTier = { name: string; priceLabel: string; sub: string; bullets: string[]; cta: string; highlight: boolean };
+
+function LandingTierCard({ tier, mono, serif, onEnter, visible, delay }: {
+  tier: LandingTier; mono: CSSProperties; serif: CSSProperties;
+  onEnter: () => void; visible: boolean; delay: string;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      className="relative flex flex-col transition-all duration-700 ease-out"
+      style={{
+        padding: "26px 22px 24px",
+        background: tier.highlight ? "rgba(212,175,55,0.06)" : "rgba(5,5,5,0.6)",
+        border: `1px solid ${tier.highlight
+          ? hov ? "rgba(212,175,55,0.55)" : "rgba(212,175,55,0.28)"
+          : hov ? "rgba(212,175,55,0.2)" : "rgba(212,175,55,0.08)"}`,
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(24px)",
+        transitionDelay: delay,
+        transition: `opacity 0.7s ease-out ${delay}, transform 0.7s ease-out ${delay}, border-color 180ms ease, background 180ms ease`,
+      }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+    >
+      {tier.highlight && (
+        <div className="absolute" style={{
+          top: -1, right: 18, background: "#D4AF37", color: "#050505",
+          ...mono, fontSize: "0.55rem", fontWeight: 700, letterSpacing: "0.14em",
+          textTransform: "uppercase", padding: "3px 9px",
+        }}>
+          Most popular
+        </div>
+      )}
+      <p style={{ ...mono, fontSize: "0.6rem", letterSpacing: "0.22em", textTransform: "uppercase", color: tier.highlight ? "#D4AF37" : "#6b5f50", marginBottom: 16 }}>
+        {tier.name}
+      </p>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginBottom: 20 }}>
+        <span style={{ ...serif, fontSize: tier.priceLabel === "Free" ? "2rem" : "2.8rem", fontWeight: 600, color: "#e8dcc8", lineHeight: 1, letterSpacing: "-0.02em" }}>
+          {tier.priceLabel}
+        </span>
+        <span style={{ ...mono, fontSize: "0.6rem", color: "#6b5f50", marginBottom: 6 }}>{tier.sub}</span>
+      </div>
+      <div style={{ height: 1, background: tier.highlight ? "rgba(212,175,55,0.2)" : "rgba(212,175,55,0.07)", marginBottom: 20 }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 26, flex: 1 }}>
+        {tier.bullets.map((b) => (
+          <div key={b} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+            <span style={{
+              width: 13, height: 13, flexShrink: 0, marginTop: 1,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: `1px solid ${tier.highlight ? "rgba(212,175,55,0.35)" : "rgba(107,95,80,0.3)"}`,
+              borderRadius: "50%",
+            }}>
+              <svg width="7" height="7" viewBox="0 0 8 8" fill="none">
+                <path d="M1.5 4L3.2 5.7L6.5 2.3" stroke={tier.highlight ? "#D4AF37" : "#6b5f50"} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+            <span style={{ ...mono, fontSize: "0.7rem", color: "#8a7e6e", lineHeight: 1.5 }}>{b}</span>
+          </div>
+        ))}
+      </div>
+      <button onClick={onEnter} style={{
+        padding: "10px 0", border: `1px solid ${tier.highlight ? "rgba(212,175,55,0.5)" : "rgba(107,95,80,0.25)"}`,
+        background: tier.highlight ? hov ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.06)" : hov ? "rgba(107,95,80,0.1)" : "transparent",
+        color: tier.highlight ? "#D4AF37" : "#6b5f50", ...mono, fontSize: "0.65rem",
+        letterSpacing: "0.2em", textTransform: "uppercase", cursor: "pointer", transition: "all 180ms ease",
+        fontWeight: tier.highlight ? 600 : 400,
+      }}>
+        {tier.cta}
+      </button>
+    </div>
+  );
+}
+
+/* ─── Footer ─── */
+function LandingFooter() {
+  const mono: CSSProperties = { fontFamily: "'IBM Plex Mono', 'Courier New', monospace" };
+  return (
+    <div className="py-10 px-6 flex flex-col items-center gap-3" style={{ background: "#050505" }}>
+      <img src="/axiom-logo.svg" alt="Axiom" style={{ width: 28, height: 28, borderRadius: "20%", opacity: 0.6 }} />
+      <p className="uppercase tracking-[0.4em]" style={{ ...mono, fontSize: "0.55rem", color: "#3d3529" }}>
+        Axiom — by Into Innovations
+      </p>
+      <div className="w-6 h-px" style={{ background: "rgba(212,175,55,0.2)" }} />
+      <p style={{ ...mono, fontSize: "0.5rem", color: "#2a2520", letterSpacing: "0.15em" }}>
+        © {new Date().getFullYear()} Into Innovations LLC. All rights reserved.
+      </p>
+      <div style={{ display: "flex", gap: "16px", justifyContent: "center", marginTop: "8px" }}>
+        {[
+          { label: "Terms", href: "/terms" },
+          { label: "Privacy", href: "/privacy" },
+          { label: "Help & FAQ", href: "/help" },
+          { label: "Pricing", href: "#pricing" },
+        ].map(({ label, href }) => (
+          <a key={href} href={href} style={{ fontSize: "0.5rem", color: "#3a3530", letterSpacing: "0.1em", textDecoration: "underline" }}>{label}</a>
+        ))}
+      </div>
+    </div>
   );
 }
 
