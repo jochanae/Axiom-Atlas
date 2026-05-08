@@ -4072,8 +4072,22 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectI
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
   const [signals, setSignals] = useState<string[]>([""]);
   const [activeSignalIdx, setActiveSignalIdx] = useState(0);
+  const [signalAdded, setSignalAdded] = useState(false);
   const intent = signals[activeSignalIdx] ?? "";
   const setIntent = (val: string) => setSignals(prev => prev.map((s, i) => i === activeSignalIdx ? val : s));
+
+  const addSignal = () => {
+    setSignals(prev => [...prev, ""]);
+    setActiveSignalIdx(signals.length);
+    setSignalAdded(true);
+    setTimeout(() => setSignalAdded(false), 1200);
+  };
+
+  const deleteActiveSignal = () => {
+    if (signals.length <= 1) return;
+    setSignals(prev => prev.filter((_, i) => i !== activeSignalIdx));
+    setActiveSignalIdx(i => Math.max(0, i - 1));
+  };
   const platform = detectPlatform();
   const { data: activeProject } = useGetProject(projectId ?? 0, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId ?? 0) },
@@ -4157,28 +4171,20 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectI
               <span style={{ fontSize: 11, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.12em" }}>INTENT CAPTURE</span>
             </div>
             <button
-              onClick={() => {
-                setSignals(prev => [...prev, ""]);
-                setActiveSignalIdx(signals.length);
-              }}
+              onClick={addSignal}
               style={{
-                background: "rgba(212,175,55,0.09)", border: "1px solid rgba(212,175,55,0.3)",
+                background: signalAdded ? "rgba(212,175,55,0.22)" : "rgba(212,175,55,0.09)",
+                border: `1px solid ${signalAdded ? "rgba(212,175,55,0.7)" : "rgba(212,175,55,0.3)"}`,
                 borderRadius: 8, padding: "5px 12px", cursor: "pointer",
                 color: "#D4AF37", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em",
-                fontFamily: "var(--app-font-mono)",
+                fontFamily: "var(--app-font-mono)", transition: "all 300ms",
               }}>
-              + Signal
+              {signalAdded ? "✓ Added" : "+ Signal"}
             </button>
           </div>
 
           {/* Signal selector */}
-          <div style={{ padding: "0 14px 8px", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            <button
-              onClick={() => setActiveSignalIdx(i => Math.max(0, i - 1))}
-              disabled={activeSignalIdx === 0}
-              style={{ color: activeSignalIdx === 0 ? "rgba(212,175,55,0.18)" : "rgba(212,175,55,0.55)", fontSize: 16, cursor: activeSignalIdx === 0 ? "default" : "pointer", lineHeight: 1, background: "none", border: "none", padding: "0 2px" }}>
-              ‹
-            </button>
+          <div style={{ padding: "0 14px 8px", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
             <select
               value={activeSignalIdx}
               onChange={e => setActiveSignalIdx(Number(e.target.value))}
@@ -4187,16 +4193,27 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectI
                 borderRadius: 6, padding: "4px 8px", color: "rgba(212,175,55,0.65)", fontSize: 10,
                 fontFamily: "var(--app-font-mono)", cursor: "pointer",
               }}>
-              {signals.map((_, i) => (
-                <option key={i} value={i}>Signal #{i + 1}{signals[i].trim() ? ` — ${signals[i].trim().slice(0, 28)}${signals[i].trim().length > 28 ? "…" : ""}` : ""}</option>
+              {signals.map((s, i) => (
+                <option key={i} value={i}>Signal #{i + 1}{s.trim() ? ` — ${s.trim().slice(0, 30)}${s.trim().length > 30 ? "…" : ""}` : ""}</option>
               ))}
             </select>
-            <button
-              onClick={() => setActiveSignalIdx(i => Math.min(signals.length - 1, i + 1))}
-              disabled={activeSignalIdx === signals.length - 1}
-              style={{ color: activeSignalIdx === signals.length - 1 ? "rgba(212,175,55,0.18)" : "rgba(212,175,55,0.55)", fontSize: 16, cursor: activeSignalIdx === signals.length - 1 ? "default" : "pointer", lineHeight: 1, background: "none", border: "none", padding: "0 2px" }}>
-              ›
-            </button>
+            {signals.length > 1 && (
+              <button
+                onClick={deleteActiveSignal}
+                title="Delete this signal"
+                style={{
+                  width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
+                  color: "rgba(239,68,68,0.6)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 13, lineHeight: 1,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.18)"; e.currentTarget.style.color = "rgba(239,68,68,0.9)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.08)"; e.currentTarget.style.color = "rgba(239,68,68,0.6)"; }}
+              >
+                ×
+              </button>
+            )}
           </div>
 
           {/* Prompt card */}
@@ -4224,7 +4241,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectI
               <textarea
                 value={intent}
                 onChange={e => setIntent(e.target.value)}
-                placeholder="Define your intent..."
+                placeholder="Describe what you want to build or change — e.g. 'Add login with Google to my Express app using passport.js'"
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (intent.trim()) { onSendIntent?.(intent.trim()); setIntent(""); } } }}
                 style={{
                   flex: 1, background: "transparent", border: "none", outline: "none",
@@ -4407,7 +4424,6 @@ function RightPanel({
       style={{
         height: "100%", display: "flex", flexDirection: "column",
         background: "var(--atlas-surface-alt)",
-        borderLeft: "1px solid var(--atlas-border)",
       }}
     >
       {/* Tab bar */}
@@ -5892,22 +5908,19 @@ export default function Workspace() {
           <>
             <div
               onMouseDown={(e) => { e.preventDefault(); startResize(e.clientX); }}
-              onTouchStart={(e) => { startResize(e.touches[0].clientX); }}
+              onTouchStart={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.18)"; startResize(e.touches[0].clientX); }}
               onDoubleClick={() => setChatWidthPct(45)}
               title="Drag to resize · Double-tap to reset"
               style={{
-                width: 8, flexShrink: 0, cursor: "col-resize",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                background: "transparent",
-                transition: "background 150ms",
+                width: 6, flexShrink: 0, cursor: "col-resize",
+                background: "var(--atlas-border)",
                 zIndex: 10,
                 touchAction: "none",
+                transition: "background 150ms",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.08)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-            >
-              <div style={{ width: 1, height: "40%", background: "var(--atlas-border)", borderRadius: 1 }} />
-            </div>
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.18)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--atlas-border)"; }}
+            />
             <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
               <RightPanel
                 projectId={id}
