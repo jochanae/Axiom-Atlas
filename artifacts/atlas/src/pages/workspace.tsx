@@ -128,9 +128,9 @@ function profileToString(p: UserProfile): string {
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 function useIsMobile() {
-  const [mobile, setMobile] = useState(() => window.innerWidth < 1024);
+  const [mobile, setMobile] = useState(() => window.innerWidth < 760);
   useEffect(() => {
-    const handler = () => setMobile(window.innerWidth < 1024);
+    const handler = () => setMobile(window.innerWidth < 760);
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
@@ -5566,7 +5566,7 @@ export default function Workspace() {
                 </div>
 
                 <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "var(--atlas-muted)", opacity: 0.3 }}>
-                  {isMobile ? "Tap to send" : "Enter · Shift+Enter for newline"}
+                  {isMobile ? "Say it plainly…" : "Enter · Shift+Enter for newline"}
                 </span>
 
                 {/* Right: mic + send */}
@@ -5697,14 +5697,49 @@ export default function Workspace() {
         )}
       </div>
 
-      {/* Mobile bottom tab bar */}
-      {isMobile && (
+      {/* Mobile bottom tab bar — hidden when Map is in focus */}
+      {isMobile && mobileTab !== "map" && (
         <MobileTabBar
           activeTab={mobileTab}
           onTabChange={(tab) => setMobileTab(tab)}
           entryCount={entryCount}
           activeCatch={!!activeCatch}
         />
+      )}
+
+      {/* Map focus mode — floating back pill when map tab is active */}
+      {isMobile && mobileTab === "map" && (
+        <button
+          onClick={() => setMobileTab("chat")}
+          style={{
+            position: "fixed",
+            bottom: "max(20px, env(safe-area-inset-bottom, 20px))",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 300,
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 18px",
+            borderRadius: 999,
+            background: "rgba(12,10,9,0.88)",
+            backdropFilter: "blur(14px)",
+            WebkitBackdropFilter: "blur(14px)",
+            border: "1px solid rgba(212,175,55,0.25)",
+            color: "var(--atlas-muted)",
+            fontSize: 11,
+            fontFamily: "var(--app-font-mono)",
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            cursor: "pointer",
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 5l-7 7 7 7" />
+          </svg>
+          Back to chat
+        </button>
       )}
 
       {/* User Profile Panel */}
