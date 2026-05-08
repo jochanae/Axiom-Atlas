@@ -248,18 +248,22 @@ export default function Login() {
                 padding: "13px 16px",
                 borderRadius: 10,
                 background: loading || !email || !password
-                  ? "rgba(146,64,14,0.3)"
-                  : "linear-gradient(180deg, var(--atlas-ember) 0%, color-mix(in oklab, var(--atlas-ember) 78%, #3a1a06) 100%)",
-                border: "none",
-                color: loading || !email || !password ? "rgba(231,229,228,0.3)" : "var(--atlas-fg)",
+                  ? "rgba(201,162,76,0.12)"
+                  : "linear-gradient(180deg, #D4AF37 0%, #B8942A 100%)",
+                border: loading || !email || !password
+                  ? "1px solid rgba(201,162,76,0.15)"
+                  : "1px solid rgba(212,175,55,0.4)",
+                color: loading || !email || !password ? "rgba(201,162,76,0.3)" : "#0C0A09",
                 fontSize: 11,
-                fontWeight: 600,
+                fontWeight: 700,
                 ...mono,
                 letterSpacing: "0.18em",
                 textTransform: "uppercase",
                 cursor: loading || !email || !password ? "not-allowed" : "pointer",
                 transition: "all 240ms ease",
-                boxShadow: loading || !email || !password ? "none" : "0 0 24px rgba(146,64,14,0.25)",
+                boxShadow: loading || !email || !password
+                  ? "none"
+                  : "0 0 28px rgba(212,175,55,0.3), 0 0 8px rgba(212,175,55,0.15), inset 0 1px 0 rgba(255,255,255,0.15)",
                 marginTop: 4,
               }}
             >
