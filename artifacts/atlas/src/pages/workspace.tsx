@@ -4568,9 +4568,7 @@ export default function Workspace() {
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
   const [rightOpen, setRightOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [chatWidth, setChatWidth] = useState(() => {
-    try { return parseInt(localStorage.getItem("atlas-chat-w") || "0") || 520; } catch { return 520; }
-  });
+  const chatWidth = "45%";
 
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [rightFullscreen, setRightFullscreen] = useState(false);
@@ -4659,8 +4657,6 @@ export default function Workspace() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const resizing = useRef(false);
-  const lastX = useRef(0);
   const initialSent = useRef(false);
   const touchStartX = useRef(0);
 
@@ -5032,33 +5028,6 @@ export default function Workspace() {
     setMemoryChips((prev) => prev.filter((c) => c !== chip));
   }, []);
 
-  const onResizeMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    resizing.current = true;
-    lastX.current = e.clientX;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-
-    const onMove = (ev: MouseEvent) => {
-      if (!resizing.current) return;
-      const dx = ev.clientX - lastX.current;
-      lastX.current = ev.clientX;
-      setChatWidth((w) => {
-        const next = Math.max(320, Math.min(window.innerWidth * 0.68, w + dx));
-        try { localStorage.setItem("atlas-chat-w", String(Math.round(next))); } catch {}
-        return next;
-      });
-    };
-    const onUp = () => {
-      resizing.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, []);
 
   const hasInput = input.trim().length > 0;
   const entryCount = entries?.length ?? 0;
@@ -5761,10 +5730,7 @@ export default function Workspace() {
         {!isMobile && (
           <>
             <div
-              className="atlas-resize-handle"
-              onMouseDown={onResizeMouseDown}
-              onDoubleClick={() => setChatWidth(Math.floor(window.innerWidth * 0.5))}
-              title="Drag · double-click for 50/50"
+              style={{ width: 1, flexShrink: 0, background: "var(--atlas-border)" }}
             />
             <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
               <RightPanel
