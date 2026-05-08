@@ -3777,10 +3777,12 @@ function detectPlatform(): string {
 function QuickPromptSheet({
   platform,
   readinessScore,
+  activeProjectName,
   onClose,
 }: {
   platform: string;
   readinessScore: number;
+  activeProjectName?: string;
   onClose: () => void;
 }) {
   const [qTab, setQTab] = useState<"axiom" | "spec" | "quick">("quick");
@@ -3789,7 +3791,7 @@ function QuickPromptSheet({
   const [buildWhere, setBuildWhere] = useState(defaultPlatform);
   const [task, setTask] = useState("");
   const [showProjectDrop, setShowProjectDrop] = useState(false);
-  const [projectContext, setProjectContext] = useState("");
+  const [projectContext, setProjectContext] = useState(activeProjectName ?? "");
   const { data: allProjects } = useListProjects();
   const cockpitH = 72;
 
@@ -3905,26 +3907,47 @@ function QuickPromptSheet({
                         boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
                         overflow: "hidden",
                       }}>
-                        {allProjects && allProjects.length > 0 ? allProjects.map((p) => (
-                          <button
-                            key={p.id}
-                            onClick={() => { setProjectContext(p.name); setShowProjectDrop(false); }}
-                            style={{
-                              width: "100%", textAlign: "left",
-                              padding: "10px 14px",
-                              background: projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent",
-                              border: "none",
-                              borderBottom: "1px solid rgba(212,175,55,0.07)",
-                              color: projectContext === p.name ? "#D4AF37" : "rgba(231,229,228,0.75)",
-                              fontSize: 12, cursor: "pointer",
-                              fontFamily: "var(--app-font-mono)",
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.08)"; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent"; }}
-                          >
-                            {p.name}
-                          </button>
-                        )) : (
+                        {allProjects && allProjects.length > 0 ? (
+                          <>
+                            {allProjects.map((p) => (
+                              <button
+                                key={p.id}
+                                onClick={() => { setProjectContext(p.name); setShowProjectDrop(false); }}
+                                style={{
+                                  width: "100%", textAlign: "left",
+                                  padding: "10px 14px",
+                                  background: projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent",
+                                  border: "none",
+                                  borderBottom: "1px solid rgba(212,175,55,0.07)",
+                                  color: projectContext === p.name ? "#D4AF37" : "rgba(231,229,228,0.75)",
+                                  fontSize: 12, cursor: "pointer",
+                                  fontFamily: "var(--app-font-mono)",
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.08)"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent"; }}
+                              >
+                                {p.name}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => { setProjectContext("Other (New)"); setShowProjectDrop(false); }}
+                              style={{
+                                width: "100%", textAlign: "left",
+                                padding: "10px 14px",
+                                background: projectContext === "Other (New)" ? "rgba(212,175,55,0.1)" : "transparent",
+                                border: "none",
+                                color: projectContext === "Other (New)" ? "#D4AF37" : "rgba(120,113,108,0.55)",
+                                fontSize: 12, cursor: "pointer",
+                                fontFamily: "var(--app-font-mono)",
+                                fontStyle: "italic",
+                              }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.06)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = projectContext === "Other (New)" ? "rgba(212,175,55,0.1)" : "transparent"; }}
+                            >
+                              + Other (New)
+                            </button>
+                          </>
+                        ) : (
                           <div style={{ padding: "10px 14px", fontSize: 11, color: "rgba(120,113,108,0.5)", fontFamily: "var(--app-font-mono)" }}>
                             No projects yet
                           </div>
@@ -4033,16 +4056,32 @@ function QuickPromptSheet({
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ onHomeNav, onSendIntent }: { onHomeNav: () => void; onSendIntent?: (text: string) => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
   const [showChat, setShowChat] = useState(true);
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
   const [intent, setIntent] = useState("");
   const platform = detectPlatform();
+  const { data: activeProject } = useGetProject(projectId ?? 0, {
+    query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId ?? 0) },
+  });
+  const activeProjectName = activeProject?.name;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <style>{`
+        @keyframes map-header-pulse {
+          0%, 100% { box-shadow: 0 0 14px rgba(139, 92, 246, 0.15); border-top-color: rgba(139, 92, 246, 0.28); }
+          50% { box-shadow: 0 0 28px rgba(139, 92, 246, 0.3); border-top-color: rgba(139, 92, 246, 0.52); }
+        }
+      `}</style>
+      <div style={{
+        height: 3, flexShrink: 0,
+        borderTop: "1.5px solid rgba(139, 92, 246, 0.28)",
+        boxShadow: "0 0 14px rgba(139, 92, 246, 0.15)",
+        animation: "map-header-pulse 3s ease-in-out infinite",
+      }} />
 
       {/* Map area */}
       <div style={{ position: "relative", flex: showChat ? "0 0 42%" : 1, minHeight: 0, overflow: "hidden", transition: "flex 350ms ease" }}>
@@ -4208,6 +4247,7 @@ function SystemMapWithCockpit({ onHomeNav, onSendIntent }: { onHomeNav: () => vo
         <QuickPromptSheet
           platform={platform}
           readinessScore={readinessScore}
+          activeProjectName={activeProjectName}
           onClose={() => setShowQuickPrompt(false)}
         />
       )}
@@ -4442,7 +4482,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit onHomeNav={onHomeNav} onSendIntent={onSendIntent} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} />}
     </div>
   );
 }
