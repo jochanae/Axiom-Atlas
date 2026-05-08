@@ -104,40 +104,65 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Social gates (stubbed — activate with OAuth credentials) */}
+          {/* Social gates */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            {[
-              { label: "Continue with Google", icon: GoogleIcon },
-              { label: "Continue with Apple", icon: AppleIcon },
-            ].map(({ label, icon: Icon }) => (
-              <button
-                key={label}
-                disabled
-                title="OAuth coming soon — configure credentials to activate"
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 10,
-                  padding: "11px 16px",
-                  borderRadius: 10,
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                  color: "var(--atlas-muted)",
-                  fontSize: 11,
-                  ...mono,
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  cursor: "not-allowed",
-                  opacity: 0.45,
-                  transition: "all 200ms ease",
-                }}
-              >
-                <Icon />
-                <span>{label}</span>
-              </button>
-            ))}
+            {/* Google — live */}
+            <a
+              href={`${BASE}/api/auth/google`}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                padding: "11px 16px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "var(--atlas-fg)",
+                fontSize: 11,
+                ...mono,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+                textDecoration: "none",
+                transition: "all 200ms ease",
+                boxSizing: "border-box",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+            >
+              <GoogleIcon />
+              <span>Continue with Google</span>
+            </a>
+
+            {/* Apple — coming soon */}
+            <button
+              disabled
+              title="Apple Sign-In coming soon"
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                padding: "11px 16px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.07)",
+                color: "var(--atlas-muted)",
+                fontSize: 11,
+                ...mono,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                cursor: "not-allowed",
+                opacity: 0.35,
+                transition: "all 200ms ease",
+              }}
+            >
+              <AppleIcon />
+              <span>Continue with Apple</span>
+            </button>
           </div>
 
           {/* Divider */}
