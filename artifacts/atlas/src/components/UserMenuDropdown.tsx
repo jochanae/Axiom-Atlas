@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useAuth, useLogout } from "@/hooks/useAuth";
 
 type Theme = "obsidian" | "parchment";
 
@@ -28,13 +29,12 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(readTheme);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+  const logout = useLogout();
 
-  const profile = (() => {
-    try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r) : {}; } catch { return {}; }
-  })();
-  const name: string = profile.name || "Account";
-  const email: string = profile.email || "Local session";
-  const photoUrl: string = profile.photoUrl || "";
+  const name: string = user?.name || user?.email?.split("@")[0] || "Account";
+  const email: string = user?.email || "";
+  const photoUrl: string = user?.avatarUrl || "";
 
   useEffect(() => {
     if (openSignal && openSignal > 0) setOpen(true);
@@ -178,14 +178,12 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
             onClick={() => { setOpen(false); onOpenProfile?.(); }}
           />
 
-          {/* Sign out — auth not wired yet */}
+          {/* Sign out */}
           <MenuRow
             icon={<SignOutIcon />}
             label="Sign out"
-            badge="SOON"
-            disabled
             danger
-            onClick={() => setOpen(false)}
+            onClick={() => { setOpen(false); void logout(); }}
           />
         </div>
       )}
