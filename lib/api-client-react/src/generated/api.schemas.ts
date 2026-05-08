@@ -307,6 +307,30 @@ export interface ChatRequest {
   entries?: EntryContext[];
 }
 
+export interface VaultSave {
+  id: number;
+  /** @nullable */
+  projectId?: number | null;
+  projectName: string;
+  title: string;
+  content: string;
+  entryCount: number;
+  /** @nullable */
+  tags?: string[] | null;
+  createdAt: string;
+}
+
+export interface CreateVaultSaveBody {
+  /** @nullable */
+  projectId?: number | null;
+  projectName: string;
+  title: string;
+  content: string;
+  entryCount: number;
+  /** @nullable */
+  tags?: string[] | null;
+}
+
 export interface Thought {
   id: number;
   content: string;

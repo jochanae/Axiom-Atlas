@@ -10,6 +10,7 @@ import devserverRouter from "./devserver";
 import selfRouter from "./self";
 import thoughtsRouter from "./thoughts";
 import importRouter from "./import";
+import vaultRouter from "./vault";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(devserverRouter);
 router.use(selfRouter);
 router.use(thoughtsRouter);
 router.use(importRouter);
+router.use(vaultRouter);
 
 export default router;

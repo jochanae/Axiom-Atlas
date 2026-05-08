@@ -20,6 +20,7 @@ import ProjectCompass from "./pages/project-compass";
 import Terms from "./pages/terms";
 import Privacy from "./pages/privacy";
 import Help from "./pages/help";
+import Vault from "./pages/vault";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/terms" component={Terms} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/help" component={Help} />
+      <Route path="/vault" component={Vault} />
       <Route component={NotFound} />
     </Switch>
   );

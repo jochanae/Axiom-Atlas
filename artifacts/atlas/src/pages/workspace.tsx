@@ -1735,6 +1735,43 @@ function LedgerTab({
   const [newTitle, setNewTitle] = useState("");
   const createEntry = useCreateEntry();
   const queryClient = useQueryClient();
+  const { data: ledgerProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
+
+  const [vaultSaving, setVaultSaving] = useState(false);
+  const [vaultSaved, setVaultSaved] = useState(false);
+
+  const handleSaveToVault = async () => {
+    if (vaultSaving || allCommitted.length === 0) return;
+    setVaultSaving(true);
+    const projectName = ledgerProject?.name ?? "Unknown Project";
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const title = `${projectName} — ${dateStr}`;
+    const tagSet = new Set<string>();
+    const lines = allCommitted.map((e) => {
+      if (e.mode) tagSet.add(e.mode.toUpperCase());
+      return `• ${e.title}${e.summary ? `\n  ${e.summary}` : ""}`;
+    });
+    const content = `Decision Ledger Snapshot — ${projectName}\n${dateStr}\n\n${lines.join("\n\n")}`;
+    try {
+      await fetch("/api/vault", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          projectName,
+          title,
+          content,
+          entryCount: allCommitted.length,
+          tags: tagSet.size > 0 ? Array.from(tagSet) : null,
+        }),
+      });
+      setVaultSaved(true);
+      setTimeout(() => setVaultSaved(false), 2500);
+    } finally {
+      setVaultSaving(false);
+    }
+  };
 
   const handleAdd = () => {
     if (!newTitle.trim()) return;
@@ -1945,8 +1982,8 @@ function LedgerTab({
         )}
       </div>
 
-      {/* Footer add button */}
-      <div style={{ padding: "8px 12px", borderTop: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+      {/* Footer buttons */}
+      <div style={{ padding: "8px 12px", borderTop: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", flexDirection: "column", gap: 6 }}>
         <button
           onClick={() => setShowAdd(!showAdd)}
           style={{
@@ -1963,6 +2000,26 @@ function LedgerTab({
           onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.65"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.2)"; }}
         >
           + Add decision
+        </button>
+        <button
+          onClick={handleSaveToVault}
+          disabled={vaultSaving || allCommitted.length === 0}
+          title={allCommitted.length === 0 ? "No committed decisions to save" : "Save a snapshot of this ledger to the Vault"}
+          style={{
+            width: "100%", padding: "7px", borderRadius: 6,
+            background: vaultSaved ? "rgba(201,162,76,0.1)" : "transparent",
+            border: `1px solid ${vaultSaved ? "rgba(201,162,76,0.4)" : "rgba(201,162,76,0.15)"}`,
+            color: vaultSaved ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 11,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+            textTransform: "uppercase" as const,
+            cursor: vaultSaving || allCommitted.length === 0 ? "default" : "pointer",
+            opacity: allCommitted.length === 0 ? 0.35 : vaultSaved ? 1 : 0.55,
+            transition: "all 160ms ease",
+          }}
+          onMouseEnter={(e) => { if (!vaultSaving && allCommitted.length > 0 && !vaultSaved) { e.currentTarget.style.opacity = "0.9"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; e.currentTarget.style.color = "var(--atlas-gold)"; } }}
+          onMouseLeave={(e) => { if (!vaultSaved) { e.currentTarget.style.opacity = allCommitted.length === 0 ? "0.35" : "0.55"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.15)"; e.currentTarget.style.color = "var(--atlas-muted)"; } }}
+        >
+          {vaultSaved ? "◆ Saved to Vault" : vaultSaving ? "Saving…" : "◆ Save to Vault"}
         </button>
       </div>
     </div>

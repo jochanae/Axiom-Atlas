@@ -56,6 +56,55 @@ paths:
         "400":
           description: Invalid payload
 
+  /vault:
+    get:
+      operationId: listVaultSaves
+      tags: [vault]
+      summary: List all saved vault snapshots
+      responses:
+        "200":
+          description: List of vault saves
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VaultSave"
+    post:
+      operationId: createVaultSave
+      tags: [vault]
+      summary: Save a ledger snapshot to the vault
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVaultSaveBody"
+      responses:
+        "201":
+          description: Created vault save
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VaultSave"
+        "400":
+          description: Invalid payload
+
+  /vault/{id}:
+    delete:
+      operationId: deleteVaultSave
+      tags: [vault]
+      summary: Delete a vault save
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
   /thoughts:
     get:
       operationId: listThoughts
@@ -817,6 +866,58 @@ components:
         - id
         - title
         - status
+
+    VaultSave:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: ["integer", "null"]
+        projectName:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        entryCount:
+          type: integer
+        tags:
+          type: ["array", "null"]
+          items:
+            type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - projectName
+        - title
+        - content
+        - entryCount
+        - createdAt
+
+    CreateVaultSaveBody:
+      type: object
+      properties:
+        projectId:
+          type: ["integer", "null"]
+        projectName:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        entryCount:
+          type: integer
+        tags:
+          type: ["array", "null"]
+          items:
+            type: string
+      required:
+        - projectName
+        - title
+        - content
+        - entryCount
 
     Thought:
       type: object
