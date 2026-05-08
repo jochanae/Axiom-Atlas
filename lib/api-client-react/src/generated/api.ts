@@ -25,6 +25,7 @@ import type {
   CreateProjectBody,
   CreateSessionBody,
   CreateThoughtBody,
+  CreateVaultSaveBody,
   Entry,
   HealthStatus,
   ListEntriesParams,
@@ -36,6 +37,7 @@ import type {
   Thought,
   UpdateEntryBody,
   UpdateProjectBody,
+  VaultSave,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -206,6 +208,251 @@ export const useAxiomImport = <
   TContext
 > => {
   return useMutation(getAxiomImportMutationOptions(options));
+};
+
+/**
+ * @summary List all saved vault snapshots
+ */
+export const getListVaultSavesUrl = () => {
+  return `/api/vault`;
+};
+
+export const listVaultSaves = async (
+  options?: RequestInit,
+): Promise<VaultSave[]> => {
+  return customFetch<VaultSave[]>(getListVaultSavesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVaultSavesQueryKey = () => {
+  return [`/api/vault`] as const;
+};
+
+export const getListVaultSavesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVaultSaves>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVaultSaves>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListVaultSavesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listVaultSaves>>> = ({
+    signal,
+  }) => listVaultSaves({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVaultSaves>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVaultSavesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVaultSaves>>
+>;
+export type ListVaultSavesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all saved vault snapshots
+ */
+
+export function useListVaultSaves<
+  TData = Awaited<ReturnType<typeof listVaultSaves>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listVaultSaves>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVaultSavesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Save a ledger snapshot to the vault
+ */
+export const getCreateVaultSaveUrl = () => {
+  return `/api/vault`;
+};
+
+export const createVaultSave = async (
+  createVaultSaveBody: CreateVaultSaveBody,
+  options?: RequestInit,
+): Promise<VaultSave> => {
+  return customFetch<VaultSave>(getCreateVaultSaveUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createVaultSaveBody),
+  });
+};
+
+export const getCreateVaultSaveMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVaultSave>>,
+    TError,
+    { data: BodyType<CreateVaultSaveBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createVaultSave>>,
+  TError,
+  { data: BodyType<CreateVaultSaveBody> },
+  TContext
+> => {
+  const mutationKey = ["createVaultSave"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createVaultSave>>,
+    { data: BodyType<CreateVaultSaveBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createVaultSave(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateVaultSaveMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createVaultSave>>
+>;
+export type CreateVaultSaveMutationBody = BodyType<CreateVaultSaveBody>;
+export type CreateVaultSaveMutationError = ErrorType<void>;
+
+/**
+ * @summary Save a ledger snapshot to the vault
+ */
+export const useCreateVaultSave = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createVaultSave>>,
+    TError,
+    { data: BodyType<CreateVaultSaveBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createVaultSave>>,
+  TError,
+  { data: BodyType<CreateVaultSaveBody> },
+  TContext
+> => {
+  return useMutation(getCreateVaultSaveMutationOptions(options));
+};
+
+/**
+ * @summary Delete a vault save
+ */
+export const getDeleteVaultSaveUrl = (id: number) => {
+  return `/api/vault/${id}`;
+};
+
+export const deleteVaultSave = async (
+  id: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getDeleteVaultSaveUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteVaultSaveMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVaultSave>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteVaultSave>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteVaultSave"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteVaultSave>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteVaultSave(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteVaultSaveMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteVaultSave>>
+>;
+
+export type DeleteVaultSaveMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a vault save
+ */
+export const useDeleteVaultSave = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteVaultSave>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteVaultSave>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteVaultSaveMutationOptions(options));
 };
 
 /**

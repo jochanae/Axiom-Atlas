@@ -5,3 +5,4 @@ export * from "./entries";
 export * from "./conversations";
 export * from "./messages";
 export * from "./thoughts";
+export * from "./vault";

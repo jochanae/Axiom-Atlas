@@ -35,6 +35,40 @@ export const AxiomImportBody = zod.object({
 });
 
 /**
+ * @summary List all saved vault snapshots
+ */
+export const ListVaultSavesResponseItem = zod.object({
+  id: zod.number(),
+  projectId: zod.number().nullish(),
+  projectName: zod.string(),
+  title: zod.string(),
+  content: zod.string(),
+  entryCount: zod.number(),
+  tags: zod.array(zod.string()).nullish(),
+  createdAt: zod.string(),
+});
+export const ListVaultSavesResponse = zod.array(ListVaultSavesResponseItem);
+
+/**
+ * @summary Save a ledger snapshot to the vault
+ */
+export const CreateVaultSaveBody = zod.object({
+  projectId: zod.number().nullish(),
+  projectName: zod.string(),
+  title: zod.string(),
+  content: zod.string(),
+  entryCount: zod.number(),
+  tags: zod.array(zod.string()).nullish(),
+});
+
+/**
+ * @summary Delete a vault save
+ */
+export const DeleteVaultSaveParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary List all saved thoughts
  */
 export const ListThoughtsResponseItem = zod.object({
