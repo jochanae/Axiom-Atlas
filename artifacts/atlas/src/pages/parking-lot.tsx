@@ -25,7 +25,12 @@ export default function ParkingLot() {
   const qc = useQueryClient();
 
   const { data: projects = [] } = useListProjects();
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(() => {
+    try {
+      const p = new URLSearchParams(window.location.search).get("project");
+      return p ? parseInt(p, 10) : null;
+    } catch { return null; }
+  });
   const [busyId, setBusyId] = useState<number | null>(null);
   const [editEntry, setEditEntry] = useState<Entry | null>(null);
   const [editSaving, setEditSaving] = useState(false);
