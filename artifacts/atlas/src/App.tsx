@@ -17,6 +17,9 @@ import Sessions from "./pages/sessions";
 import ThinkFreely from "./pages/think-freely";
 import Workshop from "./pages/workshop";
 import ProjectCompass from "./pages/project-compass";
+import Terms from "./pages/terms";
+import Privacy from "./pages/privacy";
+import Help from "./pages/help";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,6 +46,9 @@ function Router() {
       <Route path="/think-freely" component={ThinkFreely} />
       <Route path="/workshop" component={Workshop} />
       <Route path="/compass" component={ProjectCompass} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
+      <Route path="/help" component={Help} />
       <Route component={NotFound} />
     </Switch>
   );

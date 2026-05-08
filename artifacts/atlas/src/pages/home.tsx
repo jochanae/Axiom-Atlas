@@ -1101,7 +1101,7 @@ export default function Home() {
 
           {/* HOME — active/gold */}
           <button
-            onClick={() => {}}
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
             style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(212,175,55,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
