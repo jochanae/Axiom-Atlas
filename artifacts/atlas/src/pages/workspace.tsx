@@ -4234,6 +4234,161 @@ function RightPanel({
   );
 }
 
+// ── MobileTabBar ─────────────────────────────────────────────────────────────
+function MobileTabBar({
+  activeTab,
+  onTabChange,
+  entryCount,
+  activeCatch,
+}: {
+  activeTab: "chat" | "ledger" | "workshop" | "map";
+  onTabChange: (tab: "chat" | "ledger" | "workshop" | "map") => void;
+  entryCount: number;
+  activeCatch: boolean;
+}) {
+  const tabs: { id: "chat" | "ledger" | "workshop" | "map"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
+    {
+      id: "chat",
+      label: "Chat",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: "ledger",
+      label: "Ledger",
+      badge: entryCount > 0 ? entryCount : undefined,
+      alert: activeCatch,
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+          <rect x="9" y="3" width="6" height="4" rx="1" />
+          <line x1="9" y1="12" x2="15" y2="12" />
+          <line x1="9" y1="16" x2="13" y2="16" />
+        </svg>
+      ),
+    },
+    {
+      id: "workshop",
+      label: "Files",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: "map",
+      label: "Map",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+          <line x1="8" y1="2" x2="8" y2="18" />
+          <line x1="16" y1="6" x2="16" y2="22" />
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 64,
+        zIndex: 200,
+        background: "rgba(12,10,9,0.96)",
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
+        borderTop: "1px solid rgba(212,175,55,0.12)",
+        display: "flex",
+        alignItems: "stretch",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}
+    >
+      {tabs.map(({ id, label, icon, badge, alert }) => {
+        const active = activeTab === id;
+        return (
+          <button
+            key={id}
+            onClick={() => onTabChange(id)}
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 3,
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              color: active ? "var(--atlas-gold)" : "rgba(120,113,108,0.55)",
+              transition: "color 180ms ease",
+              position: "relative",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            {/* Active indicator bar at top */}
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: "20%",
+                right: "20%",
+                height: 2,
+                borderRadius: "0 0 2px 2px",
+                background: active ? "var(--atlas-gold)" : "transparent",
+                transition: "background 180ms ease",
+              }}
+            />
+            {/* Badge / alert dot */}
+            {(badge !== undefined || alert) && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  right: "calc(50% - 14px)",
+                  minWidth: 14,
+                  height: 14,
+                  borderRadius: 7,
+                  background: alert ? "var(--atlas-ember)" : "rgba(201,162,76,0.8)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 8,
+                  fontFamily: "var(--app-font-mono)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  padding: "0 3px",
+                  boxShadow: alert ? "0 0 8px rgba(146,64,14,0.6)" : "none",
+                }}
+              >
+                {badge !== undefined ? (badge > 9 ? "9+" : String(badge)) : "!"}
+              </div>
+            )}
+            {icon}
+            <span
+              style={{
+                fontSize: 9,
+                fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                lineHeight: 1,
+              }}
+            >
+              {label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Workspace ────────────────────────────────────────────────────────────────
 export default function Workspace() {
   const { projectId } = useParams();
@@ -4905,35 +5060,7 @@ export default function Workspace() {
                     zIndex: 9999, minWidth: 220,
                   }}
                 >
-                  {/* View switcher section */}
-                  <div style={{ padding: "4px 10px 2px", fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.5 }}>View</div>
-                  <div style={{ display: "flex", gap: 4, padding: "2px 8px 6px" }}>
-                    {([
-                      { id: "chat" as const, label: "Chat", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg> },
-                      { id: "ledger" as const, label: "Ledger", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="13" y2="16" /></svg> },
-                      { id: "workshop" as const, label: "Workshop", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg> },
-                      { id: "map" as const, label: "Map", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" /></svg> },
-                    ] as { id: "chat" | "ledger" | "workshop" | "map"; label: string; icon: React.ReactNode }[]).map(({ id, label, icon }) => {
-                      const active = mobileTab === id;
-                      return (
-                        <button
-                          key={id}
-                          onClick={() => { setMobileTab(id); setShowProjectMenu(false); }}
-                          style={{
-                            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                            padding: "7px 4px", borderRadius: 7, border: `1px solid ${active ? "rgba(201,162,76,0.35)" : "var(--atlas-border)"}`,
-                            background: active ? "rgba(201,162,76,0.08)" : "transparent",
-                            color: active ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                            cursor: "pointer", transition: "all 140ms ease",
-                          }}
-                        >
-                          {icon}
-                          <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div style={{ height: 1, background: "var(--atlas-border)", margin: "0 6px 4px", opacity: 0.5 }} />
+                  <div style={{ height: 1, background: "var(--atlas-border)", margin: "6px 6px 4px", opacity: 0.5 }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2" /><path d="M13.7 9.4a1 1 0 010-2.8l.5-.2a1 1 0 00.6-1.5l-.7-1.2a1 1 0 00-1.5-.3l-.4.3a1 1 0 01-1.4-.6l-.1-.5a1 1 0 00-1-.8H8.3a1 1 0 00-1 .8l-.1.5a1 1 0 01-1.4.6l-.4-.3a1 1 0 00-1.5.3l-.7 1.2a1 1 0 00.6 1.5l.5.2a1 1 0 010 2.8l-.5.2a1 1 0 00-.6 1.5l.7 1.2a1 1 0 001.5.3l.4-.3a1 1 0 011.4.6l.1.5a1 1 0 001 .8h1.4a1 1 0 001-.8l.1-.5a1 1 0 011.4-.6l.4.3a1 1 0 001.5-.3l.7-1.2a1 1 0 00-.6-1.5l-.5-.2z" /></svg>} label="Project settings" badge="SOON" disabled />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation("/parking"); setShowProjectMenu(false); }} />
@@ -5545,6 +5672,16 @@ export default function Workspace() {
           </div>
         )}
       </div>
+
+      {/* Mobile bottom tab bar */}
+      {isMobile && (
+        <MobileTabBar
+          activeTab={mobileTab}
+          onTabChange={(tab) => setMobileTab(tab)}
+          entryCount={entryCount}
+          activeCatch={!!activeCatch}
+        />
+      )}
 
       {/* User Profile Panel */}
       {showProfile && <UserProfilePanel onClose={() => setShowProfile(false)} isMobile={isMobile} />}
