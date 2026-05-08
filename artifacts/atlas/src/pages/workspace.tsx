@@ -198,8 +198,16 @@ function MenuBtn({ icon, label, onClick, badge, disabled }: { icon: React.ReactN
 }
 
 // ── AtlasLogo ────────────────────────────────────────────────────────────────
-function AtlasLogo({ small }: { small?: boolean }) {
+const MODE_LABEL_COLORS: Record<string, string> = {
+  THINK: "rgba(147,197,253,0.55)",
+  PLAN:  "rgba(212,175,55,0.38)",
+  BUILD: "rgba(74,222,128,0.45)",
+};
+
+function AtlasLogo({ small, mode }: { small?: boolean; mode?: "THINK" | "PLAN" | "BUILD" }) {
   const imgSize = small ? 22 : 26;
+  const modeLabel = mode ? `${mode} MODE` : "BUILD MODE";
+  const modeColor = mode ? (MODE_LABEL_COLORS[mode] ?? "rgba(212,175,55,0.38)") : "rgba(212,175,55,0.38)";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <img
@@ -225,10 +233,11 @@ function AtlasLogo({ small }: { small?: boolean }) {
           fontSize: 7.5,
           fontWeight: 500,
           letterSpacing: "0.14em",
-          color: "rgba(212,175,55,0.38)",
+          color: modeColor,
           textTransform: "uppercase",
+          transition: "color 300ms ease",
         }}>
-          BUILD MODE
+          {modeLabel}
         </span>
       </div>
     </div>
@@ -5210,7 +5219,7 @@ export default function Workspace() {
               onClick={() => setLocation("/home")}
               style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, flexShrink: 0 }}
             >
-              <AtlasLogo small />
+              <AtlasLogo small mode={projectMode} />
             </button>
           </div>
 

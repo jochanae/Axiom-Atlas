@@ -54,9 +54,9 @@ const INITIAL_EDGES: ArchEdge[] = [
 ];
 
 const SPRINT_LABELS = [
-  { sprint: 1, x: 180, y: 60  },
-  { sprint: 2, x: 350, y: 250 },
-  { sprint: 3, x: 180, y: 390 },
+  { sprint: 1, x: 100, y: 48,  subtitle: "Auth + Data"  },
+  { sprint: 2, x: 340, y: 230, subtitle: "API + State"  },
+  { sprint: 3, x: 100, y: 380, subtitle: "UI + Logic"   },
 ];
 
 const EDGE_FLOW_STYLE = `
@@ -342,14 +342,26 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
         transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
       }}>
         {/* Sprint cluster labels */}
-        {SPRINT_LABELS.map(({ sprint, x, y }) => (
+        {SPRINT_LABELS.map(({ sprint, x, y, subtitle }) => (
           <div key={sprint} style={{
             position: "absolute", left: x, top: y,
-            fontSize: 9, fontWeight: 700, letterSpacing: "0.12em",
-            color: "rgba(212,175,55,0.08)", textTransform: "uppercase",
-            pointerEvents: "none", userSelect: "none", whiteSpace: "nowrap",
+            pointerEvents: "none", userSelect: "none",
+            display: "flex", flexDirection: "column", gap: 2,
           }}>
-            Sprint {sprint}
+            <span style={{
+              fontSize: 8.5, fontWeight: 700, letterSpacing: "0.14em",
+              color: "rgba(212,175,55,0.16)", textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}>
+              Sprint {sprint}
+            </span>
+            <span style={{
+              fontSize: 7.5, fontWeight: 500, letterSpacing: "0.09em",
+              color: "rgba(212,175,55,0.09)", textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}>
+              {subtitle}
+            </span>
           </div>
         ))}
 
