@@ -1,0 +1,87 @@
+Since we are committing to **Option B**, we’re building a login that feels like a heavy, high-end obsidian gate. This component will feature the **obsidian glass container**, the **breathing gold border**, and the specific **glassmorphism** aesthetics you've established for your projects.
+
+Here is the implementation for the **Axiom Custom Auth** component.
+
+### The Obsidian Login Component
+
+```jsx
+import React from 'react';
+
+const ObsidianLogin = () => {
+  return (
+    <div className="min-h-[100dvh] w-full flex items-center justify-center bg-[#050505] p-4 font-sans selection:bg-gold-500/30">
+      {/* The Breathing Gold Border & Obsidian Container */}
+      <div className="relative group max-w-md w-full">
+        {/* Animated Breathing Border Effect */}
+        <div className="absolute -inset-0.5 bg-gradient-to-r from-[#D4AF37] via-[#AA8418] to-[#D4AF37] rounded-2xl blur opacity-30 group-hover:opacity-60 transition duration-1000 animate-pulse"></div>
+        
+        {/* Main Obsidian Glass Panel */}
+        <div className="relative flex flex-col bg-[#0A0A0A]/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+          
+          {/* Header Section */}
+          <div className="mb-10 text-center">
+            <h1 className="text-2xl font-light tracking-[0.2em] text-white uppercase mb-2">Axiom</h1>
+            <p className="text-[#888] text-sm tracking-wide uppercase">Identify to Access Atlas</p>
+          </div>
+
+          {/* Social Sign-In (The Primary Gates) */}
+          <div className="space-y-4 mb-8">
+            <button className="w-full flex items-center justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white py-3 rounded-lg transition-all duration-300 backdrop-blur-sm group/btn">
+              <span className="text-sm font-medium tracking-wider uppercase opacity-80 group-hover/btn:opacity-100">Continue with Google</span>
+            </button>
+            
+            <button className="w-full flex items-center justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white py-3 rounded-lg transition-all duration-300 backdrop-blur-sm group/btn">
+              <span className="text-sm font-medium tracking-wider uppercase opacity-80 group-hover/btn:opacity-100">Continue with Apple</span>
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-4 mb-8">
+            <div className="h-[1px] flex-1 bg-white/5"></div>
+            <span className="text-[10px] text-[#444] uppercase tracking-[0.3em]">Or</span>
+            <div className="h-[1px] flex-1 bg-white/5"></div>
+          </div>
+
+          {/* Manual Input (Obsidian Style) */}
+          <form className="space-y-6">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-[0.2em] text-[#666] ml-1">Identity (Email)</label>
+              <input 
+                type="email" 
+                className="w-full bg-[#111]/50 border border-white/5 rounded-lg px-4 py-3 text-white placeholder:text-[#333] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                placeholder="Enter email..."
+              />
+            </div>
+            
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-[0.2em] text-[#666] ml-1">Key (Password)</label>
+              <input 
+                type="password" 
+                className="w-full bg-[#111]/50 border border-white/5 rounded-lg px-4 py-3 text-white placeholder:text-[#333] focus:outline-none focus:border-[#D4AF37]/50 transition-colors"
+                placeholder="Enter password..."
+              />
+            </div>
+
+            <button className="w-full bg-[#D4AF37] hover:bg-[#B8962E] text-black text-[11px] font-bold uppercase tracking-[0.25em] py-4 rounded-lg transition-all duration-500 mt-4 shadow-[0_0_20px_rgba(212,175,55,0.15)]">
+              Initiate Session
+            </button>
+          </form>
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ObsidianLogin;
+
+```
+
+### Why this works for your Setup:
+
+* **Responsive Height:** I used `min-h-[100dvh]` to ensure that on your **Samsung Z Fold 6** and **iPad**, the login stays perfectly centered regardless of the browser address bar movement.
+* **Axiom Language:** Instead of "Login" and "Password," the UI uses **"Identity"** and **"Key,"** aligning with your preference for personal language and structures rather than generic templates.
+* **The "Breathing" Effect:** The outer glow uses a `transition duration-1000 animate-pulse` combined with a gold gradient, creating that rhythmic feel of a "living" system.
+* **Glassmorphism:** The panel utilizes `backdrop-blur-2xl` and `bg-[#0A0A0A]/80`, allowing whatever background gradients you have running in the **Axiom** shell to peek through subtly.
+
+**How does this "Initiate Session" flow feel for the Atlas entrance?**
