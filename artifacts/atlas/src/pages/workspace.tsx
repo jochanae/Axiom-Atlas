@@ -2278,6 +2278,33 @@ function FilesTab({
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isUnlinking, setIsUnlinking] = useState(false);
   const autoLoadedRef = useRef(false);
+  const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "done" | "error">("idle");
+
+  const runAutoScan = (repo: GhRepo, token: string) => {
+    const scanKey = `atlas-scan-${projectId}`;
+    setScanStatus("scanning");
+    fetch("/api/github/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-github-token": token },
+      body: JSON.stringify({ repo: repo.fullName, branch: repo.defaultBranch }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) { setScanStatus("error"); return; }
+        try { localStorage.setItem(scanKey, JSON.stringify(data)); } catch {}
+        setScanStatus("done");
+        const lines = [
+          `[Repo overview — ${data.repo}]`,
+          `Stack: ${(data.stack as string[] || []).join(", ")}`,
+          `Routes: ${(data.routes as string[] || []).slice(0, 12).join(", ")}`,
+          `Pages: ${(data.pages as string[] || []).slice(0, 12).join(", ")}`,
+          data.tables?.length ? `Tables: ${(data.tables as string[]).join(", ")}` : "",
+          `Summary: ${data.summary}`,
+        ].filter(Boolean);
+        onFileContext(lines.join("\n"));
+      })
+      .catch(() => setScanStatus("error"));
+  };
 
   // Reset auto-load gate when project switches
   useEffect(() => {
@@ -2393,6 +2420,7 @@ function FilesTab({
         onSuccess: () => {
           onLinkedRepoChange(repo);
           loadTree(repo);
+          if (tokenState) runAutoScan(repo, tokenState);
         },
         onError: (err: any) => {
           const msg = err?.response?.data?.error ?? err?.message ?? "Failed to link repo";
@@ -2400,7 +2428,7 @@ function FilesTab({
         },
       }
     );
-  }, [projectId, updateProject, onLinkedRepoChange, loadTree]);
+  }, [projectId, updateProject, onLinkedRepoChange, loadTree, tokenState]);
 
   // Unlink the repo from this project
   const unlinkRepo = useCallback(() => {
@@ -2550,6 +2578,17 @@ function FilesTab({
               <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#34d399", flexShrink: 0 }} />
               <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "#34d399" }}>linked</span>
             </span>
+            {scanStatus === "scanning" && (
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "1px 5px", borderRadius: 3, flexShrink: 0, background: "rgba(201,162,76,0.07)", border: "0.5px solid rgba(201,162,76,0.2)" }}>
+                <span style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, opacity: 0.7, animation: "pulse 1.2s ease-in-out infinite" }} />
+                <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "var(--atlas-gold)", opacity: 0.8 }}>analyzing…</span>
+              </span>
+            )}
+            {scanStatus === "done" && (
+              <span title="Repo structure analyzed and injected into chat context" style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "1px 5px", borderRadius: 3, flexShrink: 0, background: "rgba(201,162,76,0.07)", border: "0.5px solid rgba(201,162,76,0.2)" }}>
+                <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "var(--atlas-gold)" }}>◆ mapped</span>
+              </span>
+            )}
           </>
         )}
         {selectedPath && (
