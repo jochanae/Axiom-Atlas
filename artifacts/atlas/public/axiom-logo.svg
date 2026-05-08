@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="purpleGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#5B21B6" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#3B0764" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#0D0B09" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="goldSheen" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#F5D97A" stop-opacity="1"/>
+      <stop offset="50%" stop-color="#D4AF37" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#A07820" stop-opacity="1"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="90" ry="90" fill="#0D0B09"/>
+  <rect x="0" y="0" width="512" height="512" rx="90" ry="90" fill="url(#purpleGlow)"/>
+  <rect x="0" y="0" width="512" height="512" rx="90" ry="90" fill="none" stroke="#D4AF37" stroke-width="2" stroke-opacity="0.3"/>
+  <polygon points="256,110 170,402 212,402 274,172" fill="url(#goldSheen)"/>
+  <polygon points="256,110 342,402 300,402 238,172" fill="url(#goldSheen)"/>
+  <rect x="180" y="282" width="152" height="34" rx="5" fill="url(#goldSheen)"/>
+  <polygon points="256,100 270,126 256,118 242,126" fill="#F5D97A"/>
+</svg>

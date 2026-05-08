@@ -194,28 +194,38 @@ function MenuBtn({ icon, label, onClick, badge, disabled }: { icon: React.ReactN
 
 // ── AtlasLogo ────────────────────────────────────────────────────────────────
 function AtlasLogo({ small }: { small?: boolean }) {
-  const s = small ? 15 : 18;
+  const imgSize = small ? 22 : 26;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <svg width={s} height={s} viewBox="0 0 20 20" fill="none" aria-hidden>
-        <circle cx="10" cy="10" r="8" stroke="#C9A24C" strokeWidth="1.2" />
-        <circle cx="10" cy="10" r="3.2" stroke="#C9A24C" strokeWidth="0.9" />
-        <line x1="10" y1="2" x2="10" y2="18" stroke="#C9A24C" strokeWidth="0.7" strokeDasharray="1.8 2.4" />
-        <line x1="2" y1="10" x2="18" y2="10" stroke="#C9A24C" strokeWidth="0.7" strokeDasharray="1.8 2.4" />
-      </svg>
-      <span
-        style={{
-          fontFamily: "var(--app-font-sans)",
-          fontSize: small ? 12 : 13,
+      <img
+        src="/axiom-logo.svg"
+        alt="Axiom"
+        width={imgSize}
+        height={imgSize}
+        style={{ borderRadius: "20%", flexShrink: 0 }}
+      />
+      <div style={{ display: "flex", flexDirection: "column", gap: 1.5, lineHeight: 1 }}>
+        <span style={{
+          fontFamily: "'IBM Plex Mono', var(--app-font-mono)",
+          fontSize: small ? 10 : 11,
+          fontWeight: 700,
+          letterSpacing: "0.18em",
+          color: "var(--atlas-gold)",
+          textTransform: "uppercase",
+        }}>
+          AXIOM
+        </span>
+        <span style={{
+          fontFamily: "'IBM Plex Mono', var(--app-font-mono)",
+          fontSize: 7.5,
           fontWeight: 500,
           letterSpacing: "0.14em",
-          color: "var(--atlas-fg)",
+          color: "rgba(212,175,55,0.38)",
           textTransform: "uppercase",
-          opacity: 0.82,
-        }}
-      >
-        Atlas
-      </span>
+        }}>
+          BUILD MODE
+        </span>
+      </div>
     </div>
   );
 }

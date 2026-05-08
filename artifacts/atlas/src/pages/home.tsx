@@ -105,25 +105,25 @@ function InlineTimestamp() {
 // ── AtlasLogo ────────────────────────────────────────────────────────────────
 function AtlasLogo() {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden>
-        <circle cx="10" cy="10" r="8" stroke="#C9A24C" strokeWidth="1.2" />
-        <circle cx="10" cy="10" r="3.2" stroke="#C9A24C" strokeWidth="0.9" />
-        <line x1="10" y1="2" x2="10" y2="18" stroke="#C9A24C" strokeWidth="0.7" strokeDasharray="1.8 2.4" />
-        <line x1="2" y1="10" x2="18" y2="10" stroke="#C9A24C" strokeWidth="0.7" strokeDasharray="1.8 2.4" />
-      </svg>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <img
+        src="/axiom-logo.svg"
+        alt="Axiom"
+        width={26}
+        height={26}
+        style={{ borderRadius: "20%", flexShrink: 0 }}
+      />
       <span
         style={{
-          fontFamily: "var(--app-font-sans)",
-          fontSize: 13,
-          fontWeight: 500,
-          letterSpacing: "0.14em",
-          color: "var(--atlas-fg)",
+          fontFamily: "'IBM Plex Mono', var(--app-font-mono)",
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: "0.18em",
+          color: "var(--atlas-gold)",
           textTransform: "uppercase",
-          opacity: 0.88,
         }}
       >
-        Atlas
+        AXIOM
       </span>
     </div>
   );
