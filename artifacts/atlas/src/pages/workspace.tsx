@@ -2140,12 +2140,21 @@ function FilesTab({
     query: { queryKey: getGetProjectQueryKey(projectId) },
   });
 
+  const getGlobalToken = () => { try { return localStorage.getItem("atlas-github-token") || null; } catch { return null; } };
+  const setGlobalToken = (t: string | null) => { try { if (t) localStorage.setItem("atlas-github-token", t); else localStorage.removeItem("atlas-github-token"); } catch {} };
+
   const [tokenState, setTokenState] = useState<string | null>(null);
   const tokenSynced = useRef(false);
   useEffect(() => {
     if (!filesProject || tokenSynced.current) return;
     tokenSynced.current = true;
-    setTokenState(filesProject.githubToken ?? null);
+    const globalToken = getGlobalToken();
+    const token = globalToken ?? filesProject.githubToken ?? null;
+    setTokenState(token);
+    // If the global token exists but this project doesn't have it saved yet, back-fill it
+    if (globalToken && !filesProject.githubToken) {
+      updateProject.mutate({ id: projectId, data: { githubToken: globalToken } });
+    }
   }, [filesProject]);
   const [tokenInput, setTokenInput] = useState("");
   const [tokenSaveError, setTokenSaveError] = useState<string | null>(null);
@@ -2183,6 +2192,7 @@ function FilesTab({
 
   const saveToken = (t: string) => {
     setTokenSaveError(null);
+    setGlobalToken(t); // persist globally so all projects share it
     updateProject.mutate(
       { id: projectId, data: { githubToken: t } },
       {
@@ -2198,6 +2208,7 @@ function FilesTab({
   const clearToken = () => {
     setClearTokenError(null);
     setIsDisconnecting(true);
+    setGlobalToken(null); // clear globally
     updateProject.mutate(
       { id: projectId, data: { githubToken: null } },
       {
@@ -2353,7 +2364,7 @@ function FilesTab({
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 12.5, color: "var(--atlas-fg)", opacity: 0.7, fontWeight: 500, marginBottom: 5 }}>Connect GitHub</div>
           <div style={{ fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.6, opacity: 0.6 }}>
-            Paste a GitHub personal access token<br />to browse your repos.
+            Paste your GitHub token once — it works<br />across all your projects automatically.
           </div>
         </div>
         <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 7 }}>
