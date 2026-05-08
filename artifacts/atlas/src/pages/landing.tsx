@@ -49,7 +49,7 @@ export default function LandingPage() {
 
       {/* Purple ambient glow */}
       <div className="fixed inset-0 z-[3] pointer-events-none" style={{
-        background: "radial-gradient(ellipse 60% 50% at 50% 45%, rgba(88,28,135,0.18) 0%, transparent 70%)",
+        background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,28,135,0.25) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(88,28,135,0.15) 0%, transparent 60%)",
       }} />
 
       <HeroSection onEnter={handleEnter} />
