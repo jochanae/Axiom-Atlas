@@ -13,7 +13,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Force-push main to atlas-v2 on jochanae/atlas
+        id: push
         run: |
           git clone --mirror "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/atlas.git" repo.git
           cd repo.git
+          # Capture the SHA we're about to push (the tip of the mirrored main)
+          PUSHED_SHA=$(git rev-parse refs/heads/main)
+          echo "pushed_sha=$PUSHED_SHA" >> "$GITHUB_OUTPUT"
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/atlas.git" refs/heads/main:refs/heads/atlas-v2
+
+      - name: Verify atlas-v2 SHA matches pushed SHA
+        env:
+          PUSHED_SHA: ${{ steps.push.outputs.pushed_sha }}
+        run: |
+          REMOTE_SHA=$(git ls-remote "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/atlas.git" refs/heads/atlas-v2 | awk '{print $1}')
+          echo "Pushed SHA : $PUSHED_SHA"
+          echo "Remote SHA : $REMOTE_SHA"
+          if [ "$REMOTE_SHA" != "$PUSHED_SHA" ]; then
+            echo "::error::Health-check failed — atlas-v2 remote SHA ($REMOTE_SHA) does not match pushed SHA ($PUSHED_SHA)"
+            exit 1
+          fi
+          echo "Health-check passed — atlas-v2 is up to date."
