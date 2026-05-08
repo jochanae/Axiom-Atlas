@@ -514,7 +514,7 @@ export default function Home() {
       style={{
         height: "100vh",
         backgroundColor: "var(--atlas-bg)",
-        backgroundImage: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88, 28, 135, 0.18) 0%, transparent 70%)",
+        backgroundImage: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88, 28, 135, 0.25) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(88, 28, 135, 0.15) 0%, transparent 60%)",
         display: "flex",
         flexDirection: "column",
         overflowY: "auto",
