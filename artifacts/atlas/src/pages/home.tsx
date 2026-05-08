@@ -987,7 +987,14 @@ export default function Home() {
                 animation: "homeAxiomPulse 2.5s ease-in-out infinite",
                 flexShrink: 0,
               }}
-              onClick={() => setLocation("/workshop")}
+              onClick={() => {
+                const lastId = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
+                const targetId = lastId || (projects ?? [])[0]?.id;
+                if (targetId) {
+                  sessionStorage.setItem("atlas-open-tab", "map");
+                  setLocation(`/project/${targetId}`);
+                }
+              }}
             >
               <svg viewBox="0 0 512 512" width="40" height="40">
                 <defs>

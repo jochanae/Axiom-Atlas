@@ -3535,7 +3535,16 @@ function RightPanel({
   onRollbackPush: (record: PushRecord) => Promise<void>;
   onHomeNav: () => void;
 }) {
-  const [tab, setTab] = useState<RightTab>("ledger");
+  const [tab, setTab] = useState<RightTab>(() => {
+    try {
+      const stored = sessionStorage.getItem("atlas-open-tab");
+      if (stored === "map") {
+        sessionStorage.removeItem("atlas-open-tab");
+        return "map";
+      }
+    } catch {}
+    return "ledger";
+  });
 
   const tabs: { id: RightTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     {
