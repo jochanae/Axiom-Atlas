@@ -33,11 +33,11 @@ export function LandingHeader({ onSignIn }: { onSignIn?: () => void }) {
     <header
       style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        background: scrolled ? "rgba(13,11,9,0.82)" : "rgba(13,11,9,0.7)",
-        backdropFilter: "blur(15px)",
-        WebkitBackdropFilter: "blur(15px)",
-        borderBottom: "1px solid rgba(212,175,55,0.1)",
-        transition: "background 300ms ease",
+        background: scrolled ? "rgba(13,11,9,0.72)" : "transparent",
+        backdropFilter: scrolled ? "blur(15px)" : "none",
+        WebkitBackdropFilter: scrolled ? "blur(15px)" : "none",
+        borderBottom: scrolled ? "1px solid rgba(212,175,55,0.1)" : "none",
+        transition: "background 400ms ease, backdrop-filter 400ms ease, border-color 400ms ease",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         height: "56px", padding: "0 20px",
       }}
