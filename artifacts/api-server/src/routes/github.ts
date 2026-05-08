@@ -144,6 +144,33 @@ router.put("/github/commit", async (req, res): Promise<void> => {
   res.json({ sha: putData.content?.sha, commitSha: putData.commit?.sha, commitUrl: putData.commit?.html_url, path: filePath, branch });
 });
 
+// POST /api/github/pr
+router.post("/github/pr", async (req, res): Promise<void> => {
+  const token = req.headers["x-github-token"] as string | undefined;
+  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+
+  const { repo, head, base, title, body = "" } = req.body as {
+    repo: string; head: string; base: string; title: string; body?: string;
+  };
+  if (!repo || !head || !base || !title) {
+    res.status(400).json({ error: "Missing required fields: repo, head, base, title" }); return;
+  }
+
+  const prResp = await fetch(`${GH_API}/repos/${repo}/pulls`, {
+    method: "POST",
+    headers: { ...ghHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body, head, base }),
+  });
+
+  if (!prResp.ok) {
+    const detail = await prResp.text();
+    res.status(prResp.status).json({ error: "GitHub API error", detail }); return;
+  }
+
+  const pr = await prResp.json() as any;
+  res.json({ prUrl: pr.html_url, prNumber: pr.number, title: pr.title });
+});
+
 // POST /api/github/analyze — AI-powered project structure analysis
 router.post("/github/analyze", async (req, res): Promise<void> => {
   const token = req.headers["x-github-token"] as string | undefined;
