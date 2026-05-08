@@ -64,6 +64,19 @@ export default function LandingPage() {
 
 /* ─── Hero ─── */
 function HeroSection({ onEnter }: { onEnter: () => void }) {
+  const [btnOpacity, setBtnOpacity] = useState(1);
+  const [btnScale, setBtnScale] = useState(1);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const progress = Math.min(window.scrollY / 340, 1);
+      setBtnOpacity(1 - progress);
+      setBtnScale(1 - progress * 0.05);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
     <section className="relative z-10 min-h-screen flex flex-col items-center justify-center px-6" style={{ paddingTop: 56 }}>
       <LogicCore />
@@ -120,7 +133,7 @@ function HeroSection({ onEnter }: { onEnter: () => void }) {
 
         <button
           onClick={onEnter}
-          className="group relative uppercase transition-all duration-700"
+          className="group relative uppercase"
           style={{
             fontFamily: "'IBM Plex Mono', 'Courier New', monospace",
             fontSize: "clamp(0.7rem, 1.5vw, 0.85rem)",
@@ -134,6 +147,10 @@ function HeroSection({ onEnter }: { onEnter: () => void }) {
             padding: "18px 24px",
             display: "block",
             margin: "0 auto",
+            opacity: btnOpacity,
+            transform: `scale(${btnScale})`,
+            transition: "background 200ms, border-color 200ms",
+            pointerEvents: btnOpacity < 0.05 ? "none" : "auto",
           }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.07)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; }}
