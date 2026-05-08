@@ -60,10 +60,12 @@ router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Title cannot be blank" });
     return;
   }
+  const { costOfLesson, ...rest } = parsed.data;
   const [entry] = await db.insert(entriesTable).values({
     projectId: params.data.projectId,
-    ...parsed.data,
+    ...rest,
     title: parsed.data.title.trim(),
+    ...(costOfLesson != null ? { costOfLesson: String(costOfLesson) } : {}),
   }).returning();
   res.status(201).json(serializeEntry(entry));
 });
@@ -156,7 +158,7 @@ router.post("/entries/:id/reopen", async (req, res): Promise<void> => {
     deviation: original.deviation,
     buildId: original.buildId,
     touched: original.touched,
-    costOfLesson: original.costOfLesson,
+    ...(original.costOfLesson != null ? { costOfLesson: String(original.costOfLesson) } : {}),
     supersedesId: original.id,
   }).returning();
 
