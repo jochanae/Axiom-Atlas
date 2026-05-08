@@ -3788,6 +3788,9 @@ function QuickPromptSheet({
   const defaultPlatform = PLATFORMS.find(p => p.toUpperCase() === platform) ?? "Replit";
   const [buildWhere, setBuildWhere] = useState(defaultPlatform);
   const [task, setTask] = useState("");
+  const [showProjectDrop, setShowProjectDrop] = useState(false);
+  const [projectContext, setProjectContext] = useState("");
+  const { data: allProjects } = useListProjects();
   const cockpitH = 72;
 
   return (
@@ -3869,7 +3872,7 @@ function QuickPromptSheet({
                 </select>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const, position: "relative" }}>
                 <button style={{
                   background: "none", border: "none", cursor: "pointer",
                   color: "#D4AF37", fontSize: 11, letterSpacing: "0.04em",
@@ -3877,14 +3880,59 @@ function QuickPromptSheet({
                 }}>
                   + Add project context (optional)
                 </button>
-                <button style={{
-                  padding: "5px 12px", borderRadius: 8,
-                  background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.32)",
-                  color: "#D4AF37", fontSize: 11, fontWeight: 700, cursor: "pointer",
-                  letterSpacing: "0.04em", fontFamily: "var(--app-font-mono)",
-                }}>
-                  Load Project ▾
-                </button>
+                <div style={{ position: "relative" }}>
+                  <button
+                    onClick={() => setShowProjectDrop(v => !v)}
+                    style={{
+                      padding: "5px 12px", borderRadius: 8,
+                      background: showProjectDrop ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.08)",
+                      border: "1px solid rgba(212,175,55,0.32)",
+                      color: "#D4AF37", fontSize: 11, fontWeight: 700, cursor: "pointer",
+                      letterSpacing: "0.04em", fontFamily: "var(--app-font-mono)",
+                    }}
+                  >
+                    {projectContext || "Load Project"} ▾
+                  </button>
+                  {showProjectDrop && (
+                    <>
+                      <div onClick={() => setShowProjectDrop(false)} style={{ position: "fixed", inset: 0, zIndex: 70 }} />
+                      <div style={{
+                        position: "absolute", top: "calc(100% + 6px)", left: 0,
+                        zIndex: 80, minWidth: 200,
+                        background: "rgba(20,18,14,0.99)",
+                        border: "1px solid rgba(212,175,55,0.28)",
+                        borderRadius: 10,
+                        boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
+                        overflow: "hidden",
+                      }}>
+                        {allProjects && allProjects.length > 0 ? allProjects.map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() => { setProjectContext(p.name); setShowProjectDrop(false); }}
+                            style={{
+                              width: "100%", textAlign: "left",
+                              padding: "10px 14px",
+                              background: projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent",
+                              border: "none",
+                              borderBottom: "1px solid rgba(212,175,55,0.07)",
+                              color: projectContext === p.name ? "#D4AF37" : "rgba(231,229,228,0.75)",
+                              fontSize: 12, cursor: "pointer",
+                              fontFamily: "var(--app-font-mono)",
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.08)"; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent"; }}
+                          >
+                            {p.name}
+                          </button>
+                        )) : (
+                          <div style={{ padding: "10px 14px", fontSize: 11, color: "rgba(120,113,108,0.5)", fontFamily: "var(--app-font-mono)" }}>
+                            No projects yet
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -4034,12 +4082,14 @@ function SystemMapWithCockpit({ onHomeNav, onSendIntent }: { onHomeNav: () => vo
         >
           {showChat ? "▼ Hide Chat — See Full Map" : "▲ Show Chat — Intent Capture"}
         </button>
-        <button style={{
-          background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.18)",
-          borderRadius: 6, padding: "3px 10px", cursor: "pointer",
-          color: "rgba(212,175,55,0.65)", fontSize: 9.5,
-          fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
-        }}>
+        <button
+          onClick={() => setShowChat(false)}
+          style={{
+            background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.18)",
+            borderRadius: 6, padding: "3px 10px", cursor: "pointer",
+            color: "rgba(212,175,55,0.65)", fontSize: 9.5,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+          }}>
           ⛶ Fullscreen
         </button>
       </div>
@@ -5090,18 +5140,18 @@ export default function Workspace() {
       <style>{`
         @keyframes header-pulse {
           0%, 100% {
-            box-shadow: 0 1px 20px rgba(88, 28, 135, 0.15);
-            border-bottom-color: rgba(88, 28, 135, 0.3);
+            box-shadow: 0 1px 16px rgba(201, 162, 76, 0.08);
+            border-bottom-color: rgba(201, 162, 76, 0.12);
           }
           50% {
-            box-shadow: 0 1px 35px rgba(88, 28, 135, 0.28);
-            border-bottom-color: rgba(88, 28, 135, 0.5);
+            box-shadow: 0 1px 28px rgba(201, 162, 76, 0.16);
+            border-bottom-color: rgba(201, 162, 76, 0.22);
           }
         }
       `}</style>
       <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(12px)" }}>
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
-        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(88, 28, 135, 0.3)", boxShadow: "0 1px 20px rgba(88, 28, 135, 0.15)", animation: "header-pulse 3s ease-in-out infinite" }}>
+        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(201, 162, 76, 0.12)", boxShadow: "0 1px 16px rgba(201, 162, 76, 0.08)", animation: "header-pulse 3s ease-in-out infinite" }}>
 
           {/* Left: drawer button + Atlas logo → home */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
