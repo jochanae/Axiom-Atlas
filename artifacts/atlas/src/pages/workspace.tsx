@@ -4296,30 +4296,34 @@ export default function Workspace() {
     const KEY_FILES = [
       "package.json",
       "README.md", "readme.md", "README.mdx",
-      "src/index.tsx", "src/index.ts",
+      "tsconfig.json", "tsconfig.app.json",
+      "vite.config.ts", "vite.config.js",
+      "next.config.js", "next.config.ts", "next.config.mjs",
       "src/main.tsx", "src/main.ts",
+      "src/index.tsx", "src/index.ts",
       "src/App.tsx", "src/App.ts",
       "src/app.tsx", "src/app.ts",
-      "tsconfig.json",
       "index.ts", "index.tsx",
     ];
 
     (async () => {
       try {
-        // 1. Fetch flat tree to discover which key files actually exist
+        // 1. Fetch flat tree
         const treeRes = await fetch(
           `/api/github/tree?repo=${encodeURIComponent(parsedRepo.fullName)}&branch=${encodeURIComponent(branch)}`,
           { headers: { "x-github-token": token } }
         );
         if (!treeRes.ok || cancelled) return;
         const treeData = await treeRes.json() as { branch: string; tree: Array<{ path: string; type: string }> };
-        const blobSet = new Set(treeData.tree.filter(i => i.type === "blob").map(i => i.path));
         const resolvedBranch = treeData.branch ?? branch;
+        const allBlobs = treeData.tree.filter(i => i.type === "blob").map(i => i.path);
+        const blobSet = new Set(allBlobs);
 
+        // 2. Identify up to 5 priority files that actually exist
         const toFetch = KEY_FILES.filter(p => blobSet.has(p)).slice(0, 5);
         if (toFetch.length === 0 || cancelled) return;
 
-        // 2. Fetch each key file in parallel
+        // 3. Fetch priority files in parallel
         const results = await Promise.allSettled(
           toFetch.map(p =>
             fetch(
@@ -4331,9 +4335,10 @@ export default function Workspace() {
 
         if (cancelled) return;
 
-        // 3. Build combined context string
+        // 4. Build combined context: header + full file tree + file contents
+        const treelisting = allBlobs.join("\n");
         const parts: string[] = [
-          `Repo: ${parsedRepo.fullName} (branch: ${resolvedBranch})\nKey files loaded automatically — no manual file opening needed.\n`,
+          `Repo: ${parsedRepo.fullName} (branch: ${resolvedBranch})\n\nFull file tree:\n${treelisting}`,
         ];
         for (let i = 0; i < results.length; i++) {
           const r = results[i];
