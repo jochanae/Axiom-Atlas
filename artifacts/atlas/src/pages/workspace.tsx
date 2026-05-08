@@ -4778,10 +4778,13 @@ export default function Workspace() {
             {/* Mode pill — always visible, tappable */}
             {(() => {
               const modeConfig = {
-                THINK: { color: "#93c5fd", bg: "rgba(96,165,250,0.1)", border: "rgba(96,165,250,0.35)", desc: "Strategy & advice — no code" },
-                PLAN:  { color: "var(--atlas-gold)", bg: "rgba(201,162,76,0.1)", border: "rgba(201,162,76,0.35)", desc: "Structure & outlines" },
-                BUILD: { color: "#4ade80", bg: "rgba(74,222,128,0.1)", border: "rgba(74,222,128,0.35)", desc: "Writes code → push to GitHub" },
-              } as const;
+                THINK: { color: "#93c5fd", bg: "rgba(96,165,250,0.1)", border: "rgba(96,165,250,0.35)", desc: "Strategy & advice — no code",
+                  icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.6-1.4 4.9-3.5 6.2V17a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-1.8C6.4 13.9 5 11.6 5 9a7 7 0 0 1 7-7z" /></svg> },
+                PLAN:  { color: "var(--atlas-gold)", bg: "rgba(201,162,76,0.1)", border: "rgba(201,162,76,0.35)", desc: "Structure & outlines",
+                  icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
+                BUILD: { color: "#4ade80", bg: "rgba(74,222,128,0.1)", border: "rgba(74,222,128,0.35)", desc: "Writes code → push to GitHub",
+                  icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> },
+              };
               const cfg = modeConfig[projectMode];
               return (
                 <div style={{ position: "relative" }}>
@@ -4789,10 +4792,10 @@ export default function Workspace() {
                     ref={modeBtnRef}
                     onClick={() => { setShowModeMenu(v => !v); setShowProjectMenu(false); setShowViewMenu(false); }}
                     title={`Mode: ${projectMode} — ${cfg.desc}`}
-                    style={{ display: "flex", alignItems: "center", gap: 5, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 7, padding: "4px 8px", cursor: "pointer", color: cfg.color, fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", flexShrink: 0, transition: "all 180ms ease" }}
+                    style={{ display: "flex", alignItems: "center", gap: 5, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 7, padding: "5px 8px", cursor: "pointer", color: cfg.color, flexShrink: 0, transition: "all 180ms ease" }}
                   >
                     <span style={{ width: 5, height: 5, borderRadius: "50%", background: cfg.color, flexShrink: 0, display: "inline-block" }} />
-                    {projectMode}
+                    {cfg.icon}
                   </button>
                   {showModeMenu && createPortal(
                     <>
