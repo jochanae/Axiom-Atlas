@@ -27,7 +27,7 @@ export default function Projects() {
     <div className="min-h-screen bg-background p-8">
       <header className="flex justify-between items-center mb-12 max-w-5xl mx-auto">
         <div className="flex items-center space-x-4">
-          <Link href="/" className="text-xl font-bold tracking-tight text-primary">ATLAS</Link>
+          <Link href="/home" className="text-xl font-bold tracking-tight text-primary">AXIOM</Link>
           <span className="text-muted-foreground">/</span>
           <span className="text-lg font-medium">Projects</span>
         </div>

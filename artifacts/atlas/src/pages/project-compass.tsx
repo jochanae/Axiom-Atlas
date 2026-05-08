@@ -18,7 +18,7 @@ export default function ProjectCompass() {
         <div style={{ padding: "10px 16px 10px", display: "flex", alignItems: "center", gap: 8 }}>
           <button
             type="button"
-            onClick={() => setLocation("/")}
+            onClick={() => setLocation("/home")}
             style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", background: "transparent", border: "none", padding: 0, cursor: "pointer", opacity: 0.7 }}
           >
             ← Home
@@ -50,7 +50,7 @@ export default function ProjectCompass() {
           </div>
           <button
             type="button"
-            onClick={() => setLocation("/")}
+            onClick={() => setLocation("/home")}
             style={{
               marginTop: 8, padding: "9px 20px", borderRadius: 8,
               background: "color-mix(in oklab, var(--atlas-gold) 12%, transparent)",

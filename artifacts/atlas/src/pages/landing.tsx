@@ -4,7 +4,7 @@ import { LandingHeader } from "@/components/landing/LandingHeader";
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
-  const handleEnter = () => setLocation("/");
+  const handleEnter = () => setLocation("/home");
 
   useEffect(() => {
     const html = document.documentElement;

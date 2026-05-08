@@ -84,7 +84,7 @@ export default function ParkingLot() {
     if (entry.projectId) {
       setLocation(`/project/${entry.projectId}`);
     } else {
-      setLocation("/");
+      setLocation("/home");
     }
   };
 

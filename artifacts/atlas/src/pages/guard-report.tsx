@@ -57,7 +57,7 @@ export default function GuardReport() {
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <button
             type="button"
-            onClick={() => setLocation("/")}
+            onClick={() => setLocation("/home")}
             style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--muted-text)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
           >
             ← Workspace

@@ -164,7 +164,7 @@ export default function EntryDetail() {
         <div style={{ fontSize: 32, opacity: 0.2 }}>✕</div>
         <h1 style={{ margin: 0, fontSize: 16, fontWeight: 500 }}>Entry not found</h1>
         <button
-          onClick={() => setLocation("/")}
+          onClick={() => setLocation("/home")}
           style={{ ...sMono, fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase" as const, background: "transparent", border: "1px solid var(--border)", borderRadius: 4, color: "var(--muted-text)", padding: "6px 14px", cursor: "pointer" }}
         >
           ← Home
@@ -198,10 +198,10 @@ export default function EntryDetail() {
 
         <nav aria-label="Breadcrumb" style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
           <Link
-            href="/"
+            href="/home"
             style={{ ...sMono, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--muted-text)", textDecoration: "none", opacity: 0.5 }}
           >
-            Atlas
+            Axiom
           </Link>
           <span style={{ color: "var(--border)", fontSize: 11 }}>/</span>
           <Link

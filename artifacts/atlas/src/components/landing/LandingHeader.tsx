@@ -25,7 +25,7 @@ export function LandingHeader({ onSignIn }: { onSignIn?: () => void }) {
       const { outcome } = await installEvent.userChoice;
       if (outcome === "accepted") { setInstallEvent(null); setInstalled(true); }
     } else {
-      window.location.href = "/";
+      window.location.href = "/home";
     }
   };
 

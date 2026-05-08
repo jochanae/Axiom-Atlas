@@ -129,7 +129,7 @@ function MobileFooter({ onYou, onProjects }: { onYou: () => void; onProjects: ()
   if (!isMobile) return null;
 
   const lastProject = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
-  const isHome = location === "/" || location === "";
+  const isHome = location === "/home" || location === "";
   const isProjects = location.startsWith("/projects");
   const isLedger = location.startsWith("/ledger");
   const isWorkspace = location.startsWith("/project");
@@ -167,7 +167,7 @@ function MobileFooter({ onYou, onProjects }: { onYou: () => void; onProjects: ()
           <polyline points="9,22 9,12 15,12 15,22" />
         </svg>,
         "Home",
-        () => setLocation("/"),
+        () => setLocation("/home"),
         isHome
       )}
 
@@ -184,7 +184,7 @@ function MobileFooter({ onYou, onProjects }: { onYou: () => void; onProjects: ()
       {/* CENTER — Atlas */}
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <button
-          onClick={() => setLocation("/")}
+          onClick={() => setLocation("/home")}
           style={{
             width: 52, height: 52, borderRadius: 16,
             background: isHome || isWorkspace ? "var(--atlas-ember)" : "rgba(28,25,23,0.9)",
@@ -212,7 +212,7 @@ function MobileFooter({ onYou, onProjects }: { onYou: () => void; onProjects: ()
           <path d="M9 7h6M9 11h6M9 15h4" strokeWidth="1.2" />
         </svg>,
         "Ledger",
-        () => lastProject ? setLocation(`/ledger/${lastProject}`) : setLocation("/"),
+        () => lastProject ? setLocation(`/ledger/${lastProject}`) : setLocation("/home"),
         isLedger
       )}
 
@@ -244,8 +244,8 @@ function Router({ onYou, onProjects }: { onYou: () => void; onProjects: () => vo
   return (
     <>
       <Switch>
-        <Route path="/" component={Home} />
-        <Route path="/landing" component={Landing} />
+        <Route path="/" component={Landing} />
+        <Route path="/home" component={Home} />
         <Route path="/projects" component={Projects} />
         <Route path="/project/:projectId" component={Workspace} />
         <Route path="/ledger/:projectId" component={Ledger} />

@@ -251,7 +251,7 @@ export default function ThinkFreely() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <button
             type="button"
-            onClick={() => setLocation("/")}
+            onClick={() => setLocation("/home")}
             style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", background: "transparent", border: "none", padding: 0, cursor: "pointer", opacity: 0.7 }}
           >
             ← Home

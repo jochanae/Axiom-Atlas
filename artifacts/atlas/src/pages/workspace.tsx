@@ -4167,7 +4167,7 @@ export default function Workspace() {
               </svg>
             </button>
             <button
-              onClick={() => setLocation("/")}
+              onClick={() => setLocation("/home")}
               style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, flexShrink: 0 }}
             >
               <AtlasLogo small />
@@ -4288,7 +4288,7 @@ export default function Workspace() {
                               queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
                               setShowProjectMenu(false);
                               setConfirmDeleteProject(false);
-                              setLocation("/");
+                              setLocation("/home");
                             },
                           });
                         }} style={{ flex: 1, padding: "5px 0", borderRadius: 5, fontSize: 11, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.35)", color: "rgba(252,165,165,0.9)", cursor: "pointer", fontWeight: 600 }}>
@@ -4858,7 +4858,7 @@ export default function Workspace() {
         projects={allProjects ?? []}
         activeProjectId={id}
         onOpenProject={(projectId) => { setLocation(`/project/${projectId}`); setShowDrawer(false); }}
-        onNewProject={() => { setLocation("/"); setShowDrawer(false); }}
+        onNewProject={() => { setLocation("/home"); setShowDrawer(false); }}
         onOpenLedger={(projectId) => { setLocation(`/ledger/${projectId}`); setShowDrawer(false); }}
         onOpenParking={() => { setLocation("/parking"); setShowDrawer(false); }}
         userLabel={loadProfile().name || null}
