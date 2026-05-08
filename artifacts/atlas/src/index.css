@@ -561,3 +561,22 @@
 .atlas-lp-gold-pulse  { animation: atlas-lp-gold-pulse  2s ease-in-out infinite; }
 .atlas-lp-amber-pulse { animation: atlas-lp-amber-pulse 2s ease-in-out infinite; }
 .atlas-lp-node-resolve { animation: atlas-lp-node-resolve 0.4s ease-out; }
+
+/* ── System Map — purple ambient glow + builder pulse ────────────────────────── */
+.system-map-glow {
+  position: relative;
+}
+.system-map-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, oklch(0.30 0.15 300 / 35%) 0%, transparent 70%);
+}
+[data-theme="parchment"] .system-map-glow::before {
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, oklch(0.70 0.10 300 / 10%) 0%, transparent 70%);
+}
+.pulse-lovable { box-shadow: 0 0 30px oklch(0.55 0.25 300 / 50%); }
+.pulse-cursor  { box-shadow: 0 0 30px oklch(0.55 0.20 240 / 50%); }
+.pulse-replit  { box-shadow: 0 0 30px oklch(0.55 0.20 150 / 50%); }

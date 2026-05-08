@@ -35,26 +35,26 @@ const NODE_DESCRIPTIONS: Record<string, string> = {
 };
 
 const INITIAL_NODES: ArchNode[] = [
-  { id: "auth", label: "Authentication", type: "auth", resolved: false, x: 300, y: 80 },
-  { id: "db", label: "Database", type: "database", resolved: false, x: 150, y: 200 },
-  { id: "api", label: "API Routes", type: "api", resolved: false, x: 450, y: 200 },
-  { id: "state", label: "State Management", type: "state", resolved: false, x: 300, y: 320 },
-  { id: "ui", label: "UI Components", type: "ui", resolved: false, x: 150, y: 440 },
-  { id: "logic", label: "Business Logic", type: "logic", resolved: false, x: 450, y: 440 },
+  { id: "auth",  label: "Authentication",   type: "auth",     resolved: false, x: 300, y: 80  },
+  { id: "db",    label: "Database",          type: "database", resolved: false, x: 150, y: 200 },
+  { id: "api",   label: "API Routes",        type: "api",      resolved: false, x: 450, y: 200 },
+  { id: "state", label: "State Management",  type: "state",    resolved: false, x: 300, y: 320 },
+  { id: "ui",    label: "UI Components",     type: "ui",       resolved: false, x: 150, y: 440 },
+  { id: "logic", label: "Business Logic",    type: "logic",    resolved: false, x: 450, y: 440 },
 ];
 
 const INITIAL_EDGES: ArchEdge[] = [
-  { id: "e1", from: "auth", to: "db" },
-  { id: "e2", from: "auth", to: "api" },
-  { id: "e3", from: "api", to: "db" },
-  { id: "e4", from: "api", to: "state" },
-  { id: "e5", from: "state", to: "ui" },
+  { id: "e1", from: "auth",  to: "db"    },
+  { id: "e2", from: "auth",  to: "api"   },
+  { id: "e3", from: "api",   to: "db"    },
+  { id: "e4", from: "api",   to: "state" },
+  { id: "e5", from: "state", to: "ui"    },
   { id: "e6", from: "state", to: "logic" },
-  { id: "e7", from: "logic", to: "api" },
+  { id: "e7", from: "logic", to: "api"   },
 ];
 
 const SPRINT_LABELS = [
-  { sprint: 1, x: 180, y: 60 },
+  { sprint: 1, x: 180, y: 60  },
   { sprint: 2, x: 350, y: 250 },
   { sprint: 3, x: 180, y: 390 },
 ];
@@ -69,8 +69,8 @@ const EDGE_FLOW_STYLE = `
   50% { box-shadow: 0 0 20px rgba(212,175,55,0.6); }
 }
 @keyframes node-resolve {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.08); }
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
   100% { transform: scale(1); }
 }
 `;
@@ -81,6 +81,22 @@ const ZOOM_DEFAULT = 0.9;
 const TAP_THRESHOLD = 8;
 const CANVAS_PADDING = 80;
 const STORAGE_KEY = "axiom-system-map-nodes";
+
+type BuilderType = "lovable" | "cursor" | "replit" | null;
+
+function detectBuilder(): BuilderType {
+  try {
+    const host = window.location.hostname;
+    if (host.includes("replit") || host.includes("janeway") || host.includes("worf") ||
+        host.includes("repl.co") || host.includes("repl.run") || host.includes("id.replit") ||
+        typeof (window as any).__REPLIT__ !== "undefined") {
+      return "replit";
+    }
+    if (host.includes("lovable") || host.includes("lovableproject")) return "lovable";
+    if (host.includes("cursor")) return "cursor";
+  } catch {}
+  return null;
+}
 
 function loadNodes(): ArchNode[] {
   try {
@@ -101,6 +117,7 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
   const [zoom, setZoom] = useState(ZOOM_DEFAULT);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [activeCardNodeId, setActiveCardNodeId] = useState<string | null>(null);
+  const [builder] = useState<BuilderType>(detectBuilder);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -108,9 +125,7 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     (nodes.filter(n => n.resolved).length / Math.max(nodes.length, 1)) * 100
   );
 
-  useEffect(() => {
-    onReadinessChange?.(readinessScore);
-  }, [readinessScore, onReadinessChange]);
+  useEffect(() => { onReadinessChange?.(readinessScore); }, [readinessScore, onReadinessChange]);
 
   useEffect(() => {
     onNodesChange?.(nodes);
@@ -149,6 +164,38 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     pinchStartDist: 0, pinchStartZoom: 1,
   });
 
+  // Store latest pan/zoom in refs so touch handlers never go stale
+  const panRef = useRef(pan);
+  const zoomRef = useRef(zoom);
+  useEffect(() => { panRef.current = pan; }, [pan]);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  // Non-passive touchmove listener — must be attached via addEventListener
+  // because React synthetic events are passive by default, which prevents
+  // e.preventDefault() from stopping browser scroll/zoom during pinch.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e: TouchEvent) => {
+      if (e.touches.length >= 1) e.preventDefault();
+      const ds = dragState.current;
+      if (e.touches.length === 1 && ds.dragging) {
+        const dx = e.touches[0].clientX - ds.startX;
+        const dy = e.touches[0].clientY - ds.startY;
+        if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) ds.moved = true;
+        const z = zoomRef.current;
+        setPan({ x: ds.startPanX + dx / z, y: ds.startPanY + dy / z });
+      } else if (e.touches.length === 2 && ds.pinchStartDist > 0) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        setZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ds.pinchStartZoom * (dist / ds.pinchStartDist))));
+      }
+    };
+    el.addEventListener("touchmove", handler, { passive: false });
+    return () => el.removeEventListener("touchmove", handler);
+  }, []);
+
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     const ds = dragState.current;
     ds.dragging = true; ds.startX = e.clientX; ds.startY = e.clientY;
@@ -183,38 +230,22 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     if (e.touches.length === 1) {
       ds.dragging = true;
       ds.startX = e.touches[0].clientX; ds.startY = e.touches[0].clientY;
-      ds.startPanX = pan.x; ds.startPanY = pan.y; ds.moved = false;
+      ds.startPanX = panRef.current.x; ds.startPanY = panRef.current.y; ds.moved = false;
     } else if (e.touches.length === 2) {
       ds.dragging = false;
       const dx = e.touches[0].clientX - e.touches[1].clientX;
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       ds.pinchStartDist = Math.hypot(dx, dy);
-      ds.pinchStartZoom = zoom;
+      ds.pinchStartZoom = zoomRef.current;
     }
-  }, [pan, zoom]);
-
-  const onTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    const ds = dragState.current;
-    if (e.touches.length === 1 && ds.dragging) {
-      const dx = e.touches[0].clientX - ds.startX;
-      const dy = e.touches[0].clientY - ds.startY;
-      if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) ds.moved = true;
-      setPan({ x: ds.startPanX + dx / zoom, y: ds.startPanY + dy / zoom });
-    } else if (e.touches.length === 2 && ds.pinchStartDist > 0) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      setZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, ds.pinchStartZoom * (dist / ds.pinchStartDist))));
-    }
-  }, [zoom]);
+  }, []);
 
   const onTouchEnd = useCallback((e: React.TouchEvent) => {
     const ds = dragState.current;
     ds.dragging = false;
     if (e.changedTouches.length === 1 && !ds.moved) {
       const now = Date.now();
-      if (now - ds.lastTap < 180) { fitMap(); ds.lastTap = 0; }
+      if (now - ds.lastTap < 300) { fitMap(); ds.lastTap = 0; }
       else ds.lastTap = now;
     }
   }, [fitMap]);
@@ -251,10 +282,15 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     if (cardTop < 50) cardTop = nodeScreenY + 70;
   }
 
+  const builderClass = builder === "lovable" ? "pulse-lovable"
+    : builder === "cursor" ? "pulse-cursor"
+    : builder === "replit" ? "pulse-replit"
+    : "";
+
   return (
     <div
       ref={containerRef}
-      className="system-map-glow"
+      className={`system-map-glow${builderClass ? ` ${builderClass}` : ""}`}
       style={{
         position: "relative", height: "100%", width: "100%",
         overflow: "hidden", borderRadius: compact ? 0 : 8,
@@ -269,7 +305,6 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
       onWheel={onWheel}
       onDoubleClick={onDoubleClick}
       onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onClick={onContainerClick}
     >
@@ -292,7 +327,7 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
       {/* % READY badge — top-right */}
       <div style={{ position: "absolute", right: 14, top: 14, zIndex: 10, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
         <span style={{
-          fontSize: 9, fontWeight: 700, color: "rgba(212,175,55,0.6)",
+          fontSize: 9, fontWeight: 700, color: "rgba(212,175,55,0.7)",
           background: "rgba(212,175,55,0.08)", border: "0.5px solid rgba(212,175,55,0.25)",
           borderRadius: 20, padding: "1px 8px", letterSpacing: "0.06em",
         }}>
@@ -437,7 +472,7 @@ function NodeComp({
       </div>
       <span style={{
         fontSize: 10, fontWeight: 500, whiteSpace: "nowrap",
-        color: node.resolved ? "#D4AF37" : "rgba(120,113,108,0.9)",
+        color: node.resolved ? "#D4AF37" : "rgba(200,195,190,0.85)",
       }}>
         {node.label}
       </span>
