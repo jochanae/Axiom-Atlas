@@ -609,7 +609,7 @@ export default function Home() {
       >
         <div style={{ width: "100%", maxWidth: 560 }}>
           {/* Hero — fills the viewport above the mobile nav, content vertically centered */}
-          <div style={{ minHeight: "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative", paddingBottom: 72 }}>
+          <div style={{ minHeight: "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative", paddingBottom: 120 }}>
 
           {/* Greeting */}
           <div style={{ textAlign: "center", marginBottom: 24 }}>
@@ -862,7 +862,7 @@ export default function Home() {
       </div>
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "0 24px" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "0 24px", paddingBottom: 120 }}>
         <BelowFoldDashboard
           projects={(projects ?? []).map((p: Project) => ({
             id: p.id,
@@ -895,12 +895,67 @@ export default function Home() {
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
       />
 
-      {/* Fixed CockpitBar footer */}
+      {/* Fixed bottom nav via CockpitBar */}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100 }}>
         <CockpitBar
           readinessScore={0}
           nodes={[]}
-          onHomeNav={() => {}}
+          showReadinessStrip={false}
+          navLeft={
+            <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+              {/* HOME — active */}
+              <button
+                onClick={() => {}}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(212,175,55,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                  <polyline points="9,22 9,12 15,12 15,22" />
+                </svg>
+                <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(212,175,55,0.9)", fontWeight: 700 }}>Home</span>
+              </button>
+              {/* PROJECTS */}
+              <button
+                onClick={() => setShowDrawer(true)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                </svg>
+                <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>Projects</span>
+              </button>
+            </div>
+          }
+          navRight={
+            <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+              {/* LEDGER */}
+              <button
+                onClick={() => {
+                  const p = (projects ?? [])[0];
+                  if (p) setLocation(`/ledger/${p.id}`);
+                }}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 19.5A2.5 2.5 0 016.5 17H20" />
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+                  <path d="M9 7h6M9 11h6M9 15h4" strokeWidth="1.2" />
+                </svg>
+                <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>Ledger</span>
+              </button>
+              {/* YOU */}
+              <button
+                onClick={() => setShowProfile(true)}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(120,113,108,0.55)" }}>You</span>
+              </button>
+            </div>
+          }
         />
       </div>
     </div>
