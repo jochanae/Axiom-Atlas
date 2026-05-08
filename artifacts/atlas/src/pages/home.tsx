@@ -544,10 +544,8 @@ export default function Home() {
             onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(201,162,76,0.55)")}
           >
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
-              <rect x="2" y="2" width="16" height="16" rx="2.5" />
-              <path d="M7 2v16" />
-              <path d="M10 7h5M10 10h5M10 13h4" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
             </svg>
           </button>
           <AtlasLogo />
@@ -561,8 +559,8 @@ export default function Home() {
         {/* Right side: avatar pair */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ display: "none" }} />
-          {/* Avatar + new-project as a tight pair */}
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {/* Avatar + new-project as overlapping pair (avatar in front) */}
+          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
             <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
             <button
               title="New project"
@@ -579,19 +577,19 @@ export default function Home() {
                 );
               }}
               style={{
-                width: 22, height: 22, borderRadius: "22%",
-                border: "1.5px dashed rgba(201,162,76,0.38)",
+                width: 26, height: 26, borderRadius: "22%",
+                border: "1px dashed rgba(212,175,55,0.45)",
                 background: "transparent",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: loading ? "not-allowed" : "pointer",
-                color: "rgba(201,162,76,0.65)",
-                fontSize: 16, lineHeight: 1, fontWeight: 300,
-                transition: "all 160ms ease", flexShrink: 0,
+                color: "rgba(212,175,55,0.55)",
+                fontSize: 14, lineHeight: 1, fontWeight: 300,
+                flexShrink: 0, marginLeft: -4, position: "relative", zIndex: 1,
                 opacity: loading ? 0.4 : 1,
-                paddingBottom: 1,
+                transition: "all 160ms ease",
               }}
-              onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.borderColor = "rgba(201,162,76,0.7)"; e.currentTarget.style.color = "#C9A24C"; } }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.38)"; e.currentTarget.style.color = "rgba(201,162,76,0.65)"; }}
+              onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; e.currentTarget.style.color = "#D4AF37"; } }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; e.currentTarget.style.color = "rgba(212,175,55,0.55)"; }}
             >
               +
             </button>

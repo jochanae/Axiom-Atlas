@@ -68,16 +68,16 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
         onClick={() => setOpen(o => !o)}
         title="Account"
         style={{
-          width: 42, height: 42, borderRadius: "22%",
-          border: `1.5px dashed ${open ? "rgba(201,162,76,0.65)" : "rgba(201,162,76,0.35)"}`,
-          background: photoUrl ? "transparent" : open ? "rgba(201,162,76,0.1)" : "rgba(201,162,76,0.04)",
+          width: 36, height: 36, borderRadius: "22%",
+          border: `1.5px solid ${open ? "#D4AF37" : "rgba(212,175,55,0.75)"}`,
+          background: photoUrl ? "transparent" : "#0D0B09",
           display: "flex", alignItems: "center", justifyContent: "center",
           cursor: "pointer", overflow: "hidden", flexShrink: 0,
           transition: "all 160ms ease", padding: 0,
-          boxShadow: open ? "0 0 0 3px rgba(201,162,76,0.12)" : "none",
+          position: "relative", zIndex: 2,
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.6)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.borderColor = open ? "rgba(201,162,76,0.65)" : "rgba(201,162,76,0.35)"; }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#D4AF37"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = open ? "#D4AF37" : "rgba(212,175,55,0.75)"; }}
       >
         {photoUrl ? (
           <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "20%" }} />

@@ -2,6 +2,9 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
+import { SystemMap } from "../components/SystemMap";
+import type { ArchNode } from "../components/SystemMap";
+import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { StatusGlyph } from "../components/StatusGlyph";
@@ -3484,6 +3487,28 @@ function UserProfilePanel({ onClose, isMobile = false }: { onClose: () => void; 
   );
 }
 
+// ── SystemMapWithCockpit ────────────────────────────────────────────────────
+function SystemMapWithCockpit({ onHomeNav }: { onHomeNav: () => void }) {
+  const [readinessScore, setReadinessScore] = useState(0);
+  const [nodes, setNodes] = useState<ArchNode[]>([]);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <SystemMap
+          onReadinessChange={setReadinessScore}
+          onNodesChange={setNodes}
+          compact
+        />
+      </div>
+      <CockpitBar
+        readinessScore={readinessScore}
+        nodes={nodes}
+        onHomeNav={onHomeNav}
+      />
+    </div>
+  );
+}
+
 // ── RightPanel (tabbed) ──────────────────────────────────────────────────────
 function RightPanel({
   projectId,
@@ -3496,6 +3521,7 @@ function RightPanel({
   onLinkedRepoChange,
   pushHistory,
   onRollbackPush,
+  onHomeNav,
 }: {
   projectId: number;
   entries: Entry[];
@@ -3507,6 +3533,7 @@ function RightPanel({
   onLinkedRepoChange: (repo: LinkedRepo | null) => void;
   pushHistory: PushRecord[];
   onRollbackPush: (record: PushRecord) => Promise<void>;
+  onHomeNav: () => void;
 }) {
   const [tab, setTab] = useState<RightTab>("ledger");
 
@@ -3685,7 +3712,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <MapTab projectId={projectId} />}
+      {tab === "map" && <SystemMapWithCockpit onHomeNav={onHomeNav} />}
     </div>
   );
 }
@@ -4160,10 +4187,8 @@ export default function Workspace() {
               onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
               onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
             >
-              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
-                <rect x="2" y="2" width="16" height="16" rx="2.5" />
-                <path d="M7 2v16" />
-                <path d="M10 7h5M10 10h5M10 13h4" />
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
               </svg>
             </button>
             <button
@@ -4793,6 +4818,7 @@ export default function Workspace() {
                 onLinkedRepoChange={setLinkedRepo}
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
+                onHomeNav={() => setLocation("/home")}
               />
             </div>
           </>
@@ -4842,6 +4868,7 @@ export default function Workspace() {
                 onLinkedRepoChange={setLinkedRepo}
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
+                onHomeNav={() => setLocation("/home")}
               />
             </div>
           </div>
