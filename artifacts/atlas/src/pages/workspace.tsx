@@ -930,8 +930,114 @@ function GitHubPushModal({
   );
 }
 
+// ── StreamingText ─────────────────────────────────────────────────────────────
+function StreamingText({
+  text,
+  speed = 35,
+  animate = true,
+  onComplete,
+  style,
+}: {
+  text: string;
+  speed?: number;
+  animate?: boolean;
+  onComplete?: () => void;
+  style?: React.CSSProperties;
+}) {
+  const [visibleCount, setVisibleCount] = useState(animate ? 0 : Infinity);
+  const words = useRef<string[]>([]);
+  const completeCalled = useRef(false);
+
+  useEffect(() => {
+    words.current = text.match(/\S+|\n/g) ?? [];
+    if (!animate) { setVisibleCount(Infinity); return; }
+    setVisibleCount(0);
+    completeCalled.current = false;
+  }, [text, animate]);
+
+  useEffect(() => {
+    if (!animate) return;
+    const total = words.current.length;
+    if (visibleCount >= total) {
+      if (!completeCalled.current) { completeCalled.current = true; onComplete?.(); }
+      return;
+    }
+    const lastWord = words.current[visibleCount - 1] ?? "";
+    const pause = /[.!?]$/.test(lastWord)
+      ? speed * 4
+      : speed * (0.6 + Math.random() * 0.8);
+    const timer = setTimeout(() => {
+      const burst = Math.random() > 0.7 ? 2 : 1;
+      setVisibleCount((c) => Math.min(c + burst, total));
+    }, pause);
+    return () => clearTimeout(timer);
+  }, [visibleCount, animate, speed, onComplete]);
+
+  const done = !animate || visibleCount >= (words.current.length || Infinity);
+  if (done) {
+    return <div style={style}>{text}</div>;
+  }
+  const visible = words.current.slice(0, visibleCount).join(" ");
+  return (
+    <div style={style}>
+      {visible}
+      <span className="atlas-cursor" />
+    </div>
+  );
+}
+
+function splitIntoChunks(text: string): string[] {
+  if (text.length < 300) return [text];
+  const raw = text.split(/\n{2,}/);
+  const chunks: string[] = [];
+  for (const segment of raw) {
+    const trimmed = segment.trim();
+    if (trimmed) chunks.push(trimmed);
+  }
+  return chunks.length > 0 ? chunks : [text];
+}
+
+// ── ChunkedBubbles ────────────────────────────────────────────────────────────
+function ChunkedBubbles({
+  text,
+  isNew,
+  textStyle,
+}: {
+  text: string;
+  isNew: boolean;
+  textStyle?: React.CSSProperties;
+}) {
+  const chunks = splitIntoChunks(text);
+  const [revealed, setRevealed] = useState(isNew ? 0 : chunks.length);
+
+  useEffect(() => {
+    if (!isNew || revealed >= chunks.length) return;
+    const timer = setTimeout(
+      () => setRevealed((r) => r + 1),
+      revealed === 0 ? 100 : 600 + Math.random() * 400,
+    );
+    return () => clearTimeout(timer);
+  }, [revealed, chunks.length, isNew]);
+
+  const visibleChunks = chunks.slice(0, isNew ? Math.min(revealed + 1, chunks.length) : chunks.length);
+  return (
+    <>
+      {visibleChunks.map((chunk, i) => (
+        <StreamingText
+          key={i}
+          text={chunk}
+          animate={isNew && i === revealed && revealed < chunks.length}
+          style={{ ...textStyle, ...(i < visibleChunks.length - 1 ? { marginBottom: 12 } : {}) }}
+        />
+      ))}
+    </>
+  );
+}
+
+// ── AssistantBubble ───────────────────────────────────────────────────────────
 function AssistantBubble({
   message,
+  isNew = false,
   projectId,
   sessionId,
   linkedRepo,
@@ -943,6 +1049,7 @@ function AssistantBubble({
   onPushSuccess,
 }: {
   message: ChatMessage;
+  isNew?: boolean;
   projectId: number;
   sessionId: number;
   linkedRepo: LinkedRepo | null;
@@ -1074,9 +1181,11 @@ function AssistantBubble({
           </div>
         )}
 
-        <div style={{ fontSize: 14, lineHeight: 1.78, color: "var(--atlas-fg)", opacity: 0.9, whiteSpace: "pre-wrap" }}>
-          {message.content}
-        </div>
+        <ChunkedBubbles
+          text={message.content}
+          isNew={isNew}
+          textStyle={{ fontSize: 14, lineHeight: 1.78, color: "var(--atlas-fg)", opacity: 0.9, whiteSpace: "pre-wrap" }}
+        />
 
         {/* Code ready card — self-repair paths */}
         {selfEdits.length > 0 && (
@@ -4251,9 +4360,11 @@ export default function Workspace() {
     query: { enabled: !!sessionId, queryKey: ["messages", sessionId] },
   });
   const priorLoaded = useRef(false);
+  const historyMsgCountRef = useRef<number>(0);
   useEffect(() => {
     if (!priorMessages || priorMessages.length === 0 || priorLoaded.current || messages.length > 0) return;
     priorLoaded.current = true;
+    historyMsgCountRef.current = priorMessages.length;
     setMessages(
       priorMessages.map((m) => ({
         id: m.id,
@@ -5055,6 +5166,7 @@ export default function Workspace() {
                 <AssistantBubble
                   key={i}
                   message={msg}
+                  isNew={msg.role === "assistant" && i >= historyMsgCountRef.current}
                   projectId={id}
                   sessionId={sessionId || 0}
                   linkedRepo={linkedRepo}
