@@ -282,15 +282,19 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
         backgroundSize: "40px 40px",
       }} />
 
-      {/* SYSTEM MAP label */}
-      <div style={{ position: "absolute", left: 14, top: 14, zIndex: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+      {/* SYSTEM MAP label — left */}
+      <div style={{ position: "absolute", left: 14, top: 14, zIndex: 10 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.1em" }}>
           SYSTEM MAP
         </span>
+      </div>
+
+      {/* % READY badge — top-right */}
+      <div style={{ position: "absolute", right: 14, top: 14, zIndex: 10, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
         <span style={{
           fontSize: 9, fontWeight: 700, color: "rgba(212,175,55,0.6)",
           background: "rgba(212,175,55,0.08)", border: "0.5px solid rgba(212,175,55,0.25)",
-          borderRadius: 20, padding: "1px 8px", alignSelf: "flex-start", letterSpacing: "0.06em",
+          borderRadius: 20, padding: "1px 8px", letterSpacing: "0.06em",
         }}>
           {readinessScore}% READY
         </span>

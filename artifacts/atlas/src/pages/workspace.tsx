@@ -3731,9 +3731,9 @@ function SystemMapWithCockpit({ onHomeNav, onSendIntent }: { onHomeNav: () => vo
           onNodesChange={setNodes}
           compact
         />
-        {/* Platform detected badge — overlaid below the % READY badge */}
+        {/* Platform detected badge — top-right, stacked under % READY */}
         <div style={{
-          position: "absolute", left: 14, top: 46, zIndex: 10,
+          position: "absolute", right: 14, top: 40, zIndex: 10,
           fontSize: 9, fontWeight: 700, color: "rgba(212,175,55,0.7)",
           background: "rgba(212,175,55,0.07)", border: "0.5px solid rgba(212,175,55,0.22)",
           borderRadius: 20, padding: "1px 8px", letterSpacing: "0.08em",
