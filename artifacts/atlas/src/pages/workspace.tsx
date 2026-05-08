@@ -6,6 +6,7 @@ import { SystemMap } from "../components/SystemMap";
 import type { ArchNode } from "../components/SystemMap";
 import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
+import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
@@ -19,6 +20,7 @@ import {
   useListMessages,
   useCreateSession,
   useCreateEntry,
+  useCreateProject,
   useUpdateProject,
   useUpdateEntry,
   useDeleteProject,
@@ -4187,6 +4189,7 @@ export default function Workspace() {
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const updateProjectHeader = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
+  const createProjectMutation = useCreateProject();
 
   const ATLAS_SRC_FILES = [
     { label: "workspace.tsx", path: "artifacts/atlas/src/pages/workspace.tsx", hint: "main UI · ~4k lines" },
@@ -4835,14 +4838,38 @@ export default function Workspace() {
               )}
             </button>
 
-            {/* User avatar */}
-            <button
-              onClick={() => setShowProfile(true)}
-              title="Your profile"
-              style={{ width: 34, height: 34, borderRadius: "50%", background: loadProfile().photoUrl ? "transparent" : "rgba(28,25,23,0.95)", border: "1.5px solid rgba(120,113,108,0.3)", color: "rgba(231,229,228,0.65)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontFamily: "var(--app-font-mono)", fontWeight: 600, flexShrink: 0, overflow: "hidden", padding: 0 }}
-            >
-              {(() => { const p = loadProfile(); if (p.photoUrl) return <img src={p.photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />; return p.name ? p.name[0].toUpperCase() : "👤"; })()}
-            </button>
+            {/* Squircle avatar + new project button — matches /home */}
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
+              <button
+                title="New project"
+                disabled={createProjectMutation.isPending}
+                onClick={() => {
+                  createProjectMutation.mutate({ data: { name: "New Project" } }, {
+                    onSuccess: (p) => {
+                      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                      setLocation(`/project/${p.id}`);
+                    },
+                  });
+                }}
+                style={{
+                  width: 26, height: 26, borderRadius: "22%",
+                  border: "1px dashed rgba(212,175,55,0.45)",
+                  background: "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: createProjectMutation.isPending ? "not-allowed" : "pointer",
+                  color: "rgba(212,175,55,0.55)",
+                  fontSize: 14, lineHeight: 1, fontWeight: 300,
+                  flexShrink: 0, marginLeft: -4, position: "relative", zIndex: 1,
+                  opacity: createProjectMutation.isPending ? 0.4 : 1,
+                  transition: "all 160ms ease",
+                }}
+                onMouseEnter={(e) => { if (!createProjectMutation.isPending) { e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; e.currentTarget.style.color = "#D4AF37"; } }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; e.currentTarget.style.color = "rgba(212,175,55,0.55)"; }}
+              >
+                +
+              </button>
+            </div>
           </div>
         </div>
 
