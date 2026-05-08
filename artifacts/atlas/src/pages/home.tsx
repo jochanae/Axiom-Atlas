@@ -417,6 +417,7 @@ export default function Home() {
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
+  const [showProjectsSheet, setShowProjectsSheet] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -453,25 +454,11 @@ export default function Home() {
   const { data: projects, isLoading } = useListProjects();
   const createProject = useCreateProject();
 
-  const [fromLanding] = useState(() => {
-    try {
-      const v = sessionStorage.getItem("atlas-from-landing");
-      if (v) sessionStorage.removeItem("atlas-from-landing");
-      return v === "1";
-    } catch { return false; }
-  });
-
   useEffect(() => {
-    if (!fromLanding) return;
-    if (isLoading) return;
-    if (projects && projects.length > 0) {
-      const lastId = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
-      const target = lastId || String(projects[0].id);
-      setLocation(`/project/${target}`);
-    }
-  }, [fromLanding, projects, isLoading, setLocation]);
+    try { sessionStorage.removeItem("atlas-from-landing"); } catch {}
+  }, []);
 
-  const showChoiceScreen = fromLanding && !isLoading && (!projects || projects.length === 0);
+  const showChoiceScreen = false;
 
   const navigateToProject = useCallback(
     (projectId: number) => {
@@ -975,6 +962,21 @@ export default function Home() {
 
       {showProfile && <HomeProfileSheet onClose={() => setShowProfile(false)} />}
 
+      {showProjectsSheet && (
+        <ProjectsGridSheet
+          projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description }))}
+          onOpenProject={(id) => { setShowProjectsSheet(false); navigateToProject(id); }}
+          onNewProject={() => {
+            setShowProjectsSheet(false);
+            createProject.mutate(
+              { data: { name: "New Project" } },
+              { onSuccess: (p) => { queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); setLocation(`/project/${p.id}`); } }
+            );
+          }}
+          onClose={() => setShowProjectsSheet(false)}
+        />
+      )}
+
       {/* Projects Drawer (slide-in menu) */}
       <ProjectsDrawer
         open={showDrawer}
@@ -1042,7 +1044,7 @@ export default function Home() {
 
           {/* PROJECTS */}
           <button
-            onClick={() => setShowDrawer(true)}
+            onClick={() => setShowProjectsSheet(true)}
             style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1124,5 +1126,155 @@ export default function Home() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Projects Grid Sheet ───────────────────────────────────────────────────────
+type SheetProject = { id: number; name: string; description?: string | null };
+
+function ProjectsGridSheet({
+  projects,
+  onOpenProject,
+  onNewProject,
+  onClose,
+}: {
+  projects: SheetProject[];
+  onOpenProject: (id: number) => void;
+  onNewProject: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const COLORS = ["#92400E", "#1e3a5f", "#1a3a2a", "#3b1f4e", "#3b2a0e", "#1f3b3b"];
+  const ICONS = [
+    <path key="a" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />,
+    <path key="b" d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z M13 2v7h7" />,
+    <g key="c"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></g>,
+    <path key="d" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10" />,
+    <g key="e"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></g>,
+    <path key="f" d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />,
+  ];
+
+  return (
+    <>
+      {/* Scrim */}
+      <div
+        onClick={onClose}
+        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", zIndex: 200 }}
+      />
+
+      {/* Sheet — slides up from bottom */}
+      <div
+        style={{
+          position: "fixed", left: 0, right: 0, bottom: 0,
+          zIndex: 201,
+          background: "var(--atlas-surface)",
+          borderTop: "1px solid rgba(212,175,55,0.18)",
+          borderRadius: "20px 20px 0 0",
+          maxHeight: "80dvh",
+          display: "flex", flexDirection: "column",
+          animation: "projectSheetSlideUp 220ms cubic-bezier(0.32,0.72,0,1) both",
+        }}
+      >
+        <style>{`
+          @keyframes projectSheetSlideUp {
+            from { transform: translateY(100%); opacity: 0.5; }
+            to   { transform: translateY(0);    opacity: 1; }
+          }
+        `}</style>
+
+        {/* Handle */}
+        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(120,113,108,0.35)" }} />
+        </div>
+
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px 12px" }}>
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+            Projects
+          </span>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Grid */}
+        <div style={{ overflowY: "auto", padding: "0 16px 32px", flex: 1 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+
+            {/* New Project card */}
+            <button
+              onClick={onNewProject}
+              style={{
+                background: "none", border: "1px dashed rgba(212,175,55,0.3)", borderRadius: 14,
+                cursor: "pointer", padding: 0, overflow: "hidden", textAlign: "left",
+                transition: "border-color 160ms",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(212,175,55,0.65)")}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(212,175,55,0.3)")}
+            >
+              <div style={{ height: 90, background: "rgba(212,175,55,0.04)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontSize: 28, color: "rgba(212,175,55,0.45)", lineHeight: 1 }}>+</span>
+              </div>
+              <div style={{ padding: "10px 12px 12px" }}>
+                <p style={{ margin: 0, fontFamily: "var(--app-font-sans)", fontSize: 12, fontWeight: 600, color: "rgba(212,175,55,0.7)" }}>New Project</p>
+                <p style={{ margin: "3px 0 0", fontFamily: "var(--app-font-mono)", fontSize: 9, color: "rgba(120,113,108,0.5)", letterSpacing: "0.05em" }}>Start fresh</p>
+              </div>
+            </button>
+
+            {/* Project cards */}
+            {projects.map((p, i) => {
+              const bg = COLORS[i % COLORS.length];
+              const icon = ICONS[i % ICONS.length];
+              const initials = p.name.split(" ").slice(0, 2).map(w => w[0]?.toUpperCase() ?? "").join("");
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => onOpenProject(p.id)}
+                  style={{
+                    background: "none", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14,
+                    cursor: "pointer", padding: 0, overflow: "hidden", textAlign: "left",
+                    transition: "border-color 160ms, transform 120ms",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.3)"; e.currentTarget.style.transform = "scale(1.02)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; e.currentTarget.style.transform = "scale(1)"; }}
+                >
+                  {/* Colored thumbnail with subtle grid texture */}
+                  <div style={{ height: 90, background: bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+                    <div style={{
+                      position: "absolute", inset: 0, opacity: 0.12,
+                      backgroundImage: "linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px)",
+                      backgroundSize: "14px 14px",
+                    }} />
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ position: "relative", zIndex: 1 }}>
+                      {icon}
+                    </svg>
+                    <div style={{ position: "absolute", top: 8, right: 8, fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.5)" }}>
+                      {initials}
+                    </div>
+                  </div>
+                  <div style={{ padding: "10px 12px 12px" }}>
+                    <p style={{ margin: 0, fontFamily: "var(--app-font-sans)", fontSize: 12, fontWeight: 600, color: "var(--atlas-fg)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {p.name}
+                    </p>
+                    <p style={{ margin: "3px 0 0", fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {p.description ?? "No description"}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
