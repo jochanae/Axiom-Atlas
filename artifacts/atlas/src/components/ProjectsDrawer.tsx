@@ -154,7 +154,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
                   +{projects.length - visible.length} more projects
                 </button>
               )}
-              <button type="button" style={{ ...linkBtn, padding: "5px 14px", marginTop: 2 }}>
+              <button type="button" onClick={() => navigate("/projects")} style={{ ...linkBtn, padding: "5px 14px", marginTop: 2 }}>
                 Open project gallery →
               </button>
             </div>
