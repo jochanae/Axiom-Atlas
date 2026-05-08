@@ -11,6 +11,7 @@ import type { Project } from "@workspace/api-client-react";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
+import { CockpitBar } from "../components/CockpitBar";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
 
 const PLACEHOLDERS = [
@@ -893,6 +894,15 @@ export default function Home() {
         onOpenParking={() => setLocation("/parking")}
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
       />
+
+      {/* Fixed CockpitBar footer */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100 }}>
+        <CockpitBar
+          readinessScore={0}
+          nodes={[]}
+          onHomeNav={() => {}}
+        />
+      </div>
     </div>
   );
 }
