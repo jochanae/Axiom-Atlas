@@ -52,7 +52,7 @@ export default function Privacy() {
           Privacy Policy
         </h1>
         <p style={{ ...mono, fontSize: 10, letterSpacing: "0.12em", color: "var(--atlas-muted)", marginBottom: 48 }}>
-          EFFECTIVE DATE: JANUARY 1, 2025 · INTO INNOVATIONS LLC
+          LAST UPDATED: MAY 6, 2026 · INTO INNOVATIONS LLC
         </p>
 
         <Section title="01 // What We Collect">
@@ -125,11 +125,19 @@ export default function Privacy() {
           Atlas uses browser localStorage to store your theme preference, profile information, and GitHub token. No cross-site tracking cookies are used. We may use session cookies for authentication purposes only.
         </Section>
 
-        <Section title="09 // Changes to This Policy">
-          We may update this Privacy Policy from time to time. When we do, we will update the effective date above and notify you if the changes are material. Continued use of Atlas after changes constitutes your acceptance of the updated policy.
+        <Section title="09 // Data Retention">
+          We retain your data for as long as your account is active. Upon account deletion, your personal data and all associated project content will be permanently removed within 30 days.
         </Section>
 
-        <Section title="10 // Contact">
+        <Section title="10 // Children's Privacy">
+          Atlas is not intended for users under the age of 13. We do not knowingly collect personal data from children under 13. If you believe we have inadvertently collected such data, please contact us immediately and we will delete it promptly.
+        </Section>
+
+        <Section title="11 // Changes to This Policy">
+          We may update this Privacy Policy from time to time. When we do, we will update the date above and notify you of significant changes via email or in-app notification. Continued use of Atlas after changes constitutes your acceptance of the updated policy.
+        </Section>
+
+        <Section title="12 // Contact">
           Questions about your privacy?{" "}
           <a href="mailto:privacy@intoinnovations.com" style={{ color: "var(--atlas-gold)", textDecoration: "none" }}>
             privacy@intoinnovations.com

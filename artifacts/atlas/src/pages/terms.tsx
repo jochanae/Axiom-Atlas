@@ -52,7 +52,7 @@ export default function Terms() {
           Terms of Service
         </h1>
         <p style={{ ...mono, fontSize: 10, letterSpacing: "0.12em", color: "var(--atlas-muted)", marginBottom: 48 }}>
-          EFFECTIVE DATE: JANUARY 1, 2025 · INTO INNOVATIONS LLC
+          LAST UPDATED: MAY 6, 2026 · INTO INNOVATIONS LLC
         </p>
 
         <Section title="01 // Acceptance">
@@ -63,12 +63,17 @@ export default function Terms() {
           Atlas is a decision enforcement and strategic thinking tool designed for founders and builders. It helps you track commitments, surface contradictions in your decisions, and maintain a structured record of the choices that shape your projects. Atlas is a thinking aid — not a substitute for professional legal, financial, or business advice.
         </Section>
 
-        <Section title="03 // Your Data">
+        <Section title="03 // User Accounts">
+          You must create an account to use Atlas. You are responsible for maintaining the confidentiality of your login credentials and for all activities that occur under your account. You must notify us immediately of any unauthorized use of your account at{" "}
+          <a href="mailto:support@intoinnovations.com" style={{ color: "var(--atlas-gold)", textDecoration: "none" }}>support@intoinnovations.com</a>.
+        </Section>
+
+        <Section title="04 // Your Data">
           <p style={{ marginBottom: 12 }}>You own your data. Projects, sessions, chat messages, and decision entries you create in Atlas belong to you. We do not sell, rent, or share your personal data with third parties for marketing purposes.</p>
           <p>We retain your data as long as your account is active. You may request deletion of your account and all associated data at any time by contacting us.</p>
         </Section>
 
-        <Section title="04 // Acceptable Use">
+        <Section title="05 // Acceptable Use">
           <p style={{ marginBottom: 12 }}>You agree not to use Atlas to:</p>
           <ul style={{ paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
             <li>Violate any applicable law or regulation</li>
@@ -79,27 +84,35 @@ export default function Terms() {
           </ul>
         </Section>
 
-        <Section title="05 // AI Features">
+        <Section title="06 // AI Features">
           Atlas uses large language models to provide strategic guidance and decision catch functionality. AI responses are generated automatically and may occasionally be incorrect or incomplete. You are responsible for verifying any AI-generated output before acting on it. We do not guarantee the accuracy, reliability, or suitability of AI responses for any particular purpose.
         </Section>
 
-        <Section title="06 // Intellectual Property">
+        <Section title="07 // Subscription & Payments">
+          Certain features of Atlas may require a paid subscription. Pricing, billing cycles, and tier benefits will be communicated at the point of purchase. Refund policies will be outlined in the subscription agreement presented at the time of payment. We reserve the right to change pricing with reasonable notice to existing subscribers.
+        </Section>
+
+        <Section title="08 // Intellectual Property">
           The Atlas platform, including its design, code, and branding, is the intellectual property of Into Innovations LLC. You may not copy, modify, or distribute any part of the platform without our express written permission. Your content remains yours.
         </Section>
 
-        <Section title="07 // Disclaimer of Warranties">
+        <Section title="09 // Disclaimer of Warranties">
           Atlas is provided "as is" and "as available" without any warranties of any kind, express or implied. We do not warrant that the service will be uninterrupted, error-free, or free of harmful components. Your use of the service is at your own risk.
         </Section>
 
-        <Section title="08 // Limitation of Liability">
+        <Section title="10 // Limitation of Liability">
           To the fullest extent permitted by law, Into Innovations LLC shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of or inability to use Atlas, even if we have been advised of the possibility of such damages.
         </Section>
 
-        <Section title="09 // Changes to Terms">
-          We may update these Terms of Service from time to time. When we do, we will update the effective date above. Continued use of Atlas after changes constitutes your acceptance of the updated terms.
+        <Section title="11 // Termination">
+          We reserve the right to suspend or terminate your account at our discretion if you violate these terms or engage in conduct we determine to be harmful to other users or the platform. You may terminate your account at any time by contacting support. Upon termination, your right to use Atlas ceases immediately.
         </Section>
 
-        <Section title="10 // Contact">
+        <Section title="12 // Changes to Terms">
+          We may update these Terms of Service from time to time. When we do, we will update the date above. Continued use of Atlas after changes constitutes your acceptance of the updated terms.
+        </Section>
+
+        <Section title="13 // Contact">
           Questions about these terms? Contact us at{" "}
           <a href="mailto:legal@intoinnovations.com" style={{ color: "var(--atlas-gold)", textDecoration: "none" }}>
             legal@intoinnovations.com
