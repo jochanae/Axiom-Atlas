@@ -6277,6 +6277,35 @@ export default function Workspace() {
           {/* Right: % score + mode + P + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
 
+            {/* Readiness score pill — only shown in mobile map mode (replaces the ring hidden in center) */}
+            {isMobile && mobileTab === "map" && (
+              <button
+                onClick={focusSystemMap}
+                title={`Readiness ${blendedReadiness}%`}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)",
+                  borderRadius: 7, padding: "4px 8px", cursor: "pointer",
+                  transition: "background 150ms ease",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.15)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
+              >
+                <span style={{
+                  fontFamily: "var(--app-font-mono)", fontSize: 11, fontWeight: 700,
+                  color: "var(--atlas-gold)", letterSpacing: "0.04em",
+                }}>
+                  {blendedReadiness}%
+                </span>
+                <span style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: blendedReadiness > 0 ? "var(--atlas-gold)" : "rgba(120,113,108,0.4)",
+                  flexShrink: 0, display: "inline-block",
+                  boxShadow: blendedReadiness > 0 ? "0 0 5px rgba(201,162,76,0.6)" : "none",
+                }} />
+              </button>
+            )}
+
             {/* Mode pill — hidden in mobile map mode */}
             {!(isMobile && mobileTab === "map") && (() => {
               const modeConfig = {
