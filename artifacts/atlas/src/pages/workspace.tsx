@@ -4261,8 +4261,17 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
   const [signals, setSignals] = useState<string[]>([""]);
   const [activeSignalIdx, setActiveSignalIdx] = useState(0);
   const [signalAdded, setSignalAdded] = useState(false);
+  const [sentFlash, setSentFlash] = useState(false);
   const intent = signals[activeSignalIdx] ?? "";
   const setIntent = (val: string) => setSignals(prev => prev.map((s, i) => i === activeSignalIdx ? val : s));
+
+  const handleSend = useCallback(() => {
+    if (!intent.trim()) return;
+    onSendIntent?.(intent.trim());
+    setIntent("");
+    setSentFlash(true);
+    setTimeout(() => setSentFlash(false), 1400);
+  }, [intent, onSendIntent]);
 
   const addSignal = () => {
     setSignals(prev => [...prev, ""]);
@@ -4313,52 +4322,41 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
           onNodeFocus={(text) => setIntent(text)}
           initialNodeState={(activeProject?.nodeState as Record<string, boolean> | null) ?? null}
         />
-        {/* Platform detected badge — top-right, stacked under % READY */}
-        <div style={{
-          position: "absolute", right: 14, top: 40, zIndex: 10,
-          fontSize: 9, fontWeight: 700, color: "rgba(212,175,55,0.7)",
-          background: "rgba(212,175,55,0.07)", border: "0.5px solid rgba(212,175,55,0.22)",
-          borderRadius: 20, padding: "1px 8px", letterSpacing: "0.08em",
-          pointerEvents: "none",
-        }}>
-          {platform} DETECTED
-        </div>
       </div>
 
-      {/* Toggle bar */}
+      {/* Toggle bar — thin seam between map and intent capture */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "5px 12px",
-        background: "linear-gradient(to bottom, rgba(22,18,14,0.99), rgba(13,11,9,0.99))",
-        borderTop: "1px solid rgba(212,175,55,0.1)",
+        padding: "4px 12px",
+        background: "oklch(0.11 0.01 60)",
+        borderTop: "1px solid rgba(212,175,55,0.08)",
         flexShrink: 0,
-        boxShadow: "0 -1px 20px rgba(0,0,0,0.5)",
       }}>
         <button
           onClick={() => setShowChat(v => !v)}
           style={{
             background: "none", border: "none", cursor: "pointer",
-            color: "rgba(212,175,55,0.72)", fontSize: 10.5,
+            color: "rgba(212,175,55,0.55)", fontSize: 10,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           }}
         >
-          {showChat ? "▼ Hide Chat — See Full Map" : "▲ Show Chat — Intent Capture"}
+          {showChat ? "▲ map only" : "▼ intent capture"}
         </button>
         <button
           onClick={() => setShowChat(v => !v)}
           style={{
-            background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.28)",
-            borderRadius: 6, padding: "3px 10px", cursor: "pointer",
-            color: "rgba(212,175,55,0.8)", fontSize: 9.5,
+            background: "none", border: "1px solid rgba(212,175,55,0.18)",
+            borderRadius: 5, padding: "2px 9px", cursor: "pointer",
+            color: "rgba(212,175,55,0.55)", fontSize: 9,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           }}>
-          {showChat ? "⛶ Fullscreen" : "⊠ Restore"}
+          {showChat ? "⛶" : "⊠"}
         </button>
       </div>
 
       {/* INTENT CAPTURE */}
       {showChat && (
-        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: "rgba(13,11,9,0.97)" }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: "oklch(0.11 0.01 60)" }}>
           <style>{`@keyframes intent-dot-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}`}</style>
 
           {/* Header */}
@@ -4439,7 +4437,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
                 value={intent}
                 onChange={e => setIntent(e.target.value)}
                 placeholder="Describe what you want to build or change — e.g. 'Add login with Google to my Express app using passport.js'"
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (intent.trim()) { onSendIntent?.(intent.trim()); setIntent(""); } } }}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 style={{
                   flex: 1, background: "transparent", border: "none", outline: "none",
                   resize: "none", padding: "12px 14px",
@@ -4467,20 +4465,24 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
                     </svg>
                   </button>
                   <button
-                    onClick={() => { if (intent.trim()) { onSendIntent?.(intent.trim()); setIntent(""); } }}
+                    onClick={handleSend}
                     style={{
                       width: 30, height: 30, borderRadius: 8,
-                      background: intent.trim() ? "rgba(212,175,55,0.14)" : "transparent",
-                      border: `1px solid ${intent.trim() ? "rgba(212,175,55,0.38)" : "rgba(120,113,108,0.22)"}`,
+                      background: sentFlash ? "rgba(212,175,55,0.28)" : intent.trim() ? "rgba(212,175,55,0.14)" : "transparent",
+                      border: `1px solid ${sentFlash ? "rgba(212,175,55,0.7)" : intent.trim() ? "rgba(212,175,55,0.38)" : "rgba(120,113,108,0.22)"}`,
                       cursor: "pointer",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      color: intent.trim() ? "#D4AF37" : "rgba(120,113,108,0.32)",
-                      transition: "all 150ms",
+                      color: sentFlash ? "#D4AF37" : intent.trim() ? "#D4AF37" : "rgba(120,113,108,0.32)",
+                      transition: "all 200ms",
+                      fontSize: sentFlash ? 13 : undefined,
+                      fontWeight: sentFlash ? 700 : undefined,
                     }}
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
-                    </svg>
+                    {sentFlash ? "✓" : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+                      </svg>
+                    )}
                   </button>
                 </div>
               </div>
@@ -5373,8 +5375,7 @@ export default function Workspace() {
   const sendFromIntentCapture = useCallback((text: string) => {
     if (!text.trim() || !sessionId || chatPending) return;
     doSend(text.trim(), sessionId, messages);
-    if (isMobile) { setMobileTab("chat"); setRightOpen(false); }
-  }, [sessionId, chatPending, messages, doSend, isMobile]);
+  }, [sessionId, chatPending, messages, doSend]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
