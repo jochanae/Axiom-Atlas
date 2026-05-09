@@ -266,6 +266,29 @@ function ProjectThumbnail({ name, id }: { name: string; id: number }) {
   );
 }
 
+// ── LiveThumbnail ─────────────────────────────────────────────────────────────
+function LiveThumbnail({ url, name, id }: { url: string; name: string; id: number }) {
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  const src = `https://api.microlink.io/?url=${encodeURIComponent(url)}&screenshot=true&meta=false&embed=screenshot.url`;
+  return (
+    <div style={{ width: 40, height: 40, borderRadius: 8, overflow: "hidden", flexShrink: 0, position: "relative" }}>
+      {state !== "error" && (
+        <img
+          src={src}
+          alt={name}
+          onLoad={() => setState("loaded")}
+          onError={() => setState("error")}
+          style={{
+            width: "100%", height: "100%", objectFit: "cover",
+            display: state === "loaded" ? "block" : "none",
+          }}
+        />
+      )}
+      {state !== "loaded" && <ProjectThumbnail name={name} id={id} />}
+    </div>
+  );
+}
+
 // ── ProjectCard ──────────────────────────────────────────────────────────────
 function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => void }) {
   const [hov, setHov] = useState(false);
@@ -291,7 +314,10 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
         gap: 13,
       }}
     >
-      <ProjectThumbnail name={project.name} id={project.id} />
+      {project.previewUrl
+        ? <LiveThumbnail url={project.previewUrl} name={project.name} id={project.id} />
+        : <ProjectThumbnail name={project.name} id={project.id} />
+      }
 
       <div style={{ minWidth: 0, flex: 1 }}>
         <div

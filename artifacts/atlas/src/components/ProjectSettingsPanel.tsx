@@ -12,17 +12,19 @@ interface Props {
 export function ProjectSettingsPanel({ project, onClose, onSaved }: Props) {
   const [name, setName] = useState(project.name ?? "");
   const [description, setDescription] = useState(project.description ?? "");
+  const [previewUrl, setPreviewUrl] = useState(project.previewUrl ?? "");
   const [saved, setSaved] = useState(false);
   const updateProject = useUpdateProject();
 
   useEffect(() => {
     setName(project.name ?? "");
     setDescription(project.description ?? "");
+    setPreviewUrl(project.previewUrl ?? "");
   }, [project.id]);
 
   const handleSave = () => {
     updateProject.mutate(
-      { id: project.id, data: { name: name.trim() || project.name, description: description || undefined } },
+      { id: project.id, data: { name: name.trim() || project.name, description: description || undefined, previewUrl: previewUrl.trim() || null } },
       {
         onSuccess: () => {
           setSaved(true);
@@ -94,6 +96,25 @@ export function ProjectSettingsPanel({ project, onClose, onSaved }: Props) {
                 placeholder="Project name"
                 maxLength={120}
               />
+            </div>
+
+            {/* Preview URL */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-muted)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--app-font-mono)" }}>
+                Live URL
+              </label>
+              <input
+                value={previewUrl}
+                onChange={(e) => setPreviewUrl(e.target.value)}
+                style={field}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.5)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+                placeholder="https://yourapp.com"
+                type="url"
+              />
+              <span style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.55, lineHeight: 1.4 }}>
+                Paste your deployed app URL — the project card will show a live screenshot.
+              </span>
             </div>
 
             {/* Description */}
