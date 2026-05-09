@@ -84,11 +84,12 @@ function ProjectSessionGroup({ project, onOpen }: { project: { id: number; name:
           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ color: "var(--atlas-muted)", opacity: 0.5, display: "flex", flexShrink: 0 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
-              </svg>
-            </span>
+            <span style={{
+              width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+              background: "var(--atlas-phosphor)",
+              boxShadow: "0 0 6px color-mix(in oklab, var(--atlas-phosphor) 55%, transparent)",
+              display: "inline-block",
+            }} />
             <span style={{ fontSize: 13, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)" }}>
               {s.title || `Session ${s.id}`}
             </span>
