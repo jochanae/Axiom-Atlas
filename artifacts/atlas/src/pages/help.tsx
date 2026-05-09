@@ -7,12 +7,12 @@ const sans: CSSProperties = { fontFamily: "var(--app-font-sans)" };
 
 const FAQS: { q: string; a: string }[] = [
   {
-    q: "What is Atlas?",
-    a: "Atlas is a decision enforcement and strategic thinking partner for founders and builders. It helps you track the commitments you make, catch you when you're about to contradict yourself, and maintain a permanent record of every choice that shapes your projects.",
+    q: "What is Axiom?",
+    a: "Axiom is a decision enforcement and strategic thinking partner for founders and builders. It helps you track the commitments you make, catch you when you're about to contradict yourself, and maintain a permanent record of every choice that shapes your projects.",
   },
   {
     q: "What is the Decision Catch Engine?",
-    a: "When you say something in the chat that contradicts a committed decision, Atlas intercepts with a structured catch card. It shows you the tension, lets you proceed anyway (with a reason logged), or adjust your direction. Every override is recorded in your Decision Ledger so you can see your reasoning over time.",
+    a: "When you say something in the chat that contradicts a committed decision, Axiom intercepts with a structured catch card. It shows you the tension, lets you proceed anyway (with a reason logged), or adjust your direction. Every override is recorded in your Decision Ledger so you can see your reasoning over time.",
   },
   {
     q: "What is the Decision Ledger?",
