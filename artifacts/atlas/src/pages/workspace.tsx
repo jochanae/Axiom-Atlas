@@ -1346,6 +1346,73 @@ function AssistantBubble({
           />
         )}
 
+        {/* Code ready — push to GitHub (user repo edits) */}
+        {userEdits.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <button
+              onClick={() => setShowPushModal(true)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "7px 13px", borderRadius: 7,
+                background: "rgba(201,162,76,0.1)",
+                border: "1px solid rgba(201,162,76,0.35)",
+                color: "var(--atlas-gold)",
+                fontSize: 11.5, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.05em", cursor: "pointer",
+                transition: "all 160ms ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.18)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.6)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.1)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; }}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M8 1C4.13 1 1 4.13 1 8c0 3.09 2 5.71 4.78 6.64.35.06.48-.15.48-.34v-1.2c-1.94.42-2.35-.94-2.35-.94-.32-.81-.78-1.03-.78-1.03-.64-.43.05-.42.05-.42.7.05 1.07.72 1.07.72.62 1.07 1.63.76 2.03.58.06-.45.24-.76.44-.93-1.55-.18-3.18-.77-3.18-3.44 0-.76.27-1.38.72-1.87-.07-.18-.31-.88.07-1.84 0 0 .59-.19 1.92.72A6.6 6.6 0 018 4.82c.59 0 1.19.08 1.74.23 1.33-.9 1.92-.72 1.92-.72.38.96.14 1.66.07 1.84.45.49.72 1.11.72 1.87 0 2.68-1.63 3.26-3.19 3.44.25.22.48.64.48 1.3v1.92c0 .19.13.4.48.33C13 13.71 15 11.09 15 8c0-3.87-3.13-7-7-7z" fill="currentColor" />
+              </svg>
+              {userEdits.length === 1
+                ? `Push ${userEdits[0].path.split("/").pop()} to GitHub`
+                : `Push ${userEdits.length} files to GitHub`}
+            </button>
+          </div>
+        )}
+
+        {/* Apply to Atlas itself (self-edits to artifacts/atlas or artifacts/api-server) */}
+        {selfEdits.length > 0 && (
+          <div style={{ marginTop: userEdits.length > 0 ? 6 : 10 }}>
+            <button
+              onClick={handleSelfApply}
+              disabled={selfApplyStatus === "applying" || selfApplyStatus === "done"}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "7px 13px", borderRadius: 7,
+                background: selfApplyStatus === "done"
+                  ? "rgba(52,211,153,0.08)"
+                  : selfApplyStatus === "error"
+                    ? "rgba(239,68,68,0.08)"
+                    : "rgba(120,113,108,0.12)",
+                border: `1px solid ${selfApplyStatus === "done" ? "rgba(52,211,153,0.3)" : selfApplyStatus === "error" ? "rgba(239,68,68,0.3)" : "rgba(120,113,108,0.2)"}`,
+                color: selfApplyStatus === "done" ? "#34d399" : selfApplyStatus === "error" ? "rgba(252,165,165,0.85)" : "var(--atlas-muted)",
+                fontSize: 11.5, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.05em",
+                cursor: selfApplyStatus === "applying" || selfApplyStatus === "done" ? "default" : "pointer",
+                opacity: selfApplyStatus === "applying" ? 0.6 : 1,
+                transition: "all 160ms ease",
+              }}
+            >
+              {selfApplyStatus === "done"
+                ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7l3 3 7-7" /></svg>
+                : selfApplyStatus === "error"
+                  ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M7 2v6M7 10.5v1" /></svg>
+                  : <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 1v8M4 6l3 3 3-3" /><path d="M2 11h10" /></svg>
+              }
+              {selfApplyStatus === "applying" ? "Applying…"
+                : selfApplyStatus === "done" ? (selfApplyMsg || "Applied")
+                : selfApplyStatus === "error" ? (selfApplyMsg || "Apply failed")
+                : selfEdits.length === 1
+                  ? `Apply ${selfEdits[0].path.split("/").pop()} to Atlas`
+                  : `Apply ${selfEdits.length} files to Atlas`}
+            </button>
+          </div>
+        )}
+
         {/* Action row — icon-only cockpit buttons */}
         <div style={{ display: "flex", gap: 4, marginTop: 7, opacity: hov ? 1 : 0.32, transition: "opacity 180ms ease" }}>
           {/* Copy */}
@@ -2420,6 +2487,28 @@ function FilesTab({
       if (match) {
         autoLoadedRef.current = true;
         loadTree(match);
+        // Re-inject cached scan context so AI always knows the repo structure
+        const scanKey = `atlas-scan-${projectId}`;
+        try {
+          const cached = localStorage.getItem(scanKey);
+          if (cached) {
+            const data = JSON.parse(cached) as { repo: string; stack: string[]; routes: string[]; pages: string[]; tables?: string[]; summary: string };
+            const lines = [
+              `[Repo overview — ${data.repo}]`,
+              `Stack: ${(data.stack || []).join(", ")}`,
+              `Routes: ${(data.routes || []).slice(0, 12).join(", ")}`,
+              `Pages: ${(data.pages || []).slice(0, 12).join(", ")}`,
+              data.tables?.length ? `Tables: ${data.tables.join(", ")}` : "",
+              `Summary: ${data.summary}`,
+            ].filter(Boolean);
+            setScanStatus("done");
+            onFileContext(lines.join("\n"));
+          } else if (tokenState) {
+            runAutoScan(match, tokenState);
+          }
+        } catch {
+          if (tokenState) runAutoScan(match, tokenState);
+        }
       }
     } catch {}
   }, [repos, filesProject?.linkedRepo, loadTree]);
@@ -6040,7 +6129,7 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
-                forceTab={isMobile && mobileTab === "map" ? "map" : undefined}
+                forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "workshop" ? "files" : undefined}
                 onSendIntent={sendFromIntentCapture}
                 isMobile={false}
               />
@@ -6093,7 +6182,7 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
-                forceTab={mobileTab === "map" ? "map" : undefined}
+                forceTab={mobileTab === "map" ? "map" : mobileTab === "workshop" ? "files" : undefined}
                 onSendIntent={sendFromIntentCapture}
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
                 isMobile
