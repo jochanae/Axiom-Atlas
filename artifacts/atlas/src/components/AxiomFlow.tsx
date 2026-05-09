@@ -76,26 +76,87 @@ const TAP_THRESHOLD = 8;
 const CANVAS_PADDING = 80;
 const BASE_STORAGE_KEY = "axiom-flow-nodes";
 
+// Seeded radial mission map — replaces the lonely-goal default so the canvas
+// reads as "populated" the moment a user opens a new project. Positions orbit
+// the goal at (300, 250); fitMap() auto-zooms to fit on mount and resize.
 const INITIAL_NODES: ArchNode[] = [
-  {
-    id: "goal",
-    label: "The Goal",
-    type: "goal",
-    resolved: false,
-    x: 300,
-    y: 250,
-    details: "What does winning look like for this project?",
-  },
+  { id: "goal",        label: "The Goal",        type: "goal",        resolved: false, x: 300, y: 250, details: "What does winning look like for this project?" },
+  { id: "must-1",      label: "Core requirement", type: "requirement", resolved: false, x: 300, y:  80, meta: "must",  details: "Tap to define the must-have that makes v1 real." },
+  { id: "blocker-1",   label: "Open blocker",     type: "blocker",     resolved: false, x: 520, y: 160, details: "Tap to name a blocker that's slowing the goal down." },
+  { id: "decision-1",  label: "Open decision",    type: "decision",    resolved: false, x: 520, y: 340, details: "Tap to capture a decision that's still in tension." },
+  { id: "sprint-1",    label: "Sprint 1",         type: "sprint",      resolved: false, x:  80, y: 160, details: "What single deliverable closes this sprint?" },
+  { id: "should-1",    label: "Should-have",      type: "priority",    resolved: false, x:  80, y: 340, meta: "should", details: "What's the cost of deferring this?" },
+  { id: "must-2",      label: "Foundation",       type: "requirement", resolved: false, x: 300, y: 420, meta: "must",  details: "What has to be true before everything else?" },
 ];
 
-const INITIAL_EDGES: ArchEdge[] = [];
+const INITIAL_EDGES: ArchEdge[] = [
+  { id: "e-goal-must-1",     from: "goal", to: "must-1" },
+  { id: "e-goal-blocker-1",  from: "goal", to: "blocker-1" },
+  { id: "e-goal-decision-1", from: "goal", to: "decision-1" },
+  { id: "e-goal-sprint-1",   from: "goal", to: "sprint-1" },
+  { id: "e-goal-should-1",   from: "goal", to: "should-1" },
+  { id: "e-goal-must-2",     from: "goal", to: "must-2" },
+];
+
+// Detect the EXACT untouched legacy "lonely goal" default — every field must
+// match the original seed and no edges may exist. Any user-edited goal (label,
+// position, resolved state, details) is preserved untouched.
+const LEGACY_GOAL_DEFAULT = {
+  id: "goal",
+  label: "The Goal",
+  type: "goal" as const,
+  resolved: false,
+  x: 300,
+  y: 250,
+  details: "What does winning look like for this project?",
+};
+
+function isLegacyDefault(parsedNodes: unknown, parsedEdges: unknown): boolean {
+  if (!Array.isArray(parsedNodes) || parsedNodes.length !== 1) return false;
+  const only = parsedNodes[0] as Partial<ArchNode>;
+  if (only?.id !== LEGACY_GOAL_DEFAULT.id) return false;
+  if (only?.type !== LEGACY_GOAL_DEFAULT.type) return false;
+  if (only?.label !== LEGACY_GOAL_DEFAULT.label) return false;
+  if (only?.resolved !== LEGACY_GOAL_DEFAULT.resolved) return false;
+  if (only?.x !== LEGACY_GOAL_DEFAULT.x) return false;
+  if (only?.y !== LEGACY_GOAL_DEFAULT.y) return false;
+  if (only?.details !== LEGACY_GOAL_DEFAULT.details) return false;
+  if (only?.meta !== undefined) return false;
+  if (only?.question !== undefined) return false;
+  // No edges may exist — a user who built relationships is not on the default.
+  if (Array.isArray(parsedEdges) && parsedEdges.length > 0) return false;
+  return true;
+}
+
+// Migration marker so we only ever reseed a given project once. After a
+// successful reseed (or after we decide a project is NOT legacy), we stamp this
+// key and never reconsider that project again.
+const MIGRATION_KEY_SUFFIX = "-seed-v2-applied";
 
 function loadNodes(key: string): ArchNode[] {
   try {
+    const migrationKey = `${key}${MIGRATION_KEY_SUFFIX}`;
+    const alreadyMigrated = localStorage.getItem(migrationKey) === "1";
     const r = localStorage.getItem(key);
-    if (!r) return INITIAL_NODES;
+    if (!r) {
+      // Brand-new project: seed and mark migrated.
+      localStorage.setItem(migrationKey, "1");
+      return INITIAL_NODES;
+    }
     const parsed = JSON.parse(r) as ArchNode[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return INITIAL_NODES;
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      localStorage.setItem(migrationKey, "1");
+      return INITIAL_NODES;
+    }
+    if (alreadyMigrated) return parsed;
+    const edgesRaw = localStorage.getItem(`${key}-edges`);
+    const parsedEdges = edgesRaw ? JSON.parse(edgesRaw) : null;
+    if (isLegacyDefault(parsed, parsedEdges)) {
+      localStorage.setItem(migrationKey, "1");
+      return INITIAL_NODES;
+    }
+    // Not legacy — stamp it so we never re-check.
+    localStorage.setItem(migrationKey, "1");
     return parsed;
   } catch { return INITIAL_NODES; }
 }
@@ -103,7 +164,11 @@ function loadNodes(key: string): ArchNode[] {
 function loadEdges(key: string): ArchEdge[] {
   try {
     const r = localStorage.getItem(`${key}-edges`);
-    return r ? JSON.parse(r) : INITIAL_EDGES;
+    const stored = localStorage.getItem(key);
+    const parsedNodes = stored ? JSON.parse(stored) : null;
+    const parsedEdges = r ? JSON.parse(r) : null;
+    if (isLegacyDefault(parsedNodes, parsedEdges)) return INITIAL_EDGES;
+    return parsedEdges ?? INITIAL_EDGES;
   } catch { return INITIAL_EDGES; }
 }
 
