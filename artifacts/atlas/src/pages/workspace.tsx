@@ -5,7 +5,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { useSound } from "@/hooks/useSound";
 import { AxiomFlow } from "../components/AxiomFlow";
-import type { ArchNode } from "../components/AxiomFlow";
+import type { ArchNode, NodeStateMap } from "../components/AxiomFlow";
 import { TheForge } from "../components/TheForge";
 import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
@@ -4059,7 +4059,7 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
@@ -4108,8 +4108,15 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
   const handleNodesChange = useCallback((updatedNodes: ArchNode[]) => {
     setNodes(updatedNodes);
     if (!projectId) return;
-    const nodeState: Record<string, boolean> = {};
-    updatedNodes.forEach(n => { nodeState[n.id] = n.resolved; });
+    // New shape: per-node object { resolved, strategicAnswer? }. The DB column
+    // is jsonb so this is a non-breaking change; AxiomFlow's hydration handler
+    // tolerates the legacy boolean shape on read.
+    const nodeState: Record<string, { resolved: boolean; strategicAnswer?: string }> = {};
+    updatedNodes.forEach(n => {
+      nodeState[n.id] = n.strategicAnswer
+        ? { resolved: n.resolved, strategicAnswer: n.strategicAnswer }
+        : { resolved: n.resolved };
+    });
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       updateProject.mutate({ id: projectId, data: { nodeState } });
@@ -4132,9 +4139,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
           compact
           detectedBuilder={platform.toLowerCase()}
           onNodeFocus={(text) => setIntent(text)}
-          initialNodeState={(activeProject?.nodeState as Record<string, boolean> | null) ?? null}
+          initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
           pendingNodes={pendingNodes}
           onPendingConsumed={() => setPendingNodes([])}
+          onUnansweredQuestionOpen={({ mirror }) => onSystemNodeMessage?.(mirror)}
         />
       </div>
 
@@ -4364,6 +4372,7 @@ function RightPanel({
   onBackToChat,
   isMobile,
   onMapReadinessChange,
+  onSystemNodeMessage,
 }: {
   projectId: number;
   entries: Entry[];
@@ -4381,6 +4390,7 @@ function RightPanel({
   onBackToChat?: () => void;
   isMobile?: boolean;
   onMapReadinessChange?: (score: number) => void;
+  onSystemNodeMessage?: (text: string) => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -4573,7 +4583,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} />}
     </div>
   );
 }
@@ -5203,6 +5213,25 @@ export default function Workspace() {
     if (!text.trim() || !sessionId || chatPending) return;
     doSend(text.trim(), sessionId, messages);
   }, [sessionId, chatPending, messages, doSend]);
+
+  // Mirror an unanswered Intel Panel question into the chat as an assistant
+  // message — does not call the AI, just appends to the visible thread.
+  const lastNodeMirrorRef = useRef<string | null>(null);
+  const pushSystemNodeMessage = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (lastNodeMirrorRef.current === trimmed) return;
+    lastNodeMirrorRef.current = trimmed;
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: trimmed,
+        intentType: "node_question",
+        sentAt: new Date().toISOString(),
+      },
+    ]);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -6308,6 +6337,7 @@ export default function Workspace() {
                 forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : desktopForceTab}
                 onSendIntent={sendFromIntentCapture}
                 onMapReadinessChange={setMapReadiness}
+                onSystemNodeMessage={pushSystemNodeMessage}
                 isMobile={false}
               />
             </div>
@@ -6363,6 +6393,7 @@ export default function Workspace() {
                 onSendIntent={sendFromIntentCapture}
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
                 onMapReadinessChange={setMapReadiness}
+                onSystemNodeMessage={pushSystemNodeMessage}
                 isMobile
               />
             </div>
