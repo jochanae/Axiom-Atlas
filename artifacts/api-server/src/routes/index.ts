@@ -15,10 +15,12 @@ import authRouter, { requireAuth } from "./auth";
 import googleAuthRouter from "./google-auth";
 import adminRouter from "./admin";
 import invitesRouter from "./invites";
+import stripeRouter from "./stripe";
 
 const router: IRouter = Router();
 
 // Public routes — no auth required
+router.use(stripeRouter);
 router.use(authRouter);
 router.use(googleAuthRouter);
 router.use(adminRouter);

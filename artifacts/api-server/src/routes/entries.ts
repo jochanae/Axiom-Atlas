@@ -36,6 +36,13 @@ router.get("/projects/:projectId/entries", async (req, res): Promise<void> => {
     conditions.push(eq(entriesTable.status, query.data.status));
   }
 
+  // Free tier: only show entries created within the last 24 hours
+  const authUser = (req as any).authUser;
+  if (authUser?.subscriptionTier === "free") {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    conditions.push(sql`${entriesTable.createdAt} >= ${cutoff.toISOString()}`);
+  }
+
   const entries = await db
     .select()
     .from(entriesTable)
