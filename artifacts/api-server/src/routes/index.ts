@@ -11,6 +11,7 @@ import selfRouter from "./self";
 import thoughtsRouter from "./thoughts";
 import importRouter from "./import";
 import vaultRouter from "./vault";
+import forgeRouter from "./forge";
 import authRouter, { requireAuth } from "./auth";
 import googleAuthRouter from "./google-auth";
 import adminRouter from "./admin";
@@ -39,5 +40,6 @@ router.use(requireAuth, githubRouter);
 router.use(requireAuth, imageRouter);
 router.use(requireAuth, thoughtsRouter);
 router.use(requireAuth, vaultRouter);
+router.use(requireAuth, forgeRouter);
 
 export default router;

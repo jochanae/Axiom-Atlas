@@ -27,6 +27,8 @@ import type {
   CreateThoughtBody,
   CreateVaultSaveBody,
   Entry,
+  ForgeRequest,
+  ForgeResponse,
   HealthStatus,
   ListEntriesParams,
   Message,
@@ -208,6 +210,92 @@ export const useAxiomImport = <
   TContext
 > => {
   return useMutation(getAxiomImportMutationOptions(options));
+};
+
+/**
+ * @summary Extract strategic nodes from a raw transcript using AI
+ */
+export const getRunForgeUrl = () => {
+  return `/api/forge`;
+};
+
+export const runForge = async (
+  forgeRequest: ForgeRequest,
+  options?: RequestInit,
+): Promise<ForgeResponse> => {
+  return customFetch<ForgeResponse>(getRunForgeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(forgeRequest),
+  });
+};
+
+export const getRunForgeMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runForge>>,
+    TError,
+    { data: BodyType<ForgeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runForge>>,
+  TError,
+  { data: BodyType<ForgeRequest> },
+  TContext
+> => {
+  const mutationKey = ["runForge"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runForge>>,
+    { data: BodyType<ForgeRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return runForge(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunForgeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runForge>>
+>;
+export type RunForgeMutationBody = BodyType<ForgeRequest>;
+export type RunForgeMutationError = ErrorType<void>;
+
+/**
+ * @summary Extract strategic nodes from a raw transcript using AI
+ */
+export const useRunForge = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runForge>>,
+    TError,
+    { data: BodyType<ForgeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runForge>>,
+  TError,
+  { data: BodyType<ForgeRequest> },
+  TContext
+> => {
+  return useMutation(getRunForgeMutationOptions(options));
 };
 
 /**

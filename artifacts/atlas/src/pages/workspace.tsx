@@ -4,9 +4,9 @@ import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { useSound } from "@/hooks/useSound";
-import { SystemMap } from "../components/SystemMap";
-import type { ArchNode } from "../components/SystemMap";
-import { QuickPromptSheet } from "../components/QuickPromptSheet";
+import { AxiomFlow } from "../components/AxiomFlow";
+import type { ArchNode } from "../components/AxiomFlow";
+import { TheForge } from "../components/TheForge";
 import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
@@ -4058,292 +4058,12 @@ function detectPlatform(): string {
   return "WEB";
 }
 
-// ── QuickPromptSheet (legacy — replaced by imported component) ────────────────
-function _QuickPromptSheetOld({
-  platform,
-  readinessScore,
-  activeProjectName,
-  onClose,
-}: {
-  platform: string;
-  readinessScore: number;
-  activeProjectName?: string;
-  onClose: () => void;
-}) {
-  const [qTab, setQTab] = useState<"axiom" | "spec" | "quick">("quick");
-  const PLATFORMS = ["Replit", "Lovable", "Cursor", "Vercel", "GitHub Codespaces", "Local Dev"];
-  const defaultPlatform = PLATFORMS.find(p => p.toUpperCase() === platform) ?? "Replit";
-  const [buildWhere, setBuildWhere] = useState(defaultPlatform);
-  const [task, setTask] = useState("");
-  const [showProjectDrop, setShowProjectDrop] = useState(false);
-  const [projectContext, setProjectContext] = useState(activeProjectName ?? "");
-  const { data: allProjects } = useListProjects();
-  const cockpitH = 72;
-
-  return (
-    <>
-      <div
-        style={{ position: "fixed", inset: 0, zIndex: 350, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
-        onClick={onClose}
-      />
-      <div style={{
-        position: "fixed", left: 0, right: 0, top: 0, bottom: 0, zIndex: 360,
-        background: "rgba(13,11,9,0.99)",
-        border: "1px solid rgba(212,175,55,0.22)",
-        borderRadius: "16px 16px 0 0",
-        animation: "slideUpCb 220ms ease",
-        display: "flex", flexDirection: "column",
-      }}>
-        {/* Drag handle */}
-        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(212,175,55,0.18)" }} />
-        </div>
-
-        {/* Tab row */}
-        <div style={{ display: "flex", alignItems: "center", padding: "0 16px", borderBottom: "1px solid rgba(212,175,55,0.10)" }}>
-          {(["axiom", "spec", "quick"] as const).map(t => (
-            <button
-              key={t}
-              onClick={() => setQTab(t)}
-              style={{
-                padding: "10px 14px 12px", background: "transparent",
-                border: "none",
-                borderBottom: `2px solid ${qTab === t ? "#D4AF37" : "transparent"}`,
-                cursor: "pointer",
-                color: qTab === t ? "#D4AF37" : "rgba(120,113,108,0.6)",
-                fontSize: 11, fontWeight: 700, letterSpacing: "0.1em",
-                textTransform: "uppercase" as const,
-                fontFamily: "var(--app-font-mono)",
-                marginBottom: -1,
-                transition: "color 150ms",
-              }}
-            >
-              {t}
-            </button>
-          ))}
-          <div style={{ flex: 1 }} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#D4AF37", marginRight: 14 }}>
-            {readinessScore}%
-          </span>
-          <button
-            onClick={onClose}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.55)", fontSize: 22, lineHeight: 1, padding: "2px 0 2px 4px" }}
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Content */}
-        <div style={{ flex: 1, overflow: "auto", padding: "20px 16px 16px" }}>
-          {qTab === "quick" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              <div>
-                <p style={{ fontSize: 9, fontWeight: 700, color: "rgba(120,113,108,0.75)", letterSpacing: "0.15em", textTransform: "uppercase" as const, marginBottom: 8, fontFamily: "var(--app-font-mono)" }}>
-                  WHERE ARE YOU BUILDING?
-                </p>
-                <select
-                  value={buildWhere}
-                  onChange={e => setBuildWhere(e.target.value)}
-                  style={{
-                    width: "100%", padding: "14px 12px",
-                    background: "rgba(28,25,23,0.95)",
-                    border: "1px solid rgba(212,175,55,0.18)",
-                    borderRadius: 10, color: "var(--atlas-fg)", fontSize: 13,
-                    cursor: "pointer", fontFamily: "inherit",
-                  }}
-                >
-                  {PLATFORMS.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const, position: "relative" }}>
-                <button style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  color: "#D4AF37", fontSize: 11, letterSpacing: "0.04em",
-                  fontFamily: "var(--app-font-mono)", padding: 0,
-                }}>
-                  + Add project context (optional)
-                </button>
-                <div style={{ position: "relative" }}>
-                  <button
-                    onClick={() => setShowProjectDrop(v => !v)}
-                    style={{
-                      padding: "5px 12px", borderRadius: 8,
-                      background: showProjectDrop ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.08)",
-                      border: "1px solid rgba(212,175,55,0.32)",
-                      color: "#D4AF37", fontSize: 11, fontWeight: 700, cursor: "pointer",
-                      letterSpacing: "0.04em", fontFamily: "var(--app-font-mono)",
-                    }}
-                  >
-                    {projectContext || "Load Project"} ▾
-                  </button>
-                  {showProjectDrop && (
-                    <>
-                      <div onClick={() => setShowProjectDrop(false)} style={{ position: "fixed", inset: 0, zIndex: 70 }} />
-                      <div style={{
-                        position: "absolute", top: "calc(100% + 6px)", left: 0,
-                        zIndex: 80, minWidth: 200,
-                        background: "rgba(20,18,14,0.99)",
-                        border: "1px solid rgba(212,175,55,0.28)",
-                        borderRadius: 10,
-                        boxShadow: "0 8px 32px rgba(0,0,0,0.7)",
-                        overflow: "hidden",
-                      }}>
-                        {allProjects && allProjects.length > 0 ? (
-                          <>
-                            {allProjects.map((p) => (
-                              <button
-                                key={p.id}
-                                onClick={() => { setProjectContext(p.name); setShowProjectDrop(false); }}
-                                style={{
-                                  width: "100%", textAlign: "left",
-                                  padding: "10px 14px",
-                                  background: projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent",
-                                  border: "none",
-                                  borderBottom: "1px solid rgba(212,175,55,0.07)",
-                                  color: projectContext === p.name ? "var(--atlas-gold)" : "var(--atlas-fg)",
-                                  fontSize: 12, cursor: "pointer",
-                                  fontFamily: "var(--app-font-mono)",
-                                }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.08)"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent"; }}
-                              >
-                                {p.name}
-                              </button>
-                            ))}
-                            <button
-                              onClick={() => { setProjectContext("Other (New)"); setShowProjectDrop(false); }}
-                              style={{
-                                width: "100%", textAlign: "left",
-                                padding: "10px 14px",
-                                background: projectContext === "Other (New)" ? "rgba(212,175,55,0.1)" : "transparent",
-                                border: "none",
-                                color: projectContext === "Other (New)" ? "#D4AF37" : "rgba(120,113,108,0.55)",
-                                fontSize: 12, cursor: "pointer",
-                                fontFamily: "var(--app-font-mono)",
-                                fontStyle: "italic",
-                              }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.06)"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = projectContext === "Other (New)" ? "rgba(212,175,55,0.1)" : "transparent"; }}
-                            >
-                              + Other (New)
-                            </button>
-                          </>
-                        ) : (
-                          <div style={{ padding: "10px 14px", fontSize: 11, color: "rgba(120,113,108,0.5)", fontFamily: "var(--app-font-mono)" }}>
-                            No projects yet
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p style={{ fontSize: 9, fontWeight: 700, color: "rgba(120,113,108,0.75)", letterSpacing: "0.15em", textTransform: "uppercase" as const, marginBottom: 8, fontFamily: "var(--app-font-mono)" }}>
-                  WHAT DO YOU NEED TO DO?
-                </p>
-                <div style={{ background: "rgba(28,25,23,0.95)", border: "1px solid rgba(212,175,55,0.18)", borderRadius: 10, overflow: "hidden", position: "relative" }}>
-                  <textarea
-                    value={task}
-                    onChange={e => setTask(e.target.value)}
-                    placeholder="Describe what you need to do in plain language..."
-                    style={{
-                      width: "100%", minHeight: 108, background: "transparent",
-                      border: "none", outline: "none", resize: "none",
-                      padding: "14px 50px 14px 14px",
-                      color: "var(--atlas-fg)", fontSize: 13, lineHeight: 1.6,
-                      fontFamily: "inherit", boxSizing: "border-box" as const,
-                    }}
-                  />
-                  <button style={{
-                    position: "absolute", bottom: 10, right: 10,
-                    width: 30, height: 30, borderRadius: 8,
-                    background: task.trim() ? "rgba(212,175,55,0.14)" : "transparent",
-                    border: `1px solid ${task.trim() ? "rgba(212,175,55,0.38)" : "rgba(120,113,108,0.28)"}`,
-                    cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: task.trim() ? "#D4AF37" : "rgba(120,113,108,0.38)",
-                  }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {qTab === "axiom" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <p style={{ fontSize: 13, color: "var(--atlas-fg)", lineHeight: 1.65 }}>
-                The System Map is live. Tap any node to mark it resolved. Your readiness score updates in real time.
-              </p>
-              <p style={{ fontSize: 11, color: "rgba(120,113,108,0.65)", lineHeight: 1.65 }}>
-                All six architecture layers must be resolved before Axiom considers your project structurally sound.
-              </p>
-            </div>
-          )}
-
-          {qTab === "spec" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <p style={{ fontSize: 13, color: "var(--atlas-fg)", lineHeight: 1.65 }}>
-                Three structured sprints walk you through every architectural layer before you write a line of code.
-              </p>
-              <p style={{ fontSize: 11, color: "rgba(120,113,108,0.65)", lineHeight: 1.65 }}>
-                Sprint 1: Auth + Data → Sprint 2: API + State → Sprint 3: UI + Logic
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom action row */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "12px 16px", borderTop: "1px solid rgba(212,175,55,0.07)",
-        }}>
-          <button
-            onClick={onClose}
-            style={{
-              display: "flex", alignItems: "center", gap: 4,
-              padding: "8px 16px", borderRadius: 20,
-              background: "rgba(120,113,108,0.09)", border: "1px solid rgba(120,113,108,0.2)",
-              color: "rgba(120,113,108,0.75)", fontSize: 12, cursor: "pointer",
-              fontFamily: "var(--app-font-mono)",
-            }}
-          >
-            ‹ Chat
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {(["🎙", "↺", "/", "⬆"] as const).map((icon, i) => (
-              <button
-                key={i}
-                style={{
-                  width: 36, height: 36, borderRadius: "50%",
-                  background: "rgba(120,113,108,0.09)", border: "1px solid rgba(120,113,108,0.2)",
-                  cursor: "pointer", color: "rgba(120,113,108,0.65)",
-                  fontSize: i === 2 ? 16 : 14, fontWeight: i === 2 ? 700 : 400,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}
-              >
-                {icon}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
 function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
+  const [pendingNodes, setPendingNodes] = useState<ArchNode[]>([]);
   const [showChat, setShowChat] = useState(true);
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
   const [signals, setSignals] = useState<string[]>([""]);
@@ -4405,7 +4125,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
 
       {/* Map area */}
       <div style={{ position: "relative", flex: showChat ? "0 0 42%" : 1, minHeight: 0, overflow: "hidden", transition: "flex 350ms ease" }}>
-        <SystemMap
+        <AxiomFlow
           projectId={projectId}
           onReadinessChange={setReadinessScore}
           onNodesChange={handleNodesChange}
@@ -4413,6 +4133,8 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
           detectedBuilder={platform.toLowerCase()}
           onNodeFocus={(text) => setIntent(text)}
           initialNodeState={(activeProject?.nodeState as Record<string, boolean> | null) ?? null}
+          pendingNodes={pendingNodes}
+          onPendingConsumed={() => setPendingNodes([])}
         />
       </div>
 
@@ -4585,11 +4307,13 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
 
       {/* Quick Prompt sheet */}
       {showQuickPrompt && (
-        <QuickPromptSheet
+        <TheForge
           platform={platform}
           readinessScore={readinessScore}
           activeProjectName={activeProjectName}
+          projectId={projectId}
           onClose={() => setShowQuickPrompt(false)}
+          onNodesReady={(nodes) => { setPendingNodes(nodes); setShowQuickPrompt(false); }}
         />
       )}
 
