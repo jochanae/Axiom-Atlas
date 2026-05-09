@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useAuth, useLogout } from "@/hooks/useAuth";
 
 type Theme = "obsidian" | "parchment";
@@ -118,6 +119,8 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [theme, setTheme] = useState<Theme>(readTheme);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [btnRect, setBtnRect] = useState<DOMRect | null>(null);
   const { user } = useAuth();
   const logout = useLogout();
 
@@ -148,8 +151,13 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    // Capture button position for portal placement
+    if (btnRef.current) setBtnRect(btnRef.current.getBoundingClientRect());
     const onDocClick = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const insideBtn = btnRef.current?.contains(target);
+      const insideMenu = (document.getElementById("atlas-user-menu-portal"))?.contains(target);
+      if (!insideBtn && !insideMenu) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("mousedown", onDocClick);
@@ -172,6 +180,7 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
     {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
     <div ref={wrapRef} style={{ position: "relative" }}>
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen(o => !o)}
         title="Account"
@@ -197,103 +206,6 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
         )}
       </button>
 
-      {open && (
-        <div
-          role="menu"
-          style={{
-            position: "absolute", top: "calc(100% + 10px)", right: 0,
-            width: 248,
-            background: "var(--atlas-surface)",
-            border: "1px solid rgba(201,162,76,0.18)",
-            borderRadius: 14,
-            boxShadow: "0 1px 0 rgba(255,255,255,0.04) inset, 0 24px 60px -20px var(--atlas-shadow-lg), 0 0 0 1px rgba(201,162,76,0.06)",
-            padding: 6, zIndex: 80,
-            animation: "atlas-menu-in 200ms cubic-bezier(.2,.8,.2,1)",
-            transformOrigin: "top right",
-          }}
-        >
-          {/* Identity header */}
-          <div style={{
-            padding: "12px 12px 12px",
-            borderBottom: "1px solid rgba(201,162,76,0.10)",
-            marginBottom: 4,
-            display: "flex", alignItems: "center", gap: 10,
-          }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
-              background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              {photoUrl ? (
-                <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              ) : (
-                <span style={{ fontSize: 15, fontWeight: 600, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)" }}>
-                  {name[0]?.toUpperCase()}
-                </span>
-              )}
-            </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)", lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-              <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.7 }}>{email}</div>
-            </div>
-          </div>
-
-          {/* Appearance toggle — real pill switch */}
-          <div style={{ display: "flex", alignItems: "center", padding: "6px 10px", gap: 9 }}>
-            <span style={{ color: "var(--atlas-muted)", display: "flex", flexShrink: 0, opacity: 0.8 }}>
-              {isParchment ? <SunIcon /> : <MoonIcon />}
-            </span>
-            <span style={{ flex: 1, fontSize: 12.5, color: "var(--atlas-fg)" }}>Appearance</span>
-            <button
-              type="button"
-              onClick={() => handleThemeChange(isParchment ? "obsidian" : "parchment")}
-              aria-label={isParchment ? "Switch to Obsidian" : "Switch to Parchment"}
-              style={{
-                width: 44, height: 24, borderRadius: 12, flexShrink: 0,
-                background: isParchment ? "rgba(201,162,76,0.22)" : "rgba(60,50,40,0.55)",
-                border: "1px solid rgba(201,162,76,0.28)",
-                cursor: "pointer", position: "relative",
-                transition: "background 220ms ease",
-                padding: 0,
-              }}
-            >
-              <div style={{
-                position: "absolute", top: 3,
-                left: isParchment ? 23 : 3,
-                width: 16, height: 16, borderRadius: "50%",
-                background: isParchment ? "var(--atlas-gold)" : "rgba(201,162,76,0.45)",
-                transition: "left 220ms ease, background 220ms ease",
-                boxShadow: isParchment ? "0 0 6px rgba(201,162,76,0.4)" : "none",
-              }} />
-            </button>
-          </div>
-
-          {/* Shortcuts */}
-          <MenuRow
-            icon={<KeyboardIcon />}
-            label="Shortcuts"
-            onClick={openShortcuts}
-          />
-
-          <div style={{ height: 1, background: "rgba(201,162,76,0.08)", margin: "4px 6px" }} />
-
-          {/* Edit profile */}
-          <MenuRow
-            icon={<UserIcon />}
-            label="Edit profile"
-            onClick={() => { setOpen(false); onOpenProfile?.(); }}
-          />
-
-          {/* Sign out */}
-          <MenuRow
-            icon={<SignOutIcon />}
-            label="Sign out"
-            danger
-            onClick={() => { setOpen(false); void logout(); }}
-          />
-        </div>
-      )}
-
       <style>{`
         @keyframes atlas-menu-in {
           from { transform: scale(0.94) translateY(-4px); opacity: 0; }
@@ -301,6 +213,94 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
         }
       `}</style>
     </div>
+
+    {open && btnRect && createPortal(
+      <div
+        id="atlas-user-menu-portal"
+        role="menu"
+        style={{
+          position: "fixed",
+          top: btnRect.bottom + 10,
+          right: Math.max(8, window.innerWidth - btnRect.right),
+          width: 248,
+          background: "var(--atlas-surface)",
+          border: "1px solid rgba(201,162,76,0.18)",
+          borderRadius: 14,
+          boxShadow: "0 1px 0 rgba(255,255,255,0.04) inset, 0 24px 60px -20px rgba(0,0,0,0.5), 0 0 0 1px rgba(201,162,76,0.06)",
+          padding: 6,
+          zIndex: 9999,
+          animation: "atlas-menu-in 200ms cubic-bezier(.2,.8,.2,1)",
+          transformOrigin: "top right",
+        }}
+      >
+        {/* Identity header */}
+        <div style={{
+          padding: "12px 12px 12px",
+          borderBottom: "1px solid rgba(201,162,76,0.10)",
+          marginBottom: 4,
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+            background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.2)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            {photoUrl ? (
+              <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <span style={{ fontSize: 15, fontWeight: 600, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)" }}>
+                {name[0]?.toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)", lineHeight: 1.25, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+            <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.7 }}>{email}</div>
+          </div>
+        </div>
+
+        {/* Appearance toggle */}
+        <div style={{ display: "flex", alignItems: "center", padding: "6px 10px", gap: 9 }}>
+          <span style={{ color: "var(--atlas-muted)", display: "flex", flexShrink: 0, opacity: 0.8 }}>
+            {isParchment ? <SunIcon /> : <MoonIcon />}
+          </span>
+          <span style={{ flex: 1, fontSize: 12.5, color: "var(--atlas-fg)" }}>Appearance</span>
+          <button
+            type="button"
+            onClick={() => handleThemeChange(isParchment ? "obsidian" : "parchment")}
+            aria-label={isParchment ? "Switch to Obsidian" : "Switch to Parchment"}
+            style={{
+              width: 44, height: 24, borderRadius: 12, flexShrink: 0,
+              background: isParchment ? "rgba(201,162,76,0.22)" : "rgba(60,50,40,0.55)",
+              border: "1px solid rgba(201,162,76,0.28)",
+              cursor: "pointer", position: "relative",
+              transition: "background 220ms ease", padding: 0,
+            }}
+          >
+            <div style={{
+              position: "absolute", top: 3,
+              left: isParchment ? 23 : 3,
+              width: 16, height: 16, borderRadius: "50%",
+              background: isParchment ? "var(--atlas-gold)" : "rgba(201,162,76,0.45)",
+              transition: "left 220ms ease, background 220ms ease",
+              boxShadow: isParchment ? "0 0 6px rgba(201,162,76,0.4)" : "none",
+            }} />
+          </button>
+        </div>
+
+        {/* Shortcuts */}
+        <MenuRow icon={<KeyboardIcon />} label="Shortcuts" onClick={openShortcuts} />
+
+        <div style={{ height: 1, background: "rgba(201,162,76,0.08)", margin: "4px 6px" }} />
+
+        {/* Edit profile */}
+        <MenuRow icon={<UserIcon />} label="Edit profile" onClick={() => { setOpen(false); onOpenProfile?.(); }} />
+
+        {/* Sign out */}
+        <MenuRow icon={<SignOutIcon />} label="Sign out" danger onClick={() => { setOpen(false); void logout(); }} />
+      </div>,
+      document.body
+    )}
     </>
   );
 }
