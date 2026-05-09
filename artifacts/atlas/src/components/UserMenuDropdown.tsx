@@ -56,15 +56,20 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
       role="dialog"
       aria-modal="true"
       aria-label="Keyboard shortcuts"
-      style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 300,
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch" as any,
+        display: "flex", alignItems: "flex-start", justifyContent: "center",
+        padding: "max(env(safe-area-inset-top, 0px) + 56px, 56px) 16px 32px",
+      }}
     >
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)" }} />
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(5px)" }} />
       <div style={{
         position: "relative", width: "100%", maxWidth: 440,
         background: "var(--atlas-surface)", border: "1px solid rgba(201,162,76,0.18)",
         borderRadius: 16, padding: "22px 20px 24px",
         boxShadow: "0 2px 2px rgba(255,255,255,0.03) inset, 0 32px 80px -24px rgba(0,0,0,0.7), 0 0 0 1px rgba(201,162,76,0.06)",
-        maxHeight: "80vh", overflowY: "auto",
         animation: "atlas-menu-in 200ms cubic-bezier(.2,.8,.2,1)",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
