@@ -386,6 +386,52 @@ export interface AxiomImportResponse {
   projectId: number;
 }
 
+export interface ForgeRequest {
+  /**
+   * @minLength 10
+   * @maxLength 20000
+   */
+  transcript: string;
+  projectName?: string;
+  projectId?: number;
+}
+
+export type ForgeNodeType = (typeof ForgeNodeType)[keyof typeof ForgeNodeType];
+
+export const ForgeNodeType = {
+  goal: "goal",
+  requirement: "requirement",
+  blocker: "blocker",
+  priority: "priority",
+  decision: "decision",
+  sprint: "sprint",
+} as const;
+
+export type ForgeNodeMeta = (typeof ForgeNodeMeta)[keyof typeof ForgeNodeMeta];
+
+export const ForgeNodeMeta = {
+  must: "must",
+  should: "should",
+  could: "could",
+  wont: "wont",
+} as const;
+
+export interface ForgeNode {
+  id: string;
+  label: string;
+  type: ForgeNodeType;
+  resolved: boolean;
+  x: number;
+  y: number;
+  details?: string;
+  meta?: ForgeNodeMeta;
+}
+
+export interface ForgeResponse {
+  nodes: ForgeNode[];
+  summary: string;
+}
+
 export type ListEntriesParams = {
   status?: ListEntriesStatus;
 };

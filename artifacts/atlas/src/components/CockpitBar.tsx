@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { ArchNode } from "./SystemMap";
+import type { ArchNode } from "./AxiomFlow";
 
 interface CockpitBarProps {
   readinessScore: number;

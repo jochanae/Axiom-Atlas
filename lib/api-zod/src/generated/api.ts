@@ -35,6 +35,44 @@ export const AxiomImportBody = zod.object({
 });
 
 /**
+ * @summary Extract strategic nodes from a raw transcript using AI
+ */
+export const runForgeBodyTranscriptMin = 10;
+export const runForgeBodyTranscriptMax = 20000;
+
+export const RunForgeBody = zod.object({
+  transcript: zod
+    .string()
+    .min(runForgeBodyTranscriptMin)
+    .max(runForgeBodyTranscriptMax),
+  projectName: zod.string().optional(),
+  projectId: zod.number().optional(),
+});
+
+export const RunForgeResponse = zod.object({
+  nodes: zod.array(
+    zod.object({
+      id: zod.string(),
+      label: zod.string(),
+      type: zod.enum([
+        "goal",
+        "requirement",
+        "blocker",
+        "priority",
+        "decision",
+        "sprint",
+      ]),
+      resolved: zod.boolean(),
+      x: zod.number(),
+      y: zod.number(),
+      details: zod.string().optional(),
+      meta: zod.enum(["must", "should", "could", "wont"]).optional(),
+    }),
+  ),
+  summary: zod.string(),
+});
+
+/**
  * @summary List all saved vault snapshots
  */
 export const ListVaultSavesResponseItem = zod.object({

@@ -21,6 +21,8 @@ tags:
     description: AI chat
   - name: import
     description: Axiom handoff import
+  - name: forge
+    description: Strategic node extraction pipeline
 paths:
   /healthz:
     get:
@@ -55,6 +57,29 @@ paths:
                 $ref: "#/components/schemas/AxiomImportResponse"
         "400":
           description: Invalid payload
+
+  /forge:
+    post:
+      operationId: runForge
+      tags: [forge]
+      summary: Extract strategic nodes from a raw transcript using AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgeRequest"
+      responses:
+        "200":
+          description: Extracted nodes and summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForgeResponse"
+        "400":
+          description: Invalid request
+        "500":
+          description: Forge processing error
 
   /vault:
     get:
@@ -1017,3 +1042,59 @@ components:
           type: integer
       required:
         - projectId
+
+    ForgeRequest:
+      type: object
+      properties:
+        transcript:
+          type: string
+          minLength: 10
+          maxLength: 20000
+        projectName:
+          type: string
+        projectId:
+          type: integer
+      required:
+        - transcript
+
+    ForgeNode:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum: [goal, requirement, blocker, priority, decision, sprint]
+        resolved:
+          type: boolean
+        x:
+          type: number
+        y:
+          type: number
+        details:
+          type: string
+        meta:
+          type: string
+          enum: [must, should, could, wont]
+      required:
+        - id
+        - label
+        - type
+        - resolved
+        - x
+        - y
+
+    ForgeResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ForgeNode"
+        summary:
+          type: string
+      required:
+        - nodes
+        - summary
