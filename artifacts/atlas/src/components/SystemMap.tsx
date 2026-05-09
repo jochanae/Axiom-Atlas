@@ -356,17 +356,6 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
         <span className="text-xs font-bold tracking-widest text-gold uppercase">SYSTEM MAP</span>
       </div>
 
-      {/* % READY badge */}
-      <div style={{ position: "absolute", right: 14, top: 14, zIndex: 10 }}>
-        <span style={{
-          fontSize: 9, fontWeight: 700, color: "oklch(0.60 0.08 85)",
-          background: "oklch(0.76 0.12 85 / 8%)",
-          border: "0.5px solid oklch(0.76 0.12 85 / 25%)",
-          borderRadius: 20, padding: "1px 8px", letterSpacing: "0.06em",
-        }}>
-          {readinessScore}% READY
-        </span>
-      </div>
 
       {/* Transformable canvas */}
       <div
@@ -392,6 +381,22 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
 
         {/* SVG edges */}
         <svg className="absolute inset-0 h-full w-full" style={{ overflow: "visible" }}>
+          <defs>
+            <filter id="edge-glow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="3.5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="edge-glow-resolved" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
           {edges.map(edge => {
             const fromNode = nodes.find(n => n.id === edge.from);
             const toNode = nodes.find(n => n.id === edge.to);
@@ -402,10 +407,11 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
                 key={edge.id}
                 x1={fromNode.x} y1={fromNode.y}
                 x2={toNode.x} y2={toNode.y}
-                stroke={bothResolved ? "oklch(0.76 0.12 85 / 60%)" : "oklch(0.35 0.01 60 / 50%)"}
-                strokeWidth={strokeWidth}
-                strokeDasharray={bothResolved ? "4 4" : "6 4"}
-                style={bothResolved ? { animation: "edge-flow 1.5s linear infinite" } : undefined}
+                stroke={bothResolved ? "rgba(139,92,246,0.85)" : "rgba(109,40,217,0.45)"}
+                strokeWidth={bothResolved ? strokeWidth + 0.5 : strokeWidth}
+                strokeDasharray={bothResolved ? "5 5" : "7 5"}
+                filter={bothResolved ? "url(#edge-glow-resolved)" : "url(#edge-glow)"}
+                style={bothResolved ? { animation: "edge-flow 1.8s linear infinite" } : undefined}
               />
             );
           })}
