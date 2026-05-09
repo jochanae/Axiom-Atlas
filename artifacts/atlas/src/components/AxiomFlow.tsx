@@ -62,6 +62,10 @@ const EDGE_FLOW_STYLE = `
   from { stroke-dashoffset: 0; }
   to   { stroke-dashoffset: -20; }
 }
+@keyframes node-fly-in {
+  from { opacity: 0; transform: translate(var(--fly-dx), var(--fly-dy)) scale(0.2); }
+  to   { opacity: 1; transform: translate(0px, 0px) scale(1); }
+}
 `;
 
 const ZOOM_MIN = 0.4;
@@ -143,7 +147,10 @@ export function AxiomFlow({
     })));
   }, [initialNodeState]);
 
-  // Merge pending nodes from Forge with 60ms stagger
+  // Track newly-added node IDs for fly-in animation
+  const [newlyAddedIds, setNewlyAddedIds] = useState<Set<string>>(new Set());
+
+  // Merge pending nodes from Forge with 60ms stagger + center-origin fly-in
   const pendingConsumedRef = useRef(false);
   useEffect(() => {
     if (!pendingNodes || pendingNodes.length === 0 || pendingConsumedRef.current) return;
@@ -160,6 +167,15 @@ export function AxiomFlow({
           sounds.tap();
           return [...prev, newNode];
         });
+        // Mark as newly-added for fly-in animation, clear after 650ms
+        setNewlyAddedIds(prev => new Set([...prev, newNode.id]));
+        setTimeout(() => {
+          setNewlyAddedIds(prev => {
+            const next = new Set(prev);
+            next.delete(newNode.id);
+            return next;
+          });
+        }, 650);
         if (goalNode) {
           setEdges(prev => {
             const edgeId = `e-${goalNode.id}-${newNode.id}`;
@@ -428,9 +444,21 @@ export function AxiomFlow({
         </svg>
 
         {/* Nodes */}
-        {nodes.map(node => (
-          <FlowNodeComponent key={node.id} node={node} onFocus={handleNodeTap} />
-        ))}
+        {nodes.map(node => {
+          const goalNode = nodes.find(n => n.type === "goal") || nodes[0];
+          const goalX = goalNode ? goalNode.x : 300;
+          const goalY = goalNode ? goalNode.y : 250;
+          return (
+            <FlowNodeComponent
+              key={node.id}
+              node={node}
+              onFocus={handleNodeTap}
+              newlyAdded={newlyAddedIds.has(node.id)}
+              goalX={goalX}
+              goalY={goalY}
+            />
+          );
+        })}
       </div>
 
       {/* Node info card */}
@@ -727,12 +755,22 @@ function getNodeVisual(node: ArchNode): NodeVisual {
 function FlowNodeComponent({
   node,
   onFocus,
+  newlyAdded = false,
+  goalX = 300,
+  goalY = 250,
 }: {
   node: ArchNode;
   onFocus: (id: string, e: React.MouseEvent | React.TouchEvent) => void;
+  newlyAdded?: boolean;
+  goalX?: number;
+  goalY?: number;
 }) {
   const v = getNodeVisual(node);
   const icon = getNodeIcon(node);
+
+  // Center-origin fly-in: translate from goal position to node position
+  const flyDx = newlyAdded ? `${goalX - node.x}px` : "0px";
+  const flyDy = newlyAdded ? `${goalY - node.y}px` : "0px";
 
   return (
     <button
@@ -745,7 +783,11 @@ function FlowNodeComponent({
         background: "none", border: "none", padding: 0, cursor: "pointer",
         display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
         opacity: v.opacity,
-        transition: "opacity 300ms ease, transform 300ms ease",
+        transition: "opacity 300ms ease",
+        // CSS custom properties for the fly-in keyframe
+        ["--fly-dx" as string]: flyDx,
+        ["--fly-dy" as string]: flyDy,
+        animation: newlyAdded ? "node-fly-in 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards" : undefined,
       }}
     >
       <div style={{
