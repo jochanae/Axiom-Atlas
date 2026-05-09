@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import type { StripeSync } from 'stripe-replit-sync';
 
 async function getCredentials() {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
@@ -43,7 +44,8 @@ async function getCredentials() {
 
 export async function getUncachableStripeClient(): Promise<Stripe> {
   const { secretKey } = await getCredentials();
-  return new Stripe(secretKey, { apiVersion: '2025-08-27.basil' as any });
+  // apiVersion cast required: SDK types lag behind the latest API version string
+  return new Stripe(secretKey, { apiVersion: '2025-08-27.basil' as Stripe.LatestApiVersion });
 }
 
 export async function getStripePublishableKey(): Promise<string> {
@@ -56,7 +58,7 @@ export async function getStripeSecretKey(): Promise<string> {
   return secretKey;
 }
 
-let stripeSyncInstance: any = null;
+let stripeSyncInstance: StripeSync | null = null;
 
 export async function getStripeSync() {
   if (!stripeSyncInstance) {

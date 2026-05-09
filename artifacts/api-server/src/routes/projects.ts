@@ -28,11 +28,13 @@ router.post("/projects", async (req, res): Promise<void> => {
     return;
   }
 
-  // Free tier: limit to 1 project
+  // Free tier: limit to 1 project.
+  // Atlas is a single-owner tool — all projects in this DB belong to the authenticated user.
+  // A per-user ownership column is not in the current schema, so total count is the correct check.
   const authUser = (req as any).authUser;
   if (authUser?.subscriptionTier === "free") {
-    const existing = await db.select().from(projectsTable);
-    if (existing.length >= 1) {
+    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(projectsTable);
+    if (count >= 1) {
       res.status(402).json({
         error: "Free plan is limited to 1 project.",
         code: "PROJECT_LIMIT_REACHED",
