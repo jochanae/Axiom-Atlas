@@ -63,7 +63,7 @@ const ZOOM_DEFAULT_MOBILE = 0.85;
 const ZOOM_DEFAULT_DESKTOP = 1.0;
 const TAP_THRESHOLD = 8;
 const CANVAS_PADDING = 80;
-const STORAGE_KEY = "axiom-system-map-nodes";
+const BASE_STORAGE_KEY = "axiom-system-map-nodes";
 
 type BuilderType = "lovable" | "cursor" | "replit" | null;
 
@@ -86,9 +86,9 @@ const INITIAL_EDGES: ArchEdge[] = [
   { id: "e7", from: "logic", to: "api"  },
 ];
 
-function loadNodes(): ArchNode[] {
+function loadNodes(key: string): ArchNode[] {
   try {
-    const r = localStorage.getItem(STORAGE_KEY);
+    const r = localStorage.getItem(key);
     return r ? JSON.parse(r) : INITIAL_NODES;
   } catch { return INITIAL_NODES; }
 }
@@ -106,6 +106,7 @@ function detectBuilder(): BuilderType {
 }
 
 interface SystemMapProps {
+  projectId?: number;
   onReadinessChange?: (score: number) => void;
   onNodesChange?: (nodes: ArchNode[]) => void;
   compact?: boolean;
@@ -115,9 +116,10 @@ interface SystemMapProps {
   initialNodeState?: Record<string, boolean> | null;
 }
 
-export function SystemMap({ onReadinessChange, onNodesChange, compact, onNodeFocus, atmosphere, detectedBuilder: detectedBuilderProp, initialNodeState }: SystemMapProps) {
+export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact, onNodeFocus, atmosphere, detectedBuilder: detectedBuilderProp, initialNodeState }: SystemMapProps) {
+  const storageKey = `${BASE_STORAGE_KEY}${projectId ? `-${projectId}` : ""}`;
   const isMobile = window.innerWidth < 768;
-  const [nodes, setNodes] = useState<ArchNode[]>(loadNodes);
+  const [nodes, setNodes] = useState<ArchNode[]>(() => loadNodes(storageKey));
 
   // Sync resolved states from DB once when initialNodeState arrives
   const dbSyncedRef = useRef(false);
@@ -160,8 +162,8 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact, onNodeFoc
   useEffect(() => { onReadinessChange?.(readinessScore); }, [readinessScore, onReadinessChange]);
   useEffect(() => {
     onNodesChange?.(nodes);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes)); } catch {}
-  }, [nodes, onNodesChange]);
+    try { localStorage.setItem(storageKey, JSON.stringify(nodes)); } catch {}
+  }, [nodes, onNodesChange, storageKey]);
 
   const fitMap = useCallback(() => {
     if (!containerRef.current || nodes.length === 0) return;
@@ -322,6 +324,7 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact, onNodeFoc
         transition: "box-shadow 1s ease",
         touchAction: "none",
         cursor: dragState.current.dragging ? "grabbing" : "grab",
+        background: "radial-gradient(circle at 50% 0%, rgba(76,29,149,0.18) 0%, transparent 60%), #050505",
       }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
@@ -335,6 +338,12 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact, onNodeFoc
       onClick={onContainerClick}
     >
       <style>{EDGE_FLOW_STYLE}</style>
+
+      {/* Cinematic vignette overlay — dark edges for depth */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        background: "radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%)",
+        zIndex: 1,
+      }} />
 
       {/* Dot grid */}
       <div className="absolute inset-0" style={{
