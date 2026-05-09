@@ -2483,6 +2483,7 @@ function FilesTab({
   // Reset auto-load gate when project switches
   useEffect(() => {
     autoLoadedRef.current = false;
+    tokenSynced.current = false;
     setSelectedRepo(null);
     setTree([]);
     setSelectedPath(null);
