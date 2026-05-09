@@ -156,6 +156,7 @@ export const ListProjectsResponseItem = zod.object({
   pushHistory: zod.array(zod.unknown()).nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
+  latestSnapshotScore: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -189,6 +190,7 @@ export const GetProjectResponse = zod.object({
   pushHistory: zod.array(zod.unknown()).nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
+  latestSnapshotScore: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -227,6 +229,7 @@ export const UpdateProjectResponse = zod.object({
   pushHistory: zod.array(zod.unknown()).nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
+  latestSnapshotScore: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

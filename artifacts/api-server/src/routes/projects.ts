@@ -17,10 +17,28 @@ const router: IRouter = Router();
 
 router.get("/projects", async (req, res): Promise<void> => {
   const projects = await db.select().from(projectsTable).orderBy(projectsTable.updatedAt);
+
+  const latestScores = await db
+    .select({
+      projectId: readinessSnapshotsTable.projectId,
+      score: readinessSnapshotsTable.score,
+    })
+    .from(readinessSnapshotsTable)
+    .where(
+      sql`id IN (
+        SELECT DISTINCT ON (project_id) id
+        FROM readiness_snapshots
+        ORDER BY project_id, recorded_at DESC, id DESC
+      )`
+    );
+
+  const scoreMap = new Map(latestScores.map(s => [s.projectId, s.score]));
+
   res.json(projects.map(p => ({
     ...p,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
+    latestSnapshotScore: scoreMap.get(p.id) ?? null,
   })));
 });
 
