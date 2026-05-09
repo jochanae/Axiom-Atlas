@@ -5703,7 +5703,7 @@ export default function Workspace() {
       {/* ── Header ── */}
       <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(16px)" }}>
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
-        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(212,175,55,0.12)", boxShadow: "0 1px 28px rgba(0,0,0,0.45)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 14px", borderBottom: "1px solid rgba(212,175,55,0.12)", boxShadow: "0 1px 28px rgba(0,0,0,0.45)" }}>
 
           {/* Left: drawer button + Atlas logo → home */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
