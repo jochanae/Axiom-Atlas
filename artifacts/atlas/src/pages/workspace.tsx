@@ -4965,11 +4965,23 @@ export default function Workspace() {
       "tsconfig.json", "tsconfig.app.json",
       "vite.config.ts", "vite.config.js",
       "next.config.js", "next.config.ts", "next.config.mjs",
+      // src/ layout (Vite, CRA)
       "src/main.tsx", "src/main.ts",
       "src/index.tsx", "src/index.ts",
       "src/App.tsx", "src/App.ts",
       "src/app.tsx", "src/app.ts",
-      "index.ts", "index.tsx",
+      // app/ layout (Next.js, TanStack Start, Remix)
+      "app/root.tsx", "app/root.ts",
+      "app/routes/__root.tsx", "app/routes/__root.ts",
+      "app/app.tsx", "app/app.ts",
+      "app/layout.tsx", "app/layout.ts",
+      "app/page.tsx", "app/page.ts",
+      // pages/ layout
+      "pages/_app.tsx", "pages/_app.js",
+      "pages/index.tsx", "pages/index.js",
+      // root fallbacks
+      "index.ts", "index.tsx", "index.js",
+      "main.ts", "main.tsx",
     ];
 
     (async () => {
@@ -4987,9 +4999,9 @@ export default function Workspace() {
 
         // 2. Identify up to 5 priority files that actually exist
         const toFetch = KEY_FILES.filter(p => blobSet.has(p)).slice(0, 5);
-        if (toFetch.length === 0 || cancelled) return;
+        if (cancelled) return;
 
-        // 3. Fetch priority files in parallel
+        // 3. Fetch priority files in parallel (may be empty — tree alone is still useful)
         const results = await Promise.allSettled(
           toFetch.map(p =>
             fetch(
@@ -5018,7 +5030,7 @@ export default function Workspace() {
           }
         }
 
-        if (parts.length > 1 && !cancelled) {
+        if (!cancelled && parts.length > 0) {
           repoCtxLoadedFor.current = id;
           setFileContext(parts.join("\n\n"));
         }
