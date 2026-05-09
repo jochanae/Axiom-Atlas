@@ -118,7 +118,7 @@ export default function Vault() {
   });
 
   return (
-    <div style={{ minHeight: "100dvh", background: "var(--atlas-bg)", display: "flex", flexDirection: "column" }}>
+    <div style={{ height: "100dvh", overflowY: "auto", background: "var(--atlas-bg)", display: "flex", flexDirection: "column" }}>
 
       {/* Toast */}
       {toast && (

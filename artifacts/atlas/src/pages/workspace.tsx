@@ -2370,7 +2370,7 @@ function FilesTab({
   const getGlobalToken = () => { try { return localStorage.getItem("atlas-github-token") || null; } catch { return null; } };
   const setGlobalToken = (t: string | null) => { try { if (t) localStorage.setItem("atlas-github-token", t); else localStorage.removeItem("atlas-github-token"); } catch {} };
 
-  const [tokenState, setTokenState] = useState<string | null>(null);
+  const [tokenState, setTokenState] = useState<string | null>(() => getGlobalToken());
   const tokenSynced = useRef(false);
   useEffect(() => {
     if (!filesProject || tokenSynced.current) return;
@@ -4685,12 +4685,12 @@ function MobileTabBar({
   entryCount,
   activeCatch,
 }: {
-  activeTab: "chat" | "ledger" | "files" | "map";
-  onTabChange: (tab: "chat" | "ledger" | "files" | "map") => void;
+  activeTab: "chat" | "ledger" | "files" | "map" | "preview";
+  onTabChange: (tab: "chat" | "ledger" | "files" | "map" | "preview") => void;
   entryCount: number;
   activeCatch: boolean;
 }) {
-  const tabs: { id: "chat" | "ledger" | "files" | "map"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
+  const tabs: { id: "chat" | "ledger" | "files" | "map" | "preview"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     {
       id: "chat",
       label: "Chat",
@@ -4720,6 +4720,19 @@ function MobileTabBar({
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: "preview",
+      label: "Preview",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="3" width="20" height="15" rx="2" />
+          <path d="M2 8h20" />
+          <circle cx="5" cy="5.5" r="0.9" fill="currentColor" opacity={0.5} />
+          <circle cx="8" cy="5.5" r="0.9" fill="currentColor" opacity={0.5} />
+          <path d="M8 22h8M12 18v4" />
         </svg>
       ),
     },
@@ -4914,7 +4927,7 @@ export default function Workspace() {
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
-  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map">("chat");
+  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">("chat");
   const [showDrawer, setShowDrawer] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -5841,6 +5854,7 @@ export default function Workspace() {
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="9" height="9" rx="1.5" /><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" /></svg>} label={cloningProject ? "Cloning…" : "Clone project"} onClick={async () => { if (cloningProject) return; setShowProjectMenu(false); setCloningProject(true); try { const base = import.meta.env.BASE_URL.replace(/\/$/, ""); const res = await fetch(`${base}/api/projects/${id}/clone`, { method: "POST" }); if (res.ok) { const clone = await res.json(); queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); setLocation(`/project/${clone.id}`); } } finally { setCloningProject(false); } }} />
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
+                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="14" height="10" rx="1.5" /><path d="M1 6h14" /><circle cx="3.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} /><circle cx="5.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} /></svg>} label="Dashboard" onClick={() => { setLocation("/dashboard"); setShowProjectMenu(false); }} />
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
                   {confirmDeleteProject ? (
                     <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -6605,7 +6619,7 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
-                forceTab={mobileTab === "map" ? "map" : mobileTab === "files" ? "files" : undefined}
+                forceTab={mobileTab === "map" ? "map" : mobileTab === "files" ? "files" : mobileTab === "preview" ? "preview" : undefined}
                 onSendIntent={sendFromIntentCapture}
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
                 onMapReadinessChange={setMapReadiness}
