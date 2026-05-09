@@ -80,7 +80,14 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [project] = await db.update(projectsTable).set(parsed.data).where(eq(projectsTable.id, params.data.id)).returning();
+  const { lastHandoverAt, ...rest } = parsed.data;
+  const updateValues = {
+    ...rest,
+    ...(lastHandoverAt !== undefined
+      ? { lastHandoverAt: lastHandoverAt === null ? null : new Date(lastHandoverAt) }
+      : {}),
+  };
+  const [project] = await db.update(projectsTable).set(updateValues).where(eq(projectsTable.id, params.data.id)).returning();
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;

@@ -41,10 +41,19 @@ router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => 
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const { seedMessage, seedIntentType, ...sessionFields } = parsed.data;
   const [session] = await db.insert(sessionsTable).values({
     projectId: params.data.projectId,
-    ...parsed.data,
+    ...sessionFields,
   }).returning();
+  if (seedMessage && seedMessage.trim().length > 0) {
+    await db.insert(chatMessagesTable).values({
+      sessionId: session.id,
+      role: "assistant",
+      content: seedMessage,
+      intentType: seedIntentType ?? "handover_snapshot",
+    });
+  }
   res.status(201).json({
     ...session,
     createdAt: session.createdAt.toISOString(),

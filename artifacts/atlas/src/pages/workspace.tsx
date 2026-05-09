@@ -5,7 +5,7 @@ import { useParams, useLocation, Link } from "wouter";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { useSound } from "@/hooks/useSound";
 import { AxiomFlow } from "../components/AxiomFlow";
-import type { ArchNode, NodeStateMap } from "../components/AxiomFlow";
+import type { ArchNode, NodeStateMap, HandoverSnapshot } from "../components/AxiomFlow";
 import { TheForge } from "../components/TheForge";
 import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
@@ -4059,7 +4059,7 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
@@ -4143,6 +4143,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
           pendingNodes={pendingNodes}
           onPendingConsumed={() => setPendingNodes([])}
           onUnansweredQuestionOpen={({ mirror }) => onSystemNodeMessage?.(mirror)}
+          onHandover={onHandover}
+          handoverPending={handoverPending}
+          lastHandoverHash={lastHandoverHash}
         />
       </div>
 
@@ -4373,6 +4376,9 @@ function RightPanel({
   isMobile,
   onMapReadinessChange,
   onSystemNodeMessage,
+  onHandover,
+  handoverPending,
+  lastHandoverHash,
 }: {
   projectId: number;
   entries: Entry[];
@@ -4391,6 +4397,9 @@ function RightPanel({
   isMobile?: boolean;
   onMapReadinessChange?: (score: number) => void;
   onSystemNodeMessage?: (text: string) => void;
+  onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void;
+  handoverPending?: boolean;
+  lastHandoverHash?: string | null;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -4583,7 +4592,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} />}
     </div>
   );
 }
@@ -5361,6 +5370,62 @@ export default function Workspace() {
   const healthPct = entryCount > 0 ? Math.round((committedCount / entryCount) * 100) : 0;
   const [mapReadiness, setMapReadiness] = useState(0);
   const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(undefined);
+
+  // ── Handover (Flow → Workspace) ──────────────────────────────────────────
+  const updateProjectFromHandover = useUpdateProject();
+  const [handoverPending, setHandoverPending] = useState(false);
+
+  const handleHandover = useCallback(({ snapshot, title }: { snapshot: HandoverSnapshot; title: string }) => {
+    if (!id || handoverPending) return;
+    setHandoverPending(true);
+    createSession.mutate(
+      {
+        projectId: id,
+        data: {
+          title: title || snapshot.title,
+          mode: "think",
+          seedMessage: snapshot.summary,
+          seedIntentType: "handover_snapshot",
+        },
+      },
+      {
+        onSuccess: (newSession) => {
+          // Switch active session and seed the visible thread with the same
+          // assistant message we just persisted server-side.
+          setSessionId(newSession.id);
+          setMessages([{
+            role: "assistant",
+            content: snapshot.summary,
+            intentType: "handover_snapshot",
+            sentAt: new Date().toISOString(),
+          }]);
+          // Stamp the project with the handover marker + content hash so the
+          // Workspace can later detect drift.
+          updateProjectFromHandover.mutate(
+            {
+              id,
+              data: {
+                lastHandoverAt: new Date().toISOString(),
+                lastHandoverHash: snapshot.hash,
+              },
+            },
+            {
+              onSettled: () => {
+                queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(id) });
+              },
+            }
+          );
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey(id) });
+          // Surface the chat thread so the user sees the seeded snapshot.
+          if (isMobile) {
+            setMobileTab("chat");
+            setRightOpen(false);
+          }
+        },
+        onSettled: () => setHandoverPending(false),
+      }
+    );
+  }, [id, handoverPending, createSession, updateProjectFromHandover, queryClient, isMobile]);
 
   const focusSystemMap = useCallback(() => {
     if (isMobile) {
@@ -6338,6 +6403,9 @@ export default function Workspace() {
                 onSendIntent={sendFromIntentCapture}
                 onMapReadinessChange={setMapReadiness}
                 onSystemNodeMessage={pushSystemNodeMessage}
+                onHandover={handleHandover}
+                handoverPending={handoverPending}
+                lastHandoverHash={project?.lastHandoverHash ?? null}
                 isMobile={false}
               />
             </div>
@@ -6394,6 +6462,9 @@ export default function Workspace() {
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
                 onMapReadinessChange={setMapReadiness}
                 onSystemNodeMessage={pushSystemNodeMessage}
+                onHandover={handleHandover}
+                handoverPending={handoverPending}
+                lastHandoverHash={project?.lastHandoverHash ?? null}
                 isMobile
               />
             </div>
