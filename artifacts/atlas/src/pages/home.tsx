@@ -485,11 +485,6 @@ function FirstRunOverlay({
   onWorkspace: () => void;
   onDismiss?: () => void;
 }) {
-  const bullets = [
-    { icon: "⚡", text: "Catches you when you're about to contradict a prior decision" },
-    { icon: "📋", text: "Keeps a permanent ledger of every commitment you make" },
-    { icon: "🧠", text: "Remembers context across every session, so you never repeat yourself" },
-  ];
 
   return createPortal(
     <div
@@ -508,7 +503,7 @@ function FirstRunOverlay({
       <div style={{ display: "flex", flexDirection: "column", width: "100%", maxWidth: 340 }}>
 
         {/* Identity */}
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{
             width: 44, height: 44, borderRadius: 11, background: "rgba(201,162,76,0.1)",
             border: "1.5px solid rgba(201,162,76,0.35)", display: "flex", alignItems: "center",
@@ -520,31 +515,12 @@ function FirstRunOverlay({
               <rect x="16" y="27" width="16" height="4" rx="1" fill="#D4AF37" />
             </svg>
           </div>
-          <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", color: "rgba(201,162,76,0.7)", textTransform: "uppercase", marginBottom: 10 }}>
+          <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", color: "rgba(201,162,76,0.7)", textTransform: "uppercase", marginBottom: 12 }}>
             AXIOM
           </div>
-          <div style={{ fontSize: 18, fontWeight: 300, color: "var(--atlas-fg, #E7E5E4)", letterSpacing: "-0.02em", lineHeight: 1.3, marginBottom: 6 }}>
-            Decisions you won't regret.
+          <div style={{ fontSize: 13, color: "rgba(120,113,108,0.6)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", lineHeight: 1.5 }}>
+            Structure before speed.
           </div>
-          <div style={{ fontSize: 12, color: "rgba(120,113,108,0.65)", lineHeight: 1.6 }}>
-            A thinking partner that enforces your own commitments.
-          </div>
-        </div>
-
-        {/* What it does */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
-          {bullets.map((b, i) => (
-            <div key={i} style={{
-              display: "flex", alignItems: "flex-start", gap: 11,
-              padding: "10px 13px", borderRadius: 9,
-              background: "rgba(201,162,76,0.04)",
-              border: "1px solid rgba(201,162,76,0.09)",
-              animation: `atlas-btn-rise 400ms cubic-bezier(0.34,1.56,0.64,1) ${180 + i * 80}ms both`,
-            }}>
-              <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>{b.icon}</span>
-              <span style={{ fontSize: 12, color: "rgba(231,229,228,0.72)", lineHeight: 1.5 }}>{b.text}</span>
-            </div>
-          ))}
         </div>
 
         {/* CTA buttons */}
