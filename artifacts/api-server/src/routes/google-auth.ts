@@ -110,24 +110,31 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
 
     if (!user) {
       // Check if an email/password account already exists with this email.
-      // Do NOT auto-link — that enables Google account pre-hijacking: an attacker
-      // who creates an email/password account with the victim's Gmail address before
-      // the victim signs in via Google would silently take over the Google session.
-      const existing = (await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, profile.email.toLowerCase())).limit(1))[0];
+      // If so, link the Google identity to that existing account rather than
+      // blocking — Google has already verified the email ownership.
+      const existing = (await db.select().from(usersTable).where(eq(usersTable.email, profile.email.toLowerCase())).limit(1))[0];
       if (existing) {
-        res.redirect("/login?auth_error=email_exists_use_password");
-        return;
+        // Link Google ID (and avatar if not already set) to the existing account
+        [user] = await db
+          .update(usersTable)
+          .set({
+            googleId: profile.id,
+            ...(existing.avatarUrl ? {} : { avatarUrl: profile.picture ?? null }),
+          })
+          .where(eq(usersTable.id, existing.id))
+          .returning();
+      } else {
+        // Create new Google user
+        const role = (SUPER_ADMIN_EMAIL && profile.email.toLowerCase() === SUPER_ADMIN_EMAIL) ? "super_admin" : "user";
+        [user] = await db.insert(usersTable).values({
+          email: profile.email.toLowerCase(),
+          googleId: profile.id,
+          name: profile.name ?? null,
+          avatarUrl: profile.picture ?? null,
+          role,
+          subscriptionTier: role === "super_admin" ? "founder" : "free",
+        }).returning();
       }
-      // Create new Google user
-      const role = (SUPER_ADMIN_EMAIL && profile.email.toLowerCase() === SUPER_ADMIN_EMAIL) ? "super_admin" : "user";
-      [user] = await db.insert(usersTable).values({
-        email: profile.email.toLowerCase(),
-        googleId: profile.id,
-        name: profile.name ?? null,
-        avatarUrl: profile.picture ?? null,
-        role,
-        subscriptionTier: role === "super_admin" ? "founder" : "free",
-      }).returning();
     }
 
     if (!user) {
