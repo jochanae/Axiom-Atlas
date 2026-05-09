@@ -610,6 +610,14 @@
   height: auto !important;
 }
 
+/* ── Login / auth page: allow scrolling ────────────────────────────────────── */
+.atlas-login-active,
+.atlas-login-active body,
+.atlas-login-active #root {
+  overflow: auto !important;
+  height: auto !important;
+}
+
 /* ── Landing page animation keyframes ─────────────────────────────────────── */
 @keyframes atlas-lp-gold-pulse {
   0%, 100% { box-shadow: 0 0 8px rgba(212,175,55,0.3); }
