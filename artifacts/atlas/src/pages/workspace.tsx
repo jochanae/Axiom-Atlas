@@ -4153,59 +4153,13 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         <div style={{ flex: 1, minHeight: 190, overflow: "hidden", display: "flex", flexDirection: "column", background: "oklch(0.11 0.01 60)" }}>
           <style>{`@keyframes intent-dot-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}`}</style>
 
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 6px", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#D4AF37", animation: "intent-dot-pulse 2s ease-in-out infinite", flexShrink: 0 }} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.12em" }}>INTENT CAPTURE</span>
-            </div>
-            <button
-              onClick={addSignal}
-              style={{
-                background: signalAdded ? "rgba(212,175,55,0.22)" : "rgba(212,175,55,0.09)",
-                border: `1px solid ${signalAdded ? "rgba(212,175,55,0.7)" : "rgba(212,175,55,0.3)"}`,
-                borderRadius: 8, padding: "5px 12px", cursor: "pointer",
-                color: "#D4AF37", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.04em",
-                fontFamily: "var(--app-font-mono)", transition: "all 300ms",
-              }}>
-              {signalAdded ? "✓ Added" : "+ Signal"}
-            </button>
+          {/* Section label — compact, no button here (controls moved into card header) */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px 4px", flexShrink: 0 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#D4AF37", animation: "intent-dot-pulse 2s ease-in-out infinite", flexShrink: 0 }} />
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.12em" }}>INTENT CAPTURE</span>
           </div>
 
-          {/* Signal selector */}
-          <div style={{ padding: "0 14px 8px", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-            <select
-              value={activeSignalIdx}
-              onChange={e => setActiveSignalIdx(Number(e.target.value))}
-              style={{
-                flex: 1, background: "rgba(20,18,14,0.92)", border: "1px solid rgba(212,175,55,0.13)",
-                borderRadius: 6, padding: "4px 8px", color: "rgba(212,175,55,0.65)", fontSize: 10,
-                fontFamily: "var(--app-font-mono)", cursor: "pointer",
-              }}>
-              {signals.map((s, i) => (
-                <option key={i} value={i}>Signal #{i + 1}{s.trim() ? ` — ${s.trim().slice(0, 30)}${s.trim().length > 30 ? "…" : ""}` : ""}</option>
-              ))}
-            </select>
-            {signals.length > 1 && (
-              <button
-                onClick={deleteActiveSignal}
-                title="Delete this signal"
-                style={{
-                  width: 24, height: 24, borderRadius: 6, flexShrink: 0,
-                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
-                  color: "rgba(239,68,68,0.6)", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 13, lineHeight: 1,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.18)"; e.currentTarget.style.color = "rgba(239,68,68,0.9)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.08)"; e.currentTarget.style.color = "rgba(239,68,68,0.6)"; }}
-              >
-                ×
-              </button>
-            )}
-          </div>
-
-          {/* Prompt card */}
+          {/* Prompt card — full remaining height */}
           <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: "0 14px 12px" }}>
             <div style={{
               height: "100%", display: "flex", flexDirection: "column",
@@ -4213,17 +4167,58 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
               border: "1px solid rgba(212,175,55,0.16)",
               borderRadius: 12, overflow: "hidden",
             }}>
-              {/* Card header — platform badge */}
+              {/* Card header — platform badge + signal selector + add button, all in one row */}
               <div style={{
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "9px 14px 7px",
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "7px 10px 6px",
                 borderBottom: "1px solid rgba(212,175,55,0.07)",
                 flexShrink: 0,
               }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "#0D0B09", background: "#D4AF37", borderRadius: 4, padding: "2px 7px", letterSpacing: "0.08em" }}>
+                {/* Platform badge — shows detected system (REPLIT, CURSOR, LOVABLE, etc.) */}
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#0D0B09", background: "#D4AF37", borderRadius: 4, padding: "2px 7px", letterSpacing: "0.08em", flexShrink: 0 }}>
                   {platform}
                 </span>
-                <span style={{ fontSize: 10.5, color: "rgba(120,113,108,0.65)", letterSpacing: "0.04em" }}>prompt aimed</span>
+                {/* Signal selector — inline, takes remaining space */}
+                <select
+                  value={activeSignalIdx}
+                  onChange={e => setActiveSignalIdx(Number(e.target.value))}
+                  style={{
+                    flex: 1, minWidth: 0, background: "transparent",
+                    border: "1px solid rgba(212,175,55,0.13)",
+                    borderRadius: 5, padding: "3px 6px",
+                    color: "rgba(212,175,55,0.65)", fontSize: 9.5,
+                    fontFamily: "var(--app-font-mono)", cursor: "pointer",
+                  }}>
+                  {signals.map((s, i) => (
+                    <option key={i} value={i}>Signal #{i + 1}{s.trim() ? ` — ${s.trim().slice(0, 22)}${s.trim().length > 22 ? "…" : ""}` : ""}</option>
+                  ))}
+                </select>
+                {/* Delete signal — only shown when multiple signals exist */}
+                {signals.length > 1 && (
+                  <button
+                    onClick={deleteActiveSignal}
+                    title="Delete this signal"
+                    style={{
+                      width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                      background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
+                      color: "rgba(239,68,68,0.6)", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 12, lineHeight: 1,
+                    }}
+                  >×</button>
+                )}
+                {/* Add signal */}
+                <button
+                  onClick={addSignal}
+                  style={{
+                    background: signalAdded ? "rgba(212,175,55,0.22)" : "rgba(212,175,55,0.09)",
+                    border: `1px solid ${signalAdded ? "rgba(212,175,55,0.7)" : "rgba(212,175,55,0.3)"}`,
+                    borderRadius: 6, padding: "3px 9px", cursor: "pointer", flexShrink: 0,
+                    color: "#D4AF37", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.04em",
+                    fontFamily: "var(--app-font-mono)", transition: "all 300ms",
+                  }}>
+                  {signalAdded ? "✓" : "+ Signal"}
+                </button>
               </div>
 
               {/* Textarea — minHeight:0 ensures it shrinks on small viewports/keyboard-up */}
