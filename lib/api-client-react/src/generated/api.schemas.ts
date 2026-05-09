@@ -327,6 +327,21 @@ export interface ChatRequest {
   entries?: EntryContext[];
 }
 
+export interface ReadinessSnapshot {
+  id: number;
+  projectId: number;
+  score: number;
+  recordedAt: string;
+}
+
+export interface CreateReadinessSnapshotBody {
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  score: number;
+}
+
 export interface VaultSave {
   id: number;
   /** @nullable */

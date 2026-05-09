@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
-import { db, projectsTable, sessionsTable, entriesTable } from "@workspace/db";
+import { eq, sql, desc } from "drizzle-orm";
+import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable } from "@workspace/db";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -8,6 +8,9 @@ import {
   UpdateProjectParams,
   DeleteProjectParams,
   GetProjectSummaryParams,
+  ListReadinessSnapshotsParams,
+  RecordReadinessSnapshotParams,
+  RecordReadinessSnapshotBody,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -146,6 +149,42 @@ router.get("/projects/:id/summary", async (req, res): Promise<void> => {
     parkedCount: parkedCountRow?.count ?? 0,
     recentMode: recentSession[0]?.mode ?? null,
   });
+});
+
+router.get("/projects/:id/readiness-snapshots", async (req, res): Promise<void> => {
+  const params = ListReadinessSnapshotsParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const snapshots = await db
+    .select()
+    .from(readinessSnapshotsTable)
+    .where(eq(readinessSnapshotsTable.projectId, params.data.id))
+    .orderBy(desc(readinessSnapshotsTable.recordedAt))
+    .limit(90);
+  res.json(snapshots.map(s => ({
+    ...s,
+    recordedAt: s.recordedAt.toISOString(),
+  })));
+});
+
+router.post("/projects/:id/readiness-snapshots", async (req, res): Promise<void> => {
+  const params = RecordReadinessSnapshotParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+  const parsed = RecordReadinessSnapshotBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [snapshot] = await db
+    .insert(readinessSnapshotsTable)
+    .values({ projectId: params.data.id, score: parsed.data.score })
+    .returning();
+  res.status(201).json({ ...snapshot, recordedAt: snapshot.recordedAt.toISOString() });
 });
 
 export default router;

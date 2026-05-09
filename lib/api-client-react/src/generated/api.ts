@@ -23,6 +23,7 @@ import type {
   ChatResponse,
   CreateEntryBody,
   CreateProjectBody,
+  CreateReadinessSnapshotBody,
   CreateSessionBody,
   CreateThoughtBody,
   CreateVaultSaveBody,
@@ -34,6 +35,7 @@ import type {
   Message,
   Project,
   ProjectSummary,
+  ReadinessSnapshot,
   Session,
   SessionWithMessages,
   Thought,
@@ -1293,6 +1295,182 @@ export function useGetProjectSummary<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List readiness score snapshots for a project
+ */
+export const getListReadinessSnapshotsUrl = (id: number) => {
+  return `/api/projects/${id}/readiness-snapshots`;
+};
+
+export const listReadinessSnapshots = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ReadinessSnapshot[]> => {
+  return customFetch<ReadinessSnapshot[]>(getListReadinessSnapshotsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListReadinessSnapshotsQueryKey = (id: number) => {
+  return [`/api/projects/${id}/readiness-snapshots`] as const;
+};
+
+export const getListReadinessSnapshotsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listReadinessSnapshots>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReadinessSnapshots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListReadinessSnapshotsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listReadinessSnapshots>>
+  > = ({ signal }) => listReadinessSnapshots(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listReadinessSnapshots>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListReadinessSnapshotsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listReadinessSnapshots>>
+>;
+export type ListReadinessSnapshotsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List readiness score snapshots for a project
+ */
+
+export function useListReadinessSnapshots<
+  TData = Awaited<ReturnType<typeof listReadinessSnapshots>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listReadinessSnapshots>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListReadinessSnapshotsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Record a readiness score snapshot
+ */
+export const getRecordReadinessSnapshotUrl = (id: number) => {
+  return `/api/projects/${id}/readiness-snapshots`;
+};
+
+export const recordReadinessSnapshot = async (
+  id: number,
+  createReadinessSnapshotBody: CreateReadinessSnapshotBody,
+  options?: RequestInit,
+): Promise<ReadinessSnapshot> => {
+  return customFetch<ReadinessSnapshot>(getRecordReadinessSnapshotUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createReadinessSnapshotBody),
+  });
+};
+
+export const getRecordReadinessSnapshotMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordReadinessSnapshot>>,
+    TError,
+    { id: number; data: BodyType<CreateReadinessSnapshotBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof recordReadinessSnapshot>>,
+  TError,
+  { id: number; data: BodyType<CreateReadinessSnapshotBody> },
+  TContext
+> => {
+  const mutationKey = ["recordReadinessSnapshot"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof recordReadinessSnapshot>>,
+    { id: number; data: BodyType<CreateReadinessSnapshotBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return recordReadinessSnapshot(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RecordReadinessSnapshotMutationResult = NonNullable<
+  Awaited<ReturnType<typeof recordReadinessSnapshot>>
+>;
+export type RecordReadinessSnapshotMutationBody =
+  BodyType<CreateReadinessSnapshotBody>;
+export type RecordReadinessSnapshotMutationError = ErrorType<void>;
+
+/**
+ * @summary Record a readiness score snapshot
+ */
+export const useRecordReadinessSnapshot = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof recordReadinessSnapshot>>,
+    TError,
+    { id: number; data: BodyType<CreateReadinessSnapshotBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof recordReadinessSnapshot>>,
+  TError,
+  { id: number; data: BodyType<CreateReadinessSnapshotBody> },
+  TContext
+> => {
+  return useMutation(getRecordReadinessSnapshotMutationOptions(options));
+};
 
 /**
  * @summary List sessions for a project

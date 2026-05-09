@@ -287,6 +287,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProjectSummary"
 
+  /projects/{id}/readiness-snapshots:
+    get:
+      operationId: listReadinessSnapshots
+      tags: [projects]
+      summary: List readiness score snapshots for a project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of readiness snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReadinessSnapshot"
+    post:
+      operationId: recordReadinessSnapshot
+      tags: [projects]
+      summary: Record a readiness score snapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReadinessSnapshotBody"
+      responses:
+        "201":
+          description: Created snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessSnapshot"
+        "400":
+          description: Invalid payload
+
   /projects/{projectId}/sessions:
     get:
       operationId: listSessions
@@ -919,6 +965,33 @@ components:
         - id
         - title
         - status
+
+    ReadinessSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        score:
+          type: integer
+        recordedAt:
+          type: string
+      required:
+        - id
+        - projectId
+        - score
+        - recordedAt
+
+    CreateReadinessSnapshotBody:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+      required:
+        - score
 
     VaultSave:
       type: object
