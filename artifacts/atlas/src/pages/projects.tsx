@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { useListProjects, useCreateProject, getListProjectsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
@@ -106,10 +107,8 @@ export default function Projects() {
       {/* ── Content ── */}
       <main style={{ flex: 1, padding: "20px 16px 40px", maxWidth: 760, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
         {isLoading ? (
-          <div style={{ display: "flex", gap: 4, paddingTop: 60, justifyContent: "center" }}>
-            {[0, 1, 2].map(i => (
-              <span key={i} style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--atlas-gold)", opacity: 0.4, animation: `atlas-pulse 1.2s ${i * 0.2}s ease-in-out infinite` }} />
-            ))}
+          <div style={{ display: "flex", justifyContent: "center", paddingTop: 60 }}>
+            <LoadingSpinner size="lg" color="atlas" />
           </div>
         ) : projects?.length === 0 ? (
           <div style={{
