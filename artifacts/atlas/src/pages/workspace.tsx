@@ -4449,7 +4449,7 @@ function RightPanel({
     },
     {
       id: "map" as RightTab,
-      label: "Map",
+      label: "Flow",
       icon: (
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
           <path d="M1 3.5l4-1.5 5 2 4-1.5v9.5l-4 1.5-5-2-4 1.5V3.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
@@ -4625,7 +4625,7 @@ function MobileTabBar({
     },
     {
       id: "map",
-      label: "Map",
+      label: "Flow",
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
