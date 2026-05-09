@@ -1,0 +1,20 @@
+{
+  "name": "Axiom — Specification Engine",
+  "short_name": "Axiom",
+  "description": "Run it through Axiom before you build. The structural specification engine that eliminates the do-over tax.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0D0B09",
+  "theme_color": "#D4AF37",
+  "icons": [
+    {
+      "src": "/axiom-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities", "developer"],
+  "screenshots": []
+}
