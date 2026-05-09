@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { useAuth, useLogout } from "@/hooks/useAuth";
+import { useLocation } from "wouter";
+import { useAuth, useLogout, isSuperAdmin } from "@/hooks/useAuth";
 
 type Theme = "obsidian" | "parchment";
 
@@ -123,6 +124,8 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
   const [btnRect, setBtnRect] = useState<DOMRect | null>(null);
   const { user } = useAuth();
   const logout = useLogout();
+  const [, navigate] = useLocation();
+  const isAdmin = isSuperAdmin(user);
 
   const name: string = user?.name || user?.email?.split("@")[0] || "Account";
   const email: string = user?.email || "";
@@ -205,6 +208,20 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
             <circle cx="10" cy="7.5" r="3.2" stroke="#C9A24C" strokeWidth="1.2" />
             <path d="M3 18.5c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#C9A24C" strokeWidth="1.2" strokeLinecap="round" />
           </svg>
+        )}
+        {isAdmin && (
+          <div style={{
+            position: "absolute", bottom: -4, right: -4,
+            width: 14, height: 14, borderRadius: "50%",
+            background: "linear-gradient(135deg,#D4AF37,#A07820)",
+            border: "1.5px solid var(--atlas-bg)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 0 6px rgba(212,175,55,0.5)",
+          }}>
+            <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#0C0A09" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 20h20M4 20V10l4 4 4-8 4 8 4-4v10" />
+            </svg>
+          </div>
         )}
       </button>
 
@@ -298,6 +315,14 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
         {/* Edit profile */}
         <MenuRow icon={<UserIcon />} label="Edit profile" onClick={() => { setOpen(false); onOpenProfile?.(); }} />
 
+        {/* Admin Hub — super_admin only */}
+        {isAdmin && (
+          <>
+            <div style={{ height: 1, background: "rgba(201,162,76,0.08)", margin: "4px 6px" }} />
+            <MenuRow icon={<CrownIcon />} label="Admin Hub" badge="ADMIN" onClick={() => { setOpen(false); navigate("/admin"); }} />
+          </>
+        )}
+
         {/* Sign out */}
         <MenuRow icon={<SignOutIcon />} label="Sign out" danger onClick={() => { setOpen(false); void logout(); }} />
       </div>,
@@ -327,6 +352,14 @@ function MenuRow({ icon, label, badge, danger, disabled, onClick }: {
         <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.55, letterSpacing: "0.03em", flexShrink: 0 }}>{badge}</span>
       )}
     </button>
+  );
+}
+
+function CrownIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 20h20M4 20V10l4 4 4-8 4 8 4-4v10" />
+    </svg>
   );
 }
 

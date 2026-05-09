@@ -7,3 +7,4 @@ export * from "./messages";
 export * from "./thoughts";
 export * from "./vault";
 export * from "./users";
+export * from "./admin";

@@ -13,11 +13,13 @@ import importRouter from "./import";
 import vaultRouter from "./vault";
 import authRouter from "./auth";
 import googleAuthRouter from "./google-auth";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
 router.use(googleAuthRouter);
+router.use(adminRouter);
 router.use(healthRouter);
 router.use(projectsRouter);
 router.use(sessionsRouter);
