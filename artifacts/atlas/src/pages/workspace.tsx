@@ -5908,19 +5908,26 @@ export default function Workspace() {
           <>
             <div
               onMouseDown={(e) => { e.preventDefault(); startResize(e.clientX); }}
-              onTouchStart={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.18)"; startResize(e.touches[0].clientX); }}
+              onTouchStart={(e) => { startResize(e.touches[0].clientX); }}
               onDoubleClick={() => setChatWidthPct(45)}
               title="Drag to resize · Double-tap to reset"
               style={{
-                width: 6, flexShrink: 0, cursor: "col-resize",
-                background: "var(--atlas-border)",
+                width: 16, flexShrink: 0, cursor: "col-resize",
+                background: "transparent",
                 zIndex: 10,
                 touchAction: "none",
-                transition: "background 150ms",
+                display: "flex",
+                alignItems: "stretch",
+                justifyContent: "center",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.18)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--atlas-border)"; }}
-            />
+            >
+              <div className="atlas-resize-thread" style={{
+                width: 1,
+                background: "var(--atlas-border)",
+                transition: "background 200ms",
+                pointerEvents: "none",
+              }} />
+            </div>
             <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
               <RightPanel
                 projectId={id}
