@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react";
+import { haptics } from "@/lib/haptics";
+import { sounds } from "@/lib/sounds";
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 const LS_DEFAULT = "axiom_builder_default";
@@ -54,6 +56,7 @@ interface ProjectProfile {
   id: number;
   name: string;
   memory?: string | null;
+  builder?: string | null;
 }
 
 interface Props {
@@ -119,6 +122,10 @@ export function QuickPromptSheet({ platform, readinessScore = 0, activeProjectNa
       : `Project: ${p.name}`;
     setProjectContext(context);
     if (!showContext) setShowContext(true);
+    if (p.builder) {
+      setSelectedBuilder(p.builder);
+      lsSaveSelection(p.builder);
+    }
     setShowProfilePicker(false);
   };
 
@@ -184,7 +191,11 @@ export function QuickPromptSheet({ platform, readinessScore = 0, activeProjectNa
         mediaType: file.type, preview: dataUrl, name: file.name,
       });
     }
-    if (results.length > 0) setAttachedImages(prev => [...prev, ...results].slice(0, 10));
+    if (results.length > 0) {
+      setAttachedImages(prev => [...prev, ...results].slice(0, 10));
+      haptics.tap();
+      sounds.tap();
+    }
     e.target.value = "";
   };
 
@@ -201,16 +212,26 @@ export function QuickPromptSheet({ platform, readinessScore = 0, activeProjectNa
     const fullDescription = projectContext.trim()
       ? `${baseDescription}\n\nProject context:\n${projectContext.trim()}`
       : baseDescription;
+    const imagesPayload = attachedImages.map(img => ({
+      base64: img.base64,
+      mediaType: img.mediaType,
+    }));
     try {
       const res = await fetch("/api/quick-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: fullDescription, builder: effectiveBuilder }),
+        body: JSON.stringify({
+          description: fullDescription,
+          builder: effectiveBuilder,
+          images: imagesPayload.length > 0 ? imagesPayload : undefined,
+        }),
       });
       if (!res.ok) throw new Error("Failed");
       const text = await res.text();
       setOutput(text);
       setAttachedImages([]);
+      haptics.cardConfirmed();
+      sounds.cardConfirmed();
     } catch {
       setOutput("Failed to generate prompt. Please try again.");
     } finally {
@@ -231,6 +252,8 @@ export function QuickPromptSheet({ platform, readinessScore = 0, activeProjectNa
       document.body.removeChild(ta);
     }
     setCopied(true);
+    haptics.nodeResolved();
+    sounds.nodeResolved();
     setTimeout(() => setCopied(false), 2000);
   };
 

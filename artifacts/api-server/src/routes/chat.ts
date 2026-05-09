@@ -549,11 +549,44 @@ You are now in THINK mode. This changes how you respond:
 
 // ── Quick Prompt generation ───────────────────────────────────────────────────
 router.post("/quick-prompt", async (req, res) => {
-  const { description, builder } = req.body as { description: string; builder: string };
+  const { description, builder, images } = req.body as {
+    description: string;
+    builder: string;
+    images?: Array<{ base64: string; mediaType: string }>;
+  };
   if (!description || !builder) {
     res.status(400).json({ error: "description and builder are required" });
     return;
   }
+
+  type SupportedMimeType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+  const SUPPORTED_MIME_TYPES = new Set<string>(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+  type ContentBlock =
+    | { type: "text"; text: string }
+    | { type: "image"; source: { type: "base64"; media_type: SupportedMimeType; data: string } };
+
+  const userContent: ContentBlock[] = [];
+
+  if (images && images.length > 0) {
+    const unsupported = images.find(img => !SUPPORTED_MIME_TYPES.has(img.mediaType));
+    if (unsupported) {
+      res.status(400).json({ error: `Unsupported image type: ${unsupported.mediaType}. Supported: jpeg, png, gif, webp` });
+      return;
+    }
+    for (const img of images) {
+      userContent.push({
+        type: "image",
+        source: { type: "base64", media_type: img.mediaType as SupportedMimeType, data: img.base64 },
+      });
+    }
+  }
+
+  userContent.push({
+    type: "text",
+    text: `Generate an optimized prompt for ${builder}.\n\nTask: ${description}`,
+  });
+
   try {
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
@@ -568,7 +601,7 @@ Rules:
       messages: [
         {
           role: "user",
-          content: `Generate an optimized prompt for ${builder}.\n\nTask: ${description}`,
+          content: userContent,
         },
       ],
     });
