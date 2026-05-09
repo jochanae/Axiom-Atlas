@@ -5936,54 +5936,10 @@ export default function Workspace() {
               );
             })()}
 
-            {/* Parking lot "P" badge — hidden in mobile map mode */}
-            {!(isMobile && mobileTab === "map") && (
-            <button
-              onClick={() => setLocation(`/parking?project=${id}`)}
-              title="Parking lot"
-              style={{ position: "relative", width: 28, height: 28, borderRadius: 7, background: parkedCount > 0 ? "rgba(201,162,76,0.1)" : "transparent", border: `1px solid ${parkedCount > 0 ? "rgba(201,162,76,0.35)" : "rgba(120,113,108,0.2)"}`, color: parkedCount > 0 ? "var(--atlas-gold)" : "rgba(120,113,108,0.4)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, flexShrink: 0, letterSpacing: "0.02em", transition: "all 200ms ease" }}
-            >
-              P
-              {parkedCount > 0 && (
-                <span style={{ position: "absolute", top: -5, right: -5, minWidth: 14, height: 14, borderRadius: 7, background: "var(--atlas-ember)", color: "#fff", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px", fontFamily: "var(--app-font-mono)" }}>
-                  {parkedCount}
-                </span>
-              )}
-            </button>
-            )}
+            {/* Parking Lot removed from header — lives in the Projects Drawer (Navigate → Parking Lot) */}
 
-            {/* Squircle avatar + new project button — matches /home */}
-            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-              <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
-              <button
-                title="New project"
-                disabled={createProjectMutation.isPending}
-                onClick={() => {
-                  createProjectMutation.mutate({ data: { name: "New Project" } }, {
-                    onSuccess: (p) => {
-                      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                      setLocation(`/project/${p.id}`);
-                    },
-                  });
-                }}
-                style={{
-                  width: 26, height: 26, borderRadius: "22%",
-                  border: "1px dashed rgba(212,175,55,0.45)",
-                  background: "transparent",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: createProjectMutation.isPending ? "not-allowed" : "pointer",
-                  color: "rgba(212,175,55,0.55)",
-                  fontSize: 14, lineHeight: 1, fontWeight: 300,
-                  flexShrink: 0, marginLeft: -4, position: "relative", zIndex: 1,
-                  opacity: createProjectMutation.isPending ? 0.4 : 1,
-                  transition: "all 160ms ease",
-                }}
-                onMouseEnter={(e) => { if (!createProjectMutation.isPending) { e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; e.currentTarget.style.color = "#D4AF37"; } }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; e.currentTarget.style.color = "rgba(212,175,55,0.55)"; }}
-              >
-                +
-              </button>
-            </div>
+            {/* Avatar only — New Project moved to Projects Drawer (+ next to Projects heading) */}
+            <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
           </div>
         </div>
 
