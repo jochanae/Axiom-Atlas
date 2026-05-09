@@ -12,3 +12,9 @@ id = "mKOB5Pbu5Vo_g0V6vVvpX"
 uri = "file://.local/axiom-lovable-spec.md"
 type = "text"
 title = "Axiom — Lovable Build Spec"
+
+[[outputs]]
+id = "ozTb0hPT2_1MO66aAWRzD"
+uri = "file://screenshots/axiom-redesign-mockup.jpg"
+type = "image"
+title = "Axiom Redesign — Visual Markup (full page)"
