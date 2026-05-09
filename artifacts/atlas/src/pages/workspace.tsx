@@ -4180,7 +4180,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
           onNodesChange={setNodes}
           compact
           detectedBuilder={platform.toLowerCase()}
-          onNodeFocus={onSendIntent}
+          onNodeFocus={(text) => setIntent(text)}
         />
         {/* Platform detected badge — top-right, stacked under % READY */}
         <div style={{

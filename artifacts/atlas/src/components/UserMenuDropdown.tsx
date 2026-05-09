@@ -182,33 +182,39 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
 
   return (
     <>
-    {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+    {showShortcuts && createPortal(
+      <ShortcutsModal onClose={() => setShowShortcuts(false)} />,
+      document.body
+    )}
     <div ref={wrapRef} style={{ position: "relative" }}>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        title="Account"
-        style={{
-          width: 36, height: 36, borderRadius: "22%",
-          border: `1.5px solid ${open ? "#D4AF37" : "rgba(212,175,55,0.75)"}`,
-          background: photoUrl ? "transparent" : "#0D0B09",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          cursor: "pointer", overflow: "hidden", flexShrink: 0,
-          transition: "all 160ms ease", padding: 0,
-          position: "relative", zIndex: 2,
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#D4AF37"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.borderColor = open ? "#D4AF37" : "rgba(212,175,55,0.75)"; }}
-      >
-        {photoUrl ? (
-          <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "20%" }} />
-        ) : (
-          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden>
-            <circle cx="10" cy="7.5" r="3.2" stroke="#C9A24C" strokeWidth="1.2" />
-            <path d="M3 18.5c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#C9A24C" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-        )}
+      {/* Outer wrapper: overflow visible so crown badge isn't clipped */}
+      <div style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          title="Account"
+          style={{
+            width: 36, height: 36, borderRadius: "22%",
+            border: `1.5px solid ${open ? "#D4AF37" : "rgba(212,175,55,0.75)"}`,
+            background: photoUrl ? "transparent" : "#0D0B09",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", overflow: "hidden", flexShrink: 0,
+            transition: "all 160ms ease", padding: 0,
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#D4AF37"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = open ? "#D4AF37" : "rgba(212,175,55,0.75)"; }}
+        >
+          {photoUrl ? (
+            <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "20%" }} />
+          ) : (
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden>
+              <circle cx="10" cy="7.5" r="3.2" stroke="#C9A24C" strokeWidth="1.2" />
+              <path d="M3 18.5c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke="#C9A24C" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
+        {/* Crown badge sits outside the button so it isn't clipped by overflow:hidden */}
         {isAdmin && (
           <div style={{
             position: "absolute", bottom: -4, right: -4,
@@ -217,13 +223,15 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
             border: "1.5px solid var(--atlas-bg)",
             display: "flex", alignItems: "center", justifyContent: "center",
             boxShadow: "0 0 6px rgba(212,175,55,0.5)",
+            pointerEvents: "none",
+            zIndex: 3,
           }}>
             <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#0C0A09" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 20h20M4 20V10l4 4 4-8 4 8 4-4v10" />
             </svg>
           </div>
         )}
-      </button>
+      </div>
 
       <style>{`
         @keyframes atlas-menu-in {
