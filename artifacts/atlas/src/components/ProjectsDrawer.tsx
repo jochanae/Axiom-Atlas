@@ -24,6 +24,9 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
   const [, setLocation] = useLocation();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(false);
+  const userPhoto: string = (() => {
+    try { const r = localStorage.getItem("atlas-user-profile"); return r ? (JSON.parse(r).photoUrl ?? "") : ""; } catch { return ""; }
+  })();
 
   const navigate = (path: string) => { setLocation(path); onClose(); };
 
@@ -193,12 +196,16 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
           }}>
             <div style={{
               width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-              background: "rgba(201,162,76,0.12)", border: "1px solid rgba(201,162,76,0.2)",
+              background: userPhoto ? "transparent" : "rgba(201,162,76,0.12)",
+              border: "1px solid rgba(201,162,76,0.2)",
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 11, fontWeight: 600, color: "var(--atlas-gold)",
-              fontFamily: "var(--app-font-mono)",
+              fontFamily: "var(--app-font-mono)", overflow: "hidden",
             }}>
-              {userLabel[0]?.toUpperCase()}
+              {userPhoto
+                ? <img src={userPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : userLabel?.[0]?.toUpperCase()
+              }
             </div>
             <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {userLabel}

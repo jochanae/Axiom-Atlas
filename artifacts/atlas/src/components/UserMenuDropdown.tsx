@@ -126,7 +126,9 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
 
   const name: string = user?.name || user?.email?.split("@")[0] || "Account";
   const email: string = user?.email || "";
-  const photoUrl: string = user?.avatarUrl || "";
+  const photoUrl: string = (() => {
+    try { const r = localStorage.getItem("atlas-user-profile"); return r ? (JSON.parse(r).photoUrl ?? "") : ""; } catch { return ""; }
+  })() || user?.avatarUrl || "";
 
   const openShortcuts = useCallback(() => {
     setOpen(false);
