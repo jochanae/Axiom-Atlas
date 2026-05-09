@@ -23,6 +23,7 @@ import Privacy from "./pages/privacy";
 import Help from "./pages/help";
 import Vault from "./pages/vault";
 import Admin from "./pages/admin";
+import Dashboard from "./pages/dashboard";
 import ResetPassword from "./pages/reset-password";
 
 // ── Global 401 interceptor ────────────────────────────────────────────────────
@@ -118,6 +119,7 @@ function Router() {
       <Route path="/help" component={Help} />
       <Route path="/vault" component={Vault} />
       <Route path="/admin" component={Admin} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route component={NotFound} />
     </Switch>
   );
