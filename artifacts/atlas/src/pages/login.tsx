@@ -62,12 +62,13 @@ export default function Login() {
       minHeight: "100dvh",
       width: "100%",
       display: "flex",
-      alignItems: "center",
+      alignItems: "flex-start",
       justifyContent: "center",
       background: "var(--atlas-bg)",
-      padding: "20px 16px",
+      padding: "40px 16px 40px",
       position: "relative",
-      overflow: "hidden",
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch",
     }}>
 
       {/* Background ambient glow */}
