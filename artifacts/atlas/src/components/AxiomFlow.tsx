@@ -15,7 +15,17 @@ export interface ArchNode {
   details?: string;
   meta?: FlowNodeMeta;
   question?: string;
+  strategicAnswer?: string;
 }
+
+export function isNodeDefined(node: ArchNode): boolean {
+  return Boolean(node.strategicAnswer && node.strategicAnswer.trim().length > 0);
+}
+
+// Per-node persisted state shape. Back-compat: legacy DB rows store a bare
+// boolean per id; we read both shapes and always write the object form.
+export type PersistedNodeState = boolean | { resolved: boolean; strategicAnswer?: string };
+export type NodeStateMap = Record<string, PersistedNodeState>;
 
 export interface ArchEdge {
   id: string;
@@ -180,9 +190,10 @@ interface AxiomFlowProps {
   onNodeFocus?: (text: string) => void;
   atmosphere?: string;
   detectedBuilder?: string;
-  initialNodeState?: Record<string, boolean> | null;
+  initialNodeState?: NodeStateMap | null;
   pendingNodes?: ArchNode[];
   onPendingConsumed?: () => void;
+  onUnansweredQuestionOpen?: (payload: { node: ArchNode; mirror: string }) => void;
 }
 
 export function AxiomFlow({
@@ -195,21 +206,30 @@ export function AxiomFlow({
   detectedBuilder: _detectedBuilder,
   pendingNodes,
   onPendingConsumed,
+  onUnansweredQuestionOpen,
 }: AxiomFlowProps) {
   const storageKey = `${BASE_STORAGE_KEY}${projectId ? `-${projectId}` : ""}`;
   const isMobile = window.innerWidth < 768;
   const [nodes, setNodes] = useState<ArchNode[]>(() => loadNodes(storageKey));
   const [edges, setEdges] = useState<ArchEdge[]>(() => loadEdges(storageKey));
 
-  // Sync resolved states from DB on first load
+  // Sync resolved + strategicAnswer from DB on first load. Accepts both the
+  // legacy `Record<id, boolean>` shape and the new `{ resolved, strategicAnswer }` shape.
   const dbSyncedRef = useRef(false);
   useEffect(() => {
     if (dbSyncedRef.current || !initialNodeState) return;
     dbSyncedRef.current = true;
-    setNodes(prev => prev.map(n => ({
-      ...n,
-      resolved: initialNodeState[n.id] !== undefined ? initialNodeState[n.id] : n.resolved,
-    })));
+    setNodes(prev => prev.map(n => {
+      const raw = initialNodeState[n.id];
+      if (raw === undefined) return n;
+      if (typeof raw === "boolean") return { ...n, resolved: raw };
+      const next: ArchNode = { ...n, resolved: Boolean(raw.resolved) };
+      if (typeof raw.strategicAnswer === "string" && raw.strategicAnswer.trim().length > 0) {
+        next.strategicAnswer = raw.strategicAnswer;
+        next.resolved = true;
+      }
+      return next;
+    }));
   }, [initialNodeState]);
 
   // Track newly-added node IDs for fly-in animation
@@ -399,6 +419,10 @@ export function AxiomFlow({
     }
   }, [resetView]);
 
+  // Track last-mirrored node so we don't spam the chat with duplicates on
+  // repeated taps of the same unanswered node.
+  const lastMirroredRef = useRef<string | null>(null);
+
   const handleNodeTap = useCallback((nodeId: string, e: React.MouseEvent | React.TouchEvent) => {
     dragState.current.lastNodeTapTime = Date.now();
     dragState.current.dragging = false;
@@ -411,20 +435,49 @@ export function AxiomFlow({
       } else {
         setActiveCardNodeId(nodeId);
         const node = nodes.find(n => n.id === nodeId);
-        if (node && onNodeFocus) {
-          onNodeFocus(getPivotQuestion(node));
+        if (node) {
+          const question = getPivotQuestion(node);
+          if (onNodeFocus) onNodeFocus(question);
+          // Goal re-anchor: tapping the goal recenters the map.
+          if (node.type === "goal") {
+            requestAnimationFrame(() => fitMap());
+          }
+          // Chat mirror — only for unanswered nodes, debounced per-node.
+          if (!isNodeDefined(node) && onUnansweredQuestionOpen && lastMirroredRef.current !== nodeId) {
+            lastMirroredRef.current = nodeId;
+            onUnansweredQuestionOpen({
+              node,
+              mirror: `🜸 ${node.label} — ${question}`,
+            });
+          }
         }
       }
     }
-  }, [activeCardNodeId, nodes, onNodeFocus]);
+  }, [activeCardNodeId, nodes, onNodeFocus, onUnansweredQuestionOpen, fitMap]);
 
-  const handleToggleResolved = useCallback((nodeId: string) => {
+  const handleLockInAnswer = useCallback((nodeId: string, answer: string) => {
+    const trimmed = answer.trim();
+    if (!trimmed) return;
+    let lockedLabel = "";
     setNodes(prev => prev.map(n => {
       if (n.id !== nodeId) return n;
-      const next = { ...n, resolved: !n.resolved };
-      if (next.resolved) { haptics.nodeResolved(); sounds.nodeResolved(); }
-      return next;
+      lockedLabel = n.label;
+      return { ...n, strategicAnswer: trimmed, resolved: true };
     }));
+    haptics.nodeResolved();
+    sounds.nodeResolved();
+    toast(`${lockedLabel || "Node"} defined`, {
+      duration: 1600,
+      style: {
+        color: "#0D0B09",
+        background: "#D4AF37",
+        border: "1px solid rgba(201,162,76,0.6)",
+        fontWeight: 700,
+        letterSpacing: "0.04em",
+      },
+    });
+    // Reset mirror tracker so re-tap after answer is treated fresh.
+    if (lastMirroredRef.current === nodeId) lastMirroredRef.current = null;
     setActiveCardNodeId(null);
   }, []);
 
@@ -596,20 +649,12 @@ export function AxiomFlow({
             </div>
           )}
 
-          {/* Resolved toggle */}
-          <button
-            onClick={() => handleToggleResolved(activeCardNode.id)}
-            style={{
-              width: "100%", padding: "7px 10px", borderRadius: 7,
-              background: activeCardNode.resolved ? "rgba(120,113,108,0.10)" : "rgba(212,175,55,0.16)",
-              border: `1px solid ${activeCardNode.resolved ? "rgba(120,113,108,0.28)" : "rgba(212,175,55,0.45)"}`,
-              color: activeCardNode.resolved ? "rgba(120,113,108,0.65)" : "#D4AF37",
-              fontSize: 11, fontWeight: 700, cursor: "pointer",
-              fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em",
-            }}
-          >
-            {activeCardNode.resolved ? "○ Mark unresolved" : "✓ Mark resolved"}
-          </button>
+          {/* Lock In Answer — replaces the legacy Mark resolved toggle */}
+          <AnswerCapture
+            key={activeCardNode.id}
+            node={activeCardNode}
+            onLockIn={(answer) => handleLockInAnswer(activeCardNode.id, answer)}
+          />
         </div>
       )}
 
@@ -645,7 +690,12 @@ interface NodeVisual {
 }
 
 function getNodeVisual(node: ArchNode): NodeVisual {
-  const resolved = node.resolved;
+  // "defined" = a strategicAnswer is locked in. This is the only state that
+  // earns the steady gold treatment (gold pulse / no animation needed since the
+  // node now owns truth). Kind-set-but-unanswered nodes keep the amber pulse
+  // until their answer is captured. Blockers stay ember static and never pulse.
+  const defined = isNodeDefined(node);
+  const resolved = defined || node.resolved;
 
   if (node.type === "goal") {
     return {
@@ -832,6 +882,7 @@ function FlowNodeComponent({
 }) {
   const v = getNodeVisual(node);
   const icon = getNodeIcon(node);
+  const defined = isNodeDefined(node);
 
   // Center-origin fly-in: translate from goal position to node position
   const flyDx = newlyAdded ? `${goalX - node.x}px` : "0px";
@@ -882,6 +933,101 @@ function FlowNodeComponent({
       }}>
         {node.label}
       </span>
+      {defined && (
+        <span style={{
+          fontSize: 7.5,
+          fontWeight: 700,
+          letterSpacing: "0.18em",
+          color: "rgba(212,175,55,0.78)",
+          fontFamily: "var(--app-font-mono)",
+          textTransform: "uppercase",
+          marginTop: -2,
+        }}>
+          DEFINED
+        </span>
+      )}
     </button>
+  );
+}
+
+// ── AnswerCapture: textarea + Lock In Answer button ──────────────────────────
+function AnswerCapture({
+  node,
+  onLockIn,
+}: {
+  node: ArchNode;
+  onLockIn: (answer: string) => void;
+}) {
+  const [draft, setDraft] = useState<string>(node.strategicAnswer ?? "");
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const defined = isNodeDefined(node);
+  const trimmed = draft.trim();
+  const canSubmit = trimmed.length > 0 && trimmed !== (node.strategicAnswer ?? "").trim();
+
+  useEffect(() => {
+    // Auto-focus the textarea so the user can start typing immediately.
+    const t = setTimeout(() => taRef.current?.focus(), 30);
+    return () => clearTimeout(t);
+  }, []);
+
+  const submit = () => { if (canSubmit) onLockIn(draft); };
+
+  return (
+    <div>
+      {defined && (
+        <div style={{
+          fontSize: 8.5, fontWeight: 700, letterSpacing: "0.18em",
+          color: "rgba(212,175,55,0.85)", fontFamily: "var(--app-font-mono)",
+          marginBottom: 6,
+        }}>
+          ◆ DEFINED — EDIT TO REPLACE
+        </div>
+      )}
+      <textarea
+        ref={taRef}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        placeholder="Lock in your answer to this question…"
+        rows={3}
+        style={{
+          width: "100%",
+          background: "rgba(12,10,9,0.85)",
+          border: "1px solid rgba(212,175,55,0.28)",
+          borderRadius: 7,
+          padding: "8px 10px",
+          color: "var(--atlas-fg, #E7E5E4)",
+          fontSize: 11.5,
+          lineHeight: 1.5,
+          fontFamily: "inherit",
+          resize: "vertical",
+          outline: "none",
+          marginBottom: 8,
+          boxSizing: "border-box",
+        }}
+      />
+      <button
+        onClick={submit}
+        disabled={!canSubmit}
+        style={{
+          width: "100%", padding: "8px 10px", borderRadius: 7,
+          background: canSubmit ? "rgba(212,175,55,0.20)" : "rgba(120,113,108,0.08)",
+          border: `1px solid ${canSubmit ? "rgba(212,175,55,0.55)" : "rgba(120,113,108,0.22)"}`,
+          color: canSubmit ? "#D4AF37" : "rgba(120,113,108,0.55)",
+          fontSize: 11, fontWeight: 700,
+          cursor: canSubmit ? "pointer" : "not-allowed",
+          fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+          textTransform: "uppercase",
+          transition: "background 200ms ease, border-color 200ms ease",
+        }}
+      >
+        ⌘↵ Lock In Answer
+      </button>
+    </div>
   );
 }
