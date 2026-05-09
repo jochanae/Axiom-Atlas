@@ -4268,10 +4268,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
   const handleSend = useCallback(() => {
     if (!intent.trim()) return;
     onSendIntent?.(intent.trim());
-    setIntent("");
+    setSignals(prev => prev.map((s, i) => i === activeSignalIdx ? "" : s));
     setSentFlash(true);
     setTimeout(() => setSentFlash(false), 1400);
-  }, [intent, onSendIntent]);
+  }, [intent, onSendIntent, activeSignalIdx]);
 
   const addSignal = () => {
     setSignals(prev => [...prev, ""]);
@@ -4345,12 +4345,12 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         <button
           onClick={() => setShowChat(v => !v)}
           style={{
-            background: "none", border: "1px solid rgba(212,175,55,0.18)",
+            background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.28)",
             borderRadius: 5, padding: "2px 9px", cursor: "pointer",
-            color: "rgba(212,175,55,0.55)", fontSize: 9,
+            color: "rgba(212,175,55,0.78)", fontSize: 9,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           }}>
-          {showChat ? "⛶" : "⊠"}
+          {showChat ? "⛶ Fullscreen" : "⊠ Restore"}
         </button>
       </div>
 
