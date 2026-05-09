@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 import {
   LineChart,
   Line,
@@ -7,264 +8,248 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Area,
+  AreaChart,
 } from "recharts";
-import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { StatCard } from "@/components/stat-card";
+import { useLocation } from "wouter";
 
-// ── Mock data ──────────────────────────────────────────────────────────────────
-const generateData = () => [
-  { day: "Mon", productivity: 62 + Math.floor(Math.random() * 10) },
-  { day: "Tue", productivity: 75 + Math.floor(Math.random() * 10) },
-  { day: "Wed", productivity: 68 + Math.floor(Math.random() * 10) },
-  { day: "Thu", productivity: 84 + Math.floor(Math.random() * 10) },
-  { day: "Fri", productivity: 79 + Math.floor(Math.random() * 10) },
-  { day: "Sat", productivity: 55 + Math.floor(Math.random() * 10) },
-  { day: "Sun", productivity: 91 + Math.floor(Math.random() * 10) },
+const BASE_DATA = [
+  { day: "Mon", score: 62, tasks: 8 },
+  { day: "Tue", score: 74, tasks: 11 },
+  { day: "Wed", score: 69, tasks: 9 },
+  { day: "Thu", score: 81, tasks: 14 },
+  { day: "Fri", score: 88, tasks: 16 },
+  { day: "Sat", score: 77, tasks: 12 },
+  { day: "Sun", score: 91, tasks: 18 },
 ];
 
-// ── Stat cards config ─────────────────────────────────────────────────────────
-const STATS = [
-  { label: "Tasks Completed", value: "128", delta: "+12%", up: true },
-  { label: "Focus Hours", value: "34.5h", delta: "+8%", up: true },
-  { label: "Blockers Logged", value: "4", delta: "-2", up: false },
-  { label: "Team Velocity", value: "92", delta: "+5%", up: true },
-];
+function randomize(data: typeof BASE_DATA) {
+  return data.map((d) => ({
+    ...d,
+    score: Math.max(40, Math.min(99, d.score + Math.floor((Math.random() - 0.5) * 20))),
+    tasks: Math.max(4, d.tasks + Math.floor((Math.random() - 0.5) * 6)),
+  }));
+}
 
-// ── Animation variants ────────────────────────────────────────────────────────
-const containerVariants = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.12 },
-  },
-};
-
-const springIn = {
-  hidden: { opacity: 0, y: 32, scale: 0.96 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: { type: "spring", stiffness: 260, damping: 22 },
-  },
-};
-
-// ── Custom tooltip for the chart ──────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
     <div
       style={{
-        background: "rgba(15,15,20,0.92)",
-        border: "1px solid rgba(139,92,246,0.4)",
+        background: "rgba(10,10,15,0.92)",
+        border: "1px solid rgba(201,162,76,0.3)",
         borderRadius: 10,
-        padding: "10px 16px",
-        backdropFilter: "blur(8px)",
+        padding: "10px 14px",
+        backdropFilter: "blur(12px)",
       }}
     >
-      <p style={{ color: "#a78bfa", fontWeight: 600, margin: 0 }}>{label}</p>
-      <p style={{ color: "#e2e8f0", margin: "4px 0 0" }}>
-        {payload[0].value}
-        <span style={{ color: "#64748b", fontSize: 12 }}> pts</span>
-      </p>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginBottom: 4, fontFamily: "monospace" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: "#C9A24C", lineHeight: 1 }}>
+        {payload[0]?.value}
+      </div>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>{payload[0]?.name}</div>
     </div>
   );
 };
 
-// ── Main page ─────────────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const [data, setData] = useState(generateData());
-  const [key, setKey] = useState(0); // force re-animation on refresh
+  const [, setLocation] = useLocation();
+  const [data, setData] = useState(BASE_DATA);
+  const [refreshing, setRefreshing] = useState(false);
+  const [key, setKey] = useState(0);
+
+  const stats = {
+    score: data[data.length - 1].score,
+    tasks: data.reduce((s, d) => s + d.tasks, 0),
+    focusHours: Math.round(data.reduce((s, d) => s + d.tasks * 0.72, 0) * 10) / 10,
+    streak: 7,
+  };
 
   const handleRefresh = () => {
-    setData(generateData());
-    setKey((k) => k + 1);
-    toast.success("Data refreshed", {
-      description: "Productivity trend updated with latest metrics.",
-      style: {
-        background: "rgba(15,15,20,0.95)",
-        border: "1px solid rgba(139,92,246,0.5)",
-        color: "#e2e8f0",
-      },
-    });
+    setRefreshing(true);
+    setTimeout(() => {
+      const next = randomize(BASE_DATA);
+      setData(next);
+      setKey((k) => k + 1);
+      setRefreshing(false);
+      toast.success("Data refreshed", {
+        description: `Productivity score updated to ${next[next.length - 1].score}`,
+        duration: 3500,
+      });
+    }, 600);
   };
 
   return (
-    <div style={styles.page}>
-      {/* ── Header ── */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
+    <div
+      style={{
+        minHeight: "100dvh",
+        background: "#0a0a0f",
+        color: "#fff",
+        fontFamily: "var(--app-font-sans, sans-serif)",
+        paddingBottom: 48,
+      }}
+    >
+      {/* Header */}
+      <motion.header
+        initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 200, damping: 20 }}
-        style={styles.header}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "20px 28px",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          position: "sticky",
+          top: 0,
+          background: "rgba(10,10,15,0.88)",
+          backdropFilter: "blur(16px)",
+          zIndex: 10,
+        }}
       >
-        <div>
-          <h1 style={styles.title}>Performance Dashboard</h1>
-          <p style={styles.subtitle}>Weekly productivity overview</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <button
+            onClick={() => setLocation("/home")}
+            style={{
+              background: "transparent",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 8,
+              color: "rgba(255,255,255,0.5)",
+              cursor: "pointer",
+              padding: "6px 12px",
+              fontSize: 12,
+              fontFamily: "inherit",
+              transition: "all 160ms",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)"; e.currentTarget.style.color = "#C9A24C"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
+          >
+            ← Back
+          </button>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>
+              Performance Dashboard
+            </div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "monospace", marginTop: 1 }}>
+              7-DAY PRODUCTIVITY OVERVIEW
+            </div>
+          </div>
         </div>
-        <button onClick={handleRefresh} style={styles.refreshBtn}>
-          ↻ Refresh Data
-        </button>
-      </motion.div>
 
-      {/* ── Stat cards ── */}
-      <motion.div
-        key={`cards-${key}`}
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        style={styles.cardGrid}
-      >
-        {STATS.map((stat) => (
-          <motion.div key={stat.label} variants={springIn} style={styles.card}>
-            <p style={styles.cardLabel}>{stat.label}</p>
-            <p style={styles.cardValue}>{stat.value}</p>
-            <span
-              style={{
-                ...styles.cardDelta,
-                color: stat.up ? "#34d399" : "#f87171",
-              }}
-            >
-              {stat.delta}
-            </span>
-          </motion.div>
-        ))}
-      </motion.div>
+        <motion.button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          whileTap={{ scale: 0.96 }}
+          style={{
+            background: "rgba(201,162,76,0.12)",
+            border: "1px solid rgba(201,162,76,0.4)",
+            borderRadius: 10,
+            color: "#C9A24C",
+            cursor: refreshing ? "not-allowed" : "pointer",
+            padding: "9px 20px",
+            fontSize: 13,
+            fontWeight: 600,
+            fontFamily: "inherit",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            opacity: refreshing ? 0.6 : 1,
+            transition: "all 200ms",
+          }}
+        >
+          <span style={{ display: "inline-block", animation: refreshing ? "spin 0.7s linear infinite" : "none" }}>↻</span>
+          {refreshing ? "Refreshing…" : "Refresh Data"}
+        </motion.button>
+      </motion.header>
 
-      {/* ── Chart ── */}
-      <motion.div
-        key={`chart-${key}`}
-        variants={springIn}
-        initial="hidden"
-        animate="visible"
-        style={styles.chartCard}
-      >
-        <p style={styles.chartTitle}>Productivity Trend</p>
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={data} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-            <defs>
-              <linearGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#8b5cf6" />
-                <stop offset="100%" stopColor="#06b6d4" />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="rgba(255,255,255,0.05)"
-            />
-            <XAxis
-              dataKey="day"
-              tick={{ fill: "#64748b", fontSize: 13 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              domain={[40, 100]}
-              tick={{ fill: "#64748b", fontSize: 13 }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Line
-              type="monotone"
-              dataKey="productivity"
-              stroke="url(#lineGradient)"
-              strokeWidth={3}
-              dot={{ r: 5, fill: "#8b5cf6", strokeWidth: 2, stroke: "#1e1e2e" }}
-              activeDot={{ r: 7, fill: "#a78bfa" }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </motion.div>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px 0" }}>
+        {/* Stat cards */}
+        <motion.div
+          key={`cards-${key}`}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+            gap: 16,
+            marginBottom: 32,
+          }}
+        >
+          <StatCard index={0} label="Productivity Score" value={stats.score} sub="↑ 4pts from last week" accent="#C9A24C" />
+          <StatCard index={1} label="Tasks Completed" value={stats.tasks} sub="across 7 days" accent="#6EE7B7" />
+          <StatCard index={2} label="Focus Hours" value={stats.focusHours} sub="deep work logged" accent="#818CF8" />
+          <StatCard index={3} label="Day Streak" value={`${stats.streak}🔥`} sub="consecutive active days" accent="#F97316" />
+        </motion.div>
+
+        {/* Productivity trend chart */}
+        <motion.div
+          key={`chart-${key}`}
+          initial={{ opacity: 0, y: 32 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 200, damping: 26, delay: 0.35 }}
+          style={{
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: 20,
+            padding: "28px 24px 20px",
+            backdropFilter: "blur(12px)",
+            marginBottom: 20,
+          }}
+        >
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Productivity Trend</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 3, fontFamily: "monospace" }}>SCORE / DAY — CURRENT WEEK</div>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={data} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+              <defs>
+                <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#C9A24C" stopOpacity={0.28} />
+                  <stop offset="100%" stopColor="#C9A24C" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 6" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis dataKey="day" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
+              <YAxis domain={[40, 100]} tick={{ fill: "rgba(255,255,255,0.25)", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: "rgba(201,162,76,0.2)", strokeWidth: 1 }} />
+              <Area type="monotone" dataKey="score" stroke="#C9A24C" strokeWidth={2.5} fill="url(#goldGrad)" dot={{ r: 4, fill: "#C9A24C", strokeWidth: 0 }} activeDot={{ r: 6, fill: "#C9A24C", stroke: "rgba(201,162,76,0.3)", strokeWidth: 6 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </motion.div>
+
+        {/* Task volume chart */}
+        <motion.div
+          key={`chart2-${key}`}
+          initial={{ opacity: 0, y: 32 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 200, damping: 26, delay: 0.48 }}
+          style={{
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: 20,
+            padding: "28px 24px 20px",
+            backdropFilter: "blur(12px)",
+          }}
+        >
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>Daily Task Volume</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 3, fontFamily: "monospace" }}>TASKS COMPLETED / DAY</div>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={data} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 6" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis dataKey="day" tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 11, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "rgba(255,255,255,0.25)", fontSize: 10, fontFamily: "monospace" }} axisLine={false} tickLine={false} />
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: "rgba(110,231,183,0.2)", strokeWidth: 1 }} />
+              <Line type="monotone" dataKey="tasks" stroke="#6EE7B7" strokeWidth={2.5} dot={{ r: 4, fill: "#6EE7B7", strokeWidth: 0 }} activeDot={{ r: 6, fill: "#6EE7B7", stroke: "rgba(110,231,183,0.3)", strokeWidth: 6 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </motion.div>
+      </div>
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    background: "linear-gradient(135deg, #0a0a0f 0%, #0f0f1a 50%, #0a0a0f 100%)",
-    padding: "40px 32px",
-    fontFamily: "'Inter', 'SF Pro Display', system-ui, sans-serif",
-    maxWidth: 1100,
-    margin: "0 auto",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 40,
-  },
-  title: {
-    margin: 0,
-    fontSize: 28,
-    fontWeight: 700,
-    color: "#f1f5f9",
-    letterSpacing: "-0.5px",
-  },
-  subtitle: {
-    margin: "4px 0 0",
-    fontSize: 14,
-    color: "#475569",
-  },
-  refreshBtn: {
-    padding: "10px 22px",
-    borderRadius: 10,
-    border: "1px solid rgba(139,92,246,0.5)",
-    background: "rgba(139,92,246,0.12)",
-    color: "#a78bfa",
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-    letterSpacing: "0.3px",
-    transition: "all 0.2s ease",
-  },
-  cardGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: 20,
-    marginBottom: 28,
-  },
-  card: {
-    background:
-      "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
-    border: "1px solid rgba(255,255,255,0.07)",
-    borderRadius: 16,
-    padding: "24px 28px",
-    backdropFilter: "blur(12px)",
-  },
-  cardLabel: {
-    margin: 0,
-    fontSize: 13,
-    color: "#475569",
-    fontWeight: 500,
-    textTransform: "uppercase",
-    letterSpacing: "0.8px",
-  },
-  cardValue: {
-    margin: "10px 0 6px",
-    fontSize: 32,
-    fontWeight: 700,
-    color: "#f1f5f9",
-    letterSpacing: "-1px",
-  },
-  cardDelta: {
-    fontSize: 13,
-    fontWeight: 600,
-  },
-  chartCard: {
-    background:
-      "linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)",
-    border: "1px solid rgba(255,255,255,0.07)",
-    borderRadius: 16,
-    padding: "28px 24px 16px",
-    backdropFilter: "blur(12px)",
-  },
-  chartTitle: {
-    margin: "0 0 20px",
-    fontSize: 16,
-    fontWeight: 600,
-    color: "#cbd5e1",
-    letterSpacing: "-0.2px",
-  },
-};
