@@ -12,7 +12,9 @@ import type { Project } from "@workspace/api-client-react";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
+import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
+import { useAuth, isSuperAdmin } from "../hooks/useAuth";
 
 const PLACEHOLDERS = [
   "What are we actually trying to solve here…",
@@ -549,7 +551,9 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const { user: authUser } = useAuth();
   const [showProfile, setShowProfile] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showProjectsSheet, setShowProjectsSheet] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -710,22 +714,26 @@ export default function Home() {
         {/* Right side: avatar pair */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ display: "none" }} />
-          {/* Avatar + new-project as overlapping pair (avatar in front) */}
+          {/* Avatar + invite/new-project as overlapping pair (avatar in front) */}
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
             <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
             <button
-              title="New project"
+              title={isSuperAdmin(authUser) ? "Invite someone" : "New project"}
               disabled={loading}
               onClick={() => {
-                createProject.mutate(
-                  { data: { name: "New Project" } },
-                  {
-                    onSuccess: (p) => {
-                      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                      setLocation(`/project/${p.id}`);
-                    },
-                  }
-                );
+                if (isSuperAdmin(authUser)) {
+                  setShowInvite(true);
+                } else {
+                  createProject.mutate(
+                    { data: { name: "New Project" } },
+                    {
+                      onSuccess: (p) => {
+                        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                        setLocation(`/project/${p.id}`);
+                      },
+                    }
+                  );
+                }
               }}
               style={{
                 width: 26, height: 26, borderRadius: "22%",
@@ -1071,6 +1079,7 @@ export default function Home() {
         />
       </div>
 
+      {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       {showProfile && <HomeProfileSheet onClose={() => setShowProfile(false)} />}
 
       {showProjectsSheet && (
