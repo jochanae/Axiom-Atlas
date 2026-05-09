@@ -196,14 +196,24 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
           title="Account"
           style={{
             width: 36, height: 36, borderRadius: "22%",
-            border: `1.5px solid ${open ? "#D4AF37" : "rgba(212,175,55,0.75)"}`,
+            borderTop: "none",
+            borderBottom: "none",
+            borderLeft: `2px solid ${open ? "#D4AF37" : "rgba(212,175,55,0.65)"}`,
+            borderRight: `2px solid ${open ? "#D4AF37" : "rgba(212,175,55,0.65)"}`,
             background: photoUrl ? "transparent" : "#0D0B09",
             display: "flex", alignItems: "center", justifyContent: "center",
             cursor: "pointer", overflow: "hidden", flexShrink: 0,
-            transition: "all 160ms ease", padding: 0,
+            transition: "border-color 160ms ease", padding: 0,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#D4AF37"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = open ? "#D4AF37" : "rgba(212,175,55,0.75)"; }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderLeftColor = "#D4AF37";
+            e.currentTarget.style.borderRightColor = "#D4AF37";
+          }}
+          onMouseLeave={(e) => {
+            const c = open ? "#D4AF37" : "rgba(212,175,55,0.65)";
+            e.currentTarget.style.borderLeftColor = c;
+            e.currentTarget.style.borderRightColor = c;
+          }}
         >
           {photoUrl ? (
             <img src={photoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "20%" }} />
