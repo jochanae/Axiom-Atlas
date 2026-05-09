@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Plus, X, ChevronDown, ChevronRight, MessageSquare, BookOpen, Inbox, Feather, Hammer, Compass, ShieldCheck, Archive, LayoutDashboard } from "lucide-react";
+import { CompactReadinessRing } from "./ReadinessRing";
 
 export type DrawerProject = {
   id: number;
   name: string;
   description?: string | null;
+  latestSnapshotScore?: number | null;
 };
 
 type Props = {
@@ -149,6 +151,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
                         </span>
                       )}
                     </div>
+                    <CompactReadinessRing score={p.latestSnapshotScore ?? 0} />
                   </button>
                 ))
               )}

@@ -1193,7 +1193,7 @@ export default function Home() {
       <ProjectsDrawer
         open={showDrawer}
         onClose={() => setShowDrawer(false)}
-        projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description }))}
+        projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description, latestSnapshotScore: p.latestSnapshotScore ?? null }))}
         onOpenProject={navigateToProject}
         onNewProject={() => { setShowDrawer(false); handleNewProject("New Project"); }}
         onOpenLedger={(id) => setLocation(`/ledger/${id}`)}
