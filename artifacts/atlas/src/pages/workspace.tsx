@@ -4262,15 +4262,19 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
   const [activeSignalIdx, setActiveSignalIdx] = useState(0);
   const [signalAdded, setSignalAdded] = useState(false);
   const [sentFlash, setSentFlash] = useState(false);
+  const sentFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intent = signals[activeSignalIdx] ?? "";
   const setIntent = (val: string) => setSignals(prev => prev.map((s, i) => i === activeSignalIdx ? val : s));
+
+  useEffect(() => () => { if (sentFlashTimerRef.current) clearTimeout(sentFlashTimerRef.current); }, []);
 
   const handleSend = useCallback(() => {
     if (!intent.trim()) return;
     onSendIntent?.(intent.trim());
     setSignals(prev => prev.map((s, i) => i === activeSignalIdx ? "" : s));
     setSentFlash(true);
-    setTimeout(() => setSentFlash(false), 1400);
+    if (sentFlashTimerRef.current) clearTimeout(sentFlashTimerRef.current);
+    sentFlashTimerRef.current = setTimeout(() => setSentFlash(false), 1400);
   }, [intent, onSendIntent, activeSignalIdx]);
 
   const addSignal = () => {
