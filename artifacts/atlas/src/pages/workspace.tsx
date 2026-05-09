@@ -2395,6 +2395,7 @@ function FilesTab({
   const { data: filesProject } = useGetProject(projectId, {
     query: { queryKey: getGetProjectQueryKey(projectId) },
   });
+  const { data: allProjects } = useListProjects();
 
   const getGlobalToken = () => { try { return localStorage.getItem("atlas-github-token") || null; } catch { return null; } };
   const setGlobalToken = (t: string | null) => { try { if (t) localStorage.setItem("atlas-github-token", t); else localStorage.removeItem("atlas-github-token"); } catch {} };
@@ -2402,16 +2403,33 @@ function FilesTab({
   const [tokenState, setTokenState] = useState<string | null>(() => getGlobalToken());
   const tokenSynced = useRef(false);
   useEffect(() => {
-    if (!filesProject || tokenSynced.current) return;
-    tokenSynced.current = true;
+    if (!filesProject) return;
     const globalToken = getGlobalToken();
-    const token = globalToken ?? filesProject.githubToken ?? null;
-    setTokenState(token);
-    // If the global token exists but this project doesn't have it saved yet, back-fill it
-    if (globalToken && !filesProject.githubToken) {
-      updateProject.mutate({ id: projectId, data: { githubToken: globalToken } });
+    const dbToken = filesProject.githubToken ?? null;
+
+    if (globalToken || dbToken) {
+      if (tokenSynced.current) return;
+      tokenSynced.current = true;
+      const t = globalToken ?? dbToken!;
+      setTokenState(t);
+      setGlobalToken(t);
+      // Back-fill this project if it only had the token in localStorage
+      if (!dbToken) updateProject.mutate({ id: projectId, data: { githubToken: t } });
+      return;
     }
-  }, [filesProject]);
+
+    // No token in localStorage or this project's DB — check sibling projects
+    if (!allProjects) return;
+    if (tokenSynced.current) return;
+    tokenSynced.current = true;
+    const sibling = allProjects.find((p) => p.id !== projectId && p.githubToken);
+    if (sibling?.githubToken) {
+      const t = sibling.githubToken;
+      setTokenState(t);
+      setGlobalToken(t);
+      updateProject.mutate({ id: projectId, data: { githubToken: t } });
+    }
+  }, [filesProject, allProjects]);
   const [tokenInput, setTokenInput] = useState("");
   const [tokenSaveError, setTokenSaveError] = useState<string | null>(null);
   const [repos, setRepos] = useState<GhRepo[]>([]);
@@ -2475,11 +2493,23 @@ function FilesTab({
 
   const saveToken = (t: string) => {
     setTokenSaveError(null);
-    setGlobalToken(t); // persist globally so all projects share it
+    setGlobalToken(t);
     updateProject.mutate(
       { id: projectId, data: { githubToken: t } },
       {
-        onSuccess: () => setTokenState(t),
+        onSuccess: () => {
+          setTokenState(t);
+          // Propagate token to every other project that doesn't have one yet
+          (allProjects ?? [])
+            .filter((p) => p.id !== projectId && !p.githubToken)
+            .forEach((p) => {
+              fetch(`/api/projects/${p.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ githubToken: t }),
+              }).catch(() => {});
+            });
+        },
         onError: (err: any) => {
           const msg = err?.response?.data?.error ?? err?.message ?? "Failed to save token";
           setTokenSaveError(msg);
