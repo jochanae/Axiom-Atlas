@@ -4297,17 +4297,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <style>{`
-        @keyframes map-header-pulse {
-          0%, 100% { box-shadow: 0 0 14px rgba(139, 92, 246, 0.15); border-top-color: rgba(139, 92, 246, 0.28); }
-          50% { box-shadow: 0 0 28px rgba(139, 92, 246, 0.3); border-top-color: rgba(139, 92, 246, 0.52); }
-        }
-      `}</style>
       <div style={{
-        height: 3, flexShrink: 0,
-        borderTop: "1.5px solid rgba(139, 92, 246, 0.28)",
-        boxShadow: "0 0 14px rgba(139, 92, 246, 0.15)",
-        animation: "map-header-pulse 3s ease-in-out infinite",
+        height: 1, flexShrink: 0,
+        background: "linear-gradient(to right, transparent 0%, rgba(212,175,55,0.18) 20%, rgba(212,175,55,0.38) 50%, rgba(212,175,55,0.18) 80%, transparent 100%)",
       }} />
 
       {/* Map area */}
@@ -4333,16 +4325,14 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         </div>
       </div>
 
-      {/* Toggle bar — purple glow matching header */}
-      <style>{`@keyframes toggle-bar-pulse{0%,100%{box-shadow:0 -1px 14px rgba(139,92,246,0.14),0 1px 8px rgba(139,92,246,0.08)}50%{box-shadow:0 -1px 24px rgba(139,92,246,0.28),0 1px 12px rgba(139,92,246,0.15)}}`}</style>
+      {/* Toggle bar */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "5px 12px",
-        background: "rgba(13,11,9,0.97)",
-        borderTop: "1px solid rgba(139,92,246,0.28)",
-        borderBottom: "1px solid rgba(139,92,246,0.10)",
+        background: "linear-gradient(to bottom, rgba(22,18,14,0.99), rgba(13,11,9,0.99))",
+        borderTop: "1px solid rgba(212,175,55,0.1)",
         flexShrink: 0,
-        animation: "toggle-bar-pulse 3s ease-in-out infinite",
+        boxShadow: "0 -1px 20px rgba(0,0,0,0.5)",
       }}>
         <button
           onClick={() => setShowChat(v => !v)}
@@ -5625,21 +5615,9 @@ export default function Workspace() {
     >
 
       {/* ── Header ── */}
-      <style>{`
-        @keyframes header-pulse {
-          0%, 100% {
-            box-shadow: 0 1px 18px rgba(139, 92, 246, 0.12), 0 0 0 0 rgba(139, 92, 246, 0);
-            border-bottom-color: rgba(139, 92, 246, 0.22);
-          }
-          50% {
-            box-shadow: 0 1px 32px rgba(139, 92, 246, 0.26), 0 0 40px rgba(139, 92, 246, 0.08);
-            border-bottom-color: rgba(139, 92, 246, 0.38);
-          }
-        }
-      `}</style>
-      <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(12px)" }}>
+      <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(16px)" }}>
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
-        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(139, 92, 246, 0.22)", boxShadow: "0 1px 18px rgba(139, 92, 246, 0.12)", animation: "header-pulse 3s ease-in-out infinite" }}>
+        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(212,175,55,0.12)", boxShadow: "0 1px 28px rgba(0,0,0,0.45)" }}>
 
           {/* Left: drawer button + Atlas logo → home */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
