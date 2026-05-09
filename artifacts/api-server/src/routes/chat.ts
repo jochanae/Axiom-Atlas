@@ -547,4 +547,37 @@ You are now in THINK mode. This changes how you respond:
   });
 });
 
+// ── Quick Prompt generation ───────────────────────────────────────────────────
+router.post("/quick-prompt", async (req, res) => {
+  const { description, builder } = req.body as { description: string; builder: string };
+  if (!description || !builder) {
+    res.status(400).json({ error: "description and builder are required" });
+    return;
+  }
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-5",
+      max_tokens: 2048,
+      system: `You are Axiom, a specification engine. Generate a perfectly structured, ready-to-paste prompt for ${builder}.
+
+Rules:
+- Write in clear, direct language the builder's AI will understand
+- Include all necessary context, constraints, and expected behavior  
+- Be specific: file paths, component names, exact changes
+- No preamble, no explanation, no markdown headers — ONLY the prompt text itself`,
+      messages: [
+        {
+          role: "user",
+          content: `Generate an optimized prompt for ${builder}.\n\nTask: ${description}`,
+        },
+      ],
+    });
+    const text = msg.content.find((b) => b.type === "text")?.text ?? "";
+    res.send(text);
+  } catch (err) {
+    req.log?.error(err, "quick-prompt failed");
+    res.status(500).json({ error: "Generation failed" });
+  }
+});
+
 export default router;
