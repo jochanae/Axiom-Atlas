@@ -15,6 +15,8 @@ import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
 import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
 import { useAuth, useRequireAuth, isSuperAdmin } from "../hooks/useAuth";
+import { useSubscription } from "../hooks/useSubscription";
+import { UpgradeModal } from "../components/UpgradeModal";
 
 const PLACEHOLDERS = [
   "What are we actually trying to solve here…",
@@ -570,7 +572,9 @@ export default function Home() {
   const [showInvite, setShowInvite] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showProjectsSheet, setShowProjectsSheet] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const { isFree } = useSubscription();
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -605,6 +609,30 @@ export default function Home() {
 
   const { data: projects, isLoading } = useListProjects();
   const createProject = useCreateProject();
+
+  const handleNewProject = useCallback((name = "New Project") => {
+    if (isFree && (projects?.length ?? 0) >= 1) {
+      setShowUpgrade(true);
+      return;
+    }
+    createProject.mutate(
+      { data: { name } },
+      {
+        onSuccess: (p) => {
+          queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+          setLocation(`/project/${p.id}`);
+        },
+        onError: (err: any) => {
+          const msg = extractApiErrorMessage(err);
+          if (msg?.includes("PROJECT_LIMIT_REACHED") || err?.status === 402) {
+            setShowUpgrade(true);
+          } else {
+            setCreateError(msg ?? "Failed to create project");
+          }
+        },
+      }
+    );
+  }, [isFree, projects, createProject, queryClient, setLocation]);
 
   useEffect(() => {
     try { sessionStorage.removeItem("atlas-from-landing"); } catch {}
@@ -738,15 +766,7 @@ export default function Home() {
                 if (isSuperAdmin(authUser)) {
                   setShowInvite(true);
                 } else {
-                  createProject.mutate(
-                    { data: { name: "New Project" } },
-                    {
-                      onSuccess: (p) => {
-                        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                        setLocation(`/project/${p.id}`);
-                      },
-                    }
-                  );
+                  handleNewProject("New Project");
                 }
               }}
               style={{
@@ -1095,6 +1115,7 @@ export default function Home() {
 
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       {showProfile && <HomeProfileSheet onClose={() => setShowProfile(false)} />}
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} reason="project_limit" />}
 
       {showProjectsSheet && (
         <ProjectsGridSheet
@@ -1102,10 +1123,7 @@ export default function Home() {
           onOpenProject={(id) => { setShowProjectsSheet(false); navigateToProject(id); }}
           onNewProject={() => {
             setShowProjectsSheet(false);
-            createProject.mutate(
-              { data: { name: "New Project" } },
-              { onSuccess: (p) => { queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); setLocation(`/project/${p.id}`); } }
-            );
+            handleNewProject("New Project");
           }}
           onClose={() => setShowProjectsSheet(false)}
         />
@@ -1117,7 +1135,7 @@ export default function Home() {
         onClose={() => setShowDrawer(false)}
         projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description }))}
         onOpenProject={navigateToProject}
-        onNewProject={() => { setShowDrawer(false); }}
+        onNewProject={() => { setShowDrawer(false); handleNewProject("New Project"); }}
         onOpenLedger={(id) => setLocation(`/ledger/${id}`)}
         onOpenParking={() => setLocation("/parking")}
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}

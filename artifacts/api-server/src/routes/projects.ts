@@ -27,6 +27,20 @@ router.post("/projects", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
+  // Free tier: limit to 1 project
+  const authUser = (req as any).authUser;
+  if (authUser?.subscriptionTier === "free") {
+    const existing = await db.select().from(projectsTable);
+    if (existing.length >= 1) {
+      res.status(402).json({
+        error: "Free plan is limited to 1 project.",
+        code: "PROJECT_LIMIT_REACHED",
+      });
+      return;
+    }
+  }
+
   const [project] = await db.insert(projectsTable).values(parsed.data).returning();
   res.status(201).json({
     ...project,

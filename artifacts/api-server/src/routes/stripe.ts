@@ -1,0 +1,119 @@
+import { Router } from 'express';
+import { stripeStorage } from '../stripeStorage';
+import { stripeService } from '../stripeService';
+import { requireAuth } from './auth';
+
+const router = Router();
+
+// Public: list products with prices (used on pricing page)
+router.get('/stripe/products', async (req, res) => {
+  try {
+    const rows = await stripeStorage.listProductsWithPrices();
+    const map = new Map<string, any>();
+    for (const row of rows) {
+      if (!map.has(row.product_id as string)) {
+        map.set(row.product_id as string, {
+          id: row.product_id,
+          name: row.product_name,
+          description: row.product_description,
+          metadata: row.product_metadata,
+          prices: [],
+        });
+      }
+      if (row.price_id) {
+        map.get(row.product_id as string).prices.push({
+          id: row.price_id,
+          unitAmount: row.unit_amount,
+          currency: row.currency,
+          recurring: row.recurring,
+          metadata: row.price_metadata,
+        });
+      }
+    }
+    res.json({ data: Array.from(map.values()) });
+  } catch (err: any) {
+    req.log.error({ err }, 'Failed to list products');
+    res.status(500).json({ error: 'Failed to load products' });
+  }
+});
+
+// Authenticated: get current user's subscription status
+router.get('/stripe/subscription', requireAuth, async (req: any, res) => {
+  try {
+    const user = await stripeStorage.getUser(req.authUser.id);
+    if (!user?.stripeSubscriptionId) {
+      return res.json({ subscription: null, tier: user?.subscriptionTier ?? 'free' });
+    }
+    const subscription = await stripeStorage.getSubscription(user.stripeSubscriptionId);
+    res.json({ subscription, tier: user.subscriptionTier });
+  } catch (err: any) {
+    req.log.error({ err }, 'Failed to get subscription');
+    res.status(500).json({ error: 'Failed to get subscription' });
+  }
+});
+
+// Authenticated: create checkout session
+router.post('/stripe/checkout', requireAuth, async (req: any, res) => {
+  try {
+    const { priceId } = req.body as { priceId: string };
+    if (!priceId) return res.status(400).json({ error: 'priceId required' });
+
+    let user = await stripeStorage.getUser(req.authUser.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripeService.createCustomer(user.email, user.id);
+      user = await stripeStorage.updateUserStripeInfo(user.id, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
+    const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+    const session = await stripeService.createCheckoutSession(
+      customerId!,
+      priceId,
+      `${baseUrl}/?checkout=success`,
+      `${baseUrl}/?checkout=cancel`
+    );
+
+    res.json({ url: session.url });
+  } catch (err: any) {
+    req.log.error({ err }, 'Failed to create checkout session');
+    res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+});
+
+// Authenticated: open customer billing portal
+router.post('/stripe/portal', requireAuth, async (req: any, res) => {
+  try {
+    let user = await stripeStorage.getUser(req.authUser.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripeService.createCustomer(user.email, user.id);
+      user = await stripeStorage.updateUserStripeInfo(user.id, { stripeCustomerId: customer.id });
+      customerId = customer.id;
+    }
+
+    const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
+    const portal = await stripeService.createCustomerPortalSession(customerId!, baseUrl);
+    res.json({ url: portal.url });
+  } catch (err: any) {
+    req.log.error({ err }, 'Failed to create portal session');
+    res.status(500).json({ error: 'Failed to create portal session' });
+  }
+});
+
+// Authenticated: get stripe publishable key (for frontend)
+router.get('/stripe/config', async (_req, res) => {
+  try {
+    const { getStripePublishableKey } = await import('../stripeClient');
+    const publishableKey = await getStripePublishableKey();
+    res.json({ publishableKey });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Stripe not configured' });
+  }
+});
+
+export default router;
