@@ -10,6 +10,15 @@ const FORGE_STAGES = [
   "Placing nodes...",
 ];
 
+const PLATFORMS = [
+  { id: "Replit", label: "Replit" },
+  { id: "Cursor", label: "Cursor" },
+  { id: "Lovable", label: "Lovable" },
+  { id: "Bolt", label: "Bolt" },
+  { id: "v0", label: "v0" },
+  { id: "Claude", label: "Claude" },
+];
+
 interface Props {
   platform?: string;
   readinessScore?: number;
@@ -21,15 +30,27 @@ interface Props {
 
 export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, onClose, onNodesReady }: Props) {
   const [isMobile] = useState(() => window.innerWidth < 768);
+  const [tab, setTab] = useState<"forge" | "prompt">("forge");
+
+  // Forge state
   const [transcript, setTranscript] = useState("");
   const [projectContext, setProjectContext] = useState("");
   const [showContext, setShowContext] = useState(false);
   const [isForging, setIsForging] = useState(false);
   const [stageIdx, setStageIdx] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [forgeError, setForgeError] = useState<string | null>(null);
   const stageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Quick Prompt state
+  const [selectedPlatform, setSelectedPlatform] = useState(PLATFORMS[0].id);
+  const [promptDesc, setPromptDesc] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedPrompt, setGeneratedPrompt] = useState("");
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // ── Forge logic ────────────────────────────────────────────────────────────
   const canForge = transcript.trim().length > 10 && !isForging;
 
   const startStageAnimation = () => {
@@ -51,38 +72,30 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   const handleForge = async () => {
     if (!canForge) return;
     setIsForging(true);
-    setError(null);
+    setForgeError(null);
     startStageAnimation();
-
     abortRef.current = new AbortController();
-
     try {
       const body: Record<string, unknown> = { transcript: transcript.trim(), projectId };
       if (projectContext.trim()) body.projectContext = projectContext.trim();
-
       const res = await fetch("/api/forge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: abortRef.current.signal,
         body: JSON.stringify(body),
       });
-
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || "Forge failed");
       }
-
       const data = await res.json() as { nodes: ArchNode[]; summary: string };
-
       haptics.cardConfirmed();
       sounds.cardConfirmed();
-
-      // Auto-close and immediately place nodes on map
       onNodesReady?.(data.nodes);
       onClose();
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
-      setError("The Forge couldn't process this. Try a more specific description.");
+      setForgeError("The Forge couldn't process this. Try a more specific description.");
     } finally {
       stopStageAnimation();
       setIsForging(false);
@@ -95,16 +108,64 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     setIsForging(false);
   };
 
-  const content = (
+  // ── Quick Prompt logic ─────────────────────────────────────────────────────
+  const canGenerate = promptDesc.trim().length > 5 && !isGenerating;
+
+  const handleGenerate = async () => {
+    if (!canGenerate) return;
+    setIsGenerating(true);
+    setPromptError(null);
+    setGeneratedPrompt("");
+    setCopied(false);
+    try {
+      const res = await fetch("/api/quick-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: promptDesc.trim(), builder: selectedPlatform }),
+      });
+      if (!res.ok) throw new Error("Generation failed");
+      const text = await res.text();
+      setGeneratedPrompt(text);
+    } catch {
+      setPromptError("Generation failed — try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!generatedPrompt) return;
+    await navigator.clipboard.writeText(generatedPrompt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // ── Shared styles ──────────────────────────────────────────────────────────
+  const tabBtn = (active: boolean) => ({
+    flex: 1,
+    padding: "7px 0",
+    borderRadius: 7,
+    border: "none",
+    background: active ? "rgba(212,175,55,0.14)" : "transparent",
+    color: active ? "#D4AF37" : "rgba(120,113,108,0.6)",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.12em",
+    fontFamily: "var(--app-font-mono)",
+    textTransform: "uppercase" as const,
+    cursor: "pointer",
+    transition: "all 180ms",
+  });
+
+  // ── Tab: Forge ─────────────────────────────────────────────────────────────
+  const forgeContent = (
     <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 12px", display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Explainer */}
       <div style={{ borderRadius: 10, background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.12)", padding: "12px 14px" }}>
         <p style={{ fontSize: 12, color: "rgba(212,175,55,0.75)", lineHeight: 1.6, margin: 0 }}>
           Paste a raw transcript, voice note, brain dump, or strategy doc. The Forge reads intent, extracts goals, requirements, and blockers — then places them on your Axiom Flow.
         </p>
       </div>
 
-      {/* Transcript input */}
       <div>
         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(120,113,108,0.75)", textTransform: "uppercase", marginBottom: 8, fontFamily: "var(--app-font-mono)" }}>
           Transcript / Brain Dump
@@ -133,7 +194,6 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         </div>
       </div>
 
-      {/* Optional project context */}
       <div>
         <button
           onClick={() => setShowContext(v => !v)}
@@ -154,12 +214,8 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           <div style={{ marginTop: 10 }}>
             <p style={{ fontSize: 11, color: "rgba(120,113,108,0.55)", marginBottom: 8, lineHeight: 1.5 }}>
               Give The Forge more signal — paste your current decisions, tech stack, or project goals so nodes are more precisely typed and prioritized.
-              {activeProjectName && (
-                <span style={{ color: "rgba(212,175,55,0.55)" }}> Project: <strong>{activeProjectName}</strong></span>
-              )}
-              {platform && (
-                <span style={{ color: "rgba(212,175,55,0.45)" }}> · Stack: <strong>{platform}</strong></span>
-              )}
+              {activeProjectName && <span style={{ color: "rgba(212,175,55,0.55)" }}> Project: <strong>{activeProjectName}</strong></span>}
+              {platform && <span style={{ color: "rgba(212,175,55,0.45)" }}> · Stack: <strong>{platform}</strong></span>}
             </p>
             <textarea
               value={projectContext}
@@ -182,22 +238,13 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         )}
       </div>
 
-      {/* Forge button */}
       <button
         onClick={isForging ? handleAbort : handleForge}
         style={{
           width: "100%", borderRadius: 12,
-          background: isForging
-            ? "rgba(212,175,55,0.08)"
-            : canForge
-              ? "#D4AF37"
-              : "rgba(212,175,55,0.10)",
+          background: isForging ? "rgba(212,175,55,0.08)" : canForge ? "#D4AF37" : "rgba(212,175,55,0.10)",
           padding: "14px", fontSize: 14, fontWeight: 700,
-          color: isForging
-            ? "rgba(212,175,55,0.65)"
-            : canForge
-              ? "#0D0B09"
-              : "rgba(212,175,55,0.35)",
+          color: isForging ? "rgba(212,175,55,0.65)" : canForge ? "#0D0B09" : "rgba(212,175,55,0.35)",
           border: isForging ? "1px solid rgba(212,175,55,0.25)" : "none",
           cursor: isForging || canForge ? "pointer" : "not-allowed",
           transition: "all 180ms",
@@ -206,57 +253,176 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
       >
         {isForging ? (
           <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-            <span style={{
-              display: "inline-block", width: 7, height: 7, borderRadius: "50%",
-              background: "#D4AF37",
-              animation: "forge-pulse 1.4s ease-in-out infinite",
-            }} />
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}>
-              {FORGE_STAGES[stageIdx]}
-            </span>
+            <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#D4AF37", animation: "forge-pulse 1.4s ease-in-out infinite" }} />
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}>{FORGE_STAGES[stageIdx]}</span>
           </span>
         ) : "Run The Forge →"}
       </button>
 
-      {error && (
-        <div style={{
-          borderRadius: 10, border: "1px solid rgba(239,68,68,0.3)",
-          background: "rgba(239,68,68,0.06)", padding: "12px 14px",
-          fontSize: 12, color: "rgba(239,100,100,0.9)", lineHeight: 1.5,
-        }}>
-          {error}
-          <button
-            onClick={handleForge}
-            style={{ display: "block", marginTop: 8, background: "none", border: "none", color: "rgba(212,175,55,0.75)", fontSize: 11, cursor: "pointer", padding: 0, fontWeight: 600 }}
-          >
-            Try again →
-          </button>
+      {forgeError && (
+        <div style={{ borderRadius: 10, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", padding: "12px 14px", fontSize: 12, color: "rgba(239,100,100,0.9)", lineHeight: 1.5 }}>
+          {forgeError}
+          <button onClick={handleForge} style={{ display: "block", marginTop: 8, background: "none", border: "none", color: "rgba(212,175,55,0.75)", fontSize: 11, cursor: "pointer", padding: 0, fontWeight: 600 }}>Try again →</button>
         </div>
       )}
     </div>
   );
 
-  const headerBlock = (
-    <div style={{
-      display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "12px 16px",
-      borderBottom: "1px solid rgba(212,175,55,0.10)",
-      flexShrink: 0,
-    }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.06em", fontFamily: "var(--app-font-mono)" }}>
-          THE FORGE
-        </span>
-        <span style={{ fontSize: 10, color: "rgba(120,113,108,0.6)" }}>
-          Decompose your thinking into a strategic map
-          {activeProjectName ? ` · ${activeProjectName}` : ""}
-          {readinessScore > 0 ? ` · ${readinessScore}% ready` : ""}
-        </span>
+  // ── Tab: Quick Prompt ──────────────────────────────────────────────────────
+  const quickPromptContent = (
+    <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 12px", display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ borderRadius: 10, background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.12)", padding: "12px 14px" }}>
+        <p style={{ fontSize: 12, color: "rgba(212,175,55,0.75)", lineHeight: 1.6, margin: 0 }}>
+          Describe what you want to build. Pick your platform. Get a structured, ready-to-paste prompt — no preamble, no filler.
+        </p>
       </div>
+
+      {/* Platform picker */}
+      <div>
+        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(120,113,108,0.75)", textTransform: "uppercase", marginBottom: 10, fontFamily: "var(--app-font-mono)" }}>
+          Platform
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+          {PLATFORMS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setSelectedPlatform(p.id)}
+              style={{
+                padding: "6px 14px", borderRadius: 20,
+                border: `1px solid ${selectedPlatform === p.id ? "rgba(212,175,55,0.55)" : "rgba(212,175,55,0.18)"}`,
+                background: selectedPlatform === p.id ? "rgba(212,175,55,0.14)" : "transparent",
+                color: selectedPlatform === p.id ? "#D4AF37" : "rgba(120,113,108,0.65)",
+                fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)",
+                cursor: "pointer", transition: "all 150ms",
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Description */}
+      <div>
+        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(120,113,108,0.75)", textTransform: "uppercase", marginBottom: 8, fontFamily: "var(--app-font-mono)" }}>
+          What do you want to build?
+        </p>
+        <textarea
+          value={promptDesc}
+          onChange={e => setPromptDesc(e.target.value)}
+          placeholder={`e.g. Add a settings panel to the workspace that lets users update their name and avatar. It should slide in from the right and auto-save on blur.`}
+          rows={isMobile ? 5 : 6}
+          style={{
+            width: "100%", borderRadius: 12,
+            border: `1px solid ${promptDesc.length > 5 ? "rgba(212,175,55,0.35)" : "rgba(212,175,55,0.18)"}`,
+            background: "oklch(0.14 0.01 60)",
+            padding: "12px 14px",
+            color: "rgba(231,229,228,0.87)", fontSize: 13, lineHeight: 1.65,
+            outline: "none", resize: "none", transition: "border-color 180ms",
+            boxSizing: "border-box" as const, fontFamily: "inherit",
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.55)"; }}
+          onBlur={e => { e.currentTarget.style.borderColor = promptDesc.length > 5 ? "rgba(212,175,55,0.35)" : "rgba(212,175,55,0.18)"; }}
+          onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleGenerate(); }}
+        />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+          <span style={{ fontSize: 10, color: "rgba(120,113,108,0.4)", fontFamily: "var(--app-font-mono)" }}>⌘↵ to generate</span>
+        </div>
+      </div>
+
+      {/* Generate button */}
       <button
-        onClick={onClose}
-        style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.55)", fontSize: 22, lineHeight: 1, padding: "2px 0 2px 4px" }}
-      >×</button>
+        onClick={handleGenerate}
+        disabled={!canGenerate}
+        style={{
+          width: "100%", borderRadius: 12,
+          background: isGenerating ? "rgba(212,175,55,0.08)" : canGenerate ? "#D4AF37" : "rgba(212,175,55,0.10)",
+          padding: "14px", fontSize: 14, fontWeight: 700,
+          color: isGenerating ? "rgba(212,175,55,0.65)" : canGenerate ? "#0D0B09" : "rgba(212,175,55,0.35)",
+          border: isGenerating ? "1px solid rgba(212,175,55,0.25)" : "none",
+          cursor: canGenerate ? "pointer" : "not-allowed",
+          transition: "all 180ms",
+          boxShadow: canGenerate && !isGenerating ? "0 0 20px oklch(0.76 0.12 85 / 15%)" : "none",
+        }}
+      >
+        {isGenerating ? (
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#D4AF37", animation: "forge-pulse 1.4s ease-in-out infinite" }} />
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}>Generating for {selectedPlatform}...</span>
+          </span>
+        ) : `Generate ${selectedPlatform} Prompt →`}
+      </button>
+
+      {promptError && (
+        <div style={{ borderRadius: 10, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", padding: "12px 14px", fontSize: 12, color: "rgba(239,100,100,0.9)" }}>
+          {promptError}
+        </div>
+      )}
+
+      {/* Generated output */}
+      {generatedPrompt && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(120,113,108,0.75)", textTransform: "uppercase", fontFamily: "var(--app-font-mono)" }}>
+              {selectedPlatform} Prompt
+            </span>
+            <button
+              onClick={handleCopy}
+              style={{
+                padding: "4px 12px", borderRadius: 6,
+                border: `1px solid ${copied ? "rgba(34,197,94,0.4)" : "rgba(212,175,55,0.3)"}`,
+                background: copied ? "rgba(34,197,94,0.1)" : "rgba(212,175,55,0.08)",
+                color: copied ? "rgba(134,239,172,0.9)" : "rgba(212,175,55,0.8)",
+                fontSize: 10, fontWeight: 700, fontFamily: "var(--app-font-mono)",
+                cursor: "pointer", transition: "all 180ms", letterSpacing: "0.08em",
+              }}
+            >
+              {copied ? "COPIED ✓" : "COPY"}
+            </button>
+          </div>
+          <pre
+            style={{
+              margin: 0, padding: "14px", borderRadius: 10,
+              background: "oklch(0.12 0.01 60)",
+              border: "1px solid rgba(212,175,55,0.18)",
+              color: "rgba(231,229,228,0.82)", fontSize: 12, lineHeight: 1.7,
+              whiteSpace: "pre-wrap", wordBreak: "break-word",
+              fontFamily: "var(--app-font-mono)",
+              maxHeight: 280, overflowY: "auto",
+            }}
+          >
+            {generatedPrompt}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+  const headerBlock = (
+    <div style={{ flexShrink: 0 }}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 16px 10px",
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.06em", fontFamily: "var(--app-font-mono)" }}>
+            {tab === "forge" ? "THE FORGE" : "QUICK PROMPT"}
+          </span>
+          <span style={{ fontSize: 10, color: "rgba(120,113,108,0.6)" }}>
+            {tab === "forge"
+              ? `Decompose your thinking into a strategic map${activeProjectName ? ` · ${activeProjectName}` : ""}${readinessScore > 0 ? ` · ${readinessScore}% ready` : ""}`
+              : "Generate a ready-to-paste prompt for any AI builder"}
+          </span>
+        </div>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.55)", fontSize: 22, lineHeight: 1, padding: "2px 0 2px 4px" }}>×</button>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: 4, padding: "0 16px 12px", borderBottom: "1px solid rgba(212,175,55,0.10)" }}>
+        <button style={tabBtn(tab === "forge")} onClick={() => setTab("forge")}>The Forge</button>
+        <button style={tabBtn(tab === "prompt")} onClick={() => setTab("prompt")}>Quick Prompt</button>
+      </div>
     </div>
   );
 
@@ -264,16 +430,9 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     return (
       <>
         <style>{`@keyframes forge-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.7); } }`}</style>
-        <div style={{
-          display: "flex", flexDirection: "column",
-          background: "rgba(13,11,9,0.99)",
-          border: "1px solid rgba(212,175,55,0.22)",
-          borderRadius: 12,
-          height: "100%",
-          overflow: "hidden",
-        }}>
+        <div style={{ display: "flex", flexDirection: "column", background: "rgba(13,11,9,0.99)", border: "1px solid rgba(212,175,55,0.22)", borderRadius: 12, height: "100%", overflow: "hidden" }}>
           {headerBlock}
-          {content}
+          {tab === "forge" ? forgeContent : quickPromptContent}
         </div>
       </>
     );
@@ -282,42 +441,16 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   return (
     <>
       <style>{`@keyframes forge-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.7); } }`}</style>
-      <div
-        style={{ position: "fixed", inset: 0, zIndex: 350, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
-        onClick={onClose}
-      />
-      <div style={{
-        position: "fixed", left: 0, right: 0, top: 0, bottom: 0, zIndex: 360,
-        background: "rgba(13,11,9,0.99)",
-        border: "1px solid rgba(212,175,55,0.22)",
-        borderRadius: "16px 16px 0 0",
-        display: "flex", flexDirection: "column",
-      }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: 350, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }} onClick={onClose} />
+      <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: 0, zIndex: 360, background: "rgba(13,11,9,0.99)", border: "1px solid rgba(212,175,55,0.22)", borderRadius: "16px 16px 0 0", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(212,175,55,0.18)" }} />
         </div>
         {headerBlock}
-        {content}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "10px 16px", borderTop: "1px solid rgba(212,175,55,0.07)",
-          flexShrink: 0,
-        }}>
-          <button
-            onClick={onClose}
-            style={{
-              display: "flex", alignItems: "center", gap: 4,
-              padding: "8px 16px", borderRadius: 20,
-              background: "rgba(120,113,108,0.09)", border: "1px solid rgba(120,113,108,0.2)",
-              color: "rgba(120,113,108,0.75)", fontSize: 12, cursor: "pointer",
-              fontFamily: "var(--app-font-mono)",
-            }}
-          >
-            ‹ Back
-          </button>
-          <span style={{ fontSize: 10, color: "rgba(120,113,108,0.35)", fontFamily: "var(--app-font-mono)" }}>
-            AXIOM // THE FORGE
-          </span>
+        {tab === "forge" ? forgeContent : quickPromptContent}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderTop: "1px solid rgba(212,175,55,0.07)", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 16px", borderRadius: 20, background: "rgba(120,113,108,0.09)", border: "1px solid rgba(120,113,108,0.2)", color: "rgba(120,113,108,0.75)", fontSize: 12, cursor: "pointer", fontFamily: "var(--app-font-mono)" }}>‹ Back</button>
+          <span style={{ fontSize: 10, color: "rgba(120,113,108,0.35)", fontFamily: "var(--app-font-mono)" }}>AXIOM // {tab === "forge" ? "THE FORGE" : "QUICK PROMPT"}</span>
         </div>
       </div>
     </>
