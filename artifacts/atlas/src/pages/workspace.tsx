@@ -4,6 +4,7 @@ import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { SystemMap } from "../components/SystemMap";
 import type { ArchNode } from "../components/SystemMap";
+import { QuickPromptSheet } from "../components/QuickPromptSheet";
 import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
@@ -3846,8 +3847,8 @@ function detectPlatform(): string {
   return "WEB";
 }
 
-// ── QuickPromptSheet ──────────────────────────────────────────────────────────
-function QuickPromptSheet({
+// ── QuickPromptSheet (legacy — replaced by imported component) ────────────────
+function _QuickPromptSheetOld({
   platform,
   readinessScore,
   activeProjectName,
