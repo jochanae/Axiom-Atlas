@@ -540,6 +540,10 @@ components:
           type: ["string", "null"]
         linkedRepo:
           type: ["string", "null"]
+        nodeState:
+          type: object
+          additionalProperties: true
+          nullable: true
         createdAt:
           type: string
         updatedAt:
@@ -579,6 +583,10 @@ components:
           type: ["string", "null"]
         linkedRepo:
           type: ["string", "null"]
+        nodeState:
+          type: object
+          additionalProperties: true
+          nullable: true
 
     ProjectSummary:
       type: object

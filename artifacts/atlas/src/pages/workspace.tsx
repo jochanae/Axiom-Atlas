@@ -4247,6 +4247,19 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId ?? 0) },
   });
   const activeProjectName = activeProject?.name;
+  const updateProject = useUpdateProject();
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleNodesChange = useCallback((updatedNodes: ArchNode[]) => {
+    setNodes(updatedNodes);
+    if (!projectId) return;
+    const nodeState: Record<string, boolean> = {};
+    updatedNodes.forEach(n => { nodeState[n.id] = n.resolved; });
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      updateProject.mutate({ id: projectId, data: { nodeState } });
+    }, 1000);
+  }, [projectId, updateProject]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -4267,10 +4280,11 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
       <div style={{ position: "relative", flex: showChat ? "0 0 42%" : 1, minHeight: 0, overflow: "hidden", transition: "flex 350ms ease" }}>
         <SystemMap
           onReadinessChange={setReadinessScore}
-          onNodesChange={setNodes}
+          onNodesChange={handleNodesChange}
           compact
           detectedBuilder={platform.toLowerCase()}
           onNodeFocus={(text) => setIntent(text)}
+          initialNodeState={(activeProject?.nodeState as Record<string, boolean> | null) ?? null}
         />
         {/* Platform detected badge — top-right, stacked under % READY */}
         <div style={{
