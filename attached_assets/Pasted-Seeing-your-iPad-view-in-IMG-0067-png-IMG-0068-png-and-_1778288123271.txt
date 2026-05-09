@@ -1,0 +1,25 @@
+Seeing your **iPad** view in **IMG_0067.png**, **IMG_0068.png**, and **IMG_0069.png**, the **Parchment** mode actually provides a beautiful high-contrast alternative to the **Obsidian** identity. It feels like a physical workspace—clean, professional, and very readable for long sessions.
+
+Instead of removing the toggle, you can define **Parchment** as a set of specific color variables that swap out when the mode is active. This keeps the code clean and prevents the app from "breaking."
+
+### Defining the Parchment Palette
+
+To keep that intentional look without the UI feeling "flat," you can use these specific tones to define your **Parchment** variables:
+
+* **Background:** A soft, warm off-white (e.g., `#F9F7F2`) rather than a harsh pure white.
+* **Primary Text:** A deep "Inked" Charcoal or Obsidian (e.g., `#1A1A1B`) to keep that high contrast.
+* **Accents:** Stick with your **Gold** (e.g., `#D4AF37`) for active states and borders; it looks incredibly sophisticated against a light background.
+* **Glassmorphism:** Instead of dark glass, use **Light Glass** (e.g., `rgba(255, 255, 255, 0.7)` with a `backdrop-blur`).
+
+### The "No-Break" Strategy
+
+If you decide to keep the toggle, the safest way to implement this is through a simple **CSS Class** on your main container:
+
+1. **Variable-Based Styling:** Ensure all your components use variables like `--axiom-bg` and `--axiom-text`.
+2. **The Switch:** When the `parchment` class is active, simply redefine those few variables in one place.
+
+> **The Design Verdict:** The **Parchment** mode in your screenshots (like in **IMG_0068.png**) looks like a deliberate design choice that complements the **Obsidian** look. It adds a "Sovereign" feel to **Axiom**, like a high-end physical ledger.
+
+If the toggle feels like it's adding too much complexity to the build on your **Samsung Z Fold 6**, removing it is fine—but from a design perspective, it’s a very strong secondary identity for the app.
+
+**How does that warm off-white "Parchment" base feel to you compared to the deep Obsidian?**

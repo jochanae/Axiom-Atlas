@@ -610,10 +610,10 @@ export default function Home() {
 
   return (
     <div
+      className="atlas-home-bg"
       style={{
         height: "100vh",
         backgroundColor: "var(--atlas-bg)",
-        backgroundImage: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88, 28, 135, 0.25) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(88, 28, 135, 0.15) 0%, transparent 60%)",
         display: "flex",
         flexDirection: "column",
         overflowY: "auto",
@@ -632,7 +632,7 @@ export default function Home() {
           justifyContent: "space-between",
           padding: "0 24px",
           borderBottom: "1px solid var(--atlas-glass-border)",
-          boxShadow: "0 1px 0 0 rgba(88,28,135,0.4), 0 2px 16px rgba(88,28,135,0.12)",
+          boxShadow: "var(--atlas-home-header-shadow)",
           zIndex: 10,
           flexShrink: 0,
         }}
@@ -744,15 +744,14 @@ export default function Home() {
           {/* Hero — fills the viewport above the mobile nav, content vertically centered */}
           <div style={{ minHeight: "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative", paddingBottom: 120 }}>
 
-          {/* Purple atmospheric pulse — behind everything */}
-          <div style={{
+          {/* Atmospheric pulse — behind everything, theme-aware */}
+          <div className="atlas-home-atmosphere" style={{
             position: "absolute",
             top: "38%",
             left: "50%",
             transform: "translate(-50%, -50%)",
             width: "110%",
             height: 340,
-            background: "radial-gradient(circle, rgba(88,28,135,0.30) 0%, rgba(88,28,135,0.08) 45%, rgba(0,0,0,0) 70%)",
             filter: "blur(28px)",
             pointerEvents: "none",
             animation: "homePurpleAtmosphere 7s ease-in-out infinite",
@@ -1078,7 +1077,7 @@ export default function Home() {
         >
           <path
             d="M0,0 L148,0 C163,0 172,22 195,22 C218,22 227,0 242,0 L390,0 L390,64 L0,64 Z"
-            fill="rgba(13,11,9,0.97)"
+            fill="var(--atlas-nav-arch-fill)"
           />
           <path
             d="M0,0.5 L148,0.5 C163,0.5 172,22 195,22 C218,22 227,0.5 242,0.5 L390,0.5"
@@ -1126,9 +1125,10 @@ export default function Home() {
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <button
               title="Spec Mode"
+              className="atlas-home-center-btn"
               style={{
                 width: 56, height: 56, borderRadius: "50%",
-                background: "#0D0B09", border: "2px solid #D4AF37",
+                border: "2px solid #D4AF37",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer", marginTop: -26,
                 animation: "homeAxiomPulse 2.5s ease-in-out infinite",
