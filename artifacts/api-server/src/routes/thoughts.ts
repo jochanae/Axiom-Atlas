@@ -1,14 +1,16 @@
 import { Router, type IRouter } from "express";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { db, thoughtsTable } from "@workspace/db";
 import { CreateThoughtBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
 router.get("/thoughts", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
   const thoughts = await db
     .select()
     .from(thoughtsTable)
+    .where(eq(thoughtsTable.userId, userId))
     .orderBy(desc(thoughtsTable.createdAt))
     .limit(200);
   res.json(thoughts.map(t => ({
@@ -23,14 +25,19 @@ router.post("/thoughts", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [thought] = await db.insert(thoughtsTable).values({ content: parsed.data.content }).returning();
+  const userId = (req as any).authUser.id as number;
+  const [thought] = await db
+    .insert(thoughtsTable)
+    .values({ content: parsed.data.content, userId })
+    .returning();
   res.status(201).json({ ...thought, createdAt: thought.createdAt.toISOString() });
 });
 
 router.delete("/thoughts/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  await db.delete(thoughtsTable).where(eq(thoughtsTable.id, id));
+  const userId = (req as any).authUser.id as number;
+  await db.delete(thoughtsTable).where(and(eq(thoughtsTable.id, id), eq(thoughtsTable.userId, userId)));
   res.status(204).end();
 });
 

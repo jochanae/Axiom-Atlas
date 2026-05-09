@@ -2,9 +2,11 @@ import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { projectsTable } from "./projects";
+import { usersTable } from "./users";
 
 export const vaultTable = pgTable("vault", {
   id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   projectId: integer("project_id").references(() => projectsTable.id, { onDelete: "set null" }),
   projectName: text("project_name").notNull(),
   title: text("title").notNull(),

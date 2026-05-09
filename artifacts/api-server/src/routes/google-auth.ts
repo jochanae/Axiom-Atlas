@@ -10,7 +10,8 @@ const CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const SESSION_COOKIE = "atlas-session";
 const SESSION_DAYS = 30;
-const SUPER_ADMIN_EMAIL = "jochanae@gmail.com";
+// Super-admin email from env only — no hardcoded fallback
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
 
 function getRedirectUri(req?: import("express").Request) {
   // Use the actual host from the incoming request so dev and prod both work
@@ -108,26 +109,25 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     let user = (await db.select().from(usersTable).where(eq(usersTable.googleId, profile.id)).limit(1))[0];
 
     if (!user) {
-      // Check if email already exists (email/password user linking)
-      const existing = (await db.select().from(usersTable).where(eq(usersTable.email, profile.email.toLowerCase())).limit(1))[0];
+      // Check if an email/password account already exists with this email.
+      // Do NOT auto-link — that enables Google account pre-hijacking: an attacker
+      // who creates an email/password account with the victim's Gmail address before
+      // the victim signs in via Google would silently take over the Google session.
+      const existing = (await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, profile.email.toLowerCase())).limit(1))[0];
       if (existing) {
-        // Link Google ID to existing account
-        [user] = await db.update(usersTable)
-          .set({ googleId: profile.id, avatarUrl: existing.avatarUrl ?? profile.picture ?? null })
-          .where(eq(usersTable.id, existing.id))
-          .returning();
-      } else {
-        // Create new user
-        const role = profile.email.toLowerCase() === SUPER_ADMIN_EMAIL ? "super_admin" : "user";
-        [user] = await db.insert(usersTable).values({
-          email: profile.email.toLowerCase(),
-          googleId: profile.id,
-          name: profile.name ?? null,
-          avatarUrl: profile.picture ?? null,
-          role,
-          subscriptionTier: role === "super_admin" ? "founder" : "free",
-        }).returning();
+        res.redirect("/login?auth_error=email_exists_use_password");
+        return;
       }
+      // Create new Google user
+      const role = (SUPER_ADMIN_EMAIL && profile.email.toLowerCase() === SUPER_ADMIN_EMAIL) ? "super_admin" : "user";
+      [user] = await db.insert(usersTable).values({
+        email: profile.email.toLowerCase(),
+        googleId: profile.id,
+        name: profile.name ?? null,
+        avatarUrl: profile.picture ?? null,
+        role,
+        subscriptionTier: role === "super_admin" ? "founder" : "free",
+      }).returning();
     }
 
     if (!user) {

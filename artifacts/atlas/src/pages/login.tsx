@@ -35,6 +35,9 @@ export default function Login() {
   const sessionExpired = typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("reason") === "session_expired";
 
+  const googleEmailConflict = typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("auth_error") === "email_exists_use_password";
+
   useEffect(() => {
     if (!isLoading && user) navigate("/home");
   }, [user, isLoading, navigate]);
@@ -133,6 +136,13 @@ export default function Login() {
           {sessionExpired && mode === "login" && (
             <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(146,64,14,0.1)", border: "1px solid rgba(146,64,14,0.3)", fontSize: 11, ...mono, color: "rgba(251,191,36,0.9)", lineHeight: 1.5, marginBottom: 20, textAlign: "center" }}>
               Your session expired. Please sign in again.
+            </div>
+          )}
+
+          {/* Google sign-in conflict: email already has a password account */}
+          {googleEmailConflict && mode === "login" && (
+            <div style={{ padding: "9px 12px", borderRadius: 8, background: "rgba(146,64,14,0.1)", border: "1px solid rgba(146,64,14,0.3)", fontSize: 11, ...mono, color: "rgba(251,191,36,0.9)", lineHeight: 1.5, marginBottom: 20, textAlign: "center" }}>
+              This email is already registered with a password. Sign in with your email and password below.
             </div>
           )}
 
