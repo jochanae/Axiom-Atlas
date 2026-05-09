@@ -29,6 +29,9 @@ import {
   useUpdateProject,
   useUpdateEntry,
   useDeleteProject,
+  useListReadinessSnapshots,
+  useRecordReadinessSnapshot,
+  getListReadinessSnapshotsQueryKey,
   getListEntriesQueryKey,
   getListSessionsQueryKey,
   getGetProjectQueryKey,
@@ -203,7 +206,14 @@ function MenuBtn({ icon, label, onClick, badge, disabled }: { icon: React.ReactN
 }
 
 // ── ReadinessRing ─────────────────────────────────────────────────────────────
-function ReadinessRing({ score, onClick, title }: { score: number; onClick?: () => void; title?: string }) {
+interface ReadinessTrend {
+  delta: number;
+  label: string;
+  history: Array<{ score: number; recordedAt: string }>;
+}
+
+
+function ReadinessRing({ score, onClick, title, trend }: { score: number; onClick?: () => void; title?: string; trend?: ReadinessTrend }) {
   const r = 10;
   const cx = 14;
   const cy = 14;
@@ -211,82 +221,178 @@ function ReadinessRing({ score, onClick, title }: { score: number; onClick?: () 
   const offset = circ * (1 - score / 100);
   const full = score >= 100;
 
+  const hasTrend = trend && trend.delta !== 0;
+  const trendColor = hasTrend ? (trend.delta > 0 ? "#4ade80" : "rgba(252,165,165,0.85)") : "var(--atlas-muted)";
+  const trendArrow = hasTrend ? (trend.delta > 0 ? "↑" : "↓") : null;
+
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const tooltipText = trend
+    ? `${trend.delta > 0 ? "+" : ""}${trend.delta}pts ${trend.label} · ${trend.history.length} snapshots`
+    : `Architecture readiness: ${score}%`;
+
   return (
-    <button
-      onClick={onClick}
-      title={title ?? `Architecture readiness: ${score}%`}
-      aria-label={`Architecture readiness ${score}%. Click to open System Map.`}
-      style={{
-        background: "transparent",
-        border: "none",
-        cursor: onClick ? "pointer" : "default",
-        padding: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        position: "relative",
-        width: 28,
-        height: 28,
-        borderRadius: "50%",
-        transition: "opacity 160ms ease",
-      }}
-      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.opacity = "0.75"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+    <div
+      style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0, position: "relative" }}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
     >
-      <svg
-        width="28"
-        height="28"
-        viewBox="0 0 28 28"
-        fill="none"
-        style={{ display: "block" }}
-      >
-        {/* Track ring */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          stroke="rgba(201,162,76,0.15)"
-          strokeWidth="2.5"
-        />
-        {/* Progress arc */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          stroke="var(--atlas-gold)"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeDasharray={`${circ}`}
-          strokeDashoffset={`${offset}`}
-          transform="rotate(-90 14 14)"
-          style={{
-            transition: "stroke-dashoffset 600ms cubic-bezier(0.4, 0, 0.2, 1)",
-            filter: full ? "drop-shadow(0 0 4px rgba(201,162,76,0.8))" : undefined,
-          }}
-          className={full ? "atlas-ring-pulse" : undefined}
-        />
-      </svg>
-      {/* Score label */}
-      <span
+      <button
+        onClick={onClick}
+        title={title ?? tooltipText}
+        aria-label={`Architecture readiness ${score}%. Click to open System Map.`}
         style={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          fontFamily: "var(--app-font-mono)",
-          fontSize: 7,
-          fontWeight: 700,
-          letterSpacing: "0.02em",
-          color: score > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
-          lineHeight: 1,
-          pointerEvents: "none",
-          userSelect: "none",
+          background: "transparent",
+          border: "none",
+          cursor: onClick ? "pointer" : "default",
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          position: "relative",
+          width: 28,
+          height: 28,
+          borderRadius: "50%",
+          transition: "opacity 160ms ease",
         }}
+        onMouseEnter={(e) => { if (onClick) e.currentTarget.style.opacity = "0.75"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
       >
-        {score}
-      </span>
-    </button>
+        <svg
+          width="28"
+          height="28"
+          viewBox="0 0 28 28"
+          fill="none"
+          style={{ display: "block" }}
+        >
+          {/* Track ring */}
+          <circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            stroke="rgba(201,162,76,0.15)"
+            strokeWidth="2.5"
+          />
+          {/* Progress arc */}
+          <circle
+            cx={cx}
+            cy={cy}
+            r={r}
+            stroke="var(--atlas-gold)"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={`${circ}`}
+            strokeDashoffset={`${offset}`}
+            transform="rotate(-90 14 14)"
+            style={{
+              transition: "stroke-dashoffset 600ms cubic-bezier(0.4, 0, 0.2, 1)",
+              filter: full ? "drop-shadow(0 0 4px rgba(201,162,76,0.8))" : undefined,
+            }}
+            className={full ? "atlas-ring-pulse" : undefined}
+          />
+        </svg>
+        {/* Score label */}
+        <span
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            fontFamily: "var(--app-font-mono)",
+            fontSize: 7,
+            fontWeight: 700,
+            letterSpacing: "0.02em",
+            color: score > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
+            lineHeight: 1,
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          {score}
+        </span>
+      </button>
+
+      {/* Trend arrow */}
+      {trendArrow && (
+        <span
+          style={{
+            fontSize: 9,
+            fontFamily: "var(--app-font-mono)",
+            fontWeight: 700,
+            color: trendColor,
+            lineHeight: 1,
+            letterSpacing: "0.02em",
+            userSelect: "none",
+            flexShrink: 0,
+          }}
+          title={tooltipText}
+        >
+          {trendArrow}{Math.abs(trend!.delta)}
+        </span>
+      )}
+
+      {/* Tooltip on hover */}
+      {showTooltip && trend && trend.history.length > 1 && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "var(--atlas-surface)",
+            border: "1px solid rgba(201,162,76,0.2)",
+            borderRadius: 8,
+            padding: "8px 10px",
+            minWidth: 130,
+            zIndex: 10000,
+            pointerEvents: "none",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.55)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", letterSpacing: "0.1em", marginBottom: 6, textTransform: "uppercase" }}>
+            Readiness History
+          </div>
+          {(() => {
+            const pts = [...trend.history].reverse().slice(0, 8);
+            const W = 110, H = 28, PAD = 4;
+            const allScores = pts.map(p => p.score);
+            const minS = Math.min(...allScores);
+            const maxS = Math.max(...allScores);
+            const range = Math.max(maxS - minS, 1);
+            const toX = (i: number) => PAD + (i / Math.max(pts.length - 1, 1)) * (W - PAD * 2);
+            const toY = (s: number) => H - PAD - ((s - minS) / range) * (H - PAD * 2);
+            const polyPts = pts.map((p, i) => `${toX(i).toFixed(1)},${toY(p.score).toFixed(1)}`).join(" ");
+            const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(p.score).toFixed(1)}`).join(" ");
+            return (
+              <svg width={W} height={H} style={{ display: "block", marginBottom: 6 }}>
+                <polyline
+                  points={polyPts}
+                  fill="none"
+                  stroke="rgba(201,162,76,0.5)"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d={`${pathD} L${toX(pts.length - 1).toFixed(1)},${H} L${toX(0).toFixed(1)},${H} Z`}
+                  fill="rgba(201,162,76,0.08)"
+                />
+                {pts.map((p, i) => (
+                  <circle key={i} cx={toX(i)} cy={toY(p.score)} r="2" fill={i === pts.length - 1 ? "var(--atlas-gold)" : "rgba(201,162,76,0.35)"} />
+                ))}
+              </svg>
+            );
+          })()}
+          <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: hasTrend ? trendColor : "var(--atlas-muted)" }}>
+            {hasTrend
+              ? `${trend.delta > 0 ? "+" : ""}${trend.delta}pts ${trend.label}`
+              : `No change ${trend.label}`}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -5485,6 +5591,45 @@ export default function Workspace() {
   const [pendingResolvedNodeIds, setPendingResolvedNodeIds] = useState<string[]>([]);
   const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(undefined);
 
+  // ── Readiness Snapshots ───────────────────────────────────────────────────
+  const { data: readinessSnapshots } = useListReadinessSnapshots(
+    id ? Number(id) : 0,
+    { query: { enabled: !!id, queryKey: getListReadinessSnapshotsQueryKey(id ? Number(id) : 0) } }
+  );
+  const recordSnapshot = useRecordReadinessSnapshot();
+  const lastRecordedScoreRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!id || mapReadiness === 0) return;
+    const timer = setTimeout(() => {
+      if (lastRecordedScoreRef.current === mapReadiness) return;
+      lastRecordedScoreRef.current = mapReadiness;
+      recordSnapshot.mutate({ id: Number(id), data: { score: mapReadiness } });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [id, mapReadiness]);
+
+  const readinessTrend: ReadinessTrend | undefined = (() => {
+    if (!readinessSnapshots || readinessSnapshots.length < 2) return undefined;
+    const sorted = [...readinessSnapshots].sort(
+      (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime()
+    );
+    const current = sorted[0];
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const baseline24h = sorted.find(s => new Date(s.recordedAt) <= oneDayAgo);
+    const baseline7d = sorted.find(s => new Date(s.recordedAt) <= sevenDaysAgo);
+    const baseline = baseline24h ?? baseline7d ?? sorted[sorted.length - 1];
+    if (!baseline || baseline.id === current?.id) return undefined;
+    const label = baseline24h ? "today" : baseline7d ? "this week" : "since start";
+    return {
+      delta: (current?.score ?? mapReadiness) - baseline.score,
+      label,
+      history: sorted.map(s => ({ score: s.score, recordedAt: s.recordedAt })),
+    };
+  })();
+
   // ── Handover (Flow → Workspace) ──────────────────────────────────────────
   const updateProjectFromHandover = useUpdateProject();
   const [handoverPending, setHandoverPending] = useState(false);
@@ -5761,6 +5906,7 @@ export default function Workspace() {
               score={mapReadiness}
               onClick={focusSystemMap}
               title={`Architecture readiness: ${mapReadiness}%. Click to open System Map.`}
+              trend={readinessTrend}
             />
 
             {/* Drift pill — flow has changed since the last Atlas handover.

@@ -254,6 +254,40 @@ export const GetProjectSummaryResponse = zod.object({
 });
 
 /**
+ * @summary List readiness score snapshots for a project
+ */
+export const ListReadinessSnapshotsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListReadinessSnapshotsResponseItem = zod.object({
+  id: zod.number(),
+  projectId: zod.number(),
+  score: zod.number(),
+  recordedAt: zod.string(),
+});
+export const ListReadinessSnapshotsResponse = zod.array(
+  ListReadinessSnapshotsResponseItem,
+);
+
+/**
+ * @summary Record a readiness score snapshot
+ */
+export const RecordReadinessSnapshotParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const recordReadinessSnapshotBodyScoreMin = 0;
+export const recordReadinessSnapshotBodyScoreMax = 100;
+
+export const RecordReadinessSnapshotBody = zod.object({
+  score: zod
+    .number()
+    .min(recordReadinessSnapshotBodyScoreMin)
+    .max(recordReadinessSnapshotBodyScoreMax),
+});
+
+/**
  * @summary List sessions for a project
  */
 export const ListSessionsParams = zod.object({
