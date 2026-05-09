@@ -307,6 +307,8 @@
 /* ── App header (workspace top bar — theme-aware) ── */
 .atlas-app-header {
   background: rgba(12, 10, 9, 0.92);
+  position: relative;
+  z-index: 60;
 }
 [data-theme="parchment"] .atlas-app-header {
   background: rgba(245, 241, 232, 0.92);
