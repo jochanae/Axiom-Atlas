@@ -3086,6 +3086,8 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
   const [detectResults, setDetectResults] = useState<Array<{ url: string; platform: string; confidence: string }>>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [savedIndicator, setSavedIndicator] = useState(false);
+  const [autoDetected, setAutoDetected] = useState<{ url: string; platform: string } | null>(null);
+  const autoDetectTriedRef = useRef<string | null>(null);
 
   // ── Local dev server state ──────────────────────────────────────────────────
   type DevStatus = "idle" | "cloning" | "installing" | "starting" | "running" | "error";
@@ -3177,7 +3179,58 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
     setIframeError(false);
     setIframeLoading(!!resolved);
     setDetectResults([]);
+    if (!resolved) setAutoDetected(null);
   }, [projectId, project?.previewUrl]);
+
+  // ── Auto-detect URL when repo is linked and no URL saved yet ────────────────
+  useEffect(() => {
+    const repoKey = linkedRepo?.fullName ?? null;
+    if (!repoKey || !token || liveUrl || detecting) return;
+    if (autoDetectTriedRef.current === `${projectId}:${repoKey}`) return;
+    autoDetectTriedRef.current = `${projectId}:${repoKey}`;
+    const run = async () => {
+      setDetecting(true);
+      try {
+        const res = await fetch(`/api/github/deployment?repo=${encodeURIComponent(repoKey)}`, {
+          headers: { "x-github-token": token },
+        });
+        if (!res.ok) return;
+        const data = await res.json() as {
+          detected: Array<{ url: string; platform: string; confidence: string }>;
+          suggestions: Array<{ url: string; platform: string; confidence: string }>;
+        };
+        // Prefer high-confidence confirmed deployments
+        const best = data.detected?.find((d) => d.confidence === "high")
+          ?? data.detected?.[0]
+          ?? null;
+        if (best) {
+          const u = normalize(best.url);
+          setUrlInput(u);
+          setLiveUrl(u);
+          setIframeError(false);
+          setIframeLoading(true);
+          setReloadKey((k) => k + 1);
+          setAutoDetected({ url: u, platform: best.platform });
+          setDetectResults([]);
+          try { localStorage.setItem(storageKey, u); } catch {}
+          updateProject.mutate(
+            { id: projectId, data: { previewUrl: u } },
+            { onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) }) }
+          );
+        } else {
+          // No confirmed URL — surface suggestions so user can pick
+          const all = [
+            ...(data.detected ?? []),
+            ...(data.suggestions ?? []).filter((s) => !data.detected?.find((d) => d.url === s.url)),
+          ];
+          if (all.length > 0) setDetectResults(all);
+        }
+      } catch {}
+      finally { setDetecting(false); }
+    };
+    run();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedRepo?.fullName, token, liveUrl, projectId]);
 
   const normalize = (raw: string) =>
     raw.startsWith("http://") || raw.startsWith("https://") ? raw : `https://${raw}`;
@@ -3192,7 +3245,7 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
     try { localStorage.setItem(storageKey, u); } catch {}
   };
 
-  const handleGo = () => { if (urlInput.trim()) applyUrl(urlInput.trim()); };
+  const handleGo = () => { if (urlInput.trim()) { setAutoDetected(null); applyUrl(urlInput.trim()); } };
 
   const handleSaveToProject = () => {
     if (!liveUrl) return;
@@ -3210,7 +3263,8 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
 
   const handleClear = () => {
     setLiveUrl(""); setUrlInput(""); setIframeError(false); setIframeLoading(false);
-    setDetectResults([]);
+    setDetectResults([]); setAutoDetected(null);
+    autoDetectTriedRef.current = null;
     try { localStorage.removeItem(storageKey); } catch {}
     updateProject.mutate({ id: projectId, data: { previewUrl: null } }, {
       onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) }),
@@ -3410,8 +3464,20 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
                 </>
               )}
             </div>
-            <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center" }}>
-              {linkedRepo && token ? (
+            <div style={{ marginTop: 6, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              {autoDetected ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 4, background: "rgba(134,239,172,0.06)", border: "1px solid rgba(134,239,172,0.18)", flexShrink: 0 }}>
+                  <span style={{ fontSize: 8, color: "rgba(134,239,172,0.7)" }}>✓</span>
+                  <span style={{ fontSize: 9, ...sMono, color: "rgba(134,239,172,0.7)", letterSpacing: "0.06em" }}>
+                    Auto-detected · {autoDetected.platform}
+                  </span>
+                  <button onClick={() => { setAutoDetected(null); autoDetectTriedRef.current = null; handleDetect(); }}
+                    title="Re-run detection"
+                    style={{ background: "transparent", border: "none", color: "rgba(134,239,172,0.4)", cursor: "pointer", fontSize: 10, padding: "0 0 0 3px", lineHeight: 1 }}>
+                    ↺
+                  </button>
+                </div>
+              ) : linkedRepo && token ? (
                 <button onClick={handleDetect} disabled={detecting} style={{ padding: "4px 10px", borderRadius: 4, fontSize: 9.5, ...sMono, letterSpacing: "0.08em", background: detecting ? "rgba(255,255,255,0.04)" : "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)", color: detecting ? "var(--atlas-muted)" : "var(--atlas-gold)", cursor: detecting ? "not-allowed" : "pointer", flexShrink: 0 }}>
                   {detecting ? "Detecting…" : "Auto-detect URL"}
                 </button>
@@ -3419,8 +3485,8 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
                 <div style={{ fontSize: 9.5, ...sMono, color: "var(--atlas-muted)", opacity: 0.35 }}>Link a repo in Files to auto-detect URL</div>
               )}
               {liveUrl && (
-                <button onClick={handleSaveToProject} disabled={savedIndicator || updateProject.isPending} style={{ marginLeft: "auto", padding: "4px 10px", borderRadius: 4, fontSize: 9.5, ...sMono, letterSpacing: "0.08em", background: savedIndicator ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.04)", border: `1px solid ${savedIndicator ? "rgba(34,197,94,0.2)" : "var(--atlas-border)"}`, color: savedIndicator ? "rgba(134,239,172,0.8)" : "var(--atlas-muted)", cursor: savedIndicator ? "default" : "pointer", flexShrink: 0, transition: "all 160ms ease" }}>
-                  {savedIndicator ? "✓ Saved" : project?.previewUrl === liveUrl ? "Saved to project" : "Save to project"}
+                <button onClick={handleSaveToProject} disabled={savedIndicator || updateProject.isPending || !!autoDetected} style={{ marginLeft: "auto", padding: "4px 10px", borderRadius: 4, fontSize: 9.5, ...sMono, letterSpacing: "0.08em", background: (savedIndicator || autoDetected) ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.04)", border: `1px solid ${(savedIndicator || autoDetected) ? "rgba(34,197,94,0.2)" : "var(--atlas-border)"}`, color: (savedIndicator || autoDetected) ? "rgba(134,239,172,0.8)" : "var(--atlas-muted)", cursor: (savedIndicator || autoDetected) ? "default" : "pointer", flexShrink: 0, transition: "all 160ms ease" }}>
+                  {savedIndicator || autoDetected ? "✓ Saved to project" : project?.previewUrl === liveUrl ? "Saved to project" : "Save to project"}
                 </button>
               )}
             </div>
@@ -3469,7 +3535,12 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
               <svg width="28" height="28" viewBox="0 0 28 28" fill="none" opacity={0.12}><rect x="2" y="5" width="24" height="18" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" /><path d="M2 10h24" stroke="var(--atlas-fg)" strokeWidth="1.5" /><circle cx="6" cy="7.5" r="1" fill="var(--atlas-fg)" /><circle cx="10" cy="7.5" r="1" fill="var(--atlas-fg)" /></svg>
               <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
-                {linkedRepo ? <>Click <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Auto-detect URL</strong> to find<br />your live deployment automatically.</> : <>Paste your deployment URL above,<br />or link a GitHub repo in Files<br />to auto-detect it.</>}
+                {detecting
+                  ? <>Searching for your live deployment…</>
+                  : linkedRepo
+                    ? <>Click <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Auto-detect URL</strong> to find<br />your live deployment automatically.</>
+                    : <>Paste your deployment URL above,<br />or link a GitHub repo in Files<br />to auto-detect it.</>
+                }
               </div>
               <div style={{ fontSize: 10, color: "var(--atlas-muted)", opacity: 0.25, textAlign: "center", lineHeight: 1.7, marginTop: 4, fontFamily: "var(--app-font-mono)" }}>
                 This tab previews your live app URL.<br />To browse code files, use the Files tab.
