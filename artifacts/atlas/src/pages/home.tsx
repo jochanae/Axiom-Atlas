@@ -1064,8 +1064,18 @@ export default function Home() {
           50%       { opacity: 1; }
         }
         @keyframes homeAxiomPulse {
-          0%, 100% { box-shadow: 0 0 14px rgba(212,175,55,0.28), 0 0 0 0 rgba(88,28,135,0.18); }
-          50%       { box-shadow: 0 0 26px rgba(212,175,55,0.52), 0 0 14px 4px rgba(88,28,135,0.28); }
+          0%, 100% {
+            box-shadow:
+              0 0 0 2px rgba(212,175,55,0.55),
+              0 0 10px 2px rgba(212,175,55,0.20),
+              0 0 28px 6px rgba(212,175,55,0.08);
+          }
+          50% {
+            box-shadow:
+              0 0 0 2px rgba(212,175,55,0.90),
+              0 0 16px 4px rgba(212,175,55,0.38),
+              0 0 44px 12px rgba(212,175,55,0.14);
+          }
         }
       `}</style>
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, overflow: "visible" }}>
