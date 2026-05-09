@@ -309,6 +309,8 @@
   background: rgba(12, 10, 9, 0.92);
   position: relative;
   z-index: 60;
+  /* Safe-area padding — respects iOS notch / Dynamic Island / Android status bar */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 [data-theme="parchment"] .atlas-app-header {
   background: rgba(245, 241, 232, 0.92);

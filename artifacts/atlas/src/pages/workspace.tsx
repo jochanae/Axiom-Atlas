@@ -4174,10 +4174,36 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
                 borderBottom: "1px solid rgba(212,175,55,0.07)",
                 flexShrink: 0,
               }}>
-                {/* Platform badge — shows detected system (REPLIT, CURSOR, LOVABLE, etc.) */}
-                <span style={{ fontSize: 9, fontWeight: 700, color: "#0D0B09", background: "#D4AF37", borderRadius: 4, padding: "2px 7px", letterSpacing: "0.08em", flexShrink: 0 }}>
-                  {platform}
-                </span>
+                {/* Platform badge — translucent pill, color keyed to detected system */}
+                {(() => {
+                  const p = platform.toLowerCase();
+                  const isReplit  = p === "replit";
+                  const isCursor  = p === "cursor";
+                  const isLovable = p === "lovable";
+                  const color  = isReplit  ? "oklch(0.74 0.18 150)"
+                               : isCursor  ? "oklch(0.74 0.18 240)"
+                               : isLovable ? "oklch(0.74 0.20 300)"
+                               : "rgba(212,175,55,0.78)";
+                  const bg     = isReplit  ? "oklch(0.28 0.12 150 / 28%)"
+                               : isCursor  ? "oklch(0.28 0.12 240 / 28%)"
+                               : isLovable ? "oklch(0.28 0.12 300 / 28%)"
+                               : "rgba(212,175,55,0.10)";
+                  const border = isReplit  ? "oklch(0.55 0.18 150 / 50%)"
+                               : isCursor  ? "oklch(0.55 0.18 240 / 50%)"
+                               : isLovable ? "oklch(0.55 0.20 300 / 50%)"
+                               : "rgba(212,175,55,0.30)";
+                  return (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, color,
+                      background: bg, border: `1px solid ${border}`,
+                      borderRadius: 999, padding: "2px 9px",
+                      letterSpacing: "0.10em", textTransform: "uppercase",
+                      flexShrink: 0, fontFamily: "var(--app-font-mono)",
+                    }}>
+                      {platform}
+                    </span>
+                  );
+                })()}
                 {/* Signal selector — inline, takes remaining space */}
                 <select
                   value={activeSignalIdx}
