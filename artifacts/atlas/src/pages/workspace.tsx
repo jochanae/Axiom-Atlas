@@ -4250,8 +4250,9 @@ function _QuickPromptSheetOld({
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
+  useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
   const [showChat, setShowChat] = useState(true);
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
@@ -4551,6 +4552,7 @@ function RightPanel({
   onSendIntent,
   onBackToChat,
   isMobile,
+  onMapReadinessChange,
 }: {
   projectId: number;
   entries: Entry[];
@@ -4567,6 +4569,7 @@ function RightPanel({
   onSendIntent?: (text: string) => void;
   onBackToChat?: () => void;
   isMobile?: boolean;
+  onMapReadinessChange?: (score: number) => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -4759,7 +4762,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} />}
     </div>
   );
 }
@@ -5507,6 +5510,7 @@ export default function Workspace() {
   const parkedCount = entries?.filter((e) => e.status === "parked").length ?? 0;
   const committedCount = entries?.filter((e) => e.status === "committed").length ?? 0;
   const healthPct = entryCount > 0 ? Math.round((committedCount / entryCount) * 100) : 0;
+  const [mapReadiness, setMapReadiness] = useState(0);
 
   // ── ZIP import ─────────────────────────────────────────────────────────────
   const [zipFiles, setZipFiles] = useState<ZipEntry[]>([]);
@@ -5652,12 +5656,12 @@ export default function Workspace() {
               onClick={() => setLocation("/home")}
               style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, flexShrink: 0 }}
             >
-              <AtlasLogo small mode={projectMode} />
+              <AtlasLogo small mode={isMobile && mobileTab === "map" ? undefined : projectMode} />
             </button>
           </div>
 
-          {/* Center: project name + dropdown — absolutely centered so left/right widths don't skew it */}
-          <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", maxWidth: "min(220px, calc(100% - 260px))", overflow: "hidden" }}>
+          {/* Center: project name + dropdown — hidden in mobile map mode */}
+          <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: isMobile && mobileTab === "map" ? "none" : "flex", alignItems: "center", maxWidth: "min(220px, calc(100% - 260px))", overflow: "hidden" }}>
             <button
               ref={projectBtnRef}
               onClick={() => setShowProjectMenu((v) => !v)}
@@ -5767,14 +5771,14 @@ export default function Workspace() {
           {/* Right: % score + mode + P + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
 
-            {/* Gold readiness percentage + dot */}
+            {/* Gold readiness percentage + dot — shows map readiness in map mode */}
             <span style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", flexShrink: 0, opacity: 0.92 }}>
-              {healthPct}%
+              {isMobile && mobileTab === "map" ? mapReadiness : healthPct}%
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", boxShadow: "0 0 7px rgba(201,162,76,0.7)", flexShrink: 0 }} />
             </span>
 
-            {/* Mode pill — always visible, tappable */}
-            {(() => {
+            {/* Mode pill — hidden in mobile map mode */}
+            {!(isMobile && mobileTab === "map") && (() => {
               const modeConfig = {
                 THINK: { color: "#93c5fd", bg: "rgba(96,165,250,0.1)", border: "rgba(96,165,250,0.35)", desc: "Strategy & advice — no code",
                   icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.6-1.4 4.9-3.5 6.2V17a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-1.8C6.4 13.9 5 11.6 5 9a7 7 0 0 1 7-7z" /></svg> },
@@ -5835,7 +5839,8 @@ export default function Workspace() {
               );
             })()}
 
-            {/* Parking lot "P" badge */}
+            {/* Parking lot "P" badge — hidden in mobile map mode */}
+            {!(isMobile && mobileTab === "map") && (
             <button
               onClick={() => setLocation(`/parking?project=${id}`)}
               title="Parking lot"
@@ -5848,6 +5853,7 @@ export default function Workspace() {
                 </span>
               )}
             </button>
+            )}
 
             {/* Squircle avatar + new project button — matches /home */}
             <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
@@ -6464,6 +6470,7 @@ export default function Workspace() {
                 onHomeNav={() => setLocation("/home")}
                 forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : undefined}
                 onSendIntent={sendFromIntentCapture}
+                onMapReadinessChange={setMapReadiness}
                 isMobile={false}
               />
             </div>
@@ -6518,6 +6525,7 @@ export default function Workspace() {
                 forceTab={mobileTab === "map" ? "map" : mobileTab === "files" ? "files" : undefined}
                 onSendIntent={sendFromIntentCapture}
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
+                onMapReadinessChange={setMapReadiness}
                 isMobile
               />
             </div>
