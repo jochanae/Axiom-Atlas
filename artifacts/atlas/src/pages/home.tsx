@@ -417,7 +417,20 @@ function HomeProfileSheet({ onClose }: { onClose: () => void }) {
                 const reader = new FileReader();
                 reader.onload = (ev) => {
                   const dataUrl = ev.target?.result as string;
-                  if (dataUrl) setPhotoUrl(dataUrl);
+                  if (!dataUrl) return;
+                  const img = new Image();
+                  img.onload = () => {
+                    const MAX = 256;
+                    let w = img.width, h = img.height;
+                    if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                    else { w = Math.round(w * MAX / h); h = MAX; }
+                    const canvas = document.createElement("canvas");
+                    canvas.width = w; canvas.height = h;
+                    const ctx = canvas.getContext("2d");
+                    if (ctx) { ctx.drawImage(img, 0, 0, w, h); setPhotoUrl(canvas.toDataURL("image/jpeg", 0.75)); }
+                    else { setPhotoUrl(dataUrl); }
+                  };
+                  img.src = dataUrl;
                 };
                 reader.readAsDataURL(file);
               }}

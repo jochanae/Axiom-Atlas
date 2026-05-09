@@ -3871,17 +3871,16 @@ function QuickPromptSheet({
   return (
     <>
       <div
-        style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
+        style={{ position: "fixed", inset: 0, zIndex: 350, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
         onClick={onClose}
       />
       <div style={{
-        position: "fixed", left: 0, right: 0, zIndex: 60, bottom: cockpitH,
+        position: "fixed", left: 0, right: 0, top: 0, bottom: 0, zIndex: 360,
         background: "rgba(13,11,9,0.99)",
         border: "1px solid rgba(212,175,55,0.22)",
         borderRadius: "16px 16px 0 0",
         animation: "slideUpCb 220ms ease",
         display: "flex", flexDirection: "column",
-        maxHeight: "72vh",
       }}>
         {/* Drag handle */}
         <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}>
@@ -4391,6 +4390,7 @@ function RightPanel({
   onHomeNav,
   forceTab,
   onSendIntent,
+  isMobile,
 }: {
   projectId: number;
   entries: Entry[];
@@ -4405,6 +4405,7 @@ function RightPanel({
   onHomeNav: () => void;
   forceTab?: RightTab;
   onSendIntent?: (text: string) => void;
+  isMobile?: boolean;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -4499,7 +4500,7 @@ function RightPanel({
           paddingLeft: 4,
         }}
       >
-        {tabs.map((t) => {
+        {tabs.filter(t => !isMobile || t.id !== "map").map((t) => {
           const active = tab === t.id;
           return (
             <button
@@ -4678,6 +4679,7 @@ function MobileTabBar({
     >
       {tabs.map(({ id, label, icon, badge, alert }) => {
         const active = activeTab === id;
+        const isBack = id === "chat" && activeTab === "map";
         return (
           <button
             key={id}
@@ -4692,7 +4694,7 @@ function MobileTabBar({
               background: "transparent",
               border: "none",
               cursor: "pointer",
-              color: active ? "var(--atlas-gold)" : "rgba(210,205,200,0.65)",
+              color: isBack || active ? "var(--atlas-gold)" : "rgba(210,205,200,0.65)",
               transition: "color 180ms ease",
               position: "relative",
               WebkitTapHighlightColor: "transparent",
@@ -4736,7 +4738,11 @@ function MobileTabBar({
                 {badge !== undefined ? (badge > 9 ? "9+" : String(badge)) : "!"}
               </div>
             )}
-            {icon}
+            {isBack ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 5l-7 7 7 7" />
+              </svg>
+            ) : icon}
             <span
               style={{
                 fontSize: 9,
@@ -4746,7 +4752,7 @@ function MobileTabBar({
                 lineHeight: 1,
               }}
             >
-              {label}
+              {isBack ? "← Chat" : label}
             </span>
           </button>
         );
@@ -6016,6 +6022,7 @@ export default function Workspace() {
                 onHomeNav={() => setLocation("/home")}
                 forceTab={isMobile && mobileTab === "map" ? "map" : undefined}
                 onSendIntent={sendFromIntentCapture}
+                isMobile={false}
               />
             </div>
           </>
@@ -6024,7 +6031,7 @@ export default function Workspace() {
         {/* Mobile: overlay panel */}
         {isMobile && rightOpen && (
           <div
-            style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", justifyContent: "flex-end" }}
+            style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 64, zIndex: 50, display: "flex", justifyContent: "flex-end" }}
           >
             {/* Backdrop — hidden in fullscreen */}
             {!rightFullscreen && (
@@ -6068,55 +6075,20 @@ export default function Workspace() {
                 onHomeNav={() => setLocation("/home")}
                 forceTab={mobileTab === "map" ? "map" : undefined}
                 onSendIntent={sendFromIntentCapture}
+                isMobile
               />
             </div>
           </div>
         )}
       </div>
 
-      {/* Mobile bottom tab bar — hidden when Map is in focus */}
-      {isMobile && mobileTab !== "map" && (
+      {isMobile && (
         <MobileTabBar
           activeTab={mobileTab}
           onTabChange={(tab) => setMobileTab(tab)}
           entryCount={entryCount}
           activeCatch={!!activeCatch}
         />
-      )}
-
-      {/* Map focus mode — floating back pill when map tab is active */}
-      {isMobile && mobileTab === "map" && (
-        <button
-          onClick={() => setMobileTab("chat")}
-          style={{
-            position: "fixed",
-            bottom: "max(20px, env(safe-area-inset-bottom, 20px))",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 300,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 18px",
-            borderRadius: 999,
-            background: "rgba(12,10,9,0.88)",
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
-            border: "1px solid rgba(212,175,55,0.25)",
-            color: "var(--atlas-muted)",
-            fontSize: 11,
-            fontFamily: "var(--app-font-mono)",
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-            cursor: "pointer",
-            WebkitTapHighlightColor: "transparent",
-          }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 12H5M12 5l-7 7 7 7" />
-          </svg>
-          Back to chat
-        </button>
       )}
 
       {/* User Profile Panel */}
