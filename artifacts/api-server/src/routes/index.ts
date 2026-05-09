@@ -26,6 +26,7 @@ router.use(invitesRouter);
 router.use(healthRouter);
 router.use(selfRouter);
 router.use(devserverRouter);
+router.use(importRouter); // cross-origin Axiom handoff — intentionally public, has its own CORS headers
 
 // Protected routes — valid session required
 router.use(requireAuth, projectsRouter);
@@ -35,7 +36,6 @@ router.use(requireAuth, chatRouter);
 router.use(requireAuth, githubRouter);
 router.use(requireAuth, imageRouter);
 router.use(requireAuth, thoughtsRouter);
-router.use(requireAuth, importRouter);
 router.use(requireAuth, vaultRouter);
 
 export default router;
