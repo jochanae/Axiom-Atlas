@@ -6,7 +6,7 @@ export default function LandingPage() {
   const [, setLocation] = useLocation();
   const handleEnter = () => {
     try { sessionStorage.setItem("atlas-from-landing", "1"); } catch {}
-    setLocation("/home");
+    setLocation("/login");
   };
 
   useEffect(() => {
@@ -203,7 +203,7 @@ function InterrogationSection() {
   ];
 
   return (
-    <section ref={sectionRef} className="relative z-10 py-28 md:py-40 px-6">
+    <section id="how-it-works" ref={sectionRef} className="relative z-10 py-28 md:py-40 px-6">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px transition-all duration-[1.2s] ease-out" style={{
         width: visible ? "80%" : "0%",
         background: "linear-gradient(90deg, transparent, rgba(212,175,55,0.3), transparent)",
@@ -333,7 +333,7 @@ function HandoffSection() {
   ];
 
   return (
-    <section ref={sectionRef} className="relative z-10 py-28 md:py-40 px-6">
+    <section id="spec" ref={sectionRef} className="relative z-10 py-28 md:py-40 px-6">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px transition-all duration-[1.2s] ease-out" style={{
         width: visible ? "80%" : "0%",
         background: "linear-gradient(90deg, transparent, rgba(212,175,55,0.3), transparent)",
@@ -606,7 +606,7 @@ function WallOfGoldSection({ onEnter }: { onEnter: () => void }) {
   ];
 
   return (
-    <section ref={sectionRef} className="relative z-10">
+    <section id="build" ref={sectionRef} className="relative z-10">
       <div className="relative overflow-hidden py-24 md:py-36 px-6" style={{ background: "#D4AF37" }}>
         {/* Grain on gold */}
         <div className="absolute inset-0 pointer-events-none opacity-[0.06]" style={{
