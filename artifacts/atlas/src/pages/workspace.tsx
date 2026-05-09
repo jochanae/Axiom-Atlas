@@ -4723,12 +4723,12 @@ function MobileTabBar({
   entryCount,
   activeCatch,
 }: {
-  activeTab: "chat" | "ledger" | "workshop" | "map";
-  onTabChange: (tab: "chat" | "ledger" | "workshop" | "map") => void;
+  activeTab: "chat" | "ledger" | "files" | "map";
+  onTabChange: (tab: "chat" | "ledger" | "files" | "map") => void;
   entryCount: number;
   activeCatch: boolean;
 }) {
-  const tabs: { id: "chat" | "ledger" | "workshop" | "map"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
+  const tabs: { id: "chat" | "ledger" | "files" | "map"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     {
       id: "chat",
       label: "Chat",
@@ -4753,7 +4753,7 @@ function MobileTabBar({
       ),
     },
     {
-      id: "workshop",
+      id: "files",
       label: "Files",
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -4951,7 +4951,7 @@ export default function Workspace() {
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
-  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "workshop" | "map">("chat");
+  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map">("chat");
   const [showDrawer, setShowDrawer] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -6263,7 +6263,7 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
-                forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "workshop" ? "files" : undefined}
+                forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : undefined}
                 onSendIntent={sendFromIntentCapture}
                 isMobile={false}
               />
@@ -6316,7 +6316,7 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
-                forceTab={mobileTab === "map" ? "map" : mobileTab === "workshop" ? "files" : undefined}
+                forceTab={mobileTab === "map" ? "map" : mobileTab === "files" ? "files" : undefined}
                 onSendIntent={sendFromIntentCapture}
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
                 isMobile
