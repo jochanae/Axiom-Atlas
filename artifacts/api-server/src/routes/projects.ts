@@ -120,6 +120,29 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
   });
 });
 
+router.post("/projects/:id/clone", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const [source] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+  if (!source) { res.status(404).json({ error: "Project not found" }); return; }
+  const [clone] = await db.insert(projectsTable).values({
+    name: `${source.name} (Copy)`,
+    description: source.description ?? undefined,
+  }).returning();
+  const entries = await db.select().from(entriesTable).where(eq(entriesTable.projectId, id));
+  if (entries.length > 0) {
+    await db.insert(entriesTable).values(entries.map(e => ({
+      projectId: clone.id,
+      title: e.title,
+      body: e.body,
+      category: e.category,
+      status: e.status,
+      tags: e.tags,
+    })));
+  }
+  res.status(201).json({ ...clone, createdAt: clone.createdAt.toISOString(), updatedAt: clone.updatedAt.toISOString() });
+});
+
 router.delete("/projects/:id", async (req, res): Promise<void> => {
   const params = DeleteProjectParams.safeParse(req.params);
   if (!params.success) {
