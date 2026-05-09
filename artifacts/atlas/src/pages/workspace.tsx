@@ -6199,6 +6199,40 @@ export default function Workspace() {
                     zIndex: 9999, minWidth: 220,
                   }}
                 >
+                  {/* Switch to existing project — shown when other projects exist */}
+                  {(allProjects ?? []).filter(p => p.id !== id).length > 0 && (() => {
+                    const others = (allProjects ?? []).filter(p => p.id !== id).slice(0, 7);
+                    const isEmptyNew = messages.length === 0 && project?.name === "New Project";
+                    return (
+                      <>
+                        <div style={{ padding: "6px 12px 2px", fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.45 }}>
+                          Switch to
+                        </div>
+                        {others.map(p => (
+                          <MenuBtn
+                            key={p.id}
+                            icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><circle cx="8" cy="8" r="2.2" /></svg>}
+                            label={p.name}
+                            onClick={() => {
+                              setShowProjectMenu(false);
+                              if (isEmptyNew) {
+                                deleteProjectMutation.mutate({ id }, {
+                                  onSuccess: () => {
+                                    queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                                    setLocation(`/project/${p.id}`);
+                                  },
+                                  onError: () => setLocation(`/project/${p.id}`),
+                                });
+                              } else {
+                                setLocation(`/project/${p.id}`);
+                              }
+                            }}
+                          />
+                        ))}
+                        <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
+                      </>
+                    );
+                  })()}
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "6px 6px 4px", opacity: 0.5 }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2" /><path d="M13.7 9.4a1 1 0 010-2.8l.5-.2a1 1 0 00.6-1.5l-.7-1.2a1 1 0 00-1.5-.3l-.4.3a1 1 0 01-1.4-.6l-.1-.5a1 1 0 00-1-.8H8.3a1 1 0 00-1 .8l-.1.5a1 1 0 01-1.4.6l-.4-.3a1 1 0 00-1.5.3l-.7 1.2a1 1 0 00.6 1.5l.5.2a1 1 0 010 2.8l-.5.2a1 1 0 00-.6 1.5l.7 1.2a1 1 0 001.5.3l.4-.3a1 1 0 011.4.6l.1.5a1 1 0 001 .8h1.4a1 1 0 001-.8l.1-.5a1 1 0 011.4-.6l.4.3a1 1 0 001.5-.3l.7-1.2a1 1 0 00-.6-1.5l-.5-.2z" /></svg>} label="Project settings" onClick={() => { setShowProjectMenu(false); setShowProjectSettings(true); }} />
