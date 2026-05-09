@@ -2590,7 +2590,7 @@ function FilesTab({
     if (autoLoadedRef.current || repos.length === 0 || !filesProject?.linkedRepo) return;
     try {
       const savedRepo = JSON.parse(filesProject.linkedRepo) as GhRepo;
-      const match = repos.find(r => r.fullName === savedRepo.fullName);
+      const match = repos.find(r => r.fullName.toLowerCase() === savedRepo.fullName.toLowerCase());
       if (match) {
         autoLoadedRef.current = true;
         loadTree(match);
