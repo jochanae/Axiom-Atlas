@@ -17,6 +17,7 @@ import { extractApiErrorMessage } from "../lib/atlas-utils";
 import { useAuth, useRequireAuth, isSuperAdmin } from "../hooks/useAuth";
 import { useSubscription } from "../hooks/useSubscription";
 import { UpgradeModal } from "../components/UpgradeModal";
+import { CompactReadinessRing, computeScoreFromNodeState } from "../components/ReadinessRing";
 
 const PLACEHOLDERS = [
   "What are we actually trying to solve here…",
@@ -324,6 +325,7 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+        <CompactReadinessRing score={computeScoreFromNodeState(project.nodeState)} />
         <span
           style={{
             fontFamily: "var(--app-font-mono)",
