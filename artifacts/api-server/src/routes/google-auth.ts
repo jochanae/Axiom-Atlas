@@ -12,10 +12,10 @@ const SESSION_COOKIE = "atlas-session";
 const SESSION_DAYS = 30;
 const SUPER_ADMIN_EMAIL = "jochanae@gmail.com";
 
-function getRedirectUri(req: import("express").Request) {
-  const host = req.headers["x-forwarded-host"] ?? req.headers.host ?? "";
-  const proto = req.headers["x-forwarded-proto"] ?? "https";
-  return `${proto}://${host}/api/auth/google/callback`;
+function getRedirectUri() {
+  const domain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
+  if (domain) return `https://${domain}/api/auth/google/callback`;
+  return `http://localhost:80/api/auth/google/callback`;
 }
 
 function createSessionCookie(token: string, res: import("express").Response) {
@@ -36,7 +36,7 @@ router.get("/auth/google", (req, res): void => {
 
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
-    redirect_uri: getRedirectUri(req),
+    redirect_uri: getRedirectUri(),
     response_type: "code",
     scope: "openid email profile",
     state,
@@ -71,7 +71,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         code,
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
-        redirect_uri: getRedirectUri(req),
+        redirect_uri: getRedirectUri(),
         grant_type: "authorization_code",
       }),
     });
