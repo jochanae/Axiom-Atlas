@@ -1,0 +1,800 @@
+import { useState, useRef, useEffect } from "react";
+import { useAxiom } from "@/hooks/use-axiom-store";
+import { callQuickPrompt } from "@/lib/axiom-api";
+import { loadProfilesAsync, markProfileUsed, type ProjectProfile } from "./ProjectProfiles";
+import { supabase } from "@/integrations/supabase/client";
+import { haptics } from "@/lib/haptics";
+import { sounds } from "@/lib/sounds";
+
+// ─── localStorage helpers ────────────────────────────────────────────────────
+
+const LS_DEFAULT = "axiom_builder_default";
+const LS_FREQ    = "axiom_builder_freq";
+
+function lsGetDefault(): string {
+  try { return localStorage.getItem(LS_DEFAULT) || ""; } catch { return ""; }
+}
+
+function lsGetFreq(): Record<string, number> {
+  try { const r = localStorage.getItem(LS_FREQ); return r ? JSON.parse(r) : {}; } catch { return {}; }
+}
+
+function lsSaveSelection(builder: string) {
+  try {
+    localStorage.setItem(LS_DEFAULT, builder);
+    const freq = lsGetFreq();
+    freq[builder] = (freq[builder] || 0) + 1;
+    localStorage.setItem(LS_FREQ, JSON.stringify(freq));
+  } catch {}
+}
+
+function lsGetTopBuilders(allOptions: string[], limit = 3): string[] {
+  const freq = lsGetFreq();
+  return allOptions
+    .filter((b) => (freq[b] || 0) > 0)
+    .sort((a, b) => (freq[b] || 0) - (freq[a] || 0))
+    .slice(0, limit);
+}
+
+type Builder = string;
+
+const BUILDER_OPTIONS = [
+  "Lovable",
+  "Cursor",
+  "Replit",
+  "Bolt",
+  "Windsurf",
+  "v0 by Vercel",
+  "Bubble",
+  "FlutterFlow",
+  "GitHub Copilot",
+  "Other",
+];
+
+const EXAMPLE_CHIPS = [
+  "Add a delete button to project cards",
+  "Fix the z-index on a dropdown menu",
+  "Add Google auth to my app",
+  "Create a new page for user settings",
+  "Make the header sticky on scroll",
+];
+
+const MAX_SIZE_MB = 5;
+
+interface AttachedImage {
+  id: string;
+  base64: string;
+  mediaType: string;
+  preview: string;
+  name: string;
+}
+
+export function QuickPrompt() {
+  const { detectedBuilder } = useAxiom();
+
+  const [selectedBuilder, setSelectedBuilder] = useState<Builder>(() => {
+    const saved = lsGetDefault();
+    if (saved) return saved;
+    if (!detectedBuilder) return "";
+    const lc = detectedBuilder.toLowerCase();
+    if (lc === "lovable") return "Lovable";
+    if (lc === "cursor") return "Cursor";
+    if (lc === "replit") return "Replit";
+    return "";
+  });
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [customBuilderName, setCustomBuilderName] = useState("");
+  const [input, setInput] = useState("");
+  const [projectContext, setProjectContext] = useState("");
+  const [showContext, setShowContext] = useState(false);
+  const [showProfilePicker, setShowProfilePicker] = useState(false);
+  const [dbProfiles, setDbProfiles] = useState<ProjectProfile[]>([]);
+  const profilePickerRef = useRef<HTMLDivElement>(null);
+
+  // Load profiles from DB
+  useEffect(() => {
+    loadProfilesAsync().then(setDbProfiles);
+  }, []);
+
+  useEffect(() => {
+    if (!showProfilePicker) return;
+    const h = (e: MouseEvent) => {
+      if (profilePickerRef.current && !profilePickerRef.current.contains(e.target as Node)) setShowProfilePicker(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showProfilePicker]);
+
+  const handleSaveToVault = async () => {
+    if (!output || vaultSaving) return;
+    setVaultSaving(true);
+    setVaultError(false);
+    try {
+      const { error } = await supabase.from("legacy_log").insert({
+        prompt_output: output,
+        builder: effectiveBuilder,
+        compatibility_score: null,
+      });
+      if (error) throw error;
+      setVaultSaved(true);
+      setTimeout(() => setVaultSaved(false), 2000);
+    } catch (e) {
+      console.error("Save to vault failed:", e);
+      setVaultError(true);
+      setTimeout(() => setVaultError(false), 2500);
+    } finally {
+      setVaultSaving(false);
+    }
+  };
+
+  const handleLoadProfile = (profileId: string) => {
+    const p = dbProfiles.find((pr: ProjectProfile) => pr.id === profileId);
+    if (!p) return;
+    const parts = [
+      p.techStack ? `Tech stack:\n${p.techStack}` : "",
+      p.fileStructure ? `File structure:\n${p.fileStructure}` : "",
+      p.notes ? `Notes:\n${p.notes}` : "",
+    ].filter(Boolean);
+    setProjectContext(parts.join("\n\n"));
+    if (p.builder) {
+      setSelectedBuilder(p.builder);
+      lsSaveSelection(p.builder);
+    }
+    if (!showContext) setShowContext(true);
+    markProfileUsed(profileId);
+    setShowProfilePicker(false);
+  };
+  const [output, setOutput] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [vaultSaving, setVaultSaving] = useState(false);
+  const [vaultSaved, setVaultSaved] = useState(false);
+  const [vaultError, setVaultError] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const outputRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!output) return;
+    const id = setTimeout(() => {
+      outputRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+    return () => clearTimeout(id);
+  }, [output]);
+
+  useEffect(() => {
+    if (!showDropdown) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDropdown]);
+
+  const handleBuilderSelect = (builder: Builder) => {
+    setSelectedBuilder(builder);
+    lsSaveSelection(builder);
+    setShowDropdown(false);
+  };
+
+  const effectiveBuilder =
+    selectedBuilder === "Other"
+      ? customBuilderName || "Other"
+      : selectedBuilder;
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(file);
+    });
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).slice(0, 10 - attachedImages.length);
+    const results: AttachedImage[] = [];
+    for (const file of files) {
+      if (file.size > MAX_SIZE_MB * 1024 * 1024) continue;
+      const dataUrl = await fileToBase64(file);
+      results.push({
+        id: crypto.randomUUID(),
+        base64: dataUrl.split(",")[1],
+        mediaType: file.type,
+        preview: dataUrl,
+        name: file.name,
+      });
+    }
+    if (results.length > 0) {
+      haptics.tap();
+      sounds.tap();
+      setAttachedImages((prev) => [...prev, ...results].slice(0, 10));
+    }
+    e.target.value = "";
+  };
+
+  const removeImage = (id: string) => {
+    haptics.tap();
+    sounds.tap();
+    setAttachedImages((prev) => prev.filter((img) => img.id !== id));
+  };
+
+  const handleGenerate = async () => {
+    if ((!input.trim() && attachedImages.length === 0) || isGenerating) return;
+    if (!effectiveBuilder || effectiveBuilder === "") return;
+    setIsGenerating(true);
+    setOutput(null);
+    const baseDescription = input.trim() || "Please analyze the attached image(s) and generate an appropriate prompt.";
+    const fullDescription = projectContext.trim()
+      ? `${baseDescription}\n\nProject context:\n${projectContext.trim()}`
+      : baseDescription;
+    try {
+      const result = await callQuickPrompt({
+        data: {
+          description: fullDescription,
+          builder: effectiveBuilder,
+          images: attachedImages.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
+        },
+      });
+      setOutput(result);
+      setAttachedImages([]);
+      haptics.cardConfirmed();
+      sounds.cardConfirmed();
+    } catch (e) {
+      console.error("Quick Prompt error:", e);
+      setOutput("Failed to generate prompt. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!output) return;
+    try {
+      await navigator.clipboard.writeText(output);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = output;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    haptics.nodeResolved();
+    sounds.nodeResolved();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRegenerate = () => {
+    setOutput(null);
+    handleGenerate();
+  };
+
+  const canGenerate =
+    (input.trim().length > 0 || attachedImages.length > 0) &&
+    !isGenerating &&
+    effectiveBuilder.length > 0;
+
+  return (
+    <div className="flex flex-col h-full overflow-y-auto px-4 py-4 gap-4">
+      {/* Builder dropdown */}
+      <div>
+        <p className="text-[10px] font-semibold tracking-widest text-silver-muted uppercase mb-2">
+          Where are you building?
+        </p>
+        <div className="relative" ref={dropdownRef}>
+          {/* Trigger button */}
+          <button
+            type="button"
+            onClick={() => setShowDropdown((v) => !v)}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "#0D0B09",
+              border: `1px solid ${showDropdown || selectedBuilder ? "rgba(212,175,55,0.5)" : "rgba(212,175,55,0.3)"}`,
+              borderRadius: 8,
+              padding: "11px 14px",
+              cursor: "pointer",
+              transition: "border-color 180ms",
+            }}
+          >
+            <span style={{ fontSize: 14, color: selectedBuilder ? "rgba(255,255,255,0.87)" : "rgba(255,255,255,0.35)" }}>
+              {selectedBuilder || "Select your builder..."}
+            </span>
+            <svg
+              width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="#D4AF37" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              style={{ flexShrink: 0, transform: showDropdown ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 180ms" }}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
+          {/* Dropdown panel */}
+          {showDropdown && (() => {
+            const topBuilders = lsGetTopBuilders(BUILDER_OPTIONS, 3);
+            const lastUsed = lsGetDefault();
+            const remaining = BUILDER_OPTIONS.filter((b) => !topBuilders.includes(b));
+            return (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 6px)",
+                  left: 0,
+                  right: 0,
+                  zIndex: 9999,
+                  background: "#0D0B09",
+                  border: "1px solid rgba(212,175,55,0.3)",
+                  borderRadius: 10,
+                  overflow: "hidden",
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+                }}
+              >
+                {/* YOUR STACK section — only if there are tracked builders */}
+                {topBuilders.length > 0 && (
+                  <>
+                    <div style={{ padding: "8px 14px 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(212,175,55,0.6)", textTransform: "uppercase" }}>
+                      Your Stack
+                    </div>
+                    {topBuilders.map((b) => {
+                      const isSelected = b === selectedBuilder;
+                      const isLastUsed = b === lastUsed;
+                      return (
+                        <button
+                          key={b}
+                          type="button"
+                          onClick={() => handleBuilderSelect(b)}
+                          style={{
+                            width: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "10px 14px",
+                            background: isSelected ? "rgba(212,175,55,0.12)" : "transparent",
+                            border: "none",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            transition: "background 120ms",
+                          }}
+                          onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = isSelected ? "rgba(212,175,55,0.12)" : "transparent"; }}
+                        >
+                          {/* Gold dot for last used */}
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: isLastUsed ? "#D4AF37" : "transparent", border: isLastUsed ? "none" : "1px solid rgba(212,175,55,0.25)" }} />
+                          <span style={{ fontSize: 13, color: isSelected ? "#D4AF37" : "rgba(255,255,255,0.87)", fontWeight: isSelected ? 600 : 400 }}>
+                            {b}
+                          </span>
+                          {isSelected && (
+                            <svg style={{ marginLeft: "auto", flexShrink: 0 }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      );
+                    })}
+                    {/* Divider */}
+                    <div style={{ height: 1, background: "rgba(212,175,55,0.12)", margin: "4px 0" }} />
+                  </>
+                )}
+
+                {/* ALL PLATFORMS section */}
+                <div style={{ padding: "8px 14px 4px", fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(212,175,55,0.6)", textTransform: "uppercase" }}>
+                  All Platforms
+                </div>
+                <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                  {remaining.map((b) => {
+                    const isSelected = b === selectedBuilder;
+                    return (
+                      <button
+                        key={b}
+                        type="button"
+                        onClick={() => handleBuilderSelect(b)}
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "10px 14px",
+                          background: isSelected ? "rgba(212,175,55,0.12)" : "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "background 120ms",
+                        }}
+                        onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = isSelected ? "rgba(212,175,55,0.12)" : "transparent"; }}
+                      >
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: "transparent", border: "1px solid rgba(212,175,55,0.2)" }} />
+                        <span style={{ fontSize: 13, color: isSelected ? "#D4AF37" : "rgba(255,255,255,0.87)", fontWeight: isSelected ? 600 : 400 }}>
+                          {b}
+                        </span>
+                        {isSelected && (
+                          <svg style={{ marginLeft: "auto", flexShrink: 0 }} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Custom builder input for "Other" */}
+        {selectedBuilder === "Other" && (
+          <div className="mt-2">
+            <p className="text-[10px] font-semibold tracking-widest text-gold uppercase mb-1.5">
+              Builder Name
+            </p>
+            <input
+              type="text"
+              value={customBuilderName}
+              onChange={(e) => setCustomBuilderName(e.target.value)}
+              placeholder="Type your builder name..."
+              className="w-full rounded-xl border border-gold/20 bg-obsidian-surface px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-gold/50 transition-colors"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Project context collapsible */}
+      <div>
+        {!showContext ? (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowContext(true)}
+              className="flex items-center gap-1.5 text-[11px] text-silver-muted hover:text-silver transition-colors"
+            >
+              <span className="text-gold font-bold text-xs">+</span>
+              Add project context (optional)
+            </button>
+            {/* Load Project shortcut when context is hidden */}
+            {(() => {
+              const profiles = dbProfiles;
+              if (profiles.length === 0) return null;
+              return (
+                <div ref={profilePickerRef} style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowProfilePicker(v => !v)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4,
+                      fontSize: 11, color: "#D4AF37", fontWeight: 600,
+                      background: "rgba(212,175,55,0.08)",
+                      border: "1px solid rgba(212,175,55,0.3)",
+                      borderRadius: 6, padding: "3px 8px", cursor: "pointer",
+                    }}
+                  >
+                    Load Project ▾
+                  </button>
+                  {showProfilePicker && (
+                    <div style={{
+                      position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 9999,
+                      minWidth: 180, background: "#0D0B09",
+                      border: "1px solid rgba(212,175,55,0.3)", borderRadius: 8,
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.6)", overflow: "hidden",
+                    }}>
+                      {profiles.map(p => (
+                        <button key={p.id} type="button"
+                          onClick={() => handleLoadProfile(p.id)}
+                          style={{
+                            width: "100%", display: "flex", flexDirection: "column",
+                            alignItems: "flex-start", padding: "9px 12px",
+                            background: "transparent", border: "none", cursor: "pointer", textAlign: "left",
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)"; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                        >
+                          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.87)", fontWeight: 600 }}>{p.name}</span>
+                          {p.builder && <span style={{ fontSize: 10, color: "rgba(156,163,175,0.55)", marginTop: 1 }}>{p.builder}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        ) : (
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[10px] font-semibold tracking-widest text-gold uppercase">
+                Project Context
+              </p>
+              {/* Load Project button when context is open */}
+              {(() => {
+                const profiles = dbProfiles;
+                if (profiles.length === 0) return null;
+                return (
+                  <div ref={profilePickerRef} style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowProfilePicker(v => !v)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 4,
+                        fontSize: 10, color: "#D4AF37", fontWeight: 700,
+                        background: "rgba(212,175,55,0.08)",
+                        border: "1px solid rgba(212,175,55,0.3)",
+                        borderRadius: 5, padding: "2px 7px", cursor: "pointer",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      Load Project ▾
+                    </button>
+                    {showProfilePicker && (
+                      <div style={{
+                        position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 9999,
+                        minWidth: 180, background: "#0D0B09",
+                        border: "1px solid rgba(212,175,55,0.3)", borderRadius: 8,
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.6)", overflow: "hidden",
+                      }}>
+                        {profiles.map(p => (
+                          <button key={p.id} type="button"
+                            onClick={() => handleLoadProfile(p.id)}
+                            style={{
+                              width: "100%", display: "flex", flexDirection: "column",
+                              alignItems: "flex-start", padding: "9px 12px",
+                              background: "transparent", border: "none", cursor: "pointer", textAlign: "left",
+                            }}
+                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)"; }}
+                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                          >
+                            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.87)", fontWeight: 600 }}>{p.name}</span>
+                            {p.builder && <span style={{ fontSize: 10, color: "rgba(156,163,175,0.55)", marginTop: 1 }}>{p.builder}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="relative">
+              <textarea
+                value={projectContext}
+                onChange={(e) => setProjectContext(e.target.value)}
+                placeholder={`Paste your file structure, tech stack, or key file paths...\n\nExample:\n- Frontend: src/components/ (React + Tailwind)\n- Backend: api/routes/ (Express)\n- Database: Postgres + Drizzle ORM\n- Auth: Not yet implemented`}
+                rows={5}
+                className="w-full rounded-xl border border-gold/20 bg-obsidian-surface px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-gold/50 resize-none transition-colors"
+              />
+              {projectContext && (
+                <button
+                  onClick={() => setProjectContext("")}
+                  className="absolute bottom-2 right-2 text-[10px] text-silver-muted hover:text-gold transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div>
+        <p className="text-[10px] font-semibold tracking-widest text-silver-muted uppercase mb-2">
+          What do you need to do?
+        </p>
+
+        {/* Image thumbnails */}
+        {attachedImages.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-2 mb-2">
+            {attachedImages.map((img) => (
+              <div key={img.id} className="relative shrink-0">
+                <img
+                  src={img.preview}
+                  alt={img.name}
+                  onClick={() => setLightboxSrc(img.preview)}
+                  className="h-14 w-14 rounded-lg object-cover cursor-pointer"
+                  style={{ border: "1px solid #D4AF37" }}
+                />
+                <button
+                  onClick={() => removeImage(img.id)}
+                  className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-obsidian-surface text-gold text-[10px] font-bold"
+                  style={{ border: "1px solid #D4AF37" }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="relative">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleGenerate();
+            }}
+            placeholder="Describe what you need to do in plain language..."
+            rows={4}
+            className="w-full rounded-xl border border-gold/20 bg-obsidian-surface px-3 py-3 pr-10 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-gold/50 resize-none transition-colors"
+          />
+          <button
+            onClick={handleGenerate}
+            disabled={(!input.trim() && attachedImages.length === 0) || isGenerating}
+            style={{
+              position: "absolute",
+              bottom: 10,
+              right: 10,
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              background: (!input.trim() && attachedImages.length === 0)
+                ? "rgba(212,175,55,0.1)"
+                : "#D4AF37",
+              border: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "background 150ms",
+              flexShrink: 0,
+            }}
+            title="Generate prompt"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+              stroke={(!input.trim() && attachedImages.length === 0)
+                ? "rgba(212,175,55,0.4)" : "#0D0B09"}
+              strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{ display: "flex", alignItems: "center", gap: 6,
+              fontSize: 11, color: "rgba(107,114,128,0.7)", cursor: "pointer",
+              background: "none", border: "none", padding: 0 }}
+            title="Attach images"
+          >
+            {attachedImages.length > 0 ? (
+              <span style={{ display: "flex", alignItems: "center",
+                justifyContent: "center", width: 20, height: 20,
+                borderRadius: "50%", background: "#D4AF37",
+                color: "#0D0B09", fontSize: 10, fontWeight: 700 }}>
+                {attachedImages.length}
+              </span>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+              </svg>
+            )}
+            <span style={{ fontSize: 11 }}>Attach image</span>
+          </button>
+          <span style={{ fontSize: 10, color: "rgba(107,114,128,0.4)" }}>
+            ⌘↵ to generate
+          </span>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleImageSelect}
+          style={{ display: "none" }}
+        />
+
+        {/* Example chips */}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {EXAMPLE_CHIPS.map((chip) => (
+            <button
+              key={chip}
+              onClick={() => setInput(chip)}
+              className="rounded-full border border-border/40 bg-obsidian-surface px-2.5 py-1 text-[10px] text-silver-muted hover:border-gold/30 hover:text-silver transition-all"
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Generate button */}
+      <button
+        onClick={handleGenerate}
+        disabled={!canGenerate}
+        className="w-full rounded-xl bg-gold py-3 text-sm font-bold text-gold-foreground transition-all hover:shadow-gold disabled:opacity-30 disabled:cursor-not-allowed"
+      >
+        {isGenerating ? (
+          <span className="flex items-center justify-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-gold-foreground animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="h-2 w-2 rounded-full bg-gold-foreground animate-bounce" style={{ animationDelay: "120ms" }} />
+            <span className="h-2 w-2 rounded-full bg-gold-foreground animate-bounce" style={{ animationDelay: "240ms" }} />
+          </span>
+        ) : (
+          "Generate Prompt →"
+        )}
+      </button>
+
+      {/* Output */}
+      {output && (
+        <div
+          ref={outputRef}
+          className="rounded-xl border p-4 flex flex-col gap-3"
+          style={{ borderColor: "rgba(212,175,55,0.35)", background: "oklch(0.12 0.01 60)" }}
+        >
+          <p className="text-[10px] font-bold tracking-widest text-gold uppercase">
+            Prompt for {effectiveBuilder}
+          </p>
+          <pre
+            className="text-xs text-foreground whitespace-pre-wrap leading-relaxed"
+            style={{ fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }}
+          >
+            {output}
+          </pre>
+          {/* Vault toast */}
+          {(vaultSaved || vaultError) && (
+            <div style={{
+              background: vaultError ? "rgba(239,68,68,0.1)" : "rgba(212,175,55,0.1)",
+              border: `1px solid ${vaultError ? "rgba(239,68,68,0.4)" : "rgba(212,175,55,0.4)"}`,
+              borderRadius: 8, padding: "8px 14px",
+              color: vaultError ? "rgba(239,68,68,0.9)" : "#D4AF37",
+              fontSize: 12, fontWeight: 700, textAlign: "center",
+            }}>
+              {vaultError ? "Save failed. Try again." : "Saved to Vault ◆"}
+            </div>
+          )}
+          <div className="flex gap-2 pt-1 border-t border-gold/10">
+            <button
+              onClick={handleCopy}
+              className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
+                copied
+                  ? "bg-gold/20 text-gold border border-gold/50"
+                  : "bg-gold text-gold-foreground hover:shadow-gold"
+              }`}
+            >
+              {copied ? "Copied ✓" : "Copy Prompt"}
+            </button>
+            <button
+              onClick={handleRegenerate}
+              className="flex-1 rounded-lg border border-gold/30 py-2 text-xs font-semibold text-gold hover:bg-gold/10 transition-all"
+            >
+              Regenerate
+            </button>
+            <button
+              onClick={handleSaveToVault}
+              disabled={vaultSaving}
+              className="flex-1 rounded-lg border py-2 text-xs font-semibold transition-all disabled:opacity-40"
+              style={{
+                borderColor: vaultSaved ? "rgba(212,175,55,0.7)" : "rgba(212,175,55,0.35)",
+                background: vaultSaved ? "rgba(212,175,55,0.18)" : "rgba(212,175,55,0.06)",
+                color: "#D4AF37",
+              }}
+            >
+              {vaultSaving ? "Saving..." : vaultSaved ? "Saved ◆" : "◆ Save to Vault"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setLightboxSrc(null)}
+        >
+          <img
+            src={lightboxSrc}
+            alt="Preview"
+            className="max-w-[90vw] max-h-[90vh] rounded-xl object-contain"
+            style={{ border: "1px solid rgba(212,175,55,0.4)" }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
