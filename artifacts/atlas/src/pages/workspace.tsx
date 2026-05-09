@@ -3325,6 +3325,9 @@ function PreviewTab({ projectId }: { projectId: number }) {
               <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
                 {linkedRepo ? <>Click <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Auto-detect URL</strong> to find<br />your live deployment automatically.</> : <>Paste your deployment URL above,<br />or link a GitHub repo in Files<br />to auto-detect it.</>}
               </div>
+              <div style={{ fontSize: 10, color: "var(--atlas-muted)", opacity: 0.25, textAlign: "center", lineHeight: 1.7, marginTop: 4, fontFamily: "var(--app-font-mono)" }}>
+                This tab previews your live app URL.<br />To browse code files, use the Files tab.
+              </div>
             </div>
           )}
         </>
@@ -6577,7 +6580,7 @@ export default function Workspace() {
         {/* Mobile: overlay panel */}
         {isMobile && rightOpen && (
           <div
-            style={{ position: "fixed", top: mobileTab === "map" ? 46 : 0, left: 0, right: 0, bottom: mobileTab === "map" ? 0 : 64, zIndex: 50, display: "flex", justifyContent: "flex-end" }}
+            style={{ position: "fixed", top: 46, left: 0, right: 0, bottom: mobileTab === "map" ? 0 : 64, zIndex: 50, display: "flex", justifyContent: "flex-end" }}
           >
             {/* Backdrop — hidden in fullscreen */}
             {!rightFullscreen && (
