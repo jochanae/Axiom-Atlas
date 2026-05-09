@@ -27,6 +27,23 @@ export function isNodeDefined(node: ArchNode): boolean {
 // off to a new Atlas chat session. The hash is content-addressed so the
 // Workspace header can detect drift since the last handover.
 
+// Structured snapshot of the Flow at handover time. `summary` is the
+// human-readable seed message; `nodes` + `edges` preserve the full graph so
+// downstream features (diff, replay, regenerate) can read it without parsing
+// the sentence form back out.
+export interface HandoverSnapshotNode {
+  id: string;
+  type: ArchNode["type"];
+  label: string;
+  meta?: ArchNode["meta"];
+  resolved: boolean;
+  strategicAnswer?: string;
+}
+export interface HandoverSnapshotEdge {
+  id: string;
+  from: string;
+  to: string;
+}
 export interface HandoverSnapshot {
   title: string;
   summary: string;
@@ -34,6 +51,8 @@ export interface HandoverSnapshot {
   definedCount: number;
   totalCount: number;
   goalLabel: string;
+  nodes: HandoverSnapshotNode[];
+  edges: HandoverSnapshotEdge[];
 }
 
 function djb2Hash(str: string): string {
@@ -104,6 +123,17 @@ export function buildHandoverSnapshot(
     `Edges: ${edgeList}.`;
 
   const titleBase = `Working session — ${goalLabel}`;
+  const snapshotNodes: HandoverSnapshotNode[] = nodes.map(n => ({
+    id: n.id,
+    type: n.type,
+    label: n.label,
+    meta: n.meta,
+    resolved: isNodeDefined(n),
+    strategicAnswer: n.strategicAnswer?.trim() || undefined,
+  }));
+  const snapshotEdges: HandoverSnapshotEdge[] = edges.map(e => ({
+    id: e.id, from: e.from, to: e.to,
+  }));
   return {
     title: titleBase.length > 80 ? `${titleBase.slice(0, 77)}…` : titleBase,
     summary,
@@ -111,6 +141,8 @@ export function buildHandoverSnapshot(
     definedCount: defined.length,
     totalCount: nodes.length,
     goalLabel,
+    nodes: snapshotNodes,
+    edges: snapshotEdges,
   };
 }
 
@@ -293,6 +325,17 @@ interface AxiomFlowProps {
   onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void;
   handoverPending?: boolean;
   lastHandoverHash?: string | null;
+  // Controlled snapshot stream — workspace uses this to render the desktop
+  // handover button + workspace-header drift indicator without remounting.
+  onSnapshotChange?: (snapshot: HandoverSnapshot | null) => void;
+  // Optional controlled-popover. When both provided, AxiomFlow defers
+  // open/close to the workspace so a desktop trigger can drive the same UI.
+  handoverOpen?: boolean;
+  onHandoverOpenChange?: (open: boolean) => void;
+  // Workspace-owned breakpoint. Passed in so desktop/mobile detection is
+  // consistent with the rest of the app and there is no chance of a tablet
+  // width range showing both the desktop tab-bar trigger and the footer pill.
+  isMobile?: boolean;
 }
 
 export function AxiomFlow({
@@ -308,10 +351,16 @@ export function AxiomFlow({
   onUnansweredQuestionOpen,
   onHandover,
   handoverPending,
-  lastHandoverHash,
+  lastHandoverHash: _lastHandoverHash,
+  onSnapshotChange,
+  handoverOpen: handoverOpenProp,
+  onHandoverOpenChange,
+  isMobile: isMobileProp,
 }: AxiomFlowProps) {
   const storageKey = `${BASE_STORAGE_KEY}${projectId ? `-${projectId}` : ""}`;
-  const isMobile = window.innerWidth < 768;
+  // Prefer the workspace-provided breakpoint; fall back to a local snapshot
+  // only when AxiomFlow is rendered standalone (e.g. legacy contexts).
+  const isMobile = isMobileProp ?? (typeof window !== "undefined" && window.innerWidth < 768);
   const [nodes, setNodes] = useState<ArchNode[]>(() => loadNodes(storageKey));
   const [edges, setEdges] = useState<ArchEdge[]>(() => loadEdges(storageKey));
 
@@ -596,29 +645,46 @@ export function AxiomFlow({
   }, []);
 
   // ── Handover state ────────────────────────────────────────────────────────
-  const [handoverOpen, setHandoverOpen] = useState(false);
+  const [handoverOpenInternal, setHandoverOpenInternal] = useState(false);
   const [handoverTitle, setHandoverTitle] = useState("");
   const handoverInputRef = useRef<HTMLInputElement>(null);
+  const controlledOpen = handoverOpenProp !== undefined && !!onHandoverOpenChange;
+  const handoverOpen = controlledOpen ? !!handoverOpenProp : handoverOpenInternal;
+  const setHandoverOpen = useCallback((open: boolean) => {
+    if (controlledOpen) onHandoverOpenChange!(open);
+    else setHandoverOpenInternal(open);
+  }, [controlledOpen, onHandoverOpenChange]);
 
   const currentSnapshot = onHandover ? buildHandoverSnapshot(nodes, edges) : null;
   const handoverEnabled = !!onHandover && (currentSnapshot?.definedCount ?? 0) > 0;
-  const handoverStale =
-    !!lastHandoverHash &&
-    !!currentSnapshot &&
-    currentSnapshot.hash !== lastHandoverHash;
+
+  // Stream the snapshot upward so the workspace can render its own header
+  // drift pill and desktop trigger button.
+  useEffect(() => {
+    if (!onSnapshotChange) return;
+    onSnapshotChange(currentSnapshot);
+  }, [onSnapshotChange, currentSnapshot?.hash, currentSnapshot?.definedCount]);
+
+  // When the popover is opened (from inside or outside), seed the title input
+  // and select it.
+  useEffect(() => {
+    if (!handoverOpen || !currentSnapshot) return;
+    setHandoverTitle(currentSnapshot.title);
+    setTimeout(() => handoverInputRef.current?.select(), 40);
+  }, [handoverOpen]);
 
   const openHandover = useCallback(() => {
-    if (!handoverEnabled || !currentSnapshot) return;
-    setHandoverTitle(currentSnapshot.title);
+    if (!handoverEnabled) return;
     setHandoverOpen(true);
-    setTimeout(() => handoverInputRef.current?.select(), 40);
-  }, [handoverEnabled, currentSnapshot]);
+  }, [handoverEnabled, setHandoverOpen]);
 
   const confirmHandover = useCallback(() => {
     if (!onHandover || !currentSnapshot) return;
     const title = handoverTitle.trim() || currentSnapshot.title;
+    // Don't close the popover here — let the workspace close it from the
+    // mutation's success path so failed handovers preserve the user's title
+    // input and any context they had on screen.
     onHandover({ snapshot: currentSnapshot, title });
-    setHandoverOpen(false);
   }, [onHandover, currentSnapshot, handoverTitle]);
 
   const strokeWidth = Math.max(1, Math.min(2, 1.5 / zoom));
@@ -669,29 +735,11 @@ export function AxiomFlow({
       {/* Header label */}
       <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
         <span className="text-xs font-bold tracking-widest text-gold uppercase">AXIOM FLOW</span>
-        {handoverStale && (
-          <span
-            title="Flow has changed since last Atlas handover"
-            style={{
-              padding: "2px 7px",
-              borderRadius: 4,
-              background: "rgba(146,64,14,0.18)",
-              border: "1px solid rgba(146,64,14,0.55)",
-              color: "rgba(230,150,90,0.95)",
-              fontFamily: "var(--app-font-mono)",
-              fontSize: 8.5,
-              fontWeight: 700,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-            }}
-          >
-            Updated since handover
-          </span>
-        )}
       </div>
 
-      {/* Handover footer button (visible when onHandover is provided) */}
-      {onHandover && !handoverOpen && (
+      {/* Handover footer button — mobile only. On desktop, the trigger lives
+          in the right-pane tab bar (workspace.tsx). */}
+      {onHandover && isMobile && !handoverOpen && (
         <button
           onClick={openHandover}
           disabled={!handoverEnabled || !!handoverPending}
