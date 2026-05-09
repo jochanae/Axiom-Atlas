@@ -85,23 +85,31 @@ function RingSvg({ score, size, radius, strokeWidth, pulse }: RingSvgProps) {
 
 export function CompactReadinessRing({ score }: { score: number }) {
   const SIZE = 24;
+  const isZero = score === 0;
   return (
     <div
-      title={`Readiness ${score}%`}
-      aria-label={`Readiness ${score}%`}
-      style={{ width: SIZE, height: SIZE, position: "relative", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+      title={isZero ? "Readiness unscored" : `Readiness ${score}%`}
+      aria-label={isZero ? "Readiness unscored" : `Readiness ${score}%`}
+      style={{
+        width: SIZE, height: SIZE, position: "relative", flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        opacity: isZero ? 0.38 : 1,
+        transition: "opacity 300ms ease",
+      }}
     >
       <RingSvg score={score} size={SIZE} radius={8} strokeWidth={2} pulse={false} />
-      <span
-        style={{
-          position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-          fontFamily: "var(--app-font-mono)", fontSize: 6, fontWeight: 700, letterSpacing: "0.02em",
-          color: score > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
-          lineHeight: 1, userSelect: "none", pointerEvents: "none",
-        }}
-      >
-        {score}
-      </span>
+      {!isZero && (
+        <span
+          style={{
+            position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            fontFamily: "var(--app-font-mono)", fontSize: 6, fontWeight: 700, letterSpacing: "0.02em",
+            color: "var(--atlas-gold)",
+            lineHeight: 1, userSelect: "none", pointerEvents: "none",
+          }}
+        >
+          {score}
+        </span>
+      )}
     </div>
   );
 }
