@@ -16,6 +16,7 @@ import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
 import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
+import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import type { ZipEntry } from "../components/ZipImport";
 import {
   useGetProject,
@@ -4968,6 +4969,8 @@ export default function Workspace() {
   }, [id]);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
+  const [showProjectSettings, setShowProjectSettings] = useState(false);
+  const [cloningProject, setCloningProject] = useState(false);
   const updateProjectHeader = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
   const createProjectMutation = useCreateProject();
@@ -5833,9 +5836,9 @@ export default function Workspace() {
                 >
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "6px 6px 4px", opacity: 0.5 }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
-                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2" /><path d="M13.7 9.4a1 1 0 010-2.8l.5-.2a1 1 0 00.6-1.5l-.7-1.2a1 1 0 00-1.5-.3l-.4.3a1 1 0 01-1.4-.6l-.1-.5a1 1 0 00-1-.8H8.3a1 1 0 00-1 .8l-.1.5a1 1 0 01-1.4.6l-.4-.3a1 1 0 00-1.5.3l-.7 1.2a1 1 0 00.6 1.5l.5.2a1 1 0 010 2.8l-.5.2a1 1 0 00-.6 1.5l.7 1.2a1 1 0 001.5.3l.4-.3a1 1 0 011.4.6l.1.5a1 1 0 001 .8h1.4a1 1 0 001-.8l.1-.5a1 1 0 011.4-.6l.4.3a1 1 0 001.5-.3l.7-1.2a1 1 0 00-.6-1.5l-.5-.2z" /></svg>} label="Project settings" badge="SOON" disabled />
+                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2" /><path d="M13.7 9.4a1 1 0 010-2.8l.5-.2a1 1 0 00.6-1.5l-.7-1.2a1 1 0 00-1.5-.3l-.4.3a1 1 0 01-1.4-.6l-.1-.5a1 1 0 00-1-.8H8.3a1 1 0 00-1 .8l-.1.5a1 1 0 01-1.4.6l-.4-.3a1 1 0 00-1.5.3l-.7 1.2a1 1 0 00.6 1.5l.5.2a1 1 0 010 2.8l-.5.2a1 1 0 00-.6 1.5l.7 1.2a1 1 0 001.5.3l.4-.3a1 1 0 011.4.6l.1.5a1 1 0 001 .8h1.4a1 1 0 001-.8l.1-.5a1 1 0 011.4-.6l.4.3a1 1 0 001.5-.3l.7-1.2a1 1 0 00-.6-1.5l-.5-.2z" /></svg>} label="Project settings" onClick={() => { setShowProjectMenu(false); setShowProjectSettings(true); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation(`/parking?project=${id}`); setShowProjectMenu(false); }} />
-                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="9" height="9" rx="1.5" /><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" /></svg>} label="Clone project" badge="SOON" disabled />
+                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="9" height="9" rx="1.5" /><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" /></svg>} label={cloningProject ? "Cloning…" : "Clone project"} onClick={async () => { if (cloningProject) return; setShowProjectMenu(false); setCloningProject(true); try { const base = import.meta.env.BASE_URL.replace(/\/$/, ""); const res = await fetch(`${base}/api/projects/${id}/clone`, { method: "POST" }); if (res.ok) { const clone = await res.json(); queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); setLocation(`/project/${clone.id}`); } } finally { setCloningProject(false); } }} />
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
@@ -6646,6 +6649,15 @@ export default function Workspace() {
 
       {/* User Profile Panel */}
       {showProfile && <UserProfilePanel onClose={() => setShowProfile(false)} isMobile={isMobile} />}
+
+      {/* Project Settings Panel */}
+      {showProjectSettings && project && (
+        <ProjectSettingsPanel
+          project={project}
+          onClose={() => setShowProjectSettings(false)}
+          onSaved={() => { queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); }}
+        />
+      )}
 
       {/* Projects Drawer */}
       <ProjectsDrawer

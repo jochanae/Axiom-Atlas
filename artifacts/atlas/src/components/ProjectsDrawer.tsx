@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, X, ChevronDown, ChevronRight, MessageSquare, BookOpen, Inbox, Feather, Hammer, Compass, ShieldCheck, Archive } from "lucide-react";
+import { Plus, X, ChevronDown, ChevronRight, MessageSquare, BookOpen, Inbox, Feather, Hammer, Compass, ShieldCheck, Archive, LayoutDashboard } from "lucide-react";
 
 export type DrawerProject = {
   id: number;
@@ -184,6 +184,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
           <NavRow icon={<Compass size={14} strokeWidth={1.6} />} label="Project Compass" onClick={() => navigate("/compass")} />
           <NavRow icon={<ShieldCheck size={14} strokeWidth={1.6} />} label="Guard Report" onClick={() => navigate("/guard-report")} />
           <NavRow icon={<Archive size={14} strokeWidth={1.6} />} label="The Vault" onClick={() => navigate("/vault")} />
+          <NavRow icon={<LayoutDashboard size={14} strokeWidth={1.6} />} label="Dashboard" onClick={() => navigate("/dashboard")} />
         </div>
 
         {/* User footer */}
