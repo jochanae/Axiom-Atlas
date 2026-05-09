@@ -5084,7 +5084,7 @@ export default function Workspace() {
   const touchStartX = useRef(0);
 
   const { data: allProjects } = useListProjects();
-  const { data: project } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
+  const { data: project, isLoading: projectLoading } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
   const { data: sessions, isLoading: sessionsLoading } = useListSessions(id, {
     query: { enabled: !!id, queryKey: getListSessionsQueryKey(id) },
   });
@@ -5517,6 +5517,63 @@ export default function Workspace() {
       return next;
     });
   }, [zipName]);
+
+  // ── Project not found ────────────────────────────────────────────────────
+  if (!projectLoading && !sessionsLoading && id && !project) {
+    return (
+      <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "var(--atlas-bg)", gap: 20 }}>
+        <div style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.35em", color: "var(--atlas-gold)", opacity: 0.4, textTransform: "uppercase" }}>Axiom</div>
+        <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "0.04em" }}>Project not found.</div>
+        <button
+          onClick={() => setLocation("/home")}
+          style={{ padding: "10px 24px", borderRadius: 9, cursor: "pointer", background: "linear-gradient(180deg, #D4AF37 0%, #B8942A 100%)", border: "1px solid rgba(212,175,55,0.4)", color: "#0C0A09", fontSize: 11, fontWeight: 700, fontFamily: "var(--app-font-mono)", letterSpacing: "0.14em", textTransform: "uppercase" }}
+        >
+          Go home
+        </button>
+      </div>
+    );
+  }
+
+  // ── Loading skeleton ──────────────────────────────────────────────────────
+  if (projectLoading || (sessionsLoading && !sessionId)) {
+    return (
+      <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", background: "var(--atlas-bg)", overflow: "hidden" }}>
+        <style>{`
+          @keyframes shimmer { 0% { background-position: -600px 0; } 100% { background-position: 600px 0; } }
+          .ws-shimmer { background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%); background-size: 600px 100%; animation: shimmer 1.6s infinite linear; border-radius: 6px; }
+        `}</style>
+        {/* Header skeleton */}
+        <div style={{ height: 46, flexShrink: 0, borderBottom: "1px solid rgba(201,162,76,0.08)", display: "flex", alignItems: "center", padding: "0 16px", gap: 10 }}>
+          <div className="ws-shimmer" style={{ width: 28, height: 28, borderRadius: 7 }} />
+          <div className="ws-shimmer" style={{ width: 60, height: 14 }} />
+          <div style={{ flex: 1 }} />
+          <div className="ws-shimmer" style={{ width: 80, height: 14 }} />
+          <div className="ws-shimmer" style={{ width: 28, height: 28, borderRadius: "50%" }} />
+        </div>
+        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+          {/* Chat area skeleton */}
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "24px 20px", gap: 18 }}>
+            <div className="ws-shimmer" style={{ height: 14, width: "65%" }} />
+            <div className="ws-shimmer" style={{ height: 14, width: "80%" }} />
+            <div className="ws-shimmer" style={{ height: 14, width: "50%" }} />
+            <div style={{ marginTop: 12 }}>
+              <div className="ws-shimmer" style={{ height: 14, width: "72%", marginBottom: 10 }} />
+              <div className="ws-shimmer" style={{ height: 14, width: "58%" }} />
+            </div>
+          </div>
+          {/* Right panel skeleton (desktop only) */}
+          {!isMobile && (
+            <div style={{ width: 280, flexShrink: 0, borderLeft: "1px solid rgba(201,162,76,0.08)", background: "var(--atlas-surface-alt)", padding: "20px 16px", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div className="ws-shimmer" style={{ height: 12, width: "60%" }} />
+              <div className="ws-shimmer" style={{ height: 56, borderRadius: 8 }} />
+              <div className="ws-shimmer" style={{ height: 56, borderRadius: 8 }} />
+              <div className="ws-shimmer" style={{ height: 56, borderRadius: 8 }} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -6410,6 +6467,18 @@ export default function Workspace() {
           entryCount={entryCount}
           activeCatch={!!activeCatch}
         />
+      )}
+
+      {/* Terms · Privacy fixed link */}
+      {!isMobile && (
+        <div style={{ position: "fixed", bottom: 10, left: 12, display: "flex", gap: 12, zIndex: 10, pointerEvents: "none" }}>
+          {[["Terms", "/terms"], ["Privacy", "/privacy"]].map(([label, href]) => (
+            <a key={label} href={href} style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.25, letterSpacing: "0.08em", textDecoration: "none", pointerEvents: "auto" }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.5")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.25")}
+            >{label}</a>
+          ))}
+        </div>
       )}
 
       {/* User Profile Panel */}
