@@ -4347,8 +4347,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         background: "linear-gradient(to right, transparent 0%, rgba(212,175,55,0.18) 20%, rgba(212,175,55,0.38) 50%, rgba(212,175,55,0.18) 80%, transparent 100%)",
       }} />
 
-      {/* Map area — Axiom Flow (strategic) + System Map (architecture readiness) */}
-      <div style={{ position: "relative", flex: showChat ? "0 0 54%" : 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", transition: "flex 350ms ease" }}>
+      {/* Map area — Axiom Flow (strategic) + System Map (architecture readiness)
+          When intent capture is visible, cap at 54% so the input section always
+          has enough room on every phone size. */}
+      <div style={{ position: "relative", flex: showChat ? "0 0 auto" : 1, height: showChat ? "min(54%, calc(100% - 316px))" : undefined, minHeight: showChat ? 200 : 0, overflow: "hidden", display: "flex", flexDirection: "column", transition: "flex 350ms ease" }}>
         {/* Axiom Flow canvas */}
         <div style={{ flex: 1, minHeight: 0, position: "relative", overflow: "hidden" }}>
           <AxiomFlow
@@ -4401,16 +4403,14 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         borderTop: "1px solid rgba(212,175,55,0.08)",
         flexShrink: 0,
       }}>
-        <button
-          onClick={() => setShowChat(v => !v)}
-          style={{
-            background: "none", border: "none", cursor: "pointer",
-            color: "rgba(212,175,55,0.55)", fontSize: 10,
-            fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
-          }}
-        >
-          {showChat ? "▲ map only" : "▼ intent capture"}
-        </button>
+        {/* Static label — tells the user what the panel below is */}
+        <span style={{
+          color: "rgba(212,175,55,0.35)", fontSize: 10,
+          fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+          userSelect: "none",
+        }}>
+          {showChat ? "intent capture" : "map fullscreen"}
+        </span>
         <button
           onClick={() => setShowChat(v => !v)}
           style={{
@@ -4419,13 +4419,13 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
             color: "rgba(212,175,55,0.78)", fontSize: 9,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           }}>
-          {showChat ? "⛶ Fullscreen" : "⊠ Restore"}
+          {showChat ? "⛶ Map only" : "⊠ Show input"}
         </button>
       </div>
 
       {/* INTENT CAPTURE */}
       {showChat && (
-        <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", background: "oklch(0.11 0.01 60)" }}>
+        <div style={{ flex: 1, minHeight: 190, overflow: "hidden", display: "flex", flexDirection: "column", background: "oklch(0.11 0.01 60)" }}>
           <style>{`@keyframes intent-dot-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}`}</style>
 
           {/* Header */}
