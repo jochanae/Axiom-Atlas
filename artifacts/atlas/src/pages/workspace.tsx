@@ -209,7 +209,7 @@ const MODE_LABEL_COLORS: Record<string, string> = {
 function AtlasLogo({ small, mode }: { small?: boolean; mode?: "THINK" | "PLAN" | "BUILD" }) {
   const imgSize = small ? 22 : 26;
   const modeLabel = mode ? `${mode} MODE` : "BUILD MODE";
-  const modeColor = mode ? (MODE_LABEL_COLORS[mode] ?? "rgba(212,175,55,0.38)") : "rgba(212,175,55,0.38)";
+  const modeColor = "var(--atlas-muted)";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <img
@@ -940,14 +940,14 @@ function GitHubPushModal({
                         return (
                           <div key={idx} style={{ display: "flex", alignItems: "flex-start", background: isAdded ? "rgba(134,239,172,0.06)" : isRemoved ? "rgba(239,68,68,0.05)" : "transparent", borderLeft: `2px solid ${isAdded ? "rgba(134,239,172,0.4)" : isRemoved ? "rgba(239,68,68,0.35)" : "transparent"}` }}>
                             <span style={{ width: 16, flexShrink: 0, textAlign: "center", color: isAdded ? "rgba(134,239,172,0.7)" : isRemoved ? "rgba(252,165,165,0.6)" : "transparent", fontSize: 10, paddingTop: 1, userSelect: "none" as const }}>{isAdded ? "+" : isRemoved ? "−" : " "}</span>
-                            <span style={{ flex: 1, padding: "1px 8px 1px 2px", color: isAdded ? "rgba(134,239,172,0.85)" : isRemoved ? "rgba(252,165,165,0.7)" : "rgba(231,229,228,0.32)", whiteSpace: "pre" as const, overflowX: "auto" }}>{item.line || " "}</span>
+                            <span style={{ flex: 1, padding: "1px 8px 1px 2px", color: isAdded ? "rgba(134,239,172,0.85)" : isRemoved ? "rgba(252,165,165,0.7)" : "var(--atlas-muted)", whiteSpace: "pre" as const, overflowX: "auto" }}>{item.line || " "}</span>
                           </div>
                         );
                       })}
                     </div>
                   )
                 ) : (
-                  <pre style={{ margin: 0, padding: "10px", background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 5, fontSize: 10.5, fontFamily: "var(--app-font-mono)", lineHeight: 1.6, color: "rgba(231,229,228,0.7)", overflowX: "auto", maxHeight: 280, overflowY: "auto", whiteSpace: "pre" }}>{currentFile.content}</pre>
+                  <pre style={{ margin: 0, padding: "10px", background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 5, fontSize: 10.5, fontFamily: "var(--app-font-mono)", lineHeight: 1.6, color: "var(--atlas-fg)", overflowX: "auto", maxHeight: 280, overflowY: "auto", whiteSpace: "pre" }}>{currentFile.content}</pre>
                 )}
               </div>
 
@@ -1568,7 +1568,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
         <Link
           href={`/entry/${entry.id}`}
           onClick={(e) => e.stopPropagation()}
-          style={{ flex: 1, fontSize: 12.5, color: "rgba(231,229,228,0.78)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.4, textDecoration: "none" }}
+          style={{ flex: 1, fontSize: 12.5, color: "var(--atlas-fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.4, textDecoration: "none" }}
         >
           {entry.title}
         </Link>
@@ -1613,14 +1613,14 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
           <Link
             href={`/entry/${entry.id}`}
             onClick={(e) => e.stopPropagation()}
-            style={{ display: "block", fontSize: 14, fontWeight: 600, color: "rgba(231,229,228,0.9)", marginBottom: 8, lineHeight: 1.35, textDecoration: "none" }}
+            style={{ display: "block", fontSize: 14, fontWeight: 600, color: "var(--atlas-fg)", marginBottom: 8, lineHeight: 1.35, textDecoration: "none" }}
           >
             {entry.title}
           </Link>
 
           {/* Short definition (italic intro) */}
           {shortDef && (
-            <div style={{ fontSize: 12, color: "rgba(231,229,228,0.55)", lineHeight: 1.65, marginBottom: context ? 12 : 10, fontStyle: "italic" }}>
+            <div style={{ fontSize: 12, color: "var(--atlas-muted)", lineHeight: 1.65, marginBottom: context ? 12 : 10, fontStyle: "italic" }}>
               {shortDef}
             </div>
           )}
@@ -1631,7 +1631,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
               <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(120,113,108,0.45)", marginBottom: 5 }}>
                 What it means
               </div>
-              <div style={{ fontSize: 12, color: "rgba(231,229,228,0.5)", lineHeight: 1.65, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "var(--atlas-muted)", lineHeight: 1.65, marginBottom: 12 }}>
                 {context}
               </div>
             </>
@@ -1671,7 +1671,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
                 <pre style={{
                   margin: 0, marginBottom: (entry.touched && entry.touched.length > 0) ? 10 : 0,
                   fontSize: 11, fontFamily: "var(--app-font-mono)",
-                  color: "rgba(231,229,228,0.55)", lineHeight: 1.6,
+                  color: "var(--atlas-muted)", lineHeight: 1.6,
                   whiteSpace: "pre-wrap", wordBreak: "break-word",
                 }}>
                   {entry.details}
@@ -1771,7 +1771,7 @@ function LedgerEntry({ entry }: { entry: Entry }) {
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   fontSize: 12.5, fontWeight: 600, lineHeight: 1.35, letterSpacing: "-0.01em",
-                  color: committed ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.5)",
+                  color: committed ? "var(--atlas-fg)" : "var(--atlas-muted)",
                   textDecoration: "none",
                 }}
               >
@@ -2075,7 +2075,7 @@ function LedgerTab({
             <div style={{ marginBottom: 10 }}>
               {/* Header row */}
               <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6, padding: "0 2px" }}>
-                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: parked.length > 0 ? "rgba(231,229,228,0.7)" : "var(--atlas-muted)", fontWeight: 600 }}>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10.5, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: parked.length > 0 ? "var(--atlas-fg)" : "var(--atlas-muted)", fontWeight: 600 }}>
                   Parking Lot
                 </span>
                 {parked.length > 0 && (
@@ -2301,7 +2301,7 @@ function GhTreeNodeRow({
             <path d="M2 1l4 3-4 3" stroke="var(--atlas-fg)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <FolderIcon open={open} />
-          <span style={{ fontSize: 11.5, color: "rgba(231,229,228,0.6)", fontFamily: "var(--app-font-sans)", textAlign: "left" }}>
+          <span style={{ fontSize: 11.5, color: "var(--atlas-muted)", fontFamily: "var(--app-font-sans)", textAlign: "left" }}>
             {node.name}
           </span>
         </button>
@@ -2327,7 +2327,7 @@ function GhTreeNodeRow({
       onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}
     >
       <FileIcon ext={node.ext} />
-      <span style={{ fontSize: 11.5, color: isSelected ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.5)", fontFamily: "var(--app-font-sans)", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: 11.5, color: isSelected ? "var(--atlas-fg)" : "var(--atlas-muted)", fontFamily: "var(--app-font-sans)", textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {node.name}
       </span>
     </button>
@@ -2854,7 +2854,7 @@ function FilesTab({
                     {isLinked && (
                       <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", flexShrink: 0 }} />
                     )}
-                    <span style={{ fontSize: 12, color: isLinked ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.75)", fontFamily: "var(--app-font-sans)", fontWeight: isLinked ? 600 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{repo.name}</span>
+                    <span style={{ fontSize: 12, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", fontWeight: isLinked ? 600 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{repo.name}</span>
                     {repo.private && (
                       <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 3, background: "rgba(120,113,108,0.12)", color: "var(--atlas-muted)", border: "0.5px solid rgba(120,113,108,0.2)", flexShrink: 0 }}>
                         private
@@ -2984,7 +2984,7 @@ function FilesTab({
               <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px" }} className="scrollbar-none">
                 <pre style={{
                   margin: 0, fontSize: 10.5, lineHeight: 1.7,
-                  color: "rgba(231,229,228,0.65)",
+                  color: "var(--atlas-fg)",
                   fontFamily: "var(--app-font-mono)",
                   whiteSpace: "pre-wrap", wordBreak: "break-all",
                 }}>
@@ -3152,7 +3152,7 @@ function PreviewTab({ projectId }: { projectId: number }) {
 
   const sMono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
   const platformColor = (p: string) => {
-    if (p === "Vercel") return "rgba(255,255,255,0.75)";
+    if (p === "Vercel") return "var(--atlas-fg)";
     if (p === "Netlify") return "rgba(110,231,183,0.8)";
     if (p === "GitHub Pages") return "rgba(147,197,253,0.8)";
     if (p === "Replit") return "rgba(201,162,76,0.85)";
@@ -4112,7 +4112,7 @@ function _QuickPromptSheetOld({
                                   background: projectContext === p.name ? "rgba(212,175,55,0.1)" : "transparent",
                                   border: "none",
                                   borderBottom: "1px solid rgba(212,175,55,0.07)",
-                                  color: projectContext === p.name ? "#D4AF37" : "rgba(231,229,228,0.75)",
+                                  color: projectContext === p.name ? "var(--atlas-gold)" : "var(--atlas-fg)",
                                   fontSize: 12, cursor: "pointer",
                                   fontFamily: "var(--app-font-mono)",
                                 }}
@@ -5956,7 +5956,7 @@ export default function Workspace() {
           <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px", position: "relative" }} className="scrollbar-none atlas-chat-timeline">
             {messages.length === 0 && !chatPending && (
               <div style={{ textAlign: "center", padding: "72px 20px" }}>
-                <div style={{ fontSize: 22, fontWeight: 300, color: "rgba(231,229,228,0.3)", marginBottom: 8, letterSpacing: "-0.01em" }}>
+                <div style={{ fontSize: 22, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 8, letterSpacing: "-0.01em" }}>
                   {project ? project.name : "Ready."}
                 </div>
                 <div style={{ fontSize: 12, color: "rgba(120,113,108,0.45)" }}>
@@ -6122,7 +6122,7 @@ export default function Workspace() {
                       fontFamily: "var(--app-font-sans)",
                     }}
                   >
-                    Say it plainly…
+                    {projectMode === "PLAN" ? "What should we structure…" : projectMode === "BUILD" ? "What needs to be built or fixed…" : "Say it plainly…"}
                   </div>
                 )}
                 <textarea
@@ -6241,7 +6241,7 @@ export default function Workspace() {
                           onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(56,189,248,0.07)")}
                           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                         >
-                          <div style={{ fontSize: 11.5, fontFamily: "var(--app-font-mono)", color: "rgba(231,229,228,0.85)", fontWeight: 500 }}>{f.label}</div>
+                          <div style={{ fontSize: 11.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", fontWeight: 500 }}>{f.label}</div>
                           <div style={{ fontSize: 9.5, color: "rgba(120,113,108,0.55)", marginTop: 1 }}>{f.hint}</div>
                         </button>
                       ))}
@@ -6253,7 +6253,7 @@ export default function Workspace() {
                 </div>
 
                 <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "var(--atlas-muted)", opacity: 0.3 }}>
-                  {isMobile ? "Say it plainly…" : "Enter · Shift+Enter for newline"}
+                  {isMobile ? (projectMode === "PLAN" ? "What should we structure…" : projectMode === "BUILD" ? "What needs to be built or fixed…" : "Say it plainly…") : "Enter · Shift+Enter for newline"}
                 </span>
 
                 {/* Right: mic + send */}
