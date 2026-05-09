@@ -660,7 +660,7 @@ function GitHubPushModal({
 
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [useNewBranch, setUseNewBranch] = useState(true);
-  const [branchName, setBranchName] = useState(`atlas/fix-${today}`);
+  const [branchName, setBranchName] = useState(`atlas/fix-${today}-${Date.now().toString(36).slice(-4)}`);
   const [commitMsg, setCommitMsg] = useState(
     fileEdits.length === 1
       ? `Atlas: update ${fileEdits[0]?.path.split("/").pop() ?? "file"}`
@@ -677,9 +677,16 @@ function GitHubPushModal({
   const [creatingPr, setCreatingPr] = useState(false);
   const [prResult, setPrResult] = useState<{ prUrl: string; prNumber: number } | null>(null);
   const [prError, setPrError] = useState<string | null>(null);
+  const [confirmPush, setConfirmPush] = useState(false);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: modalProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
   const token = modalProject?.githubToken ?? null;
+
+  useEffect(() => {
+    setConfirmPush(false);
+    if (confirmTimerRef.current) { clearTimeout(confirmTimerRef.current); confirmTimerRef.current = null; }
+  }, [useNewBranch]);
 
   useEffect(() => {
     if (!linkedRepo || !token) { setLoadingOriginals(false); return; }
@@ -972,11 +979,34 @@ function GitHubPushModal({
         </div>
 
         {!success && (
-          <div style={{ padding: "14px 20px", borderTop: "1px solid var(--atlas-border)", display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: 6, fontSize: 12, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer" }}>Cancel</button>
-            <button onClick={handlePush} disabled={pushing || !linkedRepo} style={{ padding: "8px 18px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)", color: "var(--atlas-bg)", border: "none", cursor: pushing || !linkedRepo ? "not-allowed" : "pointer", opacity: pushing || !linkedRepo ? 0.5 : 1, transition: "opacity 160ms ease" }}>
-              {pushing ? "Pushing…" : fileEdits.length > 1 ? `Push ${fileEdits.length} files →` : "Push to GitHub"}
-            </button>
+          <div style={{ padding: "14px 20px", borderTop: "1px solid var(--atlas-border)" }}>
+            {!useNewBranch && confirmPush && (
+              <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 6, background: "rgba(146,64,14,0.12)", border: "1px solid rgba(146,64,14,0.4)", fontSize: 12, color: "rgba(251,191,36,0.92)", lineHeight: 1.5 }}>
+                ⚠ You're pushing directly to {linkedRepo?.defaultBranch ?? "main"}. This cannot be undone. Tap again to confirm.
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: 6, fontSize: 12, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer" }}>Cancel</button>
+              <button
+                onClick={() => {
+                  if (!useNewBranch) {
+                    if (!confirmPush) {
+                      setConfirmPush(true);
+                      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+                      confirmTimerRef.current = setTimeout(() => setConfirmPush(false), 5000);
+                      return;
+                    }
+                    if (confirmTimerRef.current) { clearTimeout(confirmTimerRef.current); confirmTimerRef.current = null; }
+                    setConfirmPush(false);
+                  }
+                  void handlePush();
+                }}
+                disabled={pushing || !linkedRepo}
+                style={{ padding: "8px 18px", borderRadius: 6, fontSize: 12, fontWeight: 600, background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)", color: "var(--atlas-bg)", border: "none", cursor: pushing || !linkedRepo ? "not-allowed" : "pointer", opacity: pushing || !linkedRepo ? 0.5 : 1, transition: "opacity 160ms ease" }}
+              >
+                {pushing ? "Pushing…" : !useNewBranch && confirmPush ? "Confirm push →" : fileEdits.length > 1 ? `Push ${fileEdits.length} files →` : "Push to GitHub"}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -5092,6 +5122,16 @@ export default function Workspace() {
     } catch {}
   }, [project?.linkedRepo]);
 
+  // Load push history from DB on project load (FIX 2)
+  const pushHistoryLoaded = useRef(false);
+  useEffect(() => {
+    if (pushHistoryLoaded.current) return;
+    const hist = (project as any)?.pushHistory;
+    if (!Array.isArray(hist) || hist.length === 0) return;
+    pushHistoryLoaded.current = true;
+    setPushHistory(hist as PushRecord[]);
+  }, [(project as any)?.pushHistory]);
+
   // Auto-load key repo files into AI context on session start.
   // Fires once per project whenever a linked repo + token exist — regardless
   // of which tab the user has open.  The user never has to manually open files.
@@ -5950,7 +5990,30 @@ export default function Workspace() {
                   onPark={handlePark}
                   onCommit={handleCommit}
                   onRegenerate={() => handleRegenerate(i)}
-                  onPushSuccess={(records) => setPushHistory((prev) => [...prev, ...records].slice(-5))}
+                  onPushSuccess={(records) => {
+                    setPushHistory((prev) => {
+                      const next = [...prev, ...records].slice(-20);
+                      updateProjectHeader.mutate({ id, data: { pushHistory: next as any } });
+                      return next;
+                    });
+                    const filenames = records.map((r) => r.filename).join(", ");
+                    const branch = records[0]?.branch ?? "unknown";
+                    const commitUrl = records[0]?.commitUrl ?? "";
+                    createEntry.mutate(
+                      {
+                        projectId: id,
+                        data: {
+                          title: `Code pushed: ${filenames}`,
+                          summary: `Branch: ${branch} · Files: ${filenames} · Commit: ${commitUrl}`,
+                          status: "committed",
+                          severity: "committed",
+                          mode: "BUILD",
+                          verb: "github_push",
+                        },
+                      },
+                      { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }) }
+                    );
+                  }}
                 />
               )
             )}

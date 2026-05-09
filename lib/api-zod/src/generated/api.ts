@@ -105,6 +105,7 @@ export const ListProjectsResponseItem = zod.object({
   githubToken: zod.string().nullish(),
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
+  pushHistory: zod.array(zod.unknown()).nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -135,6 +136,7 @@ export const GetProjectResponse = zod.object({
   githubToken: zod.string().nullish(),
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
+  pushHistory: zod.array(zod.unknown()).nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -155,6 +157,7 @@ export const UpdateProjectBody = zod.object({
   githubToken: zod.string().nullish(),
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
+  pushHistory: zod.array(zod.unknown()).nullish(),
 });
 
 export const UpdateProjectResponse = zod.object({
@@ -167,6 +170,7 @@ export const UpdateProjectResponse = zod.object({
   githubToken: zod.string().nullish(),
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
+  pushHistory: zod.array(zod.unknown()).nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });

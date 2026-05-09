@@ -33,6 +33,7 @@ export interface Project {
   /** @nullable */
   linkedRepo?: string | null;
   nodeState?: ProjectNodeState;
+  pushHistory?: unknown[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -67,6 +68,7 @@ export interface UpdateProjectBody {
   /** @nullable */
   linkedRepo?: string | null;
   nodeState?: UpdateProjectBodyNodeState;
+  pushHistory?: unknown[] | null;
 }
 
 export interface ProjectSummary {
