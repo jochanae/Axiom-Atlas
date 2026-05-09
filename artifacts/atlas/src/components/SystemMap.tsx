@@ -331,13 +331,8 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact, onNodeFoc
       }} />
 
       {/* Header */}
-      <div className="absolute left-4 top-4 z-10 flex flex-col gap-1.5">
+      <div className="absolute left-4 top-4 z-10">
         <span className="text-xs font-bold tracking-widest text-gold uppercase">SYSTEM MAP</span>
-        {effectiveBuilder && (
-          <span className="self-start rounded-full border border-gold/30 bg-obsidian-surface px-2 py-0.5 text-[10px] text-gold-muted">
-            {effectiveBuilder.toUpperCase()} DETECTED
-          </span>
-        )}
       </div>
 
       {/* % READY badge */}
