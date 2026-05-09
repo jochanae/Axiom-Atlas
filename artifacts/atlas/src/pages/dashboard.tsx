@@ -86,7 +86,8 @@ export default function Dashboard() {
   return (
     <div
       style={{
-        minHeight: "100dvh",
+        height: "100dvh",
+        overflowY: "auto",
         background: "#0a0a0f",
         color: "#fff",
         fontFamily: "var(--app-font-sans, sans-serif)",

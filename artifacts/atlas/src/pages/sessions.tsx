@@ -8,7 +8,7 @@ export default function Sessions() {
   const { data: projects = [], isLoading: projectsLoading } = useListProjects();
 
   return (
-    <div style={{ minHeight: "100dvh", background: "var(--atlas-bg)", color: "var(--atlas-fg)", display: "flex", flexDirection: "column", paddingBottom: 80 }}>
+    <div style={{ height: "100dvh", overflowY: "auto", background: "var(--atlas-bg)", color: "var(--atlas-fg)", display: "flex", flexDirection: "column", paddingBottom: 80 }}>
 
       {/* Header */}
       <header style={{
