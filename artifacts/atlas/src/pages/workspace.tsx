@@ -5126,11 +5126,11 @@ export default function Workspace() {
   const pushHistoryLoaded = useRef(false);
   useEffect(() => {
     if (pushHistoryLoaded.current) return;
-    const hist = (project as any)?.pushHistory;
+    const hist = project?.pushHistory;
     if (!Array.isArray(hist) || hist.length === 0) return;
     pushHistoryLoaded.current = true;
     setPushHistory(hist as PushRecord[]);
-  }, [(project as any)?.pushHistory]);
+  }, [project?.pushHistory]);
 
   // Auto-load key repo files into AI context on session start.
   // Fires once per project whenever a linked repo + token exist — regardless
@@ -5993,7 +5993,7 @@ export default function Workspace() {
                   onPushSuccess={(records) => {
                     setPushHistory((prev) => {
                       const next = [...prev, ...records].slice(-20);
-                      updateProjectHeader.mutate({ id, data: { pushHistory: next as any } });
+                      updateProjectHeader.mutate({ id, data: { pushHistory: next } });
                       return next;
                     });
                     const filenames = records.map((r) => r.filename).join(", ");
