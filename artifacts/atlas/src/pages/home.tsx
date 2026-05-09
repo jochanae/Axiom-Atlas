@@ -717,25 +717,31 @@ export default function Home() {
   );
 
   const handleSubmit = useCallback(() => {
-    const firstProject = projects?.[0];
-    if (firstProject) {
-      navigateToProject(firstProject.id);
-    } else {
-      setCreateError(null);
-      createProject.mutate(
-        { data: { name: "My Project" } },
-        {
-          onSuccess: (p) => {
-            queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-            navigateToProject(p.id);
-          },
-          onError: (err) => {
-            setCreateError(extractApiErrorMessage(err));
-          },
-        }
-      );
+    // Always create a fresh project when submitting from the home input —
+    // never silently drop the user into an existing project.
+    if (isFree && (projects?.length ?? 0) >= 1) {
+      setShowUpgrade(true);
+      return;
     }
-  }, [projects, navigateToProject, createProject, queryClient]);
+    setCreateError(null);
+    createProject.mutate(
+      { data: { name: "New Project" } },
+      {
+        onSuccess: (p) => {
+          queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+          navigateToProject(p.id);
+        },
+        onError: (err: any) => {
+          const msg = extractApiErrorMessage(err);
+          if (msg?.includes("PROJECT_LIMIT_REACHED") || err?.status === 402) {
+            setShowUpgrade(true);
+          } else {
+            setCreateError(msg ?? "Failed to create project");
+          }
+        },
+      }
+    );
+  }, [isFree, projects, navigateToProject, createProject, queryClient]);
 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
