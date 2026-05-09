@@ -544,6 +544,10 @@ components:
           type: object
           additionalProperties: true
           nullable: true
+        pushHistory:
+          type: array
+          items: {}
+          nullable: true
         createdAt:
           type: string
         updatedAt:
@@ -586,6 +590,10 @@ components:
         nodeState:
           type: object
           additionalProperties: true
+          nullable: true
+        pushHistory:
+          type: array
+          items: {}
           nullable: true
 
     ProjectSummary:
