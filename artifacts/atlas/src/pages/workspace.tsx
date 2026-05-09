@@ -4310,6 +4310,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
       {/* Map area */}
       <div style={{ position: "relative", flex: showChat ? "0 0 42%" : 1, minHeight: 0, overflow: "hidden", transition: "flex 350ms ease" }}>
         <SystemMap
+          projectId={projectId}
           onReadinessChange={setReadinessScore}
           onNodesChange={handleNodesChange}
           compact
@@ -5005,11 +5006,15 @@ export default function Workspace() {
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
 
+  const importSource = (() => {
+    try { return new URLSearchParams(window.location.search).get("source") ?? null; } catch { return null; }
+  })();
+  const importSourceLabel = importSource === "compani" ? "Compani Blueprints" : importSource === "axiom" ? "Axiom" : importSource ? importSource.charAt(0).toUpperCase() + importSource.slice(1) : null;
   const [showAxiomBanner, setShowAxiomBanner] = useState(() => {
     try {
       const dismissed = localStorage.getItem(`atlas-axiom-banner-${id}`);
       if (dismissed) return false;
-      return new URLSearchParams(window.location.search).get("source") === "axiom";
+      return !!new URLSearchParams(window.location.search).get("source");
     } catch { return false; }
   });
   const dismissAxiomBanner = () => {
@@ -5038,10 +5043,11 @@ export default function Workspace() {
     setShowModeMenu(false);
   };
 
-  // Auto-set BUILD mode when arriving via Axiom handoff
+  // Auto-set BUILD mode when arriving via external handoff (Axiom, Compani, etc.)
   useEffect(() => {
     try {
-      if (new URLSearchParams(window.location.search).get("source") === "axiom") {
+      const src = new URLSearchParams(window.location.search).get("source");
+      if (src) {
         setProjectMode("BUILD");
         localStorage.setItem(`atlas-mode-${id}`, "BUILD");
       }
@@ -5085,6 +5091,7 @@ export default function Workspace() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialSent = useRef(false);
+  const importPrimed = useRef(false);
   const touchStartX = useRef(0);
 
   const { data: allProjects } = useListProjects();
@@ -5352,6 +5359,21 @@ export default function Workspace() {
       }, 80);
     }
   }, [sessionId, id, doSend]);
+
+  // Auto-prime AI context when arriving via external import (Compani, Axiom, etc.)
+  // Only fires once, only when no messages exist, only when project has memory
+  useEffect(() => {
+    if (!sessionId || importPrimed.current || initialSent.current) return;
+    const src = (() => { try { return new URLSearchParams(window.location.search).get("source"); } catch { return null; } })();
+    if (!src) return;
+    if (messages.length > 0) { importPrimed.current = true; return; }
+    if (!project?.memory) return;
+    importPrimed.current = true;
+    const sourceLabel = src === "compani" ? "Compani Blueprints" : src === "axiom" ? "Axiom" : src;
+    setTimeout(() => {
+      doSend(`I just imported this project from ${sourceLabel}. Please read the spec you have in your memory and give me a brief summary of the project — what it is, what's been decided, and what we're building.`, sessionId, []);
+    }, 200);
+  }, [sessionId, messages.length, project?.memory, doSend]);
 
   const sendFromIntentCapture = useCallback((text: string) => {
     if (!text.trim() || !sessionId || chatPending) return;
@@ -5992,7 +6014,7 @@ export default function Workspace() {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, display: "inline-block" }} />
             <span style={{ fontSize: 12, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.03em" }}>
-              Spec loaded from Axiom — your architecture decisions are committed.
+              Spec loaded from {importSourceLabel ?? "external source"} — your architecture decisions are committed.
             </span>
           </div>
           <button
