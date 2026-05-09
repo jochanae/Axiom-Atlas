@@ -212,8 +212,40 @@ interface ReadinessTrend {
   history: Array<{ score: number; recordedAt: string }>;
 }
 
+type ReadinessMode = "blended" | "arch" | "decisions";
 
-function ReadinessRing({ score, onClick, title, trend }: { score: number; onClick?: () => void; title?: string; trend?: ReadinessTrend }) {
+const READINESS_MODE_KEY = "atlas-readiness-mode";
+
+const MODE_META: Record<ReadinessMode, { label: string; abbr: string; description: string }> = {
+  blended:   { label: "Blended",   abbr: "BLD", description: "60% architecture · 40% decisions" },
+  arch:      { label: "Arch",      abbr: "ARC", description: "Architecture nodes only" },
+  decisions: { label: "Decisions", abbr: "DEC", description: "Committed ledger entries only" },
+};
+
+function computeBlendedScore(archScore: number, decisionsScore: number): number {
+  return Math.round(archScore * 0.6 + decisionsScore * 0.4);
+}
+
+function ReadinessRing({
+  archScore,
+  decisionsScore,
+  mode,
+  onModeChange,
+  onClick,
+  trend,
+}: {
+  archScore: number;
+  decisionsScore: number;
+  mode: ReadinessMode;
+  onModeChange: (m: ReadinessMode) => void;
+  onClick?: () => void;
+  trend?: ReadinessTrend;
+}) {
+  const score =
+    mode === "arch"      ? archScore :
+    mode === "decisions" ? decisionsScore :
+    computeBlendedScore(archScore, decisionsScore);
+
   const r = 10;
   const cx = 14;
   const cy = 14;
@@ -227,9 +259,17 @@ function ReadinessRing({ score, onClick, title, trend }: { score: number; onClic
 
   const [showTooltip, setShowTooltip] = useState(false);
 
+  const MODES: ReadinessMode[] = ["blended", "arch", "decisions"];
+  const cycleMode = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = MODES[(MODES.indexOf(mode) + 1) % MODES.length];
+    onModeChange(next);
+  };
+
+  const blended = computeBlendedScore(archScore, decisionsScore);
   const tooltipText = trend
     ? `${trend.delta > 0 ? "+" : ""}${trend.delta}pts ${trend.label} · ${trend.history.length} snapshots`
-    : `Architecture readiness: ${score}%`;
+    : `${MODE_META[mode].description}: ${score}%`;
 
   return (
     <div
@@ -237,10 +277,11 @@ function ReadinessRing({ score, onClick, title, trend }: { score: number; onClic
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
+      {/* Ring button — clicks to open System Map */}
       <button
         onClick={onClick}
-        title={title ?? tooltipText}
-        aria-label={`Architecture readiness ${score}%. Click to open System Map.`}
+        title={tooltipText}
+        aria-label={`Readiness ${score}% (${MODE_META[mode].label}). Click to open System Map.`}
         style={{
           background: "transparent",
           border: "none",
@@ -313,6 +354,39 @@ function ReadinessRing({ score, onClick, title, trend }: { score: number; onClic
         </span>
       </button>
 
+      {/* Mode pill — click to cycle blended / arch / decisions */}
+      <button
+        onClick={cycleMode}
+        title={`Viewing: ${MODE_META[mode].description}. Click to switch mode.`}
+        aria-label={`Readiness mode: ${MODE_META[mode].label}. Click to cycle modes.`}
+        style={{
+          background: "rgba(201,162,76,0.08)",
+          border: "1px solid rgba(201,162,76,0.18)",
+          borderRadius: 3,
+          cursor: "pointer",
+          padding: "1px 3px",
+          fontFamily: "var(--app-font-mono)",
+          fontSize: 6.5,
+          fontWeight: 700,
+          letterSpacing: "0.08em",
+          color: "var(--atlas-muted)",
+          lineHeight: 1,
+          userSelect: "none",
+          flexShrink: 0,
+          transition: "color 150ms ease, border-color 150ms ease",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "var(--atlas-gold)";
+          e.currentTarget.style.borderColor = "rgba(201,162,76,0.45)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "var(--atlas-muted)";
+          e.currentTarget.style.borderColor = "rgba(201,162,76,0.18)";
+        }}
+      >
+        {MODE_META[mode].abbr}
+      </button>
+
       {/* Trend arrow */}
       {trendArrow && (
         <span
@@ -333,7 +407,7 @@ function ReadinessRing({ score, onClick, title, trend }: { score: number; onClic
       )}
 
       {/* Tooltip on hover */}
-      {showTooltip && trend && trend.history.length > 1 && (
+      {showTooltip && (
         <div
           style={{
             position: "absolute",
@@ -344,7 +418,7 @@ function ReadinessRing({ score, onClick, title, trend }: { score: number; onClic
             border: "1px solid rgba(201,162,76,0.2)",
             borderRadius: 8,
             padding: "8px 10px",
-            minWidth: 130,
+            minWidth: 150,
             zIndex: 10000,
             pointerEvents: "none",
             boxShadow: "0 4px 20px rgba(0,0,0,0.55)",
@@ -352,11 +426,29 @@ function ReadinessRing({ score, onClick, title, trend }: { score: number; onClic
           }}
         >
           <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", letterSpacing: "0.1em", marginBottom: 6, textTransform: "uppercase" }}>
-            Readiness History
+            Readiness — {MODE_META[mode].label}
           </div>
-          {(() => {
+
+          {/* Score breakdown */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 9.5, fontFamily: "var(--app-font-mono)" }}>
+              <span style={{ color: "var(--atlas-muted)" }}>Architecture</span>
+              <span style={{ color: mode === "arch" ? "var(--atlas-gold)" : "var(--atlas-fg)", fontWeight: mode === "arch" ? 700 : 400 }}>{archScore}%</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 9.5, fontFamily: "var(--app-font-mono)" }}>
+              <span style={{ color: "var(--atlas-muted)" }}>Decisions</span>
+              <span style={{ color: mode === "decisions" ? "var(--atlas-gold)" : "var(--atlas-fg)", fontWeight: mode === "decisions" ? 700 : 400 }}>{decisionsScore}%</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 9.5, fontFamily: "var(--app-font-mono)", borderTop: "1px solid rgba(201,162,76,0.1)", paddingTop: 3 }}>
+              <span style={{ color: "var(--atlas-muted)" }}>Blended</span>
+              <span style={{ color: mode === "blended" ? "var(--atlas-gold)" : "var(--atlas-fg)", fontWeight: mode === "blended" ? 700 : 400 }}>{blended}%</span>
+            </div>
+          </div>
+
+          {/* Trend history chart — always reflects blended score */}
+          {trend && trend.history.length > 1 && (() => {
             const pts = [...trend.history].reverse().slice(0, 8);
-            const W = 110, H = 28, PAD = 4;
+            const W = 130, H = 28, PAD = 4;
             const allScores = pts.map(p => p.score);
             const minS = Math.min(...allScores);
             const maxS = Math.max(...allScores);
@@ -366,29 +458,28 @@ function ReadinessRing({ score, onClick, title, trend }: { score: number; onClic
             const polyPts = pts.map((p, i) => `${toX(i).toFixed(1)},${toY(p.score).toFixed(1)}`).join(" ");
             const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(i).toFixed(1)},${toY(p.score).toFixed(1)}`).join(" ");
             return (
-              <svg width={W} height={H} style={{ display: "block", marginBottom: 6 }}>
-                <polyline
-                  points={polyPts}
-                  fill="none"
-                  stroke="rgba(201,162,76,0.5)"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d={`${pathD} L${toX(pts.length - 1).toFixed(1)},${H} L${toX(0).toFixed(1)},${H} Z`}
-                  fill="rgba(201,162,76,0.08)"
-                />
-                {pts.map((p, i) => (
-                  <circle key={i} cx={toX(i)} cy={toY(p.score)} r="2" fill={i === pts.length - 1 ? "var(--atlas-gold)" : "rgba(201,162,76,0.35)"} />
-                ))}
-              </svg>
+              <>
+                <div style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.6)", letterSpacing: "0.06em", marginBottom: 3, textTransform: "uppercase" }}>
+                  Trend{mode !== "blended" ? " (blended)" : ""}
+                </div>
+                <svg width={W} height={H} style={{ display: "block", marginBottom: 4 }}>
+                  <polyline points={polyPts} fill="none" stroke="rgba(201,162,76,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={`${pathD} L${toX(pts.length - 1).toFixed(1)},${H} L${toX(0).toFixed(1)},${H} Z`} fill="rgba(201,162,76,0.08)" />
+                  {pts.map((p, i) => (
+                    <circle key={i} cx={toX(i)} cy={toY(p.score)} r="2" fill={i === pts.length - 1 ? "var(--atlas-gold)" : "rgba(201,162,76,0.35)"} />
+                  ))}
+                </svg>
+                <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: hasTrend ? trendColor : "var(--atlas-muted)" }}>
+                  {hasTrend
+                    ? `${trend.delta > 0 ? "+" : ""}${trend.delta}pts ${trend.label}`
+                    : `No change ${trend.label}`}
+                </div>
+              </>
             );
           })()}
-          <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: hasTrend ? trendColor : "var(--atlas-muted)" }}>
-            {hasTrend
-              ? `${trend.delta > 0 ? "+" : ""}${trend.delta}pts ${trend.label}`
-              : `No change ${trend.label}`}
+
+          <div style={{ marginTop: 5, fontSize: 8.5, fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.5)", letterSpacing: "0.05em" }}>
+            Click mode pill to switch signal
           </div>
         </div>
       )}
@@ -5589,6 +5680,15 @@ export default function Workspace() {
   const committedCount = entries?.filter((e) => e.status === "committed").length ?? 0;
   const healthPct = entryCount > 0 ? Math.round((committedCount / entryCount) * 100) : 0;
   const [mapReadiness, setMapReadiness] = useState(0);
+  const [readinessMode, setReadinessMode] = useState<ReadinessMode>(() => {
+    const stored = localStorage.getItem(READINESS_MODE_KEY);
+    return (stored === "arch" || stored === "decisions" || stored === "blended") ? stored : "blended";
+  });
+  const handleReadinessModeChange = (m: ReadinessMode) => {
+    setReadinessMode(m);
+    localStorage.setItem(READINESS_MODE_KEY, m);
+  };
+  const blendedReadiness = computeBlendedScore(mapReadiness, healthPct);
   const [pendingResolvedNodeIds, setPendingResolvedNodeIds] = useState<string[]>([]);
   const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(undefined);
 
@@ -5601,14 +5701,14 @@ export default function Workspace() {
   const lastRecordedScoreRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!id || mapReadiness === 0) return;
+    if (!id || blendedReadiness === 0) return;
     const timer = setTimeout(() => {
-      if (lastRecordedScoreRef.current === mapReadiness) return;
-      lastRecordedScoreRef.current = mapReadiness;
-      recordSnapshot.mutate({ id: Number(id), data: { score: mapReadiness } });
+      if (lastRecordedScoreRef.current === blendedReadiness) return;
+      lastRecordedScoreRef.current = blendedReadiness;
+      recordSnapshot.mutate({ id: Number(id), data: { score: blendedReadiness } });
     }, 2000);
     return () => clearTimeout(timer);
-  }, [id, mapReadiness]);
+  }, [id, blendedReadiness]);
 
   const readinessTrend: ReadinessTrend | undefined = (() => {
     if (!readinessSnapshots || readinessSnapshots.length < 2) return undefined;
@@ -5625,7 +5725,7 @@ export default function Workspace() {
     if (!baseline || baseline.id === current?.id) return undefined;
     const label = baseline24h ? "today" : baseline7d ? "this week" : "since start";
     return {
-      delta: (current?.score ?? mapReadiness) - baseline.score,
+      delta: (current?.score ?? blendedReadiness) - baseline.score,
       label,
       history: sorted.map(s => ({ score: s.score, recordedAt: s.recordedAt })),
     };
@@ -5902,11 +6002,13 @@ export default function Workspace() {
               )}
             </button>
 
-            {/* Readiness ring — sits right of project name, clicks to open Map panel */}
+            {/* Readiness ring — blended arch + decisions score; clicks to open Map panel */}
             <ReadinessRing
-              score={mapReadiness}
+              archScore={mapReadiness}
+              decisionsScore={healthPct}
+              mode={readinessMode}
+              onModeChange={handleReadinessModeChange}
               onClick={focusSystemMap}
-              title={`Architecture readiness: ${mapReadiness}%. Click to open System Map.`}
               trend={readinessTrend}
             />
 
