@@ -562,7 +562,7 @@ export function AxiomFlow({
             const fromNode = nodes.find(n => n.id === edge.from);
             const toNode = nodes.find(n => n.id === edge.to);
             if (!fromNode || !toNode) return null;
-            const bothResolved = fromNode.resolved && toNode.resolved;
+            const bothResolved = isNodeDefined(fromNode) && isNodeDefined(toNode);
             return (
               <line
                 key={edge.id}
@@ -801,7 +801,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
         textDecoration: "none",
         shadow: "none",
         opacity: resolved ? 0.85 : 0.70,
-        pulse: false,
+        pulse: !resolved,
         labelSize: 9.5,
         labelWeight: 400,
       };
@@ -818,7 +818,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
         textDecoration: "none",
         shadow: "none",
         opacity: 0.65,
-        pulse: false,
+        pulse: !resolved,
         labelSize: 9.5,
         labelWeight: 500,
       };
@@ -853,7 +853,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       textDecoration: "none",
       shadow: resolved ? "none" : "0 0 10px rgba(196,82,26,0.18)",
       opacity: 1,
-      pulse: false,
+      pulse: !resolved,
       labelSize: 9.5,
       labelWeight: 500,
     };
@@ -871,7 +871,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       textDecoration: "none",
       shadow: "none",
       opacity: resolved ? 1 : 0.75,
-      pulse: false,
+      pulse: !resolved,
       labelSize: 9,
       labelWeight: 500,
     };
@@ -935,9 +935,12 @@ function FlowNodeComponent({
         fontSize: node.type === "goal" ? 24 : 18,
         color: v.textColor,
         transition: "all 300ms ease",
-        animation: defined
-          ? "gold-pulse 2.4s ease-in-out infinite"
-          : v.pulse ? "amber-pulse 2s ease-in-out infinite" : undefined,
+        // Blockers stay ember-static regardless of state — they never pulse.
+        animation: node.type === "blocker"
+          ? undefined
+          : defined
+            ? "gold-pulse 2.4s ease-in-out infinite"
+            : v.pulse ? "amber-pulse 2s ease-in-out infinite" : undefined,
       }}>
         {icon}
       </div>
