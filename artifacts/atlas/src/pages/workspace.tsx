@@ -4128,7 +4128,7 @@ function QuickPromptSheet({
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
   const [showChat, setShowChat] = useState(true);
@@ -4370,6 +4370,24 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent }: { projectI
         nodes={nodes}
         onHomeNav={onHomeNav}
         onAxiomOpen={() => setShowQuickPrompt(true)}
+        navLeft={onBackToChat ? (
+          <button
+            onClick={onBackToChat}
+            style={{
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "8px 14px", borderRadius: 10,
+              background: "rgba(212,175,55,0.08)",
+              border: "1px solid rgba(212,175,55,0.22)",
+              color: "#D4AF37", fontSize: 11, fontWeight: 700,
+              letterSpacing: "0.06em", cursor: "pointer",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+            Chat
+          </button>
+        ) : undefined}
       />
     </div>
   );
@@ -4390,6 +4408,7 @@ function RightPanel({
   onHomeNav,
   forceTab,
   onSendIntent,
+  onBackToChat,
   isMobile,
 }: {
   projectId: number;
@@ -4405,6 +4424,7 @@ function RightPanel({
   onHomeNav: () => void;
   forceTab?: RightTab;
   onSendIntent?: (text: string) => void;
+  onBackToChat?: () => void;
   isMobile?: boolean;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
@@ -4491,16 +4511,16 @@ function RightPanel({
         background: "var(--atlas-surface-alt)",
       }}
     >
-      {/* Tab bar */}
+      {/* Tab bar — desktop only; on mobile the MobileTabBar drives navigation */}
       <div
         style={{
-          display: "flex", alignItems: "center",
+          display: isMobile ? "none" : "flex", alignItems: "center",
           borderBottom: "1px solid var(--atlas-border)",
           flexShrink: 0,
           paddingLeft: 4,
         }}
       >
-        {tabs.filter(t => !isMobile || t.id !== "map").map((t) => {
+        {!isMobile && tabs.filter(t => t.id !== "map").map((t) => {
           const active = tab === t.id;
           return (
             <button
@@ -4540,6 +4560,8 @@ function RightPanel({
             </button>
           );
         })}
+        {/* Mobile: spacer so close/fullscreen stay right-aligned */}
+        {isMobile && <div style={{ flex: 1 }} />}
 
         {/* Fullscreen toggle (mobile only) */}
         {onToggleFullscreen && (
@@ -4596,7 +4618,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} />}
     </div>
   );
 }
@@ -4679,7 +4701,6 @@ function MobileTabBar({
     >
       {tabs.map(({ id, label, icon, badge, alert }) => {
         const active = activeTab === id;
-        const isBack = id === "chat" && activeTab === "map";
         return (
           <button
             key={id}
@@ -4694,7 +4715,7 @@ function MobileTabBar({
               background: "transparent",
               border: "none",
               cursor: "pointer",
-              color: isBack || active ? "var(--atlas-gold)" : "rgba(210,205,200,0.65)",
+              color: active ? "var(--atlas-gold)" : "rgba(210,205,200,0.65)",
               transition: "color 180ms ease",
               position: "relative",
               WebkitTapHighlightColor: "transparent",
@@ -4738,11 +4759,7 @@ function MobileTabBar({
                 {badge !== undefined ? (badge > 9 ? "9+" : String(badge)) : "!"}
               </div>
             )}
-            {isBack ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 12H5M12 5l-7 7 7 7" />
-              </svg>
-            ) : icon}
+            {icon}
             <span
               style={{
                 fontSize: 9,
@@ -4752,7 +4769,7 @@ function MobileTabBar({
                 lineHeight: 1,
               }}
             >
-              {isBack ? "← Chat" : label}
+              {label}
             </span>
           </button>
         );
@@ -6031,7 +6048,7 @@ export default function Workspace() {
         {/* Mobile: overlay panel */}
         {isMobile && rightOpen && (
           <div
-            style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 64, zIndex: 50, display: "flex", justifyContent: "flex-end" }}
+            style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: mobileTab === "map" ? 0 : 64, zIndex: 50, display: "flex", justifyContent: "flex-end" }}
           >
             {/* Backdrop — hidden in fullscreen */}
             {!rightFullscreen && (
@@ -6075,6 +6092,7 @@ export default function Workspace() {
                 onHomeNav={() => setLocation("/home")}
                 forceTab={mobileTab === "map" ? "map" : undefined}
                 onSendIntent={sendFromIntentCapture}
+                onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
                 isMobile
               />
             </div>
@@ -6082,7 +6100,7 @@ export default function Workspace() {
         )}
       </div>
 
-      {isMobile && (
+      {isMobile && mobileTab !== "map" && (
         <MobileTabBar
           activeTab={mobileTab}
           onTabChange={(tab) => setMobileTab(tab)}
