@@ -21,10 +21,10 @@ const REASON_COPY: Record<string, { title: string; subtitle: string }> = {
   },
   github: {
     title: "GitHub integration requires Pro",
-    subtitle: "Connect your repos and use Atlas with your actual codebase — available on Pro.",
+    subtitle: "Connect your repos and use Axiom with your actual codebase — available on Pro.",
   },
   general: {
-    title: "Upgrade Atlas",
+    title: "Upgrade Axiom",
     subtitle: "Unlock unlimited projects, permanent vault, full ledger history, GitHub integration, and more.",
   },
 };
@@ -42,7 +42,7 @@ const FEATURES = {
     "Full ledger history",
     "Project profiles",
     "GitHub integration",
-    "Atlas handoff",
+    "Axiom handoff",
   ],
   teams: [
     "Everything in Pro",

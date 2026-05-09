@@ -100,7 +100,7 @@ export default function Login() {
               {mode === "login" ? "Enter the system." : "Request access."}
             </div>
             <div style={{ fontSize: 11, ...mono, color: "var(--atlas-muted)", opacity: 0.5, letterSpacing: "0.06em" }}>
-              {mode === "login" ? "Identify yourself to enter Atlas." : "Create your identity."}
+              {mode === "login" ? "Identify yourself to enter Axiom." : "Create your identity."}
             </div>
           </div>
 

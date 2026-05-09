@@ -82,7 +82,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
               <line x1="2" y1="10" x2="18" y2="10" stroke="var(--atlas-gold)" strokeWidth="0.7" strokeDasharray="1.8 2.4" opacity="0.6" />
             </svg>
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.85 }}>
-              Atlas
+              Axiom
             </span>
           </div>
           <button type="button" onClick={onClose} style={iconBtn}>
