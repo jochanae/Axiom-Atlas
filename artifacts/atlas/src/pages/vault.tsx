@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import type { CSSProperties } from "react";
+import { LoadingSpinner } from "../components/ui/loading-spinner";
 
 const mono: CSSProperties = { fontFamily: "var(--app-font-mono)" };
 const sans: CSSProperties = { fontFamily: "var(--app-font-sans)" };
@@ -195,15 +196,7 @@ export default function Vault() {
         {/* Loading */}
         {loading && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", paddingTop: 80 }}>
-            <div style={{ display: "flex", gap: 5 }}>
-              {[0, 150, 300].map((delay) => (
-                <span key={delay} style={{
-                  width: 7, height: 7, borderRadius: "50%",
-                  background: "var(--atlas-gold)",
-                  animation: `vault-bounce 1.1s ${delay}ms ease-in-out infinite`,
-                }} />
-              ))}
-            </div>
+            <LoadingSpinner size="lg" color="atlas" />
           </div>
         )}
 

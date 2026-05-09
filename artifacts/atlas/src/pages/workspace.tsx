@@ -3818,7 +3818,7 @@ function MemoryTab({ projectId }: { projectId: number }) {
   if (isLoading) {
     return (
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontSize: 10, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Loading…</span>
+        <LoadingSpinner size="sm" color="atlas" />
       </div>
     );
   }
