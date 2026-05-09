@@ -209,7 +209,7 @@ const MODE_LABEL_COLORS: Record<string, string> = {
 
 function AtlasLogo({ small, mode }: { small?: boolean; mode?: "THINK" | "PLAN" | "BUILD" }) {
   const imgSize = small ? 22 : 26;
-  const modeLabel = mode ? `${mode} MODE` : "BUILD MODE";
+  const modeLabel = mode ? `${mode} MODE` : null;
   const modeColor = "var(--atlas-muted)";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -231,17 +231,19 @@ function AtlasLogo({ small, mode }: { small?: boolean; mode?: "THINK" | "PLAN" |
         }}>
           AXIOM
         </span>
-        <span style={{
-          fontFamily: "'IBM Plex Mono', var(--app-font-mono)",
-          fontSize: 7.5,
-          fontWeight: 500,
-          letterSpacing: "0.14em",
-          color: modeColor,
-          textTransform: "uppercase",
-          transition: "color 300ms ease",
-        }}>
-          {modeLabel}
-        </span>
+        {modeLabel && (
+          <span style={{
+            fontFamily: "'IBM Plex Mono', var(--app-font-mono)",
+            fontSize: 7.5,
+            fontWeight: 500,
+            letterSpacing: "0.14em",
+            color: modeColor,
+            textTransform: "uppercase",
+            transition: "color 300ms ease",
+          }}>
+            {modeLabel}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -4355,9 +4357,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         <button
           onClick={() => setShowChat(v => !v)}
           style={{
-            background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.25)",
+            background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.28)",
             borderRadius: 6, padding: "3px 10px", cursor: "pointer",
-            color: "rgba(212,175,55,0.72)", fontSize: 9.5,
+            color: "rgba(212,175,55,0.8)", fontSize: 9.5,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           }}>
           {showChat ? "⛶ Fullscreen" : "⊠ Restore"}
