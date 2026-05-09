@@ -573,6 +573,10 @@ components:
           type: array
           items: {}
           nullable: true
+        lastHandoverAt:
+          type: ["string", "null"]
+        lastHandoverHash:
+          type: ["string", "null"]
         createdAt:
           type: string
         updatedAt:
@@ -620,6 +624,10 @@ components:
           type: array
           items: {}
           nullable: true
+        lastHandoverAt:
+          type: ["string", "null"]
+        lastHandoverHash:
+          type: ["string", "null"]
 
     ProjectSummary:
       type: object
@@ -675,6 +683,10 @@ components:
         title:
           type: string
         mode:
+          type: ["string", "null"]
+        seedMessage:
+          type: ["string", "null"]
+        seedIntentType:
           type: ["string", "null"]
       required:
         - title

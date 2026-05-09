@@ -34,6 +34,10 @@ export interface Project {
   linkedRepo?: string | null;
   nodeState?: ProjectNodeState;
   pushHistory?: unknown[] | null;
+  /** @nullable */
+  lastHandoverAt?: string | null;
+  /** @nullable */
+  lastHandoverHash?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -69,6 +73,10 @@ export interface UpdateProjectBody {
   linkedRepo?: string | null;
   nodeState?: UpdateProjectBodyNodeState;
   pushHistory?: unknown[] | null;
+  /** @nullable */
+  lastHandoverAt?: string | null;
+  /** @nullable */
+  lastHandoverHash?: string | null;
 }
 
 export interface ProjectSummary {
@@ -103,6 +111,10 @@ export interface CreateSessionBody {
   title: string;
   /** @nullable */
   mode?: string | null;
+  /** @nullable */
+  seedMessage?: string | null;
+  /** @nullable */
+  seedIntentType?: string | null;
 }
 
 export type MessageRole = (typeof MessageRole)[keyof typeof MessageRole];
@@ -392,7 +404,11 @@ export interface ForgeRequest {
    * @maxLength 20000
    */
   transcript: string;
-  projectName?: string;
+  /**
+   * Optional project context to improve node extraction accuracy
+   * @maxLength 4000
+   */
+  projectContext?: string;
   projectId?: number;
 }
 

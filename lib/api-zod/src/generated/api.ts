@@ -40,12 +40,18 @@ export const AxiomImportBody = zod.object({
 export const runForgeBodyTranscriptMin = 10;
 export const runForgeBodyTranscriptMax = 20000;
 
+export const runForgeBodyProjectContextMax = 4000;
+
 export const RunForgeBody = zod.object({
   transcript: zod
     .string()
     .min(runForgeBodyTranscriptMin)
     .max(runForgeBodyTranscriptMax),
-  projectName: zod.string().optional(),
+  projectContext: zod
+    .string()
+    .max(runForgeBodyProjectContextMax)
+    .optional()
+    .describe("Optional project context to improve node extraction accuracy"),
   projectId: zod.number().optional(),
 });
 
@@ -148,6 +154,8 @@ export const ListProjectsResponseItem = zod.object({
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
   pushHistory: zod.array(zod.unknown()).nullish(),
+  lastHandoverAt: zod.string().nullish(),
+  lastHandoverHash: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -179,6 +187,8 @@ export const GetProjectResponse = zod.object({
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
   pushHistory: zod.array(zod.unknown()).nullish(),
+  lastHandoverAt: zod.string().nullish(),
+  lastHandoverHash: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -200,6 +210,8 @@ export const UpdateProjectBody = zod.object({
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
   pushHistory: zod.array(zod.unknown()).nullish(),
+  lastHandoverAt: zod.string().nullish(),
+  lastHandoverHash: zod.string().nullish(),
 });
 
 export const UpdateProjectResponse = zod.object({
@@ -213,6 +225,8 @@ export const UpdateProjectResponse = zod.object({
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
   pushHistory: zod.array(zod.unknown()).nullish(),
+  lastHandoverAt: zod.string().nullish(),
+  lastHandoverHash: zod.string().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -268,6 +282,8 @@ export const CreateSessionParams = zod.object({
 export const CreateSessionBody = zod.object({
   title: zod.string(),
   mode: zod.string().nullish(),
+  seedMessage: zod.string().nullish(),
+  seedIntentType: zod.string().nullish(),
 });
 
 /**

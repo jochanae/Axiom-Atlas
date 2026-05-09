@@ -22,6 +22,92 @@ export function isNodeDefined(node: ArchNode): boolean {
   return Boolean(node.strategicAnswer && node.strategicAnswer.trim().length > 0);
 }
 
+// ── Handover snapshot ─────────────────────────────────────────────────────────
+// Build a structured payload that captures the current Flow state for handing
+// off to a new Atlas chat session. The hash is content-addressed so the
+// Workspace header can detect drift since the last handover.
+
+export interface HandoverSnapshot {
+  title: string;
+  summary: string;
+  hash: string;
+  definedCount: number;
+  totalCount: number;
+  goalLabel: string;
+}
+
+function djb2Hash(str: string): string {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) + h) ^ str.charCodeAt(i);
+  }
+  // Force unsigned + base36 for compactness.
+  return (h >>> 0).toString(36);
+}
+
+export function computeNodeStateHash(nodes: ArchNode[]): string {
+  const sorted = [...nodes].sort((a, b) => a.id.localeCompare(b.id));
+  const serial = sorted.map(n => [
+    n.id,
+    n.type,
+    n.label,
+    n.meta ?? "",
+    (n.strategicAnswer ?? "").trim(),
+  ].join("\u0001")).join("\u0002");
+  return djb2Hash(serial);
+}
+
+export function buildHandoverSnapshot(
+  nodes: ArchNode[],
+  edges: ArchEdge[],
+): HandoverSnapshot {
+  const goalNode = nodes.find(n => n.type === "goal") ?? nodes[0];
+  const goalLabel = (goalNode?.label ?? "Untitled goal").trim();
+
+  const defined = nodes.filter(n => isNodeDefined(n));
+  const unanswered = nodes.filter(
+    n => !isNodeDefined(n) && !(n.type === "priority" && n.meta === "wont"),
+  );
+  const blockers = nodes.filter(n => n.type === "blocker");
+
+  const fmtList = (items: ArchNode[]) =>
+    items.length === 0
+      ? "(none)"
+      : items.map(n => {
+          const ans = isNodeDefined(n) ? ` → ${n.strategicAnswer!.trim()}` : "";
+          const meta = n.meta ? ` (${n.meta})` : "";
+          return `• ${n.label}${meta}${ans}`;
+        }).join("\n");
+
+  const definedSection = fmtList(defined.filter(n => n.id !== goalNode?.id));
+  const unansweredSection = fmtList(unanswered.filter(n => n.id !== goalNode?.id));
+  const blockersSection = fmtList(blockers);
+
+  const summary = [
+    `Working from this Flow snapshot: ${goalLabel}.`,
+    "",
+    "Defined:",
+    definedSection,
+    "",
+    "Unresolved:",
+    unansweredSection,
+    "",
+    "Open blockers:",
+    blockersSection,
+    "",
+    `(${defined.length}/${nodes.length} nodes defined · ${edges.length} connections)`,
+  ].join("\n");
+
+  return {
+    title: goalLabel.length > 80 ? `${goalLabel.slice(0, 77)}…` : goalLabel,
+    summary,
+    hash: computeNodeStateHash(nodes),
+    definedCount: defined.length,
+    totalCount: nodes.length,
+    goalLabel,
+  };
+}
+
 // Per-node persisted state shape. Back-compat: legacy DB rows store a bare
 // boolean per id; we read both shapes and always write the object form.
 export type PersistedNodeState = boolean | { resolved: boolean; strategicAnswer?: string };
@@ -198,6 +284,9 @@ interface AxiomFlowProps {
   pendingNodes?: ArchNode[];
   onPendingConsumed?: () => void;
   onUnansweredQuestionOpen?: (payload: { node: ArchNode; mirror: string }) => void;
+  onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void;
+  handoverPending?: boolean;
+  lastHandoverHash?: string | null;
 }
 
 export function AxiomFlow({
@@ -211,6 +300,9 @@ export function AxiomFlow({
   pendingNodes,
   onPendingConsumed,
   onUnansweredQuestionOpen,
+  onHandover,
+  handoverPending,
+  lastHandoverHash,
 }: AxiomFlowProps) {
   const storageKey = `${BASE_STORAGE_KEY}${projectId ? `-${projectId}` : ""}`;
   const isMobile = window.innerWidth < 768;
@@ -497,6 +589,32 @@ export function AxiomFlow({
     setActiveCardNodeId(null);
   }, []);
 
+  // ── Handover state ────────────────────────────────────────────────────────
+  const [handoverOpen, setHandoverOpen] = useState(false);
+  const [handoverTitle, setHandoverTitle] = useState("");
+  const handoverInputRef = useRef<HTMLInputElement>(null);
+
+  const currentSnapshot = onHandover ? buildHandoverSnapshot(nodes, edges) : null;
+  const handoverEnabled = !!onHandover && (currentSnapshot?.definedCount ?? 0) > 0;
+  const handoverStale =
+    !!lastHandoverHash &&
+    !!currentSnapshot &&
+    currentSnapshot.hash !== lastHandoverHash;
+
+  const openHandover = useCallback(() => {
+    if (!handoverEnabled || !currentSnapshot) return;
+    setHandoverTitle(currentSnapshot.title);
+    setHandoverOpen(true);
+    setTimeout(() => handoverInputRef.current?.select(), 40);
+  }, [handoverEnabled, currentSnapshot]);
+
+  const confirmHandover = useCallback(() => {
+    if (!onHandover || !currentSnapshot) return;
+    const title = handoverTitle.trim() || currentSnapshot.title;
+    onHandover({ snapshot: currentSnapshot, title });
+    setHandoverOpen(false);
+  }, [onHandover, currentSnapshot, handoverTitle]);
+
   const strokeWidth = Math.max(1, Math.min(2, 1.5 / zoom));
 
   const activeCardNode = activeCardNodeId ? nodes.find(n => n.id === activeCardNodeId) : null;
@@ -543,9 +661,161 @@ export function AxiomFlow({
       }} />
 
       {/* Header label */}
-      <div className="absolute left-4 top-4 z-10">
+      <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
         <span className="text-xs font-bold tracking-widest text-gold uppercase">AXIOM FLOW</span>
+        {handoverStale && (
+          <span
+            title="Flow has changed since last Atlas handover"
+            style={{
+              padding: "2px 7px",
+              borderRadius: 4,
+              background: "rgba(146,64,14,0.18)",
+              border: "1px solid rgba(146,64,14,0.55)",
+              color: "rgba(230,150,90,0.95)",
+              fontFamily: "var(--app-font-mono)",
+              fontSize: 8.5,
+              fontWeight: 700,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
+          >
+            Updated since handover
+          </span>
+        )}
       </div>
+
+      {/* Handover footer button (visible when onHandover is provided) */}
+      {onHandover && !handoverOpen && (
+        <button
+          onClick={openHandover}
+          disabled={!handoverEnabled || !!handoverPending}
+          title={
+            !handoverEnabled
+              ? "Lock in at least one answer first"
+              : handoverPending
+                ? "Handing over…"
+                : "Hand the current Flow snapshot off to a new Atlas chat"
+          }
+          className="absolute z-20"
+          style={{
+            bottom: 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            padding: "8px 16px",
+            borderRadius: 999,
+            background: handoverEnabled
+              ? "rgba(212,175,55,0.14)"
+              : "rgba(120,113,108,0.08)",
+            border: `1px solid ${handoverEnabled ? "rgba(212,175,55,0.55)" : "rgba(120,113,108,0.25)"}`,
+            color: handoverEnabled ? "#D4AF37" : "rgba(120,113,108,0.55)",
+            fontFamily: "var(--app-font-mono)",
+            fontSize: 10.5,
+            fontWeight: 700,
+            letterSpacing: "0.10em",
+            textTransform: "uppercase",
+            cursor: handoverEnabled && !handoverPending ? "pointer" : "not-allowed",
+            boxShadow: handoverEnabled
+              ? "0 4px 14px rgba(0,0,0,0.45), 0 0 12px rgba(212,175,55,0.18)"
+              : "0 2px 6px rgba(0,0,0,0.35)",
+            transition: "all 180ms ease",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          {handoverPending ? "Handing over…" : "→ Atlas"}
+        </button>
+      )}
+
+      {/* Handover inline confirm popover */}
+      {onHandover && handoverOpen && currentSnapshot && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute z-30"
+          style={{
+            bottom: 14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 320,
+            maxWidth: "calc(100% - 24px)",
+            background: "rgba(20,18,14,0.98)",
+            border: "1px solid rgba(212,175,55,0.45)",
+            borderRadius: 12,
+            padding: 14,
+            boxShadow: "0 10px 32px rgba(0,0,0,0.7)",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div style={{
+            fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em",
+            color: "#D4AF37", fontFamily: "var(--app-font-mono)",
+            textTransform: "uppercase", marginBottom: 8,
+          }}>
+            Hand off to Atlas
+          </div>
+          <div style={{
+            fontSize: 10.5, color: "rgba(231,229,228,0.65)",
+            marginBottom: 10, lineHeight: 1.5,
+          }}>
+            Atlas will start a new chat seeded with this Flow snapshot
+            ({currentSnapshot.definedCount}/{currentSnapshot.totalCount} defined).
+          </div>
+          <input
+            ref={handoverInputRef}
+            value={handoverTitle}
+            onChange={(e) => setHandoverTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); confirmHandover(); }
+              if (e.key === "Escape") { e.preventDefault(); setHandoverOpen(false); }
+            }}
+            placeholder="Session title"
+            style={{
+              width: "100%",
+              background: "rgba(12,10,9,0.85)",
+              border: "1px solid rgba(212,175,55,0.30)",
+              borderRadius: 7,
+              padding: "7px 10px",
+              color: "var(--atlas-fg, #E7E5E4)",
+              fontSize: 11.5,
+              fontFamily: "inherit",
+              outline: "none",
+              marginBottom: 10,
+              boxSizing: "border-box",
+            }}
+          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setHandoverOpen(false)}
+              style={{
+                flex: 1, padding: "7px 10px", borderRadius: 7,
+                background: "transparent",
+                border: "1px solid rgba(120,113,108,0.30)",
+                color: "rgba(231,229,228,0.65)",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em",
+                textTransform: "uppercase", cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmHandover}
+              disabled={!!handoverPending}
+              style={{
+                flex: 2, padding: "7px 10px", borderRadius: 7,
+                background: "rgba(212,175,55,0.20)",
+                border: "1px solid rgba(212,175,55,0.60)",
+                color: "#D4AF37",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                cursor: handoverPending ? "not-allowed" : "pointer",
+                opacity: handoverPending ? 0.5 : 1,
+              }}
+            >
+              {handoverPending ? "Handing over…" : "Hand over to Atlas"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Transformable canvas */}
       <div
