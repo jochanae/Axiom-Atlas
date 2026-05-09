@@ -67,6 +67,10 @@ export const RunForgeResponse = zod.object({
       y: zod.number(),
       details: zod.string().optional(),
       meta: zod.enum(["must", "should", "could", "wont"]).optional(),
+      question: zod
+        .string()
+        .optional()
+        .describe("Strategic pivot question for this node"),
     }),
   ),
   summary: zod.string(),

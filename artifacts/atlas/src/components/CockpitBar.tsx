@@ -52,11 +52,11 @@ export function CockpitBar({
 
   const handleExportCopy = async () => {
     const lines = [
-      "# Axiom System Map",
+      "# Axiom Flow — Strategic Map",
       `Generated: ${new Date().toLocaleString()}`,
       `Readiness: ${readinessScore}%`,
       "",
-      ...nodes.map(n => `- ${n.label} [${n.type}]: ${n.resolved ? "Resolved" : "Unresolved"}`),
+      ...nodes.map(n => `- ${n.label} [${n.type}${n.meta ? `/${n.meta}` : ""}]: ${n.resolved ? "Resolved" : "Unresolved"}`),
     ].join("\n");
     try { await navigator.clipboard.writeText(lines); } catch {
       const ta = document.createElement("textarea");
@@ -76,7 +76,7 @@ export function CockpitBar({
       `Generated: ${new Date().toLocaleString()}`,
       `Readiness: ${readinessScore}%`,
       "",
-      ...nodes.map(n => `- ${n.label} [${n.type}]: ${n.resolved ? "Resolved" : "Unresolved"}`),
+      ...nodes.map(n => `- ${n.label} [${n.type}${n.meta ? `/${n.meta}` : ""}]: ${n.resolved ? "Resolved" : "Unresolved"}`),
     ].join("\n");
     const blob = new Blob([lines], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -141,18 +141,24 @@ export function CockpitBar({
             animation: "slideUpHelp 200ms ease",
           }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: "#D4AF37", marginBottom: 8 }}>
-              What is the System Map?
+              What is Axiom Flow?
             </p>
             <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6, marginBottom: 16 }}>
-              The System Map shows the architecture nodes for your project. Tap any node to mark it resolved as you define each layer.
+              Axiom Flow is your strategic execution map. Each node represents a key element of your mission. Tap any node to answer its pivot question and mark it resolved as you make progress.
             </p>
             <p style={{ fontSize: 10, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
-              Nodes
+              Node Types
             </p>
             <ul style={{ fontSize: 12, color: "#9ca3af", listStyle: "none", padding: 0, margin: "0 0 16px", display: "flex", flexDirection: "column", gap: 4 }}>
-              {["Authentication — who can access", "Database — what gets stored", "API Routes — how data flows", "State Management — in-memory logic", "UI Components — the visual shell", "Business Logic — rules & calculations"].map((item, i) => (
+              {[
+                "◎ Goal — What does winning look like?",
+                "◈ Requirement — What must exist?",
+                "⚠ Blocker — What prevents progress?",
+                "■ Priority — MoSCoW-ranked items",
+                "◆ Decision — Committed choices",
+                "△ Sprint — Bounded work increments",
+              ].map((item, i) => (
                 <li key={i} style={{ display: "flex", gap: 8 }}>
-                  <span style={{ color: "#D4AF37", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>
                   <span>{item}</span>
                 </li>
               ))}
@@ -172,7 +178,7 @@ export function CockpitBar({
           <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} onClick={() => setShowExport(false)} />
           <div style={{ position: "fixed", left: 0, right: 0, zIndex: 50, bottom: cockpitH, background: "rgba(13,11,9,0.99)", border: "1px solid rgba(212,175,55,0.35)", borderRadius: "16px 16px 0 0", padding: "20px 20px 24px", animation: "slideUpCb 220ms ease" }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: "#D4AF37", marginBottom: 4 }}>Export Blueprint</p>
-            <p style={{ fontSize: 11, color: "#6b7280", marginBottom: 20 }}>Copy or download your system map.</p>
+            <p style={{ fontSize: 11, color: "#6b7280", marginBottom: 20 }}>Copy or download your Axiom Flow map.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <button onClick={handleExportCopy} style={{ width: "100%", borderRadius: 12, padding: "14px 0", fontSize: 13, fontWeight: 700, background: copied ? "rgba(212,175,55,0.15)" : "#D4AF37", color: copied ? "#D4AF37" : "#0D0B09", border: copied ? "1px solid rgba(212,175,55,0.4)" : "none", cursor: "pointer" }}>
                 {copied ? "✓ Copied" : "Copy to Clipboard"}
@@ -197,9 +203,9 @@ export function CockpitBar({
           <path d="M0,0.5 L148,0.5 C163,0.5 172,22 195,22 C218,22 227,0.5 242,0.5 L390,0.5" fill="none" stroke="rgba(212,175,55,0.22)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </svg>
 
-        {/* Raised A button — center → opens Quick Prompt */}
+        {/* Raised A button — center → opens The Forge */}
         <button
-          title="Quick Prompt"
+          title="The Forge"
           style={{
             position: "absolute", top: -28, left: "50%",
             transform: "translateX(-50%)",
@@ -215,9 +221,9 @@ export function CockpitBar({
           <AxiomLogoSVG />
         </button>
 
-        {/* AXIOM label */}
+        {/* FORGE label */}
         <span style={{ position: "absolute", top: 38, left: "50%", transform: "translateX(-50%)", fontSize: 9, letterSpacing: "0.12em", color: "#D4AF37", fontWeight: 700, whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none" }}>
-          AXIOM
+          FORGE
         </span>
 
         {/* Left side */}

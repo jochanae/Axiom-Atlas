@@ -14,6 +14,7 @@ export interface ArchNode {
   y: number;
   details?: string;
   meta?: FlowNodeMeta;
+  question?: string;
 }
 
 export interface ArchEdge {
@@ -22,23 +23,39 @@ export interface ArchEdge {
   to: string;
 }
 
-const NODE_ICONS: Record<string, string> = {
-  goal:        "◎",
-  requirement: "◈",
-  blocker:     "⊗",
-  priority:    "◆",
-  decision:    "◉",
-  sprint:      "△",
-};
+// ── Icons per spec ────────────────────────────────────────────────────────────
+function getNodeIcon(node: ArchNode): string {
+  if (node.type === "goal")        return "◎";
+  if (node.type === "requirement") return "◈";
+  if (node.type === "blocker")     return "⚠";
+  if (node.type === "decision")    return "◆";
+  if (node.type === "sprint")      return "△";
+  if (node.type === "priority") {
+    if (node.meta === "must")   return "■";
+    if (node.meta === "should") return "□";
+    if (node.meta === "could")  return "◻";
+    if (node.meta === "wont")   return "✕";
+    return "■";
+  }
+  return "●";
+}
 
-const NODE_DESCRIPTIONS: Record<string, string> = {
-  goal:        "The single north star for this project. Everything flows from here.",
-  requirement: "A capability or constraint the project must satisfy. Ranked by MoSCoW priority.",
-  blocker:     "Something preventing forward progress. Must be resolved or bypassed.",
-  priority:    "A ranked item competing for attention or resources.",
-  decision:    "A committed choice that constrains future options. Logged permanently.",
-  sprint:      "A bounded work increment with a defined goal and deadline.",
-};
+// ── Strategic pivot questions per spec ────────────────────────────────────────
+function getPivotQuestion(node: ArchNode): string {
+  if (node.question) return node.question;
+  if (node.type === "goal")        return "What does winning look like? What's the outcome you'll be proud of?";
+  if (node.type === "requirement") return "What must exist for this goal to be achievable?";
+  if (node.type === "blocker")     return "What could prevent this from shipping or succeeding?";
+  if (node.type === "decision")    return "Who owns this decision, and what information do you need to make it?";
+  if (node.type === "sprint")      return "What is the single deliverable that makes this sprint complete?";
+  if (node.type === "priority") {
+    if (node.meta === "must")   return "Why is this non-negotiable? What breaks without it?";
+    if (node.meta === "should") return "What's the cost of deferring this to v2?";
+    if (node.meta === "could")  return "Under what conditions does this become a Must?";
+    if (node.meta === "wont")   return "Who asked for this, and why are we saying no?";
+  }
+  return "What does this mean for the project?";
+}
 
 const EDGE_FLOW_STYLE = `
 @keyframes edge-flow {
@@ -56,7 +73,15 @@ const CANVAS_PADDING = 80;
 const BASE_STORAGE_KEY = "axiom-flow-nodes";
 
 const INITIAL_NODES: ArchNode[] = [
-  { id: "goal-1", label: "The Goal", type: "goal", resolved: false, x: 300, y: 200 },
+  {
+    id: "goal",
+    label: "The Goal",
+    type: "goal",
+    resolved: false,
+    x: 300,
+    y: 250,
+    details: "What does winning look like for this project?",
+  },
 ];
 
 const INITIAL_EDGES: ArchEdge[] = [];
@@ -107,6 +132,7 @@ export function AxiomFlow({
   const [nodes, setNodes] = useState<ArchNode[]>(() => loadNodes(storageKey));
   const [edges, setEdges] = useState<ArchEdge[]>(() => loadEdges(storageKey));
 
+  // Sync resolved states from DB on first load
   const dbSyncedRef = useRef(false);
   useEffect(() => {
     if (dbSyncedRef.current || !initialNodeState) return;
@@ -117,12 +143,15 @@ export function AxiomFlow({
     })));
   }, [initialNodeState]);
 
+  // Merge pending nodes from Forge with 60ms stagger
   const pendingConsumedRef = useRef(false);
   useEffect(() => {
     if (!pendingNodes || pendingNodes.length === 0 || pendingConsumedRef.current) return;
     pendingConsumedRef.current = true;
 
     let delay = 0;
+    const goalNode = nodes.find(n => n.type === "goal") || nodes[0];
+
     pendingNodes.forEach(newNode => {
       setTimeout(() => {
         setNodes(prev => {
@@ -131,13 +160,13 @@ export function AxiomFlow({
           sounds.tap();
           return [...prev, newNode];
         });
-        setEdges(prev => {
-          const goalNode = nodes[0];
-          if (!goalNode) return prev;
-          const edgeId = `e-${goalNode.id}-${newNode.id}`;
-          if (prev.find(e => e.id === edgeId)) return prev;
-          return [...prev, { id: edgeId, from: goalNode.id, to: newNode.id }];
-        });
+        if (goalNode) {
+          setEdges(prev => {
+            const edgeId = `e-${goalNode.id}-${newNode.id}`;
+            if (prev.find(e => e.id === edgeId)) return prev;
+            return [...prev, { id: edgeId, from: goalNode.id, to: newNode.id }];
+          });
+        }
       }, delay);
       delay += 60;
     });
@@ -165,7 +194,8 @@ export function AxiomFlow({
     pinchStartZoom: 1,
   });
 
-  const nonWontNodes = nodes.filter(n => n.meta !== "wont");
+  // Readiness: exclude wont-priority nodes from both numerator and denominator
+  const nonWontNodes = nodes.filter(n => !(n.type === "priority" && n.meta === "wont"));
   const readinessScore = Math.round(
     (nonWontNodes.filter(n => n.resolved).length / Math.max(nonWontNodes.length, 1)) * 100
   );
@@ -301,14 +331,7 @@ export function AxiomFlow({
         setActiveCardNodeId(nodeId);
         const node = nodes.find(n => n.id === nodeId);
         if (node && onNodeFocus) {
-          const text = node.resolved
-            ? `${node.label} is resolved. Describe what you want to change.`
-            : node.type === "goal"
-              ? `Let's define your goal. What is the single outcome this project must achieve?`
-              : node.type === "blocker"
-                ? `What's blocking you on "${node.label}"? What would it take to clear it?`
-                : `Let's refine "${node.label}". ${NODE_DESCRIPTIONS[node.type] || ""}`;
-          onNodeFocus(text);
+          onNodeFocus(getPivotQuestion(node));
         }
       }
     }
@@ -329,15 +352,15 @@ export function AxiomFlow({
   const activeCardNode = activeCardNodeId ? nodes.find(n => n.id === activeCardNodeId) : null;
   let cardLeft = 0;
   let cardTop = 0;
-  const CARD_W = 220;
+  const CARD_W = 228;
   if (activeCardNode) {
     const nodeScreenX = (activeCardNode.x + pan.x) * zoom;
     const nodeScreenY = (activeCardNode.y + pan.y) * zoom;
     cardLeft = nodeScreenX - CARD_W / 2;
-    cardTop = nodeScreenY - 160;
+    cardTop = nodeScreenY - 180;
     const containerW = containerRef.current?.offsetWidth ?? 600;
     cardLeft = Math.max(8, Math.min(cardLeft, containerW - CARD_W - 8));
-    if (cardTop < 50) cardTop = nodeScreenY + 70;
+    if (cardTop < 50) cardTop = nodeScreenY + 75;
   }
 
   return (
@@ -417,9 +440,9 @@ export function AxiomFlow({
             position: "absolute", left: cardLeft, top: cardTop,
             width: CARD_W, zIndex: 50,
             background: "rgba(20, 18, 14, 0.97)",
-            border: "1px solid rgba(212, 175, 55, 0.4)",
-            borderRadius: 10, padding: 12,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
+            border: "1px solid rgba(212, 175, 55, 0.38)",
+            borderRadius: 10, padding: 13,
+            boxShadow: "0 4px 24px rgba(0,0,0,0.65)",
             pointerEvents: "auto",
           }}
           onClick={e => e.stopPropagation()}
@@ -433,27 +456,26 @@ export function AxiomFlow({
             }}
           >✕</button>
 
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#D4AF37", marginBottom: 4, paddingRight: 20 }}>
+          {/* Node label + type badge */}
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#D4AF37", marginBottom: 4, paddingRight: 24 }}>
             {activeCardNode.label}
           </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-            <span style={{ fontSize: 10, color: "rgba(120,113,108,0.7)", fontFamily: "var(--app-font-mono)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+            <span style={{ fontSize: 9, color: "rgba(120,113,108,0.7)", fontFamily: "var(--app-font-mono)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
               {activeCardNode.type}
             </span>
             {activeCardNode.meta && (
               <span style={{
                 fontSize: 9, fontWeight: 700, letterSpacing: "0.08em",
                 padding: "1px 6px", borderRadius: 4,
-                background: activeCardNode.meta === "must" ? "rgba(212,175,55,0.2)"
+                background: activeCardNode.meta === "must" ? "rgba(212,175,55,0.22)"
                   : activeCardNode.meta === "should" ? "rgba(212,175,55,0.10)"
-                  : activeCardNode.meta === "could" ? "rgba(120,113,108,0.12)"
-                  : "rgba(120,113,108,0.08)",
+                  : "rgba(120,113,108,0.10)",
                 color: activeCardNode.meta === "must" ? "#D4AF37"
-                  : activeCardNode.meta === "should" ? "rgba(212,175,55,0.7)"
+                  : activeCardNode.meta === "should" ? "rgba(212,175,55,0.75)"
                   : "rgba(120,113,108,0.6)",
                 border: `1px solid ${activeCardNode.meta === "must" ? "rgba(212,175,55,0.4)"
-                  : activeCardNode.meta === "should" ? "rgba(212,175,55,0.2)"
+                  : activeCardNode.meta === "should" ? "rgba(212,175,55,0.22)"
                   : "rgba(120,113,108,0.2)"}`,
               }}>
                 {activeCardNode.meta.toUpperCase()}
@@ -461,27 +483,35 @@ export function AxiomFlow({
             )}
           </div>
 
-          <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.5, marginBottom: 10 }}>
-            {NODE_DESCRIPTIONS[activeCardNode.type] || ""}
+          {/* Strategic pivot question */}
+          <div style={{
+            fontSize: 11, color: "rgba(231,229,228,0.72)", lineHeight: 1.6,
+            fontStyle: "italic", marginBottom: 12,
+            paddingBottom: 10,
+            borderBottom: "1px solid rgba(212,175,55,0.10)",
+          }}>
+            {getPivotQuestion(activeCardNode)}
           </div>
 
+          {/* Details if present */}
           {activeCardNode.details && (
             <div style={{
-              fontSize: 11, color: "rgba(229,231,235,0.8)", lineHeight: 1.6,
-              maxHeight: 100, overflowY: "auto", marginBottom: 10,
-              borderTop: "1px solid rgba(212,175,55,0.12)", paddingTop: 8,
+              fontSize: 11, color: "rgba(229,231,235,0.75)", lineHeight: 1.6,
+              maxHeight: 80, overflowY: "auto", marginBottom: 10,
             }}>
               {activeCardNode.details}
             </div>
           )}
 
+          {/* Resolved toggle */}
           <button
             onClick={() => handleToggleResolved(activeCardNode.id)}
             style={{
               width: "100%", padding: "7px 10px", borderRadius: 7,
-              background: activeCardNode.resolved ? "rgba(212,175,55,0.12)" : "rgba(212,175,55,0.18)",
-              border: `1px solid ${activeCardNode.resolved ? "rgba(212,175,55,0.3)" : "rgba(212,175,55,0.5)"}`,
-              color: "#D4AF37", fontSize: 11, fontWeight: 700, cursor: "pointer",
+              background: activeCardNode.resolved ? "rgba(120,113,108,0.10)" : "rgba(212,175,55,0.16)",
+              border: `1px solid ${activeCardNode.resolved ? "rgba(120,113,108,0.28)" : "rgba(212,175,55,0.45)"}`,
+              color: activeCardNode.resolved ? "rgba(120,113,108,0.65)" : "#D4AF37",
+              fontSize: 11, fontWeight: 700, cursor: "pointer",
               fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em",
             }}
           >
@@ -495,7 +525,7 @@ export function AxiomFlow({
         position: "absolute", bottom: 10, left: 0, right: 0,
         textAlign: "center", pointerEvents: "none",
         fontSize: 9, letterSpacing: "0.15em",
-        color: "oklch(0.76 0.12 85 / 25%)",
+        color: "oklch(0.76 0.12 85 / 22%)",
         fontFamily: "var(--app-font-mono)",
       }}>
         TAP NODE · PINCH TO ZOOM · DOUBLE-TAP TO FIT
@@ -504,86 +534,193 @@ export function AxiomFlow({
   );
 }
 
-function getNodeVisualStyle(node: ArchNode): {
-  opacity: number;
+// ── Per-spec node visual rules ────────────────────────────────────────────────
+interface NodeVisual {
+  size: number;
+  borderRadius: number | string;
+  borderWidth: number;
   borderStyle: string;
   borderColor: string;
   bgColor: string;
   textColor: string;
   textDecoration: string;
   shadow: string;
-} {
-  const isResolved = node.resolved;
-  const meta = node.meta;
+  opacity: number;
+  pulse: boolean;
+  labelSize: number;
+  labelWeight: number;
+}
+
+function getNodeVisual(node: ArchNode): NodeVisual {
+  const resolved = node.resolved;
 
   if (node.type === "goal") {
     return {
-      opacity: 1,
+      size: 72,
+      borderRadius: "50%",
+      borderWidth: 2,
       borderStyle: "solid",
-      borderColor: isResolved ? "rgba(212,175,55,0.9)" : "rgba(212,175,55,0.55)",
-      bgColor: isResolved ? "rgba(212,175,55,0.18)" : "rgba(212,175,55,0.07)",
+      borderColor: resolved ? "rgba(212,175,55,0.95)" : "rgba(212,175,55,0.65)",
+      bgColor: resolved ? "rgba(212,175,55,0.18)" : "rgba(212,175,55,0.06)",
       textColor: "#D4AF37",
       textDecoration: "none",
-      shadow: isResolved ? "0 0 20px rgba(212,175,55,0.35)" : "0 0 12px rgba(212,175,55,0.15)",
+      shadow: resolved ? "0 0 24px rgba(212,175,55,0.45), 0 0 8px rgba(212,175,55,0.25)"
+        : "0 0 14px rgba(212,175,55,0.22)",
+      opacity: 1,
+      pulse: !resolved,
+      labelSize: 11,
+      labelWeight: 700,
+    };
+  }
+
+  if (node.type === "requirement") {
+    return {
+      size: 56,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderStyle: "solid",
+      borderColor: resolved ? "rgba(212,175,55,0.65)" : "rgba(212,175,55,0.38)",
+      bgColor: resolved ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.04)",
+      textColor: resolved ? "#D4AF37" : "rgba(231,229,228,0.80)",
+      textDecoration: "none",
+      shadow: resolved ? "0 0 12px rgba(212,175,55,0.22)" : "none",
+      opacity: 1,
+      pulse: !resolved,
+      labelSize: 9.5,
+      labelWeight: 500,
     };
   }
 
   if (node.type === "blocker") {
     return {
-      opacity: isResolved ? 0.55 : 1,
+      size: 56,
+      borderRadius: 4,
+      borderWidth: 1.5,
       borderStyle: "solid",
-      borderColor: isResolved ? "rgba(120,113,108,0.4)" : "rgba(239,68,68,0.55)",
-      bgColor: isResolved ? "rgba(120,113,108,0.08)" : "rgba(239,68,68,0.08)",
-      textColor: isResolved ? "rgba(120,113,108,0.7)" : "rgba(239,100,100,0.9)",
+      borderColor: resolved ? "rgba(120,113,108,0.35)" : "rgba(239,100,60,0.65)",
+      bgColor: resolved ? "rgba(120,113,108,0.06)" : "rgba(239,100,60,0.07)",
+      textColor: resolved ? "rgba(120,113,108,0.60)" : "rgba(239,120,80,0.90)",
       textDecoration: "none",
-      shadow: isResolved ? "none" : "0 0 10px rgba(239,68,68,0.2)",
+      shadow: resolved ? "none" : "0 0 10px rgba(239,100,60,0.20)",
+      opacity: resolved ? 0.6 : 1,
+      pulse: false,
+      labelSize: 9.5,
+      labelWeight: 500,
     };
   }
 
-  if (meta === "wont") {
+  if (node.type === "priority") {
+    if (node.meta === "wont") {
+      return {
+        size: 56,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: "rgba(120,113,108,0.22)",
+        bgColor: "transparent",
+        textColor: "rgba(120,113,108,0.45)",
+        textDecoration: "line-through",
+        shadow: "none",
+        opacity: 0.35,
+        pulse: false,
+        labelSize: 9.5,
+        labelWeight: 400,
+      };
+    }
+    if (node.meta === "could") {
+      return {
+        size: 56,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderStyle: "dashed",
+        borderColor: resolved ? "rgba(212,175,55,0.40)" : "rgba(120,113,108,0.40)",
+        bgColor: "transparent",
+        textColor: resolved ? "rgba(212,175,55,0.65)" : "rgba(120,113,108,0.55)",
+        textDecoration: "none",
+        shadow: "none",
+        opacity: resolved ? 0.85 : 0.70,
+        pulse: false,
+        labelSize: 9.5,
+        labelWeight: 400,
+      };
+    }
+    if (node.meta === "should") {
+      return {
+        size: 56,
+        borderRadius: 14,
+        borderWidth: 1.5,
+        borderStyle: "solid",
+        borderColor: resolved ? "rgba(212,175,55,0.55)" : "rgba(212,175,55,0.28)",
+        bgColor: resolved ? "rgba(212,175,55,0.12)" : "rgba(212,175,55,0.04)",
+        textColor: resolved ? "rgba(212,175,55,0.85)" : "rgba(231,229,228,0.60)",
+        textDecoration: "none",
+        shadow: "none",
+        opacity: 0.65,
+        pulse: false,
+        labelSize: 9.5,
+        labelWeight: 500,
+      };
+    }
+    // must (default)
     return {
-      opacity: 0.35,
+      size: 56,
+      borderRadius: 14,
+      borderWidth: 2,
       borderStyle: "solid",
-      borderColor: "rgba(120,113,108,0.25)",
-      bgColor: "transparent",
-      textColor: "rgba(120,113,108,0.5)",
-      textDecoration: "line-through",
-      shadow: "none",
+      borderColor: resolved ? "rgba(212,175,55,0.90)" : "rgba(212,175,55,0.55)",
+      bgColor: resolved ? "rgba(212,175,55,0.16)" : "rgba(212,175,55,0.06)",
+      textColor: resolved ? "#D4AF37" : "rgba(231,229,228,0.87)",
+      textDecoration: "none",
+      shadow: resolved ? "0 0 14px rgba(212,175,55,0.28)" : "none",
+      opacity: 1,
+      pulse: !resolved,
+      labelSize: 9.5,
+      labelWeight: 600,
     };
   }
 
-  if (meta === "could") {
+  if (node.type === "decision") {
     return {
-      opacity: isResolved ? 0.85 : 0.75,
-      borderStyle: "dashed",
-      borderColor: isResolved ? "rgba(212,175,55,0.45)" : "rgba(120,113,108,0.45)",
-      bgColor: "transparent",
-      textColor: isResolved ? "rgba(212,175,55,0.75)" : "rgba(120,113,108,0.65)",
+      size: 56,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderStyle: "solid",
+      borderColor: resolved ? "rgba(196,82,26,0.50)" : "rgba(196,82,26,0.70)",
+      bgColor: resolved ? "rgba(196,82,26,0.10)" : "rgba(196,82,26,0.06)",
+      textColor: resolved ? "rgba(196,82,26,0.75)" : "rgba(230,130,80,0.90)",
       textDecoration: "none",
-      shadow: "none",
+      shadow: resolved ? "none" : "0 0 10px rgba(196,82,26,0.18)",
+      opacity: 1,
+      pulse: false,
+      labelSize: 9.5,
+      labelWeight: 500,
     };
   }
 
-  if (meta === "should") {
+  if (node.type === "sprint") {
     return {
-      opacity: 0.65,
+      size: 48,
+      borderRadius: 20,
+      borderWidth: 1,
       borderStyle: "solid",
-      borderColor: isResolved ? "rgba(212,175,55,0.55)" : "rgba(212,175,55,0.30)",
-      bgColor: isResolved ? "rgba(212,175,55,0.12)" : "rgba(212,175,55,0.04)",
-      textColor: isResolved ? "rgba(212,175,55,0.85)" : "rgba(231,229,228,0.65)",
+      borderColor: resolved ? "rgba(212,175,55,0.45)" : "rgba(212,175,55,0.22)",
+      bgColor: resolved ? "rgba(212,175,55,0.10)" : "rgba(212,175,55,0.04)",
+      textColor: resolved ? "rgba(212,175,55,0.75)" : "rgba(120,113,108,0.65)",
       textDecoration: "none",
       shadow: "none",
+      opacity: resolved ? 1 : 0.75,
+      pulse: false,
+      labelSize: 9,
+      labelWeight: 500,
     };
   }
 
   return {
-    opacity: 1,
-    borderStyle: "solid",
-    borderColor: isResolved ? "rgba(212,175,55,0.85)" : "rgba(212,175,55,0.45)",
-    bgColor: isResolved ? "rgba(212,175,55,0.15)" : "rgba(212,175,55,0.06)",
-    textColor: isResolved ? "#D4AF37" : "rgba(231,229,228,0.87)",
-    textDecoration: "none",
-    shadow: isResolved ? "0 0 14px rgba(212,175,55,0.25)" : "none",
+    size: 56, borderRadius: 14, borderWidth: 1.5,
+    borderStyle: "solid", borderColor: "rgba(212,175,55,0.45)",
+    bgColor: "rgba(212,175,55,0.06)",
+    textColor: "rgba(231,229,228,0.87)", textDecoration: "none",
+    shadow: "none", opacity: 1, pulse: false, labelSize: 9.5, labelWeight: 500,
   };
 }
 
@@ -594,47 +731,47 @@ function FlowNodeComponent({
   node: ArchNode;
   onFocus: (id: string, e: React.MouseEvent | React.TouchEvent) => void;
 }) {
-  const visual = getNodeVisualStyle(node);
-  const isGoal = node.type === "goal";
-  const size = isGoal ? 72 : 60;
+  const v = getNodeVisual(node);
+  const icon = getNodeIcon(node);
 
   return (
     <button
       onClick={e => onFocus(node.id, e)}
       onTouchEnd={e => { e.preventDefault(); onFocus(node.id, e); }}
-      className={`absolute flex flex-col items-center gap-1 transition-all duration-300 ${node.resolved && node.meta !== "wont" ? "animate-node-resolve" : ""}`}
       style={{
-        left: node.x - size / 2,
-        top: node.y - size / 2 + (isGoal ? 0 : 6),
+        position: "absolute",
+        left: node.x - v.size / 2,
+        top: node.y - v.size / 2,
         background: "none", border: "none", padding: 0, cursor: "pointer",
-        opacity: visual.opacity,
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+        opacity: v.opacity,
+        transition: "opacity 300ms ease, transform 300ms ease",
       }}
     >
       <div style={{
-        width: size, height: size,
+        width: v.size, height: v.size,
         display: "flex", alignItems: "center", justifyContent: "center",
-        borderRadius: isGoal ? "50%" : 14,
-        border: `${isGoal ? 2 : 1.5}px ${visual.borderStyle} ${visual.borderColor}`,
-        background: visual.bgColor,
-        boxShadow: visual.shadow,
-        fontSize: isGoal ? 22 : 18,
-        color: visual.textColor,
+        borderRadius: v.borderRadius,
+        border: `${v.borderWidth}px ${v.borderStyle} ${v.borderColor}`,
+        background: v.bgColor,
+        boxShadow: v.shadow,
+        fontSize: node.type === "goal" ? 24 : 18,
+        color: v.textColor,
         transition: "all 300ms ease",
-        animation: !node.resolved && node.meta !== "wont" && node.type !== "blocker"
-          ? "amber-pulse 2s ease-in-out infinite" : undefined,
+        animation: v.pulse ? "amber-pulse 2s ease-in-out infinite" : undefined,
       }}>
-        {NODE_ICONS[node.type] || "●"}
+        {icon}
       </div>
       <span style={{
-        fontSize: isGoal ? 11 : 10,
-        fontWeight: isGoal ? 700 : 500,
-        color: visual.textColor,
+        fontSize: v.labelSize,
+        fontWeight: v.labelWeight,
+        color: v.textColor,
         whiteSpace: "nowrap",
-        textDecoration: visual.textDecoration,
-        maxWidth: 90,
+        textDecoration: v.textDecoration,
+        maxWidth: 88,
         overflow: "hidden",
         textOverflow: "ellipsis",
-        letterSpacing: isGoal ? "0.04em" : 0,
+        letterSpacing: node.type === "goal" ? "0.04em" : 0,
       }}>
         {node.label}
       </span>

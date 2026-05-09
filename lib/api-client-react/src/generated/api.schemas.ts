@@ -425,6 +425,8 @@ export interface ForgeNode {
   y: number;
   details?: string;
   meta?: ForgeNodeMeta;
+  /** Strategic pivot question for this node */
+  question?: string;
 }
 
 export interface ForgeResponse {
