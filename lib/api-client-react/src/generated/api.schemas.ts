@@ -16,6 +16,8 @@ export const ProjectStatus = {
   archived: "archived",
 } as const;
 
+export type ProjectNodeState = { [key: string]: unknown } | null;
+
 export interface Project {
   id: number;
   name: string;
@@ -30,6 +32,7 @@ export interface Project {
   githubToken?: string | null;
   /** @nullable */
   linkedRepo?: string | null;
+  nodeState?: ProjectNodeState;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,6 +51,8 @@ export const UpdateProjectBodyStatus = {
   archived: "archived",
 } as const;
 
+export type UpdateProjectBodyNodeState = { [key: string]: unknown } | null;
+
 export interface UpdateProjectBody {
   name?: string;
   /** @nullable */
@@ -61,6 +66,7 @@ export interface UpdateProjectBody {
   githubToken?: string | null;
   /** @nullable */
   linkedRepo?: string | null;
+  nodeState?: UpdateProjectBodyNodeState;
 }
 
 export interface ProjectSummary {

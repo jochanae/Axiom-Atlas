@@ -112,11 +112,23 @@ interface SystemMapProps {
   onNodeFocus?: (text: string) => void;
   atmosphere?: string;
   detectedBuilder?: string;
+  initialNodeState?: Record<string, boolean> | null;
 }
 
-export function SystemMap({ onReadinessChange, onNodesChange, compact, onNodeFocus, atmosphere, detectedBuilder: detectedBuilderProp }: SystemMapProps) {
+export function SystemMap({ onReadinessChange, onNodesChange, compact, onNodeFocus, atmosphere, detectedBuilder: detectedBuilderProp, initialNodeState }: SystemMapProps) {
   const isMobile = window.innerWidth < 768;
   const [nodes, setNodes] = useState<ArchNode[]>(loadNodes);
+
+  // Sync resolved states from DB once when initialNodeState arrives
+  const dbSyncedRef = useRef(false);
+  useEffect(() => {
+    if (dbSyncedRef.current || !initialNodeState) return;
+    dbSyncedRef.current = true;
+    setNodes(prev => prev.map(n => ({
+      ...n,
+      resolved: initialNodeState[n.id] !== undefined ? initialNodeState[n.id] : n.resolved,
+    })));
+  }, [initialNodeState]);
   const edges = INITIAL_EDGES;
   const [zoom, setZoom] = useState(isMobile ? ZOOM_DEFAULT_MOBILE : ZOOM_DEFAULT_DESKTOP);
   const [pan, setPan] = useState({ x: 0, y: 0 });

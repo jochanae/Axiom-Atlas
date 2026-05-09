@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,7 @@ export const projectsTable = pgTable("projects", {
   previewUrl: text("preview_url"),
   githubToken: text("github_token"),
   linkedRepo: text("linked_repo"),
+  nodeState: jsonb("node_state").default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
