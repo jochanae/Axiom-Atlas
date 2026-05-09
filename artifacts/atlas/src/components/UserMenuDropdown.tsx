@@ -59,7 +59,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
       aria-modal="true"
       aria-label="Keyboard shortcuts"
       style={{
-        position: "fixed", inset: 0, zIndex: 300,
+        position: "fixed", inset: 0, zIndex: 10000,
         overflowY: "auto",
         WebkitOverflowScrolling: "touch" as any,
         display: "flex", alignItems: "flex-start", justifyContent: "center",
