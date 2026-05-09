@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
+import { useRequireAuth } from "@/hooks/useAuth";
 import { SystemMap } from "../components/SystemMap";
 import type { ArchNode } from "../components/SystemMap";
 import { QuickPromptSheet } from "../components/QuickPromptSheet";
@@ -4877,6 +4878,7 @@ export default function Workspace() {
   const id = Number(projectId);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  useRequireAuth();
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -4965,6 +4967,27 @@ export default function Workspace() {
   const dismissAxiomBanner = () => {
     try { localStorage.setItem(`atlas-axiom-banner-${id}`, "1"); } catch { /* ignore */ }
     setShowAxiomBanner(false);
+  };
+
+  // Spec → Build handoff modal state
+  const [showHandoffModal, setShowHandoffModal] = useState(false);
+  const [handoffSelected, setHandoffSelected] = useState<Set<number>>(new Set());
+
+  // Intercept mode switch to BUILD — if there are PLAN messages, show the handoff modal
+  const handleModeSelect = (m: "THINK" | "PLAN" | "BUILD") => {
+    if (m === "BUILD" && projectMode !== "BUILD") {
+      const planMsgs = messages.filter(msg => msg.role === "assistant" && msg.intentType === "PLAN" && msg.content.trim().length > 0);
+      if (planMsgs.length > 0) {
+        // Pre-select all PLAN messages
+        setHandoffSelected(new Set(planMsgs.map((_, i) => i)));
+        setShowHandoffModal(true);
+        setShowModeMenu(false);
+        return;
+      }
+    }
+    setProjectMode(m);
+    try { localStorage.setItem(`atlas-mode-${id}`, m); } catch {}
+    setShowModeMenu(false);
   };
 
   // Auto-set BUILD mode when arriving via Axiom handoff
@@ -5643,7 +5666,7 @@ export default function Workspace() {
                           const active = projectMode === m;
                           return (
                             <button key={m}
-                              onClick={() => { setProjectMode(m); try { localStorage.setItem(`atlas-mode-${id}`, m); } catch {} setShowModeMenu(false); }}
+                              onClick={() => handleModeSelect(m)}
                               style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active ? mc.bg : "transparent", border: "none", padding: "8px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
                               onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
                               onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
@@ -5715,6 +5738,117 @@ export default function Workspace() {
         </div>
 
       </div>
+
+      {/* ── Spec → Build handoff modal ── */}
+      {showHandoffModal && (() => {
+        const planMsgs = messages.filter(msg => msg.role === "assistant" && msg.intentType === "PLAN" && msg.content.trim().length > 0);
+        const commitSelected = async () => {
+          const toCommit = planMsgs.filter((_, i) => handoffSelected.has(i));
+          for (const msg of toCommit) {
+            const summary = msg.content.replace(/#{1,3}\s*/g, "").split("\n").find(l => l.trim().length > 15)?.trim().slice(0, 120) ?? msg.content.slice(0, 120);
+            await createEntry.mutateAsync({ projectId: id, data: { title: summary.slice(0, 80), summary, status: "committed", severity: "committed", mode: "plan", sessionId: sessionId ?? undefined } }).catch(() => {});
+          }
+          setShowHandoffModal(false);
+          setProjectMode("BUILD");
+          try { localStorage.setItem(`atlas-mode-${id}`, "BUILD"); } catch {}
+        };
+        const skipAndBuild = () => {
+          setShowHandoffModal(false);
+          setProjectMode("BUILD");
+          try { localStorage.setItem(`atlas-mode-${id}`, "BUILD"); } catch {}
+        };
+        return createPortal(
+          <>
+            <div onClick={skipAndBuild} style={{ position: "fixed", inset: 0, zIndex: 9990, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }} />
+            <div style={{
+              position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+              zIndex: 9991, width: "min(520px, calc(100vw - 32px))",
+              background: "var(--atlas-surface)", border: "1px solid rgba(74,222,128,0.28)",
+              borderRadius: 16, padding: "28px 28px 24px", boxShadow: "0 32px 80px rgba(0,0,0,0.7)",
+            }}>
+              {/* Header */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", display: "inline-block", flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "#4ade80" }}>Switching to Build Mode</span>
+                </div>
+                <p style={{ fontSize: 13, color: "var(--atlas-fg)", margin: 0, lineHeight: 1.6, opacity: 0.85 }}>
+                  You have {planMsgs.length} planning {planMsgs.length === 1 ? "response" : "responses"} from this session. Commit the key decisions to your ledger before you start building?
+                </p>
+              </div>
+
+              {/* Decision list */}
+              <div style={{ display: "flex", flexDirection: "column" as const, gap: 6, marginBottom: 22, maxHeight: 280, overflowY: "auto" as const }}>
+                {planMsgs.map((msg, i) => {
+                  const preview = msg.content.replace(/#{1,3}\s*/g, "").split("\n").find(l => l.trim().length > 15)?.trim().slice(0, 100) ?? msg.content.slice(0, 100);
+                  const selected = handoffSelected.has(i);
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setHandoffSelected(prev => {
+                        const next = new Set(prev);
+                        if (next.has(i)) next.delete(i); else next.add(i);
+                        return next;
+                      })}
+                      style={{
+                        display: "flex", alignItems: "flex-start", gap: 10,
+                        padding: "10px 12px", borderRadius: 9,
+                        background: selected ? "rgba(74,222,128,0.07)" : "rgba(255,255,255,0.025)",
+                        border: `1px solid ${selected ? "rgba(74,222,128,0.3)" : "rgba(120,113,108,0.15)"}`,
+                        cursor: "pointer", textAlign: "left" as const, transition: "all 140ms ease",
+                      }}
+                    >
+                      <span style={{
+                        width: 14, height: 14, borderRadius: 4, flexShrink: 0, marginTop: 1,
+                        border: `1.5px solid ${selected ? "#4ade80" : "rgba(120,113,108,0.4)"}`,
+                        background: selected ? "#4ade80" : "transparent",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        transition: "all 140ms ease",
+                      }}>
+                        {selected && <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="#0C0A09" strokeWidth="2.2" strokeLinecap="round"><path d="M2 6l3 3 5-5" /></svg>}
+                      </span>
+                      <span style={{ fontSize: 12, color: selected ? "var(--atlas-fg)" : "var(--atlas-muted)", lineHeight: 1.55, transition: "color 140ms" }}>
+                        {preview}{preview.length >= 100 ? "…" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  onClick={commitSelected}
+                  disabled={handoffSelected.size === 0}
+                  style={{
+                    flex: 1, padding: "11px 16px", borderRadius: 9, cursor: handoffSelected.size === 0 ? "not-allowed" : "pointer",
+                    background: handoffSelected.size === 0 ? "rgba(74,222,128,0.08)" : "rgba(74,222,128,0.14)",
+                    border: `1px solid ${handoffSelected.size === 0 ? "rgba(74,222,128,0.12)" : "rgba(74,222,128,0.4)"}`,
+                    color: handoffSelected.size === 0 ? "rgba(74,222,128,0.3)" : "#4ade80",
+                    fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" as const,
+                    transition: "all 160ms ease",
+                  }}
+                >
+                  Lock in {handoffSelected.size > 0 ? `${handoffSelected.size} ` : ""}& Start Building
+                </button>
+                <button
+                  onClick={skipAndBuild}
+                  style={{
+                    padding: "11px 16px", borderRadius: 9, cursor: "pointer",
+                    background: "transparent", border: "1px solid rgba(120,113,108,0.2)",
+                    color: "var(--atlas-muted)", fontSize: 11, fontFamily: "var(--app-font-mono)",
+                    fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" as const,
+                    opacity: 0.7,
+                  }}
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          </>,
+          document.body
+        );
+      })()}
 
       {/* ── Axiom handoff banner ── */}
       {showAxiomBanner && (

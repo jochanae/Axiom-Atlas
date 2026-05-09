@@ -11,28 +11,31 @@ import selfRouter from "./self";
 import thoughtsRouter from "./thoughts";
 import importRouter from "./import";
 import vaultRouter from "./vault";
-import authRouter from "./auth";
+import authRouter, { requireAuth } from "./auth";
 import googleAuthRouter from "./google-auth";
 import adminRouter from "./admin";
 import invitesRouter from "./invites";
 
 const router: IRouter = Router();
 
+// Public routes — no auth required
 router.use(authRouter);
 router.use(googleAuthRouter);
 router.use(adminRouter);
 router.use(invitesRouter);
 router.use(healthRouter);
-router.use(projectsRouter);
-router.use(sessionsRouter);
-router.use(entriesRouter);
-router.use(chatRouter);
-router.use(githubRouter);
-router.use(imageRouter);
-router.use(devserverRouter);
 router.use(selfRouter);
-router.use(thoughtsRouter);
-router.use(importRouter);
-router.use(vaultRouter);
+router.use(devserverRouter);
+
+// Protected routes — valid session required
+router.use(requireAuth, projectsRouter);
+router.use(requireAuth, sessionsRouter);
+router.use(requireAuth, entriesRouter);
+router.use(requireAuth, chatRouter);
+router.use(requireAuth, githubRouter);
+router.use(requireAuth, imageRouter);
+router.use(requireAuth, thoughtsRouter);
+router.use(requireAuth, importRouter);
+router.use(requireAuth, vaultRouter);
 
 export default router;

@@ -117,4 +117,16 @@ router.get("/auth/me", async (req, res): Promise<void> => {
   res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
 });
 
+// Middleware: require a valid session cookie — attaches authUser to req
+export async function requireAuth(
+  req: import("express").Request,
+  res: import("express").Response,
+  next: import("express").NextFunction
+): Promise<void> {
+  const user = await getUserFromCookie(req);
+  if (!user) { res.status(401).json({ error: "Authentication required" }); return; }
+  (req as any).authUser = user;
+  next();
+}
+
 export default router;

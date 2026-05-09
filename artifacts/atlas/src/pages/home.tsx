@@ -14,7 +14,7 @@ import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
 import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
-import { useAuth, isSuperAdmin } from "../hooks/useAuth";
+import { useAuth, useRequireAuth, isSuperAdmin } from "../hooks/useAuth";
 
 const PLACEHOLDERS = [
   "What are we actually trying to solve here…",
@@ -565,6 +565,7 @@ export default function Home() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const { user: authUser } = useAuth();
+  useRequireAuth();
   const [showProfile, setShowProfile] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showDrawer, setShowDrawer] = useState(false);
