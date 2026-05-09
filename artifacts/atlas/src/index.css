@@ -92,6 +92,13 @@
   --atlas-shadow-lg:    rgba(0,0,0,0.45);
   --ease-cinematic:     cubic-bezier(0.4, 0, 0.2, 1);
 
+  /* Theme-aware tokens for home page */
+  --atlas-home-atmosphere: radial-gradient(circle, rgba(88,28,135,0.30) 0%, rgba(88,28,135,0.08) 45%, transparent 70%);
+  --atlas-home-bg-gradient: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,28,135,0.25) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(88,28,135,0.15) 0%, transparent 60%);
+  --atlas-home-header-shadow: 0 1px 0 0 rgba(88,28,135,0.4), 0 2px 16px rgba(88,28,135,0.12);
+  --atlas-nav-arch-fill: rgba(13,11,9,0.97);
+  --atlas-home-btn-bg: #0D0B09;
+
   --app-font-sans: 'Geist', system-ui, -apple-system, sans-serif;
   --app-font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
 
@@ -131,6 +138,13 @@
 
 [data-theme="parchment"] {
   color-scheme: light;
+
+  /* Home page theme overrides */
+  --atlas-home-atmosphere: radial-gradient(circle, rgba(180,83,9,0.10) 0%, rgba(201,162,76,0.04) 45%, transparent 70%);
+  --atlas-home-bg-gradient: none;
+  --atlas-home-header-shadow: 0 1px 0 0 rgba(180,83,9,0.12), 0 2px 8px rgba(0,0,0,0.06);
+  --atlas-nav-arch-fill: rgba(245,241,232,0.97);
+  --atlas-home-btn-bg: #F5F1E8;
 
   --atlas-bg:           #F5F1E8;
   --atlas-surface:      #EDE9DF;
@@ -343,6 +357,27 @@
   border: 1px solid color-mix(in oklab, #92400E 40%, #252220);
   background: linear-gradient(180deg, color-mix(in oklab, #92400E 6%, transparent) 0%, transparent 100%);
   box-shadow: 0 0 0 1px color-mix(in oklab, #92400E 8%, transparent) inset;
+}
+
+/* ── Home page theme-aware classes ── */
+.atlas-home-bg {
+  background-image: var(--atlas-home-bg-gradient);
+}
+.atlas-home-atmosphere {
+  background: var(--atlas-home-atmosphere) !important;
+}
+.atlas-home-header-glow {
+  box-shadow: var(--atlas-home-header-shadow) !important;
+}
+.atlas-home-center-btn {
+  background: var(--atlas-home-btn-bg) !important;
+}
+
+/* ── Decision catch card (parchment-aware) ── */
+[data-theme="parchment"] .atlas-catch-card {
+  border-color: rgba(139,69,19,0.30);
+  background: linear-gradient(180deg, rgba(139,69,19,0.06) 0%, transparent 100%);
+  box-shadow: 0 0 0 1px rgba(139,69,19,0.06) inset;
 }
 
 /* ── Resize handle ── */
