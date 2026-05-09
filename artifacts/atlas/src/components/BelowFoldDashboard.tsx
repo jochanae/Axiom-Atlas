@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CompactReadinessRing } from "./ReadinessRing";
 
 type RecentProject = {
   id: number;
   name: string;
   description?: string | null;
   updatedAt: string;
+  latestSnapshotScore?: number | null;
 };
 
 type Props = {
@@ -176,6 +178,7 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
                     </div>
                   )}
                 </div>
+                <CompactReadinessRing score={p.latestSnapshotScore ?? 0} />
                 <div style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.45, flexShrink: 0 }}>
                   {formatRelative(p.updatedAt)}
                 </div>

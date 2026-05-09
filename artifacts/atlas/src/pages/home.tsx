@@ -325,7 +325,7 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        <CompactReadinessRing score={computeScoreFromNodeState(project.nodeState)} />
+        <CompactReadinessRing score={project.latestSnapshotScore ?? computeScoreFromNodeState(project.nodeState)} />
         <span
           style={{
             fontFamily: "var(--app-font-mono)",
@@ -1160,6 +1160,7 @@ export default function Home() {
             name: p.name,
             description: p.description,
             updatedAt: p.createdAt,
+            latestSnapshotScore: p.latestSnapshotScore ?? null,
           }))}
           onOpenProject={navigateToProject}
           onOpenLedger={() => {
@@ -1178,7 +1179,7 @@ export default function Home() {
 
       {showProjectsSheet && (
         <ProjectsGridSheet
-          projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description }))}
+          projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description, latestSnapshotScore: p.latestSnapshotScore ?? null }))}
           onOpenProject={(id) => { setShowProjectsSheet(false); navigateToProject(id); }}
           onNewProject={() => {
             setShowProjectsSheet(false);
@@ -1352,7 +1353,7 @@ export default function Home() {
 }
 
 // ── Projects Grid Sheet ───────────────────────────────────────────────────────
-type SheetProject = { id: number; name: string; description?: string | null };
+type SheetProject = { id: number; name: string; description?: string | null; latestSnapshotScore?: number | null };
 
 function ProjectsGridSheet({
   projects,
@@ -1483,10 +1484,13 @@ function ProjectsGridSheet({
                     </div>
                   </div>
                   <div style={{ padding: "10px 12px 12px" }}>
-                    <p style={{ margin: 0, fontFamily: "var(--app-font-sans)", fontSize: 12, fontWeight: 600, color: "var(--atlas-fg)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {p.name}
-                    </p>
-                    <p style={{ margin: "3px 0 0", fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 2 }}>
+                      <p style={{ margin: 0, fontFamily: "var(--app-font-sans)", fontSize: 12, fontWeight: 600, color: "var(--atlas-fg)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>
+                        {p.name}
+                      </p>
+                      <CompactReadinessRing score={p.latestSnapshotScore ?? 0} />
+                    </div>
+                    <p style={{ margin: 0, fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {p.description ?? "No description"}
                     </p>
                   </div>

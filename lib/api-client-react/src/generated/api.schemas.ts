@@ -38,6 +38,8 @@ export interface Project {
   lastHandoverAt?: string | null;
   /** @nullable */
   lastHandoverHash?: string | null;
+  /** @nullable */
+  latestSnapshotScore?: number | null;
   createdAt: string;
   updatedAt: string;
 }

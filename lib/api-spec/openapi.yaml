@@ -623,6 +623,8 @@ components:
           type: ["string", "null"]
         lastHandoverHash:
           type: ["string", "null"]
+        latestSnapshotScore:
+          type: ["integer", "null"]
         createdAt:
           type: string
         updatedAt:
