@@ -1,5 +1,7 @@
 import { toast } from "sonner";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { haptics } from "@/lib/haptics";
+import { sounds } from "@/lib/sounds";
 
 export interface ArchNode {
   id: string;
@@ -277,13 +279,13 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
     dragState.current.dragging = false;
     if (!dragState.current.moved) {
       e.stopPropagation();
-      setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, resolved: !n.resolved } : n));
+      haptics.tap();
+      sounds.tap();
 
       if (activeCardNodeId === nodeId) {
         setActiveCardNodeId(null);
       } else {
         setActiveCardNodeId(nodeId);
-        // Inject pivot message into chat — same as original addMessage behavior
         const node = nodes.find(n => n.id === nodeId);
         if (node && onNodeFocus) {
           const pivotText = node.resolved
@@ -324,7 +326,6 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
         transition: "box-shadow 1s ease",
         touchAction: "none",
         cursor: dragState.current.dragging ? "grabbing" : "grab",
-        background: "radial-gradient(circle at 50% 0%, rgba(76,29,149,0.18) 0%, transparent 60%), #050505",
       }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
@@ -339,12 +340,6 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
     >
       <style>{EDGE_FLOW_STYLE}</style>
 
-      {/* Cinematic vignette overlay — dark edges for depth */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        background: "radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%)",
-        zIndex: 1,
-      }} />
-
       {/* Dot grid */}
       <div className="absolute inset-0" style={{
         backgroundImage: `radial-gradient(circle at 1px 1px, oklch(0.30 0.01 60 / 30%) 1px, transparent 0)`,
@@ -352,8 +347,26 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
       }} />
 
       {/* Header */}
-      <div className="absolute left-4 top-4 z-10">
+      <div className="absolute left-4 top-4 z-10 flex flex-col gap-1.5">
         <span className="text-xs font-bold tracking-widest text-gold uppercase">SYSTEM MAP</span>
+        {effectiveBuilder && (
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: "0.12em",
+            color: effectiveBuilder === "lovable" ? "oklch(0.65 0.20 300)"
+              : effectiveBuilder === "cursor" ? "oklch(0.65 0.18 240)"
+              : "oklch(0.65 0.18 150)",
+            background: effectiveBuilder === "lovable" ? "oklch(0.30 0.12 300 / 30%)"
+              : effectiveBuilder === "cursor" ? "oklch(0.30 0.12 240 / 30%)"
+              : "oklch(0.30 0.12 150 / 30%)",
+            border: `1px solid ${effectiveBuilder === "lovable" ? "oklch(0.55 0.20 300 / 40%)"
+              : effectiveBuilder === "cursor" ? "oklch(0.55 0.18 240 / 40%)"
+              : "oklch(0.55 0.18 150 / 40%)"}`,
+            borderRadius: 999, padding: "2px 8px",
+            textTransform: "uppercase", display: "inline-block",
+          }}>
+            {effectiveBuilder.toUpperCase()} DETECTED
+          </span>
+        )}
       </div>
 
 
@@ -381,22 +394,6 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
 
         {/* SVG edges */}
         <svg className="absolute inset-0 h-full w-full" style={{ overflow: "visible" }}>
-          <defs>
-            <filter id="edge-glow" x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur stdDeviation="3.5" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-            <filter id="edge-glow-resolved" x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur stdDeviation="5" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
           {edges.map(edge => {
             const fromNode = nodes.find(n => n.id === edge.from);
             const toNode = nodes.find(n => n.id === edge.to);
@@ -407,11 +404,10 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
                 key={edge.id}
                 x1={fromNode.x} y1={fromNode.y}
                 x2={toNode.x} y2={toNode.y}
-                stroke={bothResolved ? "rgba(139,92,246,0.85)" : "rgba(109,40,217,0.45)"}
+                stroke={bothResolved ? "rgba(212,175,55,0.6)" : "oklch(0.35 0.01 60 / 50%)"}
                 strokeWidth={bothResolved ? strokeWidth + 0.5 : strokeWidth}
-                strokeDasharray={bothResolved ? "5 5" : "7 5"}
-                filter={bothResolved ? "url(#edge-glow-resolved)" : "url(#edge-glow)"}
-                style={bothResolved ? { animation: "edge-flow 1.8s linear infinite" } : undefined}
+                strokeDasharray={bothResolved ? "4 4" : "6 4"}
+                style={bothResolved ? { animation: "edge-flow 1.5s linear infinite" } : undefined}
               />
             );
           })}
