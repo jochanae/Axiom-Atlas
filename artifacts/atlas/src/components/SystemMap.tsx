@@ -115,7 +115,9 @@ interface SystemMapProps {
   onNodeFocus?: (text: string) => void;
   atmosphere?: string;
   detectedBuilder?: string;
-  initialNodeState?: Record<string, boolean> | null;
+  // Accepts both the legacy boolean shape and the richer AxiomFlow shape so
+  // both SystemMap and AxiomFlow can share the same project.nodeState column.
+  initialNodeState?: Record<string, boolean | { resolved: boolean; strategicAnswer?: string }> | null;
   resolvedNodeIds?: string[];
   onResolvedConsumed?: () => void;
 }
@@ -130,10 +132,12 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
   useEffect(() => {
     if (dbSyncedRef.current || !initialNodeState) return;
     dbSyncedRef.current = true;
-    setNodes(prev => prev.map(n => ({
-      ...n,
-      resolved: initialNodeState[n.id] !== undefined ? initialNodeState[n.id] : n.resolved,
-    })));
+    setNodes(prev => prev.map(n => {
+      const raw = initialNodeState[n.id];
+      if (raw === undefined) return n;
+      const resolved = typeof raw === "boolean" ? raw : raw.resolved;
+      return { ...n, resolved };
+    }));
   }, [initialNodeState]);
 
   // Apply AI-resolved node IDs when chat emits NODE_RESOLVED
