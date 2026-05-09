@@ -76,6 +76,10 @@ const EDGE_FLOW_STYLE = `
   from { opacity: 0; transform: translate(var(--fly-dx), var(--fly-dy)) scale(0.2); }
   to   { opacity: 1; transform: translate(0px, 0px) scale(1); }
 }
+@keyframes gold-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(212,175,55,0.30); }
+  50%      { box-shadow: 0 0 22px rgba(212,175,55,0.60); }
+}
 `;
 
 const ZOOM_MIN = 0.4;
@@ -213,21 +217,22 @@ export function AxiomFlow({
   const [nodes, setNodes] = useState<ArchNode[]>(() => loadNodes(storageKey));
   const [edges, setEdges] = useState<ArchEdge[]>(() => loadEdges(storageKey));
 
-  // Sync resolved + strategicAnswer from DB on first load. Accepts both the
-  // legacy `Record<id, boolean>` shape and the new `{ resolved, strategicAnswer }` shape.
+  // Sync strategicAnswer from DB on first load. `resolved` is now strictly
+  // derived from a non-empty strategicAnswer — legacy `Record<id, boolean>`
+  // rows are intentionally NOT migrated to "resolved", so a previously-checked
+  // node with no captured answer falls back to the amber-pulse unanswered state.
   const dbSyncedRef = useRef(false);
   useEffect(() => {
     if (dbSyncedRef.current || !initialNodeState) return;
     dbSyncedRef.current = true;
     setNodes(prev => prev.map(n => {
       const raw = initialNodeState[n.id];
-      if (raw === undefined) return n;
-      if (typeof raw === "boolean") return { ...n, resolved: raw };
-      const next: ArchNode = { ...n, resolved: Boolean(raw.resolved) };
-      if (typeof raw.strategicAnswer === "string" && raw.strategicAnswer.trim().length > 0) {
-        next.strategicAnswer = raw.strategicAnswer;
-        next.resolved = true;
-      }
+      if (raw === undefined) return { ...n, resolved: isNodeDefined(n) };
+      if (typeof raw === "boolean") return { ...n, resolved: isNodeDefined(n) };
+      const answer = typeof raw.strategicAnswer === "string" ? raw.strategicAnswer : undefined;
+      const hasAnswer = Boolean(answer && answer.trim().length > 0);
+      const next: ArchNode = { ...n, resolved: hasAnswer };
+      if (hasAnswer) next.strategicAnswer = answer;
       return next;
     }));
   }, [initialNodeState]);
@@ -295,10 +300,11 @@ export function AxiomFlow({
     pinchStartZoom: 1,
   });
 
-  // Readiness: exclude wont-priority nodes from both numerator and denominator
+  // Readiness: exclude wont-priority nodes from both numerator and denominator.
+  // A node counts toward readiness only if it has a locked-in strategicAnswer.
   const nonWontNodes = nodes.filter(n => !(n.type === "priority" && n.meta === "wont"));
   const readinessScore = Math.round(
-    (nonWontNodes.filter(n => n.resolved).length / Math.max(nonWontNodes.length, 1)) * 100
+    (nonWontNodes.filter(isNodeDefined).length / Math.max(nonWontNodes.length, 1)) * 100
   );
 
   useEffect(() => { onReadinessChange?.(readinessScore); }, [readinessScore, onReadinessChange]);
@@ -311,6 +317,15 @@ export function AxiomFlow({
   useEffect(() => {
     try { localStorage.setItem(`${storageKey}-edges`, JSON.stringify(edges)); } catch {}
   }, [edges, storageKey]);
+
+  // Center the viewport on a specific (x, y) world coordinate while preserving
+  // the current zoom. Used for the Intel Panel goal re-anchor: tapping the
+  // goal re-centers the map around it instead of fitting all bounds.
+  const centerOnPoint = useCallback((cx: number, cy: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setPan({ x: rect.width / 2 / zoom - cx, y: rect.height / 2 / zoom - cy });
+  }, [zoom]);
 
   const fitMap = useCallback(() => {
     if (!containerRef.current || nodes.length === 0) return;
@@ -438,9 +453,10 @@ export function AxiomFlow({
         if (node) {
           const question = getPivotQuestion(node);
           if (onNodeFocus) onNodeFocus(question);
-          // Goal re-anchor: tapping the goal recenters the map.
+          // Goal re-anchor: tapping the goal recenters the viewport on the
+          // goal's world coordinates while preserving zoom.
           if (node.type === "goal") {
-            requestAnimationFrame(() => fitMap());
+            requestAnimationFrame(() => centerOnPoint(node.x, node.y));
           }
           // Chat mirror — only for unanswered nodes, debounced per-node.
           if (!isNodeDefined(node) && onUnansweredQuestionOpen && lastMirroredRef.current !== nodeId) {
@@ -453,7 +469,7 @@ export function AxiomFlow({
         }
       }
     }
-  }, [activeCardNodeId, nodes, onNodeFocus, onUnansweredQuestionOpen, fitMap]);
+  }, [activeCardNodeId, nodes, onNodeFocus, onUnansweredQuestionOpen, centerOnPoint]);
 
   const handleLockInAnswer = useCallback((nodeId: string, answer: string) => {
     const trimmed = answer.trim();
@@ -690,12 +706,13 @@ interface NodeVisual {
 }
 
 function getNodeVisual(node: ArchNode): NodeVisual {
-  // "defined" = a strategicAnswer is locked in. This is the only state that
-  // earns the steady gold treatment (gold pulse / no animation needed since the
-  // node now owns truth). Kind-set-but-unanswered nodes keep the amber pulse
-  // until their answer is captured. Blockers stay ember static and never pulse.
+  // "defined" = a strategicAnswer is locked in. This is the ONLY signal of a
+  // resolved/answered node — `node.resolved` is now strictly derived from the
+  // presence of an answer. Defined nodes earn the gold treatment + gold pulse;
+  // unanswered kind-set nodes keep the amber pulse; blockers always stay
+  // ember-static regardless of answer.
   const defined = isNodeDefined(node);
-  const resolved = defined || node.resolved;
+  const resolved = defined;
 
   if (node.type === "goal") {
     return {
@@ -735,17 +752,19 @@ function getNodeVisual(node: ArchNode): NodeVisual {
   }
 
   if (node.type === "blocker") {
+    // Spec: blockers stay ember-static regardless of answer state — they
+    // represent an open risk, not a checklist item.
     return {
       size: 56,
       borderRadius: 4,
       borderWidth: 1.5,
       borderStyle: "solid",
-      borderColor: resolved ? "rgba(120,113,108,0.35)" : "rgba(239,100,60,0.65)",
-      bgColor: resolved ? "rgba(120,113,108,0.06)" : "rgba(239,100,60,0.07)",
-      textColor: resolved ? "rgba(120,113,108,0.60)" : "rgba(239,120,80,0.90)",
+      borderColor: "rgba(239,100,60,0.65)",
+      bgColor: "rgba(239,100,60,0.07)",
+      textColor: "rgba(239,120,80,0.90)",
       textDecoration: "none",
-      shadow: resolved ? "none" : "0 0 10px rgba(239,100,60,0.20)",
-      opacity: resolved ? 0.6 : 1,
+      shadow: "0 0 10px rgba(239,100,60,0.20)",
+      opacity: 1,
       pulse: false,
       labelSize: 9.5,
       labelWeight: 500,
@@ -916,7 +935,9 @@ function FlowNodeComponent({
         fontSize: node.type === "goal" ? 24 : 18,
         color: v.textColor,
         transition: "all 300ms ease",
-        animation: v.pulse ? "amber-pulse 2s ease-in-out infinite" : undefined,
+        animation: defined
+          ? "gold-pulse 2.4s ease-in-out infinite"
+          : v.pulse ? "amber-pulse 2s ease-in-out infinite" : undefined,
       }}>
         {icon}
       </div>
@@ -993,7 +1014,7 @@ function AnswerCapture({
             submit();
           }
         }}
-        placeholder="Lock in your answer to this question…"
+        placeholder={defined ? "Refine your answer…" : "Type your answer…"}
         rows={3}
         style={{
           width: "100%",
