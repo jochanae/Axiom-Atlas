@@ -200,6 +200,94 @@ function MenuBtn({ icon, label, onClick, badge, disabled }: { icon: React.ReactN
   );
 }
 
+// ── ReadinessRing ─────────────────────────────────────────────────────────────
+function ReadinessRing({ score, onClick, title }: { score: number; onClick?: () => void; title?: string }) {
+  const r = 10;
+  const cx = 14;
+  const cy = 14;
+  const circ = 2 * Math.PI * r; // ~62.83
+  const offset = circ * (1 - score / 100);
+  const full = score >= 100;
+
+  return (
+    <button
+      onClick={onClick}
+      title={title ?? `Architecture readiness: ${score}%`}
+      aria-label={`Architecture readiness ${score}%. Click to open System Map.`}
+      style={{
+        background: "transparent",
+        border: "none",
+        cursor: onClick ? "pointer" : "default",
+        padding: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        position: "relative",
+        width: 28,
+        height: 28,
+        borderRadius: "50%",
+        transition: "opacity 160ms ease",
+      }}
+      onMouseEnter={(e) => { if (onClick) e.currentTarget.style.opacity = "0.75"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+    >
+      <svg
+        width="28"
+        height="28"
+        viewBox="0 0 28 28"
+        fill="none"
+        style={{ display: "block" }}
+      >
+        {/* Track ring */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          stroke="rgba(201,162,76,0.15)"
+          strokeWidth="2.5"
+        />
+        {/* Progress arc */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          stroke="var(--atlas-gold)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray={`${circ}`}
+          strokeDashoffset={`${offset}`}
+          transform="rotate(-90 14 14)"
+          style={{
+            transition: "stroke-dashoffset 600ms cubic-bezier(0.4, 0, 0.2, 1)",
+            filter: full ? "drop-shadow(0 0 4px rgba(201,162,76,0.8))" : undefined,
+          }}
+          className={full ? "atlas-ring-pulse" : undefined}
+        />
+      </svg>
+      {/* Score label */}
+      <span
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          fontFamily: "var(--app-font-mono)",
+          fontSize: 7,
+          fontWeight: 700,
+          letterSpacing: "0.02em",
+          color: score > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
+          lineHeight: 1,
+          pointerEvents: "none",
+          userSelect: "none",
+        }}
+      >
+        {score}
+      </span>
+    </button>
+  );
+}
+
 // ── AtlasLogo ────────────────────────────────────────────────────────────────
 const MODE_LABEL_COLORS: Record<string, string> = {
   THINK: "rgba(147,197,253,0.55)",
@@ -5508,6 +5596,17 @@ export default function Workspace() {
   const committedCount = entries?.filter((e) => e.status === "committed").length ?? 0;
   const healthPct = entryCount > 0 ? Math.round((committedCount / entryCount) * 100) : 0;
   const [mapReadiness, setMapReadiness] = useState(0);
+  const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(undefined);
+
+  const focusSystemMap = useCallback(() => {
+    if (isMobile) {
+      setMobileTab("map");
+      setRightOpen(true);
+    } else {
+      setDesktopForceTab("map");
+      setTimeout(() => setDesktopForceTab(undefined), 80);
+    }
+  }, [isMobile]);
 
   // ── ZIP import ─────────────────────────────────────────────────────────────
   const [zipFiles, setZipFiles] = useState<ZipEntry[]>([]);
@@ -5645,8 +5744,8 @@ export default function Workspace() {
             </button>
           </div>
 
-          {/* Center: project name + dropdown — hidden in mobile map mode */}
-          <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: isMobile && mobileTab === "map" ? "none" : "flex", alignItems: "center", maxWidth: "min(220px, calc(100% - 260px))", overflow: "hidden" }}>
+          {/* Center: project name + readiness ring + dropdown — hidden in mobile map mode */}
+          <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: isMobile && mobileTab === "map" ? "none" : "flex", alignItems: "center", gap: 4, maxWidth: "min(280px, calc(100% - 260px))" }}>
             <button
               ref={projectBtnRef}
               onClick={() => setShowProjectMenu((v) => !v)}
@@ -5698,6 +5797,13 @@ export default function Workspace() {
                 </>
               )}
             </button>
+
+            {/* Readiness ring — sits right of project name, clicks to open Map panel */}
+            <ReadinessRing
+              score={mapReadiness}
+              onClick={focusSystemMap}
+              title={`Architecture readiness: ${mapReadiness}%. Click to open System Map.`}
+            />
 
             {/* Dropdown menu — portaled to escape any parent stacking context */}
             {showProjectMenu && createPortal(
@@ -5755,12 +5861,6 @@ export default function Workspace() {
 
           {/* Right: % score + mode + P + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-
-            {/* Gold readiness percentage + dot — shows map readiness in map mode */}
-            <span style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", flexShrink: 0, opacity: 0.92 }}>
-              {isMobile && mobileTab === "map" ? mapReadiness : healthPct}%
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", boxShadow: "0 0 7px rgba(201,162,76,0.7)", flexShrink: 0 }} />
-            </span>
 
             {/* Mode pill — hidden in mobile map mode */}
             {!(isMobile && mobileTab === "map") && (() => {
@@ -6453,7 +6553,7 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
-                forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : undefined}
+                forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : desktopForceTab}
                 onSendIntent={sendFromIntentCapture}
                 onMapReadinessChange={setMapReadiness}
                 isMobile={false}

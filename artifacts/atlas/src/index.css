@@ -370,6 +370,15 @@
   animation: atlas-dot-pulse 2.2s ease-in-out infinite;
 }
 
+/* ── Readiness ring — 100% pulse ── */
+@keyframes atlas-ring-pulse {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px rgba(201,162,76,0.8)); }
+  50%       { opacity: 0.72; filter: drop-shadow(0 0 10px rgba(201,162,76,0.55)); }
+}
+.atlas-ring-pulse {
+  animation: atlas-ring-pulse 2.4s ease-in-out infinite;
+}
+
 /* ── Send button ── */
 .atlas-send-btn {
   border-radius: 10px;
