@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
@@ -1147,6 +1147,7 @@ function AssistantBubble({
   onCommit,
   onRegenerate,
   onPushSuccess,
+  onPreviewCode,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -1159,6 +1160,7 @@ function AssistantBubble({
   onCommit: (content: string) => void;
   onRegenerate: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
+  onPreviewCode?: (code: string) => void;
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
@@ -1168,6 +1170,19 @@ function AssistantBubble({
   const [selfApplyStatus, setSelfApplyStatus] = useState<"idle" | "applying" | "done" | "error">("idle");
   const [selfApplyMsg, setSelfApplyMsg] = useState("");
   const activeEdits = message.fileEdits ?? (message.fileEdit ? [message.fileEdit] : []);
+
+  // Detect previewable code block (html, jsx, tsx, css, or untagged with HTML tags)
+  const previewableCode = useMemo(() => {
+    const regex = /```(\w*)\n([\s\S]+?)```/g;
+    let match;
+    const previewLangs = new Set(["html", "jsx", "tsx", "css", "vue", "svelte", ""]);
+    while ((match = regex.exec(message.content)) !== null) {
+      const lang = (match[1] ?? "").toLowerCase();
+      const code = match[2] ?? "";
+      if (previewLangs.has(lang) || /<[a-zA-Z][\s\S]*?>/.test(code)) return code;
+    }
+    return null;
+  }, [message.content]);
 
   const SELF_PATH_RE = /^artifacts\/(atlas|api-server)\//;
   const selfEdits = activeEdits.filter((e) => SELF_PATH_RE.test(e.path));
@@ -1502,6 +1517,20 @@ function AssistantBubble({
               : <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="1.5" width="10" height="11" rx="1.5" /><path d="M4.5 5h5M4.5 7.5h5M4.5 10h3" /></svg>
             }
           </button>
+          {/* Preview in Sandbox */}
+          {previewableCode && onPreviewCode && (
+            <button
+              className="atlas-icon-action"
+              title="Preview in Sandbox"
+              onClick={() => onPreviewCode(previewableCode)}
+              style={{ color: "var(--atlas-gold)", opacity: hov ? 0.85 : 0.32 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1" y="2" width="12" height="9" rx="1.5" />
+                <path d="M5 5.5l2 2-2 2M8.5 9.5h1.5" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -3016,13 +3045,36 @@ function FilesTab({
 }
 
 // ── Preview tab ──────────────────────────────────────────────────────────────
-function PreviewTab({ projectId }: { projectId: number }) {
+function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
+  projectId: number;
+  sandboxCode?: string | null;
+  onSandboxConsumed?: () => void;
+}) {
   const queryClient = useQueryClient();
   const { data: project } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
   const updateProject = useUpdateProject();
 
   // Mode toggle
-  const [previewMode, setPreviewMode] = useState<"url" | "local">("url");
+  const [previewMode, setPreviewMode] = useState<"url" | "sandbox" | "local">("url");
+
+  // Device switcher
+  type DeviceSize = "phone" | "tablet" | "desktop";
+  const [deviceSize, setDeviceSize] = useState<DeviceSize>("desktop");
+  const [isLandscape, setIsLandscape] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerW, setContainerW] = useState(0);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setContainerW(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Sandbox state
+  const [sandboxInput, setSandboxInput] = useState("");
+  const [sandboxRendered, setSandboxRendered] = useState<string | null>(null);
+  const [sandboxExpanded, setSandboxExpanded] = useState(true);
 
   // ── URL mode state ──────────────────────────────────────────────────────────
   const storageKey = `atlas-preview-${projectId}`;
@@ -3071,6 +3123,22 @@ function PreviewTab({ projectId }: { projectId: number }) {
   useEffect(() => {
     if (devLogRef.current) devLogRef.current.scrollTop = devLogRef.current.scrollHeight;
   }, [devLogs]);
+
+  // ── Sandbox handoff from chat ────────────────────────────────────────────────
+  const buildSrcdoc = (code: string): string => {
+    const t = code.trim();
+    if (/^\s*<!DOCTYPE/i.test(t) || /^\s*<html/i.test(t)) return t;
+    return `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <script src="https://cdn.tailwindcss.com"><\/script>\n  <style>*, *::before, *::after { box-sizing: border-box; } body { margin: 0; padding: 0; }</style>\n</head>\n<body>\n${t}\n</body>\n</html>`;
+  };
+  useEffect(() => {
+    if (!sandboxCode) return;
+    setPreviewMode("sandbox");
+    setSandboxInput(sandboxCode);
+    setSandboxRendered(buildSrcdoc(sandboxCode));
+    setSandboxExpanded(false);
+    onSandboxConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sandboxCode]);
 
   const startDev = async () => {
     if (!linkedRepo || !token) return;
@@ -3191,11 +3259,45 @@ function PreviewTab({ projectId }: { projectId: number }) {
     return devStatus;
   };
 
+  // Device config
+  const DEVICE_CONFIG = {
+    phone:   { portrait: [390, 844],   landscape: [844, 390] },
+    tablet:  { portrait: [768, 1024],  landscape: [1024, 768] },
+    desktop: { portrait: [null, null], landscape: [null, null] },
+  } as const;
+  const orient = isLandscape ? "landscape" : "portrait";
+  const [dW, dH] = DEVICE_CONFIG[deviceSize][orient];
+  const scale = dW && containerW > 0 && containerW < dW + 24 ? (containerW - 24) / dW : 1;
+
+  const deviceBtnStyle = (active: boolean): React.CSSProperties => ({
+    display: "flex", alignItems: "center", justifyContent: "center",
+    gap: 3, padding: "4px 7px", borderRadius: 4,
+    background: active ? "rgba(201,162,76,0.12)" : "transparent",
+    border: `1px solid ${active ? "rgba(201,162,76,0.3)" : "transparent"}`,
+    color: active ? "var(--atlas-gold)" : "var(--atlas-muted)",
+    fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em",
+    cursor: "pointer", transition: "all 140ms ease", opacity: active ? 1 : 0.5,
+  });
+
+  // Device iframe wrapper — inline to avoid component-in-component remounting
+  const deviceWrapperStyle: React.CSSProperties = deviceSize === "desktop"
+    ? { flex: 1, position: "relative", overflow: "hidden" }
+    : { flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center", overflow: "hidden", padding: "12px 8px", background: "rgba(0,0,0,0.18)" };
+  const deviceInnerStyle: React.CSSProperties = deviceSize === "desktop"
+    ? { width: "100%", height: "100%", position: "absolute", inset: 0 }
+    : {
+        width: dW ?? undefined, height: dH ?? undefined,
+        transform: `scale(${scale})`, transformOrigin: "top center",
+        borderRadius: 14, overflow: "hidden", flexShrink: 0,
+        boxShadow: "0 0 0 1px rgba(255,255,255,0.07), 0 8px 32px rgba(0,0,0,0.55)",
+        background: "#fff",
+      };
+
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Mode toggle */}
       <div style={{ display: "flex", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
-        {(["url", "local"] as const).map((m) => (
+        {(["url", "sandbox", "local"] as const).map((m) => (
           <button
             key={m}
             onClick={() => setPreviewMode(m)}
@@ -3203,16 +3305,57 @@ function PreviewTab({ projectId }: { projectId: number }) {
               flex: 1, padding: "7px 0", background: "transparent", border: "none",
               borderBottom: previewMode === m ? "2px solid var(--atlas-gold)" : "2px solid transparent",
               color: previewMode === m ? "var(--atlas-gold)" : "var(--atlas-muted)",
-              fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+              fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
               textTransform: "uppercase", cursor: "pointer",
               opacity: previewMode === m ? 1 : 0.45,
               transition: "all 140ms ease",
             }}
           >
-            {m === "url" ? "Live URL" : "Local Dev"}
+            {m === "url" ? "Live URL" : m === "sandbox" ? "Sandbox" : "Local Dev"}
           </button>
         ))}
       </div>
+
+      {/* Device switcher — shown for URL + Sandbox modes */}
+      {(previewMode === "url" || previewMode === "sandbox") && (
+        <div style={{ display: "flex", alignItems: "center", gap: 3, padding: "5px 8px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+          <button style={deviceBtnStyle(deviceSize === "phone")} onClick={() => setDeviceSize("phone")}>
+            <svg width="8" height="11" viewBox="0 0 8 11" fill="none"><rect x="0.5" y="0.5" width="7" height="10" rx="1.5" stroke="currentColor" strokeWidth="1" /><circle cx="4" cy="8.5" r="0.6" fill="currentColor" /></svg>
+            Phone
+          </button>
+          <button style={deviceBtnStyle(deviceSize === "tablet")} onClick={() => setDeviceSize("tablet")}>
+            <svg width="10" height="11" viewBox="0 0 10 11" fill="none"><rect x="0.5" y="0.5" width="9" height="10" rx="1.5" stroke="currentColor" strokeWidth="1" /><circle cx="5" cy="8.5" r="0.6" fill="currentColor" /></svg>
+            Tablet
+          </button>
+          <button style={deviceBtnStyle(deviceSize === "desktop")} onClick={() => { setDeviceSize("desktop"); setIsLandscape(false); }}>
+            <svg width="11" height="9" viewBox="0 0 11 9" fill="none"><rect x="0.5" y="0.5" width="10" height="7" rx="1" stroke="currentColor" strokeWidth="1" /><path d="M3 8.5h5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" /></svg>
+            Desktop
+          </button>
+          <div style={{ flex: 1 }} />
+          <button
+            onClick={() => { if (deviceSize !== "desktop") setIsLandscape((l) => !l); }}
+            title={deviceSize === "desktop" ? "Rotate applies to Phone / Tablet only" : isLandscape ? "Switch to portrait" : "Switch to landscape"}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 4,
+              padding: "4px 8px", borderRadius: 4, cursor: deviceSize === "desktop" ? "not-allowed" : "pointer",
+              background: isLandscape && deviceSize !== "desktop" ? "rgba(201,162,76,0.1)" : "transparent",
+              border: `1px solid ${isLandscape && deviceSize !== "desktop" ? "rgba(201,162,76,0.28)" : "var(--atlas-border)"}`,
+              color: isLandscape && deviceSize !== "desktop" ? "var(--atlas-gold)" : "var(--atlas-muted)",
+              opacity: deviceSize === "desktop" ? 0.22 : 0.8,
+              transition: "all 140ms ease",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <path d="M3 13L13 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M13 3v4M13 3H9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M3 13H7M3 13v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
+              {deviceSize !== "desktop" ? (isLandscape ? "Landscape" : "Portrait") : "Rotate"}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* ── URL mode ── */}
       {previewMode === "url" && (
@@ -3298,20 +3441,23 @@ function PreviewTab({ projectId }: { projectId: number }) {
               </div>
             )}
           </div>
+          <div ref={containerRef} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {liveUrl && !iframeError ? (
-            <div style={{ flex: 1, position: "relative" }}>
-              {iframeLoading && (
-                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, background: "var(--atlas-bg)", zIndex: 2 }}>
-                  <LoadingSpinner size="sm" color="atlas" />
-                  <div style={{ fontSize: 9.5, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Loading preview…</div>
-                </div>
-              )}
-              <iframe key={`${liveUrl}-${reloadKey}`} src={liveUrl} title="Preview"
-                style={{ flex: 1, border: "none", width: "100%", height: "100%", display: "block", background: "#fff" }}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-                onLoad={() => setIframeLoading(false)}
-                onError={() => { setIframeError(true); setIframeLoading(false); }}
-              />
+            <div style={deviceWrapperStyle}>
+              <div style={deviceInnerStyle}>
+                {iframeLoading && (
+                  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, background: "var(--atlas-bg)", zIndex: 2 }}>
+                    <LoadingSpinner size="sm" color="atlas" />
+                    <div style={{ fontSize: 9.5, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Loading preview…</div>
+                  </div>
+                )}
+                <iframe key={`${liveUrl}-${reloadKey}`} src={liveUrl} title="Preview"
+                  style={{ border: "none", width: "100%", height: "100%", display: "block", background: "#fff" }}
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+                  onLoad={() => setIframeLoading(false)}
+                  onError={() => { setIframeError(true); setIframeLoading(false); }}
+                />
+              </div>
             </div>
           ) : iframeError ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
@@ -3330,7 +3476,92 @@ function PreviewTab({ projectId }: { projectId: number }) {
               </div>
             </div>
           )}
+          </div>
         </>
+      )}
+
+      {/* ── Sandbox mode ── */}
+      {previewMode === "sandbox" && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* Code input area */}
+          <div style={{ flexShrink: 0, borderBottom: "1px solid var(--atlas-border)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px 0" }}>
+              <button
+                onClick={() => setSandboxExpanded((v) => !v)}
+                style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em", padding: "0 2px", opacity: 0.65 }}
+              >
+                <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ transition: "transform 140ms ease", transform: sandboxExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>
+                  <path d="M2 1.5L6 4.5L2 7.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {sandboxExpanded ? "Hide code" : "Edit code"}
+              </button>
+              <div style={{ flex: 1 }} />
+              {sandboxRendered && (
+                <button
+                  onClick={() => { setSandboxInput(""); setSandboxRendered(null); setSandboxExpanded(true); }}
+                  style={{ padding: "2px 7px", borderRadius: 4, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", cursor: "pointer", opacity: 0.45, transition: "opacity 140ms ease" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.9")}
+                  onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.45")}
+                >Clear</button>
+              )}
+            </div>
+            {sandboxExpanded && (
+              <div style={{ padding: "6px 8px 8px" }}>
+                <textarea
+                  value={sandboxInput}
+                  onChange={(e) => setSandboxInput(e.target.value)}
+                  placeholder="Paste HTML, CSS, or any component here…"
+                  rows={6}
+                  style={{
+                    width: "100%", resize: "vertical", background: "rgba(12,10,9,0.8)",
+                    border: "1px solid var(--atlas-border)", borderRadius: 6,
+                    color: "var(--atlas-fg)", fontSize: 10.5, fontFamily: "var(--app-font-mono)",
+                    lineHeight: 1.6, padding: "7px 9px", outline: "none",
+                    transition: "border-color 160ms ease", boxSizing: "border-box",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                  <button
+                    onClick={() => { if (sandboxInput.trim()) { setSandboxRendered(buildSrcdoc(sandboxInput)); setSandboxExpanded(false); } }}
+                    disabled={!sandboxInput.trim()}
+                    style={{ padding: "5px 12px", borderRadius: 5, background: sandboxInput.trim() ? "var(--atlas-ember)" : "rgba(255,255,255,0.04)", border: "none", color: sandboxInput.trim() ? "var(--atlas-fg)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", cursor: sandboxInput.trim() ? "pointer" : "not-allowed", transition: "all 140ms ease" }}
+                  >Render</button>
+                  <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.28 }}>HTML · Tailwind included</span>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Sandbox preview area */}
+          <div ref={containerRef} style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {sandboxRendered ? (
+              <div style={deviceWrapperStyle}>
+                <div style={deviceInnerStyle}>
+                  <iframe
+                    key={sandboxRendered.slice(0, 80)}
+                    srcDoc={sandboxRendered}
+                    title="Sandbox Preview"
+                    sandbox="allow-scripts allow-same-origin"
+                    style={{ border: "none", width: "100%", height: "100%", display: "block", background: "#fff" }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" opacity={0.12}>
+                  <path d="M8 6l-6 6 6 6M16 6l6 6-6 6" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
+                  Paste any HTML or component above<br />and hit <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Render</strong> to preview it.
+                </div>
+                <div style={{ fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.22, textAlign: "center", lineHeight: 1.7, fontFamily: "var(--app-font-mono)" }}>
+                  Or tap Preview on any code block in the chat<br />to send it here instantly.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ── Local Dev mode ── */}
@@ -4406,6 +4637,8 @@ function RightPanel({
   onSnapshotChange,
   handoverOpen,
   onHandoverOpenChange,
+  sandboxCode,
+  onSandboxConsumed,
 }: {
   projectId: number;
   entries: Entry[];
@@ -4433,6 +4666,8 @@ function RightPanel({
   onSnapshotChange?: (s: HandoverSnapshot | null) => void;
   handoverOpen?: boolean;
   onHandoverOpenChange?: (open: boolean) => void;
+  sandboxCode?: string | null;
+  onSandboxConsumed?: () => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -4674,7 +4909,7 @@ function RightPanel({
         <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} pushHistory={pushHistory} onRollbackPush={onRollbackPush} />
       )}
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
-      {tab === "preview" && <PreviewTab projectId={projectId} />}
+      {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
     </div>
@@ -5488,6 +5723,18 @@ export default function Workspace() {
   const blendedReadiness = computeBlendedScore(mapReadiness, healthPct);
   const [pendingResolvedNodeIds, setPendingResolvedNodeIds] = useState<string[]>([]);
   const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(undefined);
+  const [sandboxCode, setSandboxCode] = useState<string | null>(null);
+  const handlePreviewCode = useCallback((code: string) => {
+    setSandboxCode(code);
+    if (isMobile) {
+      setMobileTab("preview");
+      setRightOpen(true);
+    } else {
+      setDesktopForceTab("preview");
+      setTimeout(() => setDesktopForceTab(undefined), 120);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile]);
 
   // ── Readiness Snapshots ───────────────────────────────────────────────────
   const { data: readinessSnapshots } = useListReadinessSnapshots(
@@ -6191,6 +6438,7 @@ export default function Workspace() {
                   onPark={handlePark}
                   onCommit={handleCommit}
                   onRegenerate={() => handleRegenerate(i)}
+                  onPreviewCode={handlePreviewCode}
                   onPushSuccess={(records) => {
                     setPushHistory((prev) => {
                       const next = [...prev, ...records].slice(-20);
@@ -6572,6 +6820,8 @@ export default function Workspace() {
                 onSnapshotChange={setCurrentSnapshot}
                 handoverOpen={handoverOpen}
                 onHandoverOpenChange={setHandoverOpen}
+                sandboxCode={sandboxCode}
+                onSandboxConsumed={() => setSandboxCode(null)}
               />
             </div>
           </>
@@ -6637,6 +6887,8 @@ export default function Workspace() {
                 onSnapshotChange={setCurrentSnapshot}
                 handoverOpen={handoverOpen}
                 onHandoverOpenChange={setHandoverOpen}
+                sandboxCode={sandboxCode}
+                onSandboxConsumed={() => setSandboxCode(null)}
               />
             </div>
           </div>
