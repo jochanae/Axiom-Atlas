@@ -11,7 +11,7 @@ const anthropic = new Anthropic({
 
 const ForgeRequestSchema = z.object({
   transcript: z.string().min(10).max(20000),
-  projectName: z.string().optional(),
+  projectContext: z.string().max(4000).optional(),
   projectId: z.number().optional(),
 });
 
@@ -120,10 +120,10 @@ router.post("/forge", async (req, res) => {
     return;
   }
 
-  const { transcript, projectName } = parsed.data;
+  const { transcript, projectContext } = parsed.data;
 
-  const userPrompt = projectName
-    ? `Project: ${projectName}\n\nTranscript:\n${transcript}`
+  const userPrompt = projectContext
+    ? `Project Context:\n${projectContext}\n\nTranscript:\n${transcript}`
     : `Transcript:\n${transcript}`;
 
   try {

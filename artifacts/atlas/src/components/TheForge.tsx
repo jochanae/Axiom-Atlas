@@ -10,11 +10,6 @@ const FORGE_STAGES = [
   "Placing nodes...",
 ];
 
-interface ForgeResult {
-  nodes: ArchNode[];
-  summary: string;
-}
-
 interface Props {
   platform?: string;
   readinessScore?: number;
@@ -27,9 +22,10 @@ interface Props {
 export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, onClose, onNodesReady }: Props) {
   const [isMobile] = useState(() => window.innerWidth < 768);
   const [transcript, setTranscript] = useState("");
+  const [projectContext, setProjectContext] = useState("");
+  const [showContext, setShowContext] = useState(false);
   const [isForging, setIsForging] = useState(false);
   const [stageIdx, setStageIdx] = useState(0);
-  const [result, setResult] = useState<ForgeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const stageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -55,22 +51,20 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   const handleForge = async () => {
     if (!canForge) return;
     setIsForging(true);
-    setResult(null);
     setError(null);
     startStageAnimation();
 
     abortRef.current = new AbortController();
 
     try {
+      const body: Record<string, unknown> = { transcript: transcript.trim(), projectId };
+      if (projectContext.trim()) body.projectContext = projectContext.trim();
+
       const res = await fetch("/api/forge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: abortRef.current.signal,
-        body: JSON.stringify({
-          transcript: transcript.trim(),
-          projectName: activeProjectName,
-          projectId,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -78,10 +72,14 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         throw new Error(text || "Forge failed");
       }
 
-      const data = await res.json() as ForgeResult;
-      setResult(data);
+      const data = await res.json() as { nodes: ArchNode[]; summary: string };
+
       haptics.cardConfirmed();
       sounds.cardConfirmed();
+
+      // Auto-close and immediately place nodes on map
+      onNodesReady?.(data.nodes);
+      onClose();
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
       setError("The Forge couldn't process this. Try a more specific description.");
@@ -97,36 +95,8 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     setIsForging(false);
   };
 
-  const handlePlaceNodes = () => {
-    if (!result) return;
-    onNodesReady?.(result.nodes);
-    haptics.nodeResolved();
-    sounds.nodeResolved();
-    onClose();
-  };
-
-  const metaBadge = (meta?: string) => {
-    if (!meta) return null;
-    const colors: Record<string, { bg: string; border: string; color: string }> = {
-      must:   { bg: "rgba(212,175,55,0.18)", border: "rgba(212,175,55,0.45)", color: "#D4AF37" },
-      should: { bg: "rgba(212,175,55,0.09)", border: "rgba(212,175,55,0.22)", color: "rgba(212,175,55,0.75)" },
-      could:  { bg: "rgba(120,113,108,0.10)", border: "rgba(120,113,108,0.28)", color: "rgba(120,113,108,0.75)" },
-      wont:   { bg: "rgba(120,113,108,0.07)", border: "rgba(120,113,108,0.18)", color: "rgba(120,113,108,0.5)" },
-    };
-    const c = colors[meta] || colors.could;
-    return (
-      <span style={{
-        fontSize: 9, fontWeight: 700, letterSpacing: "0.08em",
-        padding: "1px 6px", borderRadius: 4,
-        background: c.bg, border: `1px solid ${c.border}`, color: c.color,
-      }}>
-        {meta.toUpperCase()}
-      </span>
-    );
-  };
-
   const content = (
-    <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 12px", display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 12px", display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Explainer */}
       <div style={{ borderRadius: 10, background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.12)", padding: "12px 14px" }}>
         <p style={{ fontSize: 12, color: "rgba(212,175,55,0.75)", lineHeight: 1.6, margin: 0 }}>
@@ -143,7 +113,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           value={transcript}
           onChange={e => setTranscript(e.target.value)}
           placeholder={`Paste anything — a voice note transcript, a product spec, a messy doc, a Notion page dump...\n\nThe Forge will extract what matters and map it to your strategic flow.`}
-          rows={isMobile ? 6 : 9}
+          rows={isMobile ? 6 : 8}
           style={{
             width: "100%", borderRadius: 12,
             border: `1px solid ${transcript.length > 10 ? "rgba(212,175,55,0.35)" : "rgba(212,175,55,0.18)"}`,
@@ -161,6 +131,55 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
             {transcript.length} chars
           </span>
         </div>
+      </div>
+
+      {/* Optional project context */}
+      <div>
+        <button
+          onClick={() => setShowContext(v => !v)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: "none", border: "none", cursor: "pointer",
+            color: showContext ? "rgba(212,175,55,0.75)" : "rgba(120,113,108,0.55)",
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.12em",
+            fontFamily: "var(--app-font-mono)", textTransform: "uppercase",
+            padding: 0, transition: "color 180ms",
+          }}
+        >
+          <span style={{ fontSize: 12, lineHeight: 1 }}>{showContext ? "▾" : "▸"}</span>
+          {showContext ? "Hide project context" : "Add project context (optional)"}
+        </button>
+
+        {showContext && (
+          <div style={{ marginTop: 10 }}>
+            <p style={{ fontSize: 11, color: "rgba(120,113,108,0.55)", marginBottom: 8, lineHeight: 1.5 }}>
+              Give The Forge more signal — paste your current decisions, tech stack, or project goals so nodes are more precisely typed and prioritized.
+              {activeProjectName && (
+                <span style={{ color: "rgba(212,175,55,0.55)" }}> Project: <strong>{activeProjectName}</strong></span>
+              )}
+              {platform && (
+                <span style={{ color: "rgba(212,175,55,0.45)" }}> · Stack: <strong>{platform}</strong></span>
+              )}
+            </p>
+            <textarea
+              value={projectContext}
+              onChange={e => setProjectContext(e.target.value)}
+              placeholder="e.g. We're building a founder OS in React/Express/Postgres. Current committed decisions: auth via Clerk, no mobile for v1, must ship by end of month..."
+              rows={4}
+              style={{
+                width: "100%", borderRadius: 10,
+                border: "1px solid rgba(212,175,55,0.18)",
+                background: "oklch(0.13 0.01 60)",
+                padding: "10px 12px",
+                color: "rgba(231,229,228,0.75)", fontSize: 12, lineHeight: 1.6,
+                outline: "none", resize: "none", transition: "border-color 180ms",
+                boxSizing: "border-box" as const, fontFamily: "inherit",
+              }}
+              onFocus={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.35)"; }}
+              onBlur={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.18)"; }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Forge button */}
@@ -206,84 +225,11 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           fontSize: 12, color: "rgba(239,100,100,0.9)", lineHeight: 1.5,
         }}>
           {error}
-        </div>
-      )}
-
-      {/* Results */}
-      {result && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* Summary */}
-          <div style={{
-            borderRadius: 10, border: "1px solid rgba(212,175,55,0.22)",
-            background: "rgba(212,175,55,0.05)", padding: "12px 14px",
-          }}>
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(212,175,55,0.65)", textTransform: "uppercase", marginBottom: 6, fontFamily: "var(--app-font-mono)" }}>
-              Forge Summary
-            </p>
-            <p style={{ fontSize: 12, color: "rgba(231,229,228,0.8)", lineHeight: 1.6, margin: 0 }}>
-              {result.summary}
-            </p>
-          </div>
-
-          {/* Node list */}
-          <div>
-            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.65)", textTransform: "uppercase", marginBottom: 8, fontFamily: "var(--app-font-mono)" }}>
-              {result.nodes.length} Node{result.nodes.length !== 1 ? "s" : ""} Extracted
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {result.nodes.map(node => (
-                <div key={node.id} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "9px 12px", borderRadius: 8,
-                  background: "rgba(20,18,14,0.85)",
-                  border: "1px solid rgba(212,175,55,0.13)",
-                }}>
-                  <span style={{ fontSize: 16, flexShrink: 0, color: node.type === "blocker" ? "rgba(239,100,100,0.8)" : "rgba(212,175,55,0.75)" }}>
-                    {({ goal: "◎", requirement: "◈", blocker: "⊗", priority: "◆", decision: "◉", sprint: "△" })[node.type] || "●"}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(231,229,228,0.87)", marginBottom: 2 }}>
-                      {node.label}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 9, color: "rgba(120,113,108,0.55)", fontFamily: "var(--app-font-mono)", textTransform: "uppercase" }}>
-                        {node.type}
-                      </span>
-                      {metaBadge(node.meta)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Place button */}
           <button
-            onClick={handlePlaceNodes}
-            style={{
-              width: "100%", borderRadius: 12, padding: "13px",
-              background: "#D4AF37", fontSize: 13, fontWeight: 700,
-              color: "#0D0B09", border: "none", cursor: "pointer",
-              boxShadow: "0 0 20px oklch(0.76 0.12 85 / 18%)",
-              transition: "box-shadow 150ms",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 0 30px oklch(0.76 0.12 85 / 30%)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 0 20px oklch(0.76 0.12 85 / 18%)"; }}
+            onClick={handleForge}
+            style={{ display: "block", marginTop: 8, background: "none", border: "none", color: "rgba(212,175,55,0.75)", fontSize: 11, cursor: "pointer", padding: 0, fontWeight: 600 }}
           >
-            Place on Axiom Flow →
-          </button>
-
-          <button
-            onClick={() => { setResult(null); setTranscript(""); }}
-            style={{
-              width: "100%", borderRadius: 12, padding: "10px",
-              background: "transparent", fontSize: 12, fontWeight: 600,
-              color: "rgba(120,113,108,0.65)",
-              border: "1px solid rgba(120,113,108,0.2)",
-              cursor: "pointer",
-            }}
-          >
-            Start over
+            Try again →
           </button>
         </div>
       )}
@@ -302,8 +248,9 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           THE FORGE
         </span>
         <span style={{ fontSize: 10, color: "rgba(120,113,108,0.6)" }}>
-          {activeProjectName ? `${activeProjectName} · ` : ""}{readinessScore}% ready
-          {platform ? ` · ${platform}` : ""}
+          Decompose your thinking into a strategic map
+          {activeProjectName ? ` · ${activeProjectName}` : ""}
+          {readinessScore > 0 ? ` · ${readinessScore}% ready` : ""}
         </span>
       </div>
       <button

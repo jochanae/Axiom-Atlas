@@ -1050,8 +1050,10 @@ components:
           type: string
           minLength: 10
           maxLength: 20000
-        projectName:
+        projectContext:
           type: string
+          maxLength: 4000
+          description: Optional project context to improve node extraction accuracy
         projectId:
           type: integer
       required:
