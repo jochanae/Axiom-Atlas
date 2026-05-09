@@ -1078,6 +1078,9 @@ components:
         meta:
           type: string
           enum: [must, should, could, wont]
+        question:
+          type: string
+          description: Strategic pivot question for this node
       required:
         - id
         - label

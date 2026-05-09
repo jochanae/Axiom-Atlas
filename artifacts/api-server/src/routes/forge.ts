@@ -27,6 +27,7 @@ interface ForgeNode {
   y: number;
   details?: string;
   meta?: NodeMeta;
+  question?: string;
 }
 
 interface ForgeResponse {
@@ -34,45 +35,80 @@ interface ForgeResponse {
   summary: string;
 }
 
+const VALID_TYPES: NodeType[] = ["goal", "requirement", "blocker", "priority", "decision", "sprint"];
+const VALID_META: NodeMeta[] = ["must", "should", "could", "wont"];
+const MAX_NODES = 12;
+
+// Pre-compute radial positions around a center point
+function radialPositions(count: number, cx = 300, cy = 250, radius = 160): { x: number; y: number }[] {
+  return Array.from({ length: count }, (_, i) => {
+    const angle = (2 * Math.PI * i) / count - Math.PI / 2;
+    return {
+      x: Math.round(cx + radius * Math.cos(angle)),
+      y: Math.round(cy + radius * Math.sin(angle)),
+    };
+  });
+}
+
+const PIVOT_QUESTIONS: Record<string, string> = {
+  "goal":             "What does winning look like? What's the outcome you'll be proud of?",
+  "requirement":      "What must exist for this goal to be achievable?",
+  "blocker":          "What could prevent this from shipping or succeeding?",
+  "decision":         "Who owns this decision, and what information do you need to make it?",
+  "sprint":           "What is the single deliverable that makes this sprint complete?",
+  "priority/must":    "Why is this non-negotiable? What breaks without it?",
+  "priority/should":  "What's the cost of deferring this to v2?",
+  "priority/could":   "Under what conditions does this become a Must?",
+  "priority/wont":    "Who asked for this, and why are we saying no?",
+};
+
+function getPivotQuestion(type: NodeType, meta?: NodeMeta): string {
+  if (type === "priority" && meta) return PIVOT_QUESTIONS[`priority/${meta}`] ?? PIVOT_QUESTIONS["priority/must"];
+  return PIVOT_QUESTIONS[type] ?? "What does this mean for the project?";
+}
+
 const SYSTEM_PROMPT = `You are The Forge — a strategic extraction engine inside Axiom, a decision enforcement system for founders.
 
 Your job: read a raw transcript, brain dump, voice note, or strategy document and extract structured strategic nodes.
 
-Node types you can create:
-- "goal": The primary outcome (use sparingly — 1-2 max)
-- "requirement": A needed capability or constraint (MoSCoW priority in meta field)
-- "blocker": An active impediment preventing progress
-- "priority": A ranked item competing for focus or resources
-- "decision": A committed choice that constrains future options
-- "sprint": A bounded work increment
+Node types you can create (choose the most appropriate):
+- "goal": The primary outcome or north star (1-2 max, only if the transcript defines a clear goal)
+- "requirement": A needed capability or constraint
+- "blocker": An active impediment preventing progress (must be real, not hypothetical)
+- "priority": A ranked work item with a MoSCoW sub-type (meta field required)
+- "decision": A committed choice that constrains future options (must already be decided, not open)
+- "sprint": A bounded work increment with a defined goal
 
-MoSCoW meta values (only for "requirement" type):
+For "priority" nodes, you MUST include a "meta" field:
 - "must": Non-negotiable, project fails without it
 - "should": High value, strong expectation
 - "could": Nice to have if time permits
 - "wont": Explicitly out of scope this cycle
 
 Rules:
-1. Extract 3-8 nodes from any transcript. Don't over-extract.
-2. Labels must be concise (2-6 words max). No verbs in labels.
-3. Blockers must be real impediments, not hypotheticals.
-4. Decisions must be things already decided, not open questions.
-5. Every requirement needs a MoSCoW meta value.
-6. Arrange nodes spatially — x: 100-600, y: 80-500. Goal at center-top. Spread logically.
+1. Extract 3-${MAX_NODES} nodes. Never exceed ${MAX_NODES} nodes. Prefer fewer, higher-quality nodes.
+2. Labels must be concise: 2-6 words max. No verbs in labels. No punctuation.
+3. Every "priority" node MUST have a "meta" value. Other types must NOT have "meta".
+4. "blocker" nodes must describe real current impediments.
+5. "decision" means already decided — not a question.
+6. x/y coordinates: place nodes in a rough radial pattern around center (300, 250). Spread across x: 80-520, y: 80-420.
+7. Include a "question" field for each node — the strategic pivot question a founder should answer for this node.
+8. Keep "label" to 30 characters max.
 
-Respond ONLY with valid JSON in this exact shape:
+Respond ONLY with valid JSON — no markdown, no explanation, no code fences:
 {
-  "summary": "One sentence describing what you extracted and why.",
+  "summary": "One concise sentence describing what you extracted.",
   "nodes": [
     {
-      "id": "unique-kebab-id",
+      "id": "unique-kebab-slug",
       "label": "Short Label",
-      "type": "requirement",
+      "type": "priority",
+      "meta": "must",
       "resolved": false,
       "x": 300,
-      "y": 150,
-      "details": "Optional one-sentence elaboration on what this means.",
-      "meta": "must"
+      "y": 120,
+      "details": "Brief one-sentence elaboration on what this node means strategically.",
+      "question": "The strategic pivot question for this node."
     }
   ]
 }`;
@@ -93,7 +129,7 @@ router.post("/forge", async (req, res) => {
   try {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
-      max_tokens: 2000,
+      max_tokens: 2500,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
     });
@@ -116,18 +152,38 @@ router.post("/forge", async (req, res) => {
       return;
     }
 
-    const nodes: ForgeNode[] = data.nodes.map(n => ({
-      id: String(n.id || `node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
-      label: String(n.label || "Untitled").slice(0, 60),
-      type: (["goal", "requirement", "blocker", "priority", "decision", "sprint"].includes(n.type)
-        ? n.type : "requirement") as NodeType,
-      resolved: false,
-      x: Math.max(80, Math.min(600, Number(n.x) || 300)),
-      y: Math.max(60, Math.min(500, Number(n.y) || 200)),
-      details: n.details ? String(n.details).slice(0, 200) : undefined,
-      meta: (["must", "should", "could", "wont"].includes(n.meta ?? "")
-        ? n.meta : undefined) as NodeMeta | undefined,
-    }));
+    // Hard cap at MAX_NODES
+    const rawNodes = data.nodes.slice(0, MAX_NODES);
+
+    // Pre-compute radial positions as fallback
+    const radial = radialPositions(rawNodes.length);
+
+    const nodes: ForgeNode[] = rawNodes.map((n, idx) => {
+      const type = (VALID_TYPES.includes(n.type) ? n.type : "requirement") as NodeType;
+      const meta = (type === "priority" && VALID_META.includes(n.meta ?? ""))
+        ? n.meta as NodeMeta
+        : type === "priority" ? "must" : undefined;
+
+      // Use AI coordinates if reasonable, else fall back to radial
+      const aiX = Number(n.x);
+      const aiY = Number(n.y);
+      const x = (aiX >= 60 && aiX <= 560) ? aiX : radial[idx].x;
+      const y = (aiY >= 50 && aiY <= 450) ? aiY : radial[idx].y;
+
+      return {
+        id: String(n.id || `node-${Date.now()}-${idx}`).slice(0, 60),
+        label: String(n.label || "Untitled").slice(0, 30),
+        type,
+        resolved: false,
+        x,
+        y,
+        details: n.details ? String(n.details).slice(0, 200) : undefined,
+        meta,
+        question: n.question
+          ? String(n.question).slice(0, 200)
+          : getPivotQuestion(type, meta),
+      };
+    });
 
     const response: ForgeResponse = {
       summary: String(data.summary).slice(0, 300),

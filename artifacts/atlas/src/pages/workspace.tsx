@@ -4246,14 +4246,15 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
                 <span style={{ fontSize: 10.5, color: "rgba(120,113,108,0.65)", letterSpacing: "0.04em" }}>prompt aimed</span>
               </div>
 
-              {/* Textarea */}
+              {/* Textarea — minHeight:0 ensures it shrinks on small viewports/keyboard-up */}
               <textarea
                 value={intent}
                 onChange={e => setIntent(e.target.value)}
                 placeholder="Describe what you want to build or change — e.g. 'Add login with Google to my Express app using passport.js'"
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                 style={{
-                  flex: 1, background: "transparent", border: "none", outline: "none",
+                  flex: 1, minHeight: 0, overflowY: "auto",
+                  background: "transparent", border: "none", outline: "none",
                   resize: "none", padding: "12px 14px",
                   color: "var(--atlas-fg)", fontSize: 13, lineHeight: 1.6,
                   fontFamily: "inherit",
