@@ -6654,7 +6654,15 @@ export default function Workspace() {
         projects={allProjects ?? []}
         activeProjectId={id}
         onOpenProject={(projectId) => { setLocation(`/project/${projectId}`); setShowDrawer(false); }}
-        onNewProject={() => { setLocation("/home"); setShowDrawer(false); }}
+        onNewProject={() => {
+          setShowDrawer(false);
+          createProjectMutation.mutate({ data: { name: "New Project" } }, {
+            onSuccess: (p) => {
+              queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+              setLocation(`/project/${p.id}`);
+            },
+          });
+        }}
         onOpenLedger={(projectId) => { setLocation(`/ledger/${projectId}`); setShowDrawer(false); }}
         onOpenParking={() => { setLocation(`/parking?project=${id}`); setShowDrawer(false); }}
         userLabel={loadProfile().name || null}
