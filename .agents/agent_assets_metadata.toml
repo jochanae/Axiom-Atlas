@@ -18,3 +18,9 @@ id = "ozTb0hPT2_1MO66aAWRzD"
 uri = "file://screenshots/axiom-redesign-mockup.jpg"
 type = "image"
 title = "Axiom Redesign — Visual Markup (full page)"
+
+[[outputs]]
+id = "3GG18VwehfnWmTZVHBBn0"
+uri = "file://screenshots/atlas-social-preview.jpg"
+type = "image"
+title = "Atlas-v2 Social Preview (1280×640)"
