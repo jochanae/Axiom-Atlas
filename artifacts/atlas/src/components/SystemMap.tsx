@@ -310,11 +310,11 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     >
       <style>{EDGE_FLOW_STYLE}</style>
 
-      {/* Dot grid background */}
+      {/* Dot grid background — subtle purple-tinted dots like original */}
       <div style={{
         position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none",
-        backgroundImage: "radial-gradient(circle at 1px 1px, rgba(212,175,55,0.15) 1px, transparent 0)",
-        backgroundSize: "40px 40px",
+        backgroundImage: "radial-gradient(circle at 1px 1px, rgba(139,92,246,0.18) 1px, transparent 0)",
+        backgroundSize: "38px 38px",
       }} />
 
       {/* SYSTEM MAP label — left */}
