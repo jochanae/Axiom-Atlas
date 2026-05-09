@@ -6,3 +6,9 @@ id = "3gXoj_2chJsfejTPFay-Q"
 uri = "file://screenshots/parking-lot.jpg"
 type = "image"
 title = "Parking Lot — Atlas v2"
+
+[[outputs]]
+id = "mKOB5Pbu5Vo_g0V6vVvpX"
+uri = "file://.local/axiom-lovable-spec.md"
+type = "text"
+title = "Axiom — Lovable Build Spec"
