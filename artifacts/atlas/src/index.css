@@ -346,6 +346,17 @@
 }
 
 /* ── Resize handle ── */
+/* 16px invisible hit area, 1px visible gold thread */
+.atlas-resize-thread {
+  width: 1px;
+  background: var(--atlas-border);
+  transition: background 200ms;
+  pointer-events: none;
+}
+*:hover > .atlas-resize-thread,
+*:active > .atlas-resize-thread {
+  background: rgba(201, 162, 76, 0.35);
+}
 
 /* ── Mobile slide-in from right ── */
 @keyframes atlas-slide-in-right {
