@@ -2245,6 +2245,9 @@ function FilesTab({
   onLinkedRepoChange: (repo: LinkedRepo | null) => void;
 }) {
   const updateProject = useUpdateProject();
+  const createProject = useCreateProject();
+  const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
   const { data: filesProject } = useGetProject(projectId, {
     query: { queryKey: getGetProjectQueryKey(projectId) },
   });
@@ -2701,44 +2704,105 @@ function FilesTab({
             } catch {}
             const isLinked = linkedFullName === repo.fullName;
             return (
-              <button
+              <div
                 key={repo.id}
-                onClick={() => pickRepo(repo)}
                 style={{
-                  width: "100%", display: "flex", flexDirection: "column", gap: 3,
-                  padding: "8px 10px", borderRadius: 5, marginBottom: 2,
-                  background: isLinked ? "rgba(52,211,153,0.04)" : "transparent",
-                  border: `1px solid ${isLinked ? "rgba(52,211,153,0.15)" : "transparent"}`,
-                  cursor: "pointer", textAlign: "left",
-                  transition: "all 120ms ease",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLinked) { e.currentTarget.style.background = "rgba(201,162,76,0.04)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.12)"; }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isLinked) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }
+                  width: "100%", display: "flex", alignItems: "center", gap: 4,
+                  marginBottom: 2,
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  {isLinked && (
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", flexShrink: 0 }} />
-                  )}
-                  <span style={{ fontSize: 12, color: isLinked ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.75)", fontFamily: "var(--app-font-sans)", fontWeight: isLinked ? 600 : 500 }}>{repo.name}</span>
-                  {repo.private && (
-                    <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 3, background: "rgba(120,113,108,0.12)", color: "var(--atlas-muted)", border: "0.5px solid rgba(120,113,108,0.2)" }}>
-                      private
-                    </span>
-                  )}
-                  {repo.language && (
-                    <span style={{ fontSize: 8.5, color: "var(--atlas-muted)", marginLeft: "auto", fontFamily: "var(--app-font-mono)", opacity: 0.55 }}>{repo.language}</span>
-                  )}
-                </div>
-                {repo.description && (
-                  <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.55, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: isLinked ? 11 : 0 }}>
-                    {repo.description}
+                {/* Main repo row — browse / link to current project */}
+                <button
+                  onClick={() => pickRepo(repo)}
+                  style={{
+                    flex: 1, display: "flex", flexDirection: "column", gap: 3,
+                    padding: "8px 10px", borderRadius: 5,
+                    background: isLinked ? "rgba(52,211,153,0.04)" : "transparent",
+                    border: `1px solid ${isLinked ? "rgba(52,211,153,0.15)" : "transparent"}`,
+                    cursor: "pointer", textAlign: "left",
+                    transition: "all 120ms ease", minWidth: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isLinked) { e.currentTarget.style.background = "rgba(201,162,76,0.04)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.12)"; }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isLinked) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {isLinked && (
+                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", flexShrink: 0 }} />
+                    )}
+                    <span style={{ fontSize: 12, color: isLinked ? "rgba(231,229,228,0.92)" : "rgba(231,229,228,0.75)", fontFamily: "var(--app-font-sans)", fontWeight: isLinked ? 600 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{repo.name}</span>
+                    {repo.private && (
+                      <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 3, background: "rgba(120,113,108,0.12)", color: "var(--atlas-muted)", border: "0.5px solid rgba(120,113,108,0.2)", flexShrink: 0 }}>
+                        private
+                      </span>
+                    )}
+                    {repo.language && (
+                      <span style={{ fontSize: 8.5, color: "var(--atlas-muted)", marginLeft: "auto", fontFamily: "var(--app-font-mono)", opacity: 0.55, flexShrink: 0 }}>{repo.language}</span>
+                    )}
                   </div>
-                )}
-              </button>
+                  {repo.description && (
+                    <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.55, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: isLinked ? 11 : 0 }}>
+                      {repo.description}
+                    </div>
+                  )}
+                </button>
+
+                {/* Import → New project button */}
+                <button
+                  title={`Create a new Axiom project for ${repo.name}`}
+                  onClick={() => {
+                    createProject.mutate(
+                      { data: { name: repo.name } },
+                      {
+                        onSuccess: (newProject) => {
+                          const token = localStorage.getItem("atlas-github-token") || null;
+                          const repoJson = JSON.stringify(repo);
+                          updateProject.mutate(
+                            { id: newProject.id, data: { linkedRepo: repoJson, ...(token ? { githubToken: token } : {}) } },
+                            {
+                              onSuccess: () => {
+                                queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                                navigate(`/project/${newProject.id}`);
+                              },
+                            }
+                          );
+                        },
+                      }
+                    );
+                  }}
+                  disabled={createProject.isPending}
+                  style={{
+                    flexShrink: 0, display: "flex", alignItems: "center", gap: 3,
+                    padding: "5px 7px", borderRadius: 5,
+                    background: "rgba(201,162,76,0.05)",
+                    border: "1px solid rgba(201,162,76,0.15)",
+                    cursor: createProject.isPending ? "not-allowed" : "pointer",
+                    color: "rgba(201,162,76,0.55)",
+                    transition: "all 140ms ease",
+                    opacity: createProject.isPending ? 0.4 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!createProject.isPending) {
+                      e.currentTarget.style.background = "rgba(201,162,76,0.12)";
+                      e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)";
+                      e.currentTarget.style.color = "rgba(201,162,76,0.9)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(201,162,76,0.05)";
+                    e.currentTarget.style.borderColor = "rgba(201,162,76,0.15)";
+                    e.currentTarget.style.color = "rgba(201,162,76,0.55)";
+                  }}
+                >
+                  <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <path d="M6 1v10M1 6h10" />
+                  </svg>
+                  <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>project</span>
+                </button>
+              </div>
             );
           })}
         </div>
