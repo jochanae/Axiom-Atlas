@@ -4288,6 +4288,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
           <SystemMap
             projectId={projectId}
             compact
+            detectedBuilder={platform.toLowerCase()}
             onNodesChange={handleArchNodesChange}
             initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
             resolvedNodeIds={resolvedNodeIds}

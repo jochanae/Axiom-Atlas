@@ -345,7 +345,7 @@ export function AxiomFlow({
   compact,
   onNodeFocus,
   initialNodeState,
-  detectedBuilder: _detectedBuilder,
+  detectedBuilder,
   pendingNodes,
   onPendingConsumed,
   onUnansweredQuestionOpen,
@@ -732,9 +732,32 @@ export function AxiomFlow({
         backgroundSize: "40px 40px",
       }} />
 
-      {/* Header label */}
+      {/* Header label + platform detection badge */}
       <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
         <span className="text-xs font-bold tracking-widest text-gold uppercase">AXIOM FLOW</span>
+        {detectedBuilder && detectedBuilder !== "web" && (
+          <span style={{
+            fontSize: 8.5,
+            fontFamily: "var(--app-font-mono)",
+            fontWeight: 700,
+            letterSpacing: "0.1em",
+            color: detectedBuilder === "lovable" ? "oklch(0.65 0.20 300)"
+              : detectedBuilder === "cursor" ? "oklch(0.65 0.18 240)"
+              : "oklch(0.65 0.18 150)",
+            background: detectedBuilder === "lovable" ? "oklch(0.30 0.12 300 / 30%)"
+              : detectedBuilder === "cursor" ? "oklch(0.30 0.12 240 / 30%)"
+              : "oklch(0.30 0.12 150 / 30%)",
+            border: `1px solid ${detectedBuilder === "lovable" ? "oklch(0.55 0.20 300 / 40%)"
+              : detectedBuilder === "cursor" ? "oklch(0.55 0.18 240 / 40%)"
+              : "oklch(0.55 0.18 150 / 40%)"}`,
+            borderRadius: 999,
+            padding: "2px 8px",
+            textTransform: "uppercase",
+            display: "inline-block",
+          }}>
+            {detectedBuilder.toUpperCase()} DETECTED
+          </span>
+        )}
       </div>
 
       {/* Handover footer button — mobile only. On desktop, the trigger lives
