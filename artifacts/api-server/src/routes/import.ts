@@ -55,6 +55,8 @@ router.post("/import", async (req, res): Promise<void> => {
     memory = `${header}\n\n${manifest}`;
   }
 
+  const userId = (req as any).authUser.id as number;
+
   const [project] = await db
     .insert(projectsTable)
     .values({
@@ -64,6 +66,7 @@ router.post("/import", async (req, res): Promise<void> => {
         nodes_resolved?.length ? `Nodes: ${nodes_resolved.join(", ")}` : null,
       ].filter(Boolean).join(" | ") || null,
       memory,
+      userId,
     })
     .returning();
 

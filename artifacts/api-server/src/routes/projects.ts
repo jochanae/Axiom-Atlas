@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql, desc, and } from "drizzle-orm";
 import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable } from "@workspace/db";
 import {
   CreateProjectBody,
@@ -15,8 +15,27 @@ import {
 
 const router: IRouter = Router();
 
+// Strip GitHub token from outbound project objects — never expose it in list responses.
+// The token is returned in single-project GET only (owner-scoped via tenant isolation).
+function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = false) {
+  const { githubToken, ...rest } = p;
+  return {
+    ...rest,
+    hasGithubToken: !!githubToken,
+    ...(includeToken ? { githubToken } : {}),
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  };
+}
+
 router.get("/projects", async (req, res): Promise<void> => {
-  const projects = await db.select().from(projectsTable).orderBy(projectsTable.updatedAt);
+  const userId = (req as any).authUser.id as number;
+
+  const projects = await db
+    .select()
+    .from(projectsTable)
+    .where(eq(projectsTable.userId, userId))
+    .orderBy(projectsTable.updatedAt);
 
   const latestScores = await db
     .select({
@@ -35,9 +54,7 @@ router.get("/projects", async (req, res): Promise<void> => {
   const scoreMap = new Map(latestScores.map(s => [s.projectId, s.score]));
 
   res.json(projects.map(p => ({
-    ...p,
-    createdAt: p.createdAt.toISOString(),
-    updatedAt: p.updatedAt.toISOString(),
+    ...serializeProject(p, false), // token never sent in list
     latestSnapshotScore: scoreMap.get(p.id) ?? null,
   })));
 });
@@ -49,12 +66,14 @@ router.post("/projects", async (req, res): Promise<void> => {
     return;
   }
 
-  // Free tier: limit to 1 project.
-  // Atlas is a single-owner tool — all projects in this DB belong to the authenticated user.
-  // A per-user ownership column is not in the current schema, so total count is the correct check.
+  const userId = (req as any).authUser.id as number;
   const authUser = (req as any).authUser;
+
   if (authUser?.subscriptionTier === "free") {
-    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(projectsTable);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(projectsTable)
+      .where(eq(projectsTable.userId, userId));
     if (count >= 1) {
       res.status(402).json({
         error: "Free plan is limited to 1 project.",
@@ -64,12 +83,11 @@ router.post("/projects", async (req, res): Promise<void> => {
     }
   }
 
-  const [project] = await db.insert(projectsTable).values(parsed.data).returning();
-  res.status(201).json({
-    ...project,
-    createdAt: project.createdAt.toISOString(),
-    updatedAt: project.updatedAt.toISOString(),
-  });
+  const [project] = await db
+    .insert(projectsTable)
+    .values({ ...parsed.data, userId })
+    .returning();
+  res.status(201).json(serializeProject(project, true));
 });
 
 router.get("/projects/:id", async (req, res): Promise<void> => {
@@ -78,16 +96,17 @@ router.get("/projects/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, params.data.id));
+  const userId = (req as any).authUser.id as number;
+  const [project] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)));
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
-  res.json({
-    ...project,
-    createdAt: project.createdAt.toISOString(),
-    updatedAt: project.updatedAt.toISOString(),
-  });
+  // Single-project GET includes the token for the authenticated owner
+  res.json(serializeProject(project, true));
 });
 
 router.patch("/projects/:id", async (req, res): Promise<void> => {
@@ -101,6 +120,7 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const userId = (req as any).authUser.id as number;
   const { lastHandoverAt, ...rest } = parsed.data;
   const updateValues = {
     ...rest,
@@ -108,39 +128,46 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
       ? { lastHandoverAt: lastHandoverAt === null ? null : new Date(lastHandoverAt) }
       : {}),
   };
-  const [project] = await db.update(projectsTable).set(updateValues).where(eq(projectsTable.id, params.data.id)).returning();
+  const [project] = await db
+    .update(projectsTable)
+    .set(updateValues)
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)))
+    .returning();
   if (!project) {
     res.status(404).json({ error: "Project not found" });
     return;
   }
-  res.json({
-    ...project,
-    createdAt: project.createdAt.toISOString(),
-    updatedAt: project.updatedAt.toISOString(),
-  });
+  res.json(serializeProject(project, true));
 });
 
 router.post("/projects/:id/clone", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }
-  const [source] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+  const userId = (req as any).authUser.id as number;
+  const [source] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
   if (!source) { res.status(404).json({ error: "Project not found" }); return; }
   const [clone] = await db.insert(projectsTable).values({
     name: `${source.name} (Copy)`,
     description: source.description ?? undefined,
+    userId, // clone belongs to the same user; token is intentionally NOT copied
   }).returning();
   const entries = await db.select().from(entriesTable).where(eq(entriesTable.projectId, id));
   if (entries.length > 0) {
     await db.insert(entriesTable).values(entries.map(e => ({
       projectId: clone.id,
       title: e.title,
-      body: e.body,
-      category: e.category,
+      summary: e.summary,
+      details: e.details,
       status: e.status,
-      tags: e.tags,
+      severity: e.severity,
+      verb: e.verb,
+      mode: e.mode,
     })));
   }
-  res.status(201).json({ ...clone, createdAt: clone.createdAt.toISOString(), updatedAt: clone.updatedAt.toISOString() });
+  res.status(201).json(serializeProject(clone, false));
 });
 
 router.delete("/projects/:id", async (req, res): Promise<void> => {
@@ -149,7 +176,10 @@ router.delete("/projects/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: params.error.message });
     return;
   }
-  await db.delete(projectsTable).where(eq(projectsTable.id, params.data.id));
+  const userId = (req as any).authUser.id as number;
+  await db
+    .delete(projectsTable)
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)));
   res.sendStatus(204);
 });
 
@@ -160,6 +190,14 @@ router.get("/projects/:id/summary", async (req, res): Promise<void> => {
     return;
   }
   const id = params.data.id;
+  const userId = (req as any).authUser.id as number;
+
+  // Verify ownership first
+  const [proj] = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
+  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
 
   const [sessionCountRow] = await db
     .select({ count: sql<number>`cast(count(*) as int)` })
@@ -198,6 +236,13 @@ router.get("/projects/:id/readiness-snapshots", async (req, res): Promise<void> 
     res.status(400).json({ error: params.error.message });
     return;
   }
+  const userId = (req as any).authUser.id as number;
+  const [proj] = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)));
+  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
+
   const snapshots = await db
     .select()
     .from(readinessSnapshotsTable)
@@ -221,6 +266,13 @@ router.post("/projects/:id/readiness-snapshots", async (req, res): Promise<void>
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const userId = (req as any).authUser.id as number;
+  const [proj] = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)));
+  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
+
   const [snapshot] = await db
     .insert(readinessSnapshotsTable)
     .values({ projectId: params.data.id, score: parsed.data.score })

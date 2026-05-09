@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, vaultTable } from "@workspace/db";
 
@@ -22,9 +22,11 @@ function serialize(v: typeof vaultTable.$inferSelect) {
 }
 
 router.get("/vault", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
   const rows = await db
     .select()
     .from(vaultTable)
+    .where(eq(vaultTable.userId, userId))
     .orderBy(desc(vaultTable.createdAt))
     .limit(200);
   res.json(rows.map(serialize));
@@ -36,7 +38,9 @@ router.post("/vault", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+  const userId = (req as any).authUser.id as number;
   const [row] = await db.insert(vaultTable).values({
+    userId,
     projectId: parsed.data.projectId ?? null,
     projectName: parsed.data.projectName,
     title: parsed.data.title,
@@ -50,7 +54,9 @@ router.post("/vault", async (req, res): Promise<void> => {
 router.delete("/vault/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  await db.delete(vaultTable).where(eq(vaultTable.id, id));
+  const userId = (req as any).authUser.id as number;
+  // Only delete rows owned by the requesting user
+  await db.delete(vaultTable).where(and(eq(vaultTable.id, id), eq(vaultTable.userId, userId)));
   res.status(204).end();
 });
 

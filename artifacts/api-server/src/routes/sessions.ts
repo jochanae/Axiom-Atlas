@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
-import { db, sessionsTable, chatMessagesTable } from "@workspace/db";
+import { eq, sql, and } from "drizzle-orm";
+import { db, sessionsTable, chatMessagesTable, projectsTable } from "@workspace/db";
 import {
   CreateSessionBody,
   CreateSessionParams,
@@ -12,11 +12,33 @@ import {
 
 const router: IRouter = Router();
 
+// Verify that a project exists and is owned by the given userId.
+async function projectBelongsToUser(projectId: number, userId: number): Promise<boolean> {
+  const rows = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+// Resolve the projectId for a session and verify ownership.
+async function sessionBelongsToUser(sessionId: number, userId: number): Promise<boolean> {
+  const rows = await db
+    .select({ id: sessionsTable.id })
+    .from(sessionsTable)
+    .innerJoin(projectsTable, eq(sessionsTable.projectId, projectsTable.id))
+    .where(and(eq(sessionsTable.id, sessionId), eq(projectsTable.userId, userId)))
+    .limit(1);
+  return rows.length > 0;
+}
+
 router.get("/projects/:projectId/sessions", async (req, res): Promise<void> => {
   const params = ListSessionsParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await projectBelongsToUser(params.data.projectId, userId))) {
+    res.status(404).json({ error: "Project not found" }); return;
   }
   const sessions = await db
     .select()
@@ -32,14 +54,12 @@ router.get("/projects/:projectId/sessions", async (req, res): Promise<void> => {
 
 router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => {
   const params = CreateSessionParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
-  }
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = CreateSessionBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await projectBelongsToUser(params.data.projectId, userId))) {
+    res.status(404).json({ error: "Project not found" }); return;
   }
   const { seedMessage, seedIntentType, ...sessionFields } = parsed.data;
   const [session] = await db.insert(sessionsTable).values({
@@ -67,15 +87,13 @@ router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => 
 
 router.get("/sessions/:id", async (req, res): Promise<void> => {
   const params = GetSessionParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await sessionBelongsToUser(params.data.id, userId))) {
+    res.status(404).json({ error: "Session not found" }); return;
   }
   const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
-  if (!session) {
-    res.status(404).json({ error: "Session not found" });
-    return;
-  }
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
   const messages = await db
     .select()
     .from(chatMessagesTable)
@@ -96,9 +114,10 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
 
 router.delete("/sessions/:id", async (req, res): Promise<void> => {
   const params = DeleteSessionParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await sessionBelongsToUser(params.data.id, userId))) {
+    res.status(404).json({ error: "Session not found" }); return;
   }
   await db.delete(sessionsTable).where(eq(sessionsTable.id, params.data.id));
   res.sendStatus(204);
@@ -106,9 +125,10 @@ router.delete("/sessions/:id", async (req, res): Promise<void> => {
 
 router.get("/sessions/:sessionId/messages", async (req, res): Promise<void> => {
   const params = ListMessagesParams.safeParse(req.params);
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
-    return;
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await sessionBelongsToUser(params.data.sessionId, userId))) {
+    res.status(404).json({ error: "Session not found" }); return;
   }
   const messages = await db
     .select()

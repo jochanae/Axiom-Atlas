@@ -29,7 +29,9 @@ function checkRateLimit(ip: string): boolean {
 const resetTokens = new Map<string, { email: string; expiresAt: number }>();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
-const SUPER_ADMIN_EMAIL = "jochanae@gmail.com";
+// Super-admin email from env only — no hardcoded fallback
+const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
+
 const SESSION_COOKIE = "atlas-session";
 const SESSION_DAYS = 30;
 
@@ -85,7 +87,8 @@ router.post("/auth/signup", async (req, res): Promise<void> => {
   if (existing.length > 0) { res.status(409).json({ error: "An account with this email already exists" }); return; }
 
   const passwordHash = await hashPassword(password);
-  const role = email.toLowerCase() === SUPER_ADMIN_EMAIL ? "super_admin" : "user";
+  // Only grant super_admin if SUPER_ADMIN_EMAIL env var is explicitly set and matches
+  const role = (SUPER_ADMIN_EMAIL && email.toLowerCase() === SUPER_ADMIN_EMAIL) ? "super_admin" : "user";
 
   const [user] = await db.insert(usersTable).values({
     email: email.toLowerCase(),
@@ -167,10 +170,17 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Reset link is invalid or has expired" }); return;
   }
 
+  const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, entry.email)).limit(1);
+
   const passwordHash = await hashPassword(password);
   await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.email, entry.email));
-  resetTokens.delete(token);
 
+  // Invalidate ALL existing sessions so stolen sessions can't be reused after a password reset
+  if (user) {
+    await db.delete(userSessionsTable).where(eq(userSessionsTable.userId, user.id));
+  }
+
+  resetTokens.delete(token);
   res.json({ ok: true });
 });
 
@@ -189,6 +199,19 @@ export async function requireAuth(
 ): Promise<void> {
   const user = await getUserFromCookie(req);
   if (!user) { res.status(401).json({ error: "Authentication required" }); return; }
+  (req as any).authUser = user;
+  next();
+}
+
+// Middleware: require super_admin role
+export async function requireAdmin(
+  req: import("express").Request,
+  res: import("express").Response,
+  next: import("express").NextFunction
+): Promise<void> {
+  const user = await getUserFromCookie(req);
+  if (!user) { res.status(401).json({ error: "Authentication required" }); return; }
+  if (user.role !== "super_admin") { res.status(403).json({ error: "Admin access required" }); return; }
   (req as any).authUser = user;
   next();
 }
