@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuth, useLogout } from "@/hooks/useAuth";
 
 type Theme = "obsidian" | "parchment";
@@ -25,8 +25,92 @@ type Props = {
   onOpenProfile?: () => void;
 };
 
+// ── Keyboard shortcuts data ──────────────────────────────────────────────────
+const SHORTCUTS: Array<{ keys: string[]; label: string; section?: string }> = [
+  { section: "Navigation", keys: [], label: "" },
+  { keys: ["⌘", "K"], label: "Command palette / jump to project" },
+  { keys: ["⌘", "⇧", "P"], label: "Open projects list" },
+  { keys: ["⌘", "⇧", "L"], label: "Open decision ledger" },
+  { keys: ["Esc"], label: "Close panel / cancel" },
+  { section: "Chat", keys: [], label: "" },
+  { keys: ["⌘", "↵"], label: "Send message" },
+  { keys: ["/"], label: "Focus message input" },
+  { keys: ["⌘", "⇧", "C"], label: "Clear chat" },
+  { section: "Workspace", keys: [], label: "" },
+  { keys: ["⌘", "D"], label: "New decision entry" },
+  { keys: ["⌘", "⇧", "F"], label: "Open files panel" },
+  { keys: ["⌘", "⇧", "M"], label: "Open memory panel" },
+  { keys: ["⌘", "⇧", "\\"], label: "50 / 50 split view" },
+  { keys: ["?"], label: "Open this shortcuts list" },
+];
+
+function ShortcutsModal({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+      style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+    >
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(5px)" }} />
+      <div style={{
+        position: "relative", width: "100%", maxWidth: 440,
+        background: "var(--atlas-surface)", border: "1px solid rgba(201,162,76,0.18)",
+        borderRadius: 16, padding: "22px 20px 24px",
+        boxShadow: "0 2px 2px rgba(255,255,255,0.03) inset, 0 32px 80px -24px rgba(0,0,0,0.7), 0 0 0 1px rgba(201,162,76,0.06)",
+        maxHeight: "80vh", overflowY: "auto",
+        animation: "atlas-menu-in 200ms cubic-bezier(.2,.8,.2,1)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+          <span style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", color: "var(--atlas-gold)", opacity: 0.85, textTransform: "uppercase" }}>Keyboard Shortcuts</span>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", padding: "2px 6px", borderRadius: 4, fontSize: 16, lineHeight: 1, opacity: 0.5 }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}>✕</button>
+        </div>
+
+        {SHORTCUTS.map((s, i) => {
+          if (s.section) {
+            return (
+              <div key={s.section + i} style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", color: "var(--atlas-muted)", opacity: 0.45, textTransform: "uppercase", marginTop: i === 0 ? 0 : 16, marginBottom: 8, paddingBottom: 5, borderBottom: "1px solid var(--atlas-border)" }}>
+                {s.section}
+              </div>
+            );
+          }
+          return (
+            <div key={s.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 0", gap: 12 }}>
+              <span style={{ fontSize: 12, color: "var(--atlas-fg)", opacity: 0.72, flex: 1 }}>{s.label}</span>
+              <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                {s.keys.map((k, ki) => (
+                  <kbd key={ki} style={{
+                    fontFamily: "var(--app-font-mono)", fontSize: 10,
+                    padding: "2px 6px", borderRadius: 5,
+                    background: "rgba(201,162,76,0.07)",
+                    border: "1px solid rgba(201,162,76,0.2)",
+                    color: "var(--atlas-gold)", lineHeight: 1.5,
+                  }}>{k}</kbd>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+
+        <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid var(--atlas-border)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.4, letterSpacing: "0.04em" }}>
+          ⌘ = Cmd on Mac · Ctrl on Windows/Linux
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
   const [open, setOpen] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [theme, setTheme] = useState<Theme>(readTheme);
   const wrapRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -35,6 +119,23 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
   const name: string = user?.name || user?.email?.split("@")[0] || "Account";
   const email: string = user?.email || "";
   const photoUrl: string = user?.avatarUrl || "";
+
+  const openShortcuts = useCallback(() => {
+    setOpen(false);
+    setShowShortcuts(true);
+  }, []);
+
+  // Global "?" key opens shortcuts when not typing in an input
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "?" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        setShowShortcuts(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   useEffect(() => {
     if (openSignal && openSignal > 0) setOpen(true);
@@ -62,6 +163,8 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
   const isParchment = theme === "parchment";
 
   return (
+    <>
+    {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
     <div ref={wrapRef} style={{ position: "relative" }}>
       <button
         type="button"
@@ -160,13 +263,11 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
             </button>
           </div>
 
-          {/* Shortcuts — not wired yet */}
+          {/* Shortcuts */}
           <MenuRow
             icon={<KeyboardIcon />}
             label="Shortcuts"
-            badge="SOON"
-            disabled
-            onClick={() => setOpen(false)}
+            onClick={openShortcuts}
           />
 
           <div style={{ height: 1, background: "rgba(201,162,76,0.08)", margin: "4px 6px" }} />
@@ -195,6 +296,7 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
         }
       `}</style>
     </div>
+    </>
   );
 }
 

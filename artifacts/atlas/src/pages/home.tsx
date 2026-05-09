@@ -390,13 +390,56 @@ function HomeProfileSheet({ onClose }: { onClose: () => void }) {
             onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          <label style={{ fontSize: 9, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>Photo URL</label>
-          <input value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="Paste your Google profile photo URL"
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ fontSize: 9, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>Photo</label>
+          {/* Upload button */}
+          <label style={{ cursor: "pointer" }}>
+            <div style={{
+              padding: "8px 12px", borderRadius: 6, border: "1px dashed rgba(201,162,76,0.3)",
+              background: "var(--atlas-surface-alt)", display: "flex", alignItems: "center", gap: 8,
+              transition: "border-color 160ms ease",
+            }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "rgba(201,162,76,0.55)")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "rgba(201,162,76,0.3)")}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(201,162,76,0.65)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              <span style={{ fontSize: 11, color: "var(--atlas-muted)", ...sMono, opacity: 0.65 }}>Upload photo from device</span>
+            </div>
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  const dataUrl = ev.target?.result as string;
+                  if (dataUrl) setPhotoUrl(dataUrl);
+                };
+                reader.readAsDataURL(file);
+              }}
+            />
+          </label>
+          {/* Divider */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, height: 1, background: "var(--atlas-border)" }} />
+            <span style={{ fontSize: 9, ...sMono, color: "var(--atlas-muted)", opacity: 0.35, letterSpacing: "0.06em" }}>OR</span>
+            <div style={{ flex: 1, height: 1, background: "var(--atlas-border)" }} />
+          </div>
+          {/* URL paste */}
+          <input value={photoUrl.startsWith("data:") ? "" : photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="Paste a photo URL"
             style={{ padding: "8px 10px", borderRadius: 6, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 11, outline: "none", ...sMono }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
-          <div style={{ fontSize: 9, ...sMono, color: "var(--atlas-muted)", opacity: 0.4 }}>Right-click your Google photo → Copy image address</div>
+          {photoUrl.startsWith("data:") && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 9, ...sMono, color: "#34d399", opacity: 0.75 }}>✓ Photo uploaded</span>
+              <button onClick={() => setPhotoUrl("")} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 9, ...sMono, color: "var(--atlas-muted)", opacity: 0.45, padding: 0 }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.45")}>Remove</button>
+            </div>
+          )}
         </div>
         <button onClick={save} style={{
           marginTop: 4, padding: "11px", borderRadius: 8, border: "none",
