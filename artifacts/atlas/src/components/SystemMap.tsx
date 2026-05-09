@@ -116,9 +116,11 @@ interface SystemMapProps {
   atmosphere?: string;
   detectedBuilder?: string;
   initialNodeState?: Record<string, boolean> | null;
+  resolvedNodeIds?: string[];
+  onResolvedConsumed?: () => void;
 }
 
-export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact, onNodeFocus, atmosphere, detectedBuilder: detectedBuilderProp, initialNodeState }: SystemMapProps) {
+export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact, onNodeFocus, atmosphere, detectedBuilder: detectedBuilderProp, initialNodeState, resolvedNodeIds, onResolvedConsumed }: SystemMapProps) {
   const storageKey = `${BASE_STORAGE_KEY}${projectId ? `-${projectId}` : ""}`;
   const isMobile = window.innerWidth < 768;
   const [nodes, setNodes] = useState<ArchNode[]>(() => loadNodes(storageKey));
@@ -133,6 +135,24 @@ export function SystemMap({ projectId, onReadinessChange, onNodesChange, compact
       resolved: initialNodeState[n.id] !== undefined ? initialNodeState[n.id] : n.resolved,
     })));
   }, [initialNodeState]);
+
+  // Apply AI-resolved node IDs when chat emits NODE_RESOLVED
+  // Gate on reference identity so each distinct incoming array is processed exactly once
+  const prevResolvedRef = useRef<string[] | undefined>(undefined);
+  useEffect(() => {
+    if (!resolvedNodeIds || resolvedNodeIds.length === 0) return;
+    if (prevResolvedRef.current === resolvedNodeIds) return;
+    prevResolvedRef.current = resolvedNodeIds;
+    setNodes(prev => {
+      const needsUpdate = prev.some(n => resolvedNodeIds.includes(n.id) && !n.resolved);
+      if (!needsUpdate) return prev;
+      return prev.map(n =>
+        resolvedNodeIds.includes(n.id) ? { ...n, resolved: true } : n
+      );
+    });
+    // Signal immediately — no timer needed; reference identity prevents double-fire
+    onResolvedConsumed?.();
+  }, [resolvedNodeIds, onResolvedConsumed]);
   const edges = INITIAL_EDGES;
   const [zoom, setZoom] = useState(isMobile ? ZOOM_DEFAULT_MOBILE : ZOOM_DEFAULT_DESKTOP);
   const [pan, setPan] = useState({ x: 0, y: 0 });

@@ -6,6 +6,8 @@ import { useRequireAuth } from "@/hooks/useAuth";
 import { useSound } from "@/hooks/useSound";
 import { AxiomFlow } from "../components/AxiomFlow";
 import type { ArchNode, NodeStateMap, HandoverSnapshot } from "../components/AxiomFlow";
+import { SystemMap } from "../components/SystemMap";
+import type { ArchNode as SystemMapNode } from "../components/SystemMap";
 import { TheForge } from "../components/TheForge";
 import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
@@ -4059,7 +4061,7 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
@@ -4111,17 +4113,35 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
     // New shape: per-node object { resolved, strategicAnswer? }. The DB column
     // is jsonb so this is a non-breaking change; AxiomFlow's hydration handler
     // tolerates the legacy boolean shape on read.
-    const nodeState: Record<string, { resolved: boolean; strategicAnswer?: string }> = {};
+    const axiomState: Record<string, { resolved: boolean; strategicAnswer?: string }> = {};
     updatedNodes.forEach(n => {
-      nodeState[n.id] = n.strategicAnswer
+      axiomState[n.id] = n.strategicAnswer
         ? { resolved: n.resolved, strategicAnswer: n.strategicAnswer }
         : { resolved: n.resolved };
     });
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      updateProject.mutate({ id: projectId, data: { nodeState } });
+      // Merge with existing nodeState so arch layer nodes (auth/db/api/state/ui/logic) are preserved
+      const currentNodeState = (activeProject?.nodeState as Record<string, unknown>) ?? {};
+      updateProject.mutate({ id: projectId, data: { nodeState: { ...currentNodeState, ...axiomState } } });
     }, 1000);
-  }, [projectId, updateProject]);
+  }, [projectId, updateProject, activeProject]);
+
+  // Save architecture layer node state (SystemMap nodes: auth/db/api/state/ui/logic)
+  // Merges with AxiomFlow's node state since both write to the same project.nodeState field
+  const archSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (archSaveTimerRef.current) clearTimeout(archSaveTimerRef.current); }, []);
+
+  const handleArchNodesChange = useCallback((updatedArchNodes: SystemMapNode[]) => {
+    if (!projectId) return;
+    const archState: Record<string, boolean> = {};
+    updatedArchNodes.forEach(n => { archState[n.id] = n.resolved; });
+    if (archSaveTimerRef.current) clearTimeout(archSaveTimerRef.current);
+    archSaveTimerRef.current = setTimeout(() => {
+      const currentNodeState = (activeProject?.nodeState as Record<string, boolean>) ?? {};
+      updateProject.mutate({ id: projectId, data: { nodeState: { ...currentNodeState, ...archState } } });
+    }, 1000);
+  }, [projectId, updateProject, activeProject]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -4130,23 +4150,40 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         background: "linear-gradient(to right, transparent 0%, rgba(212,175,55,0.18) 20%, rgba(212,175,55,0.38) 50%, rgba(212,175,55,0.18) 80%, transparent 100%)",
       }} />
 
-      {/* Map area */}
-      <div style={{ position: "relative", flex: showChat ? "0 0 42%" : 1, minHeight: 0, overflow: "hidden", transition: "flex 350ms ease" }}>
-        <AxiomFlow
-          projectId={projectId}
-          onReadinessChange={setReadinessScore}
-          onNodesChange={handleNodesChange}
-          compact
-          detectedBuilder={platform.toLowerCase()}
-          onNodeFocus={(text) => setIntent(text)}
-          initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
-          pendingNodes={pendingNodes}
-          onPendingConsumed={() => setPendingNodes([])}
-          onUnansweredQuestionOpen={({ mirror }) => onSystemNodeMessage?.(mirror)}
-          onHandover={onHandover}
-          handoverPending={handoverPending}
-          lastHandoverHash={lastHandoverHash}
-        />
+      {/* Map area — Axiom Flow (strategic) + System Map (architecture readiness) */}
+      <div style={{ position: "relative", flex: showChat ? "0 0 54%" : 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", transition: "flex 350ms ease" }}>
+        {/* Axiom Flow canvas */}
+        <div style={{ flex: 1, minHeight: 0, position: "relative", overflow: "hidden" }}>
+          <AxiomFlow
+            projectId={projectId}
+            onReadinessChange={setReadinessScore}
+            onNodesChange={handleNodesChange}
+            compact
+            detectedBuilder={platform.toLowerCase()}
+            onNodeFocus={(text) => setIntent(text)}
+            initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
+            pendingNodes={pendingNodes}
+            onPendingConsumed={() => setPendingNodes([])}
+            onUnansweredQuestionOpen={({ mirror }) => onSystemNodeMessage?.(mirror)}
+            onHandover={onHandover}
+            handoverPending={handoverPending}
+            lastHandoverHash={lastHandoverHash}
+          />
+        </div>
+        {/* System Map — architecture layer readiness (auth/db/api/state/ui/logic) */}
+        <div style={{
+          flexShrink: 0, height: 180, position: "relative", overflow: "hidden",
+          borderTop: "1px solid rgba(212,175,55,0.12)",
+        }}>
+          <SystemMap
+            projectId={projectId}
+            compact
+            onNodesChange={handleArchNodesChange}
+            initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
+            resolvedNodeIds={resolvedNodeIds}
+            onResolvedConsumed={onResolvedConsumed}
+          />
+        </div>
       </div>
 
       {/* Toggle bar — thin seam between map and intent capture */}
@@ -4379,6 +4416,8 @@ function RightPanel({
   onHandover,
   handoverPending,
   lastHandoverHash,
+  resolvedNodeIds,
+  onResolvedConsumed,
 }: {
   projectId: number;
   entries: Entry[];
@@ -4400,6 +4439,8 @@ function RightPanel({
   onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void;
   handoverPending?: boolean;
   lastHandoverHash?: string | null;
+  resolvedNodeIds?: string[];
+  onResolvedConsumed?: () => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -4592,7 +4633,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} />}
     </div>
   );
 }
@@ -5160,6 +5201,15 @@ export default function Workspace() {
               return merged.slice(-12);
             });
           }
+          if (res.resolvedNodes && res.resolvedNodes.length > 0) {
+            setPendingResolvedNodeIds((prev) => {
+              const merged = [...prev];
+              for (const id of res.resolvedNodes!) {
+                if (!merged.includes(id)) merged.push(id);
+              }
+              return merged;
+            });
+          }
         })
         .catch((err: unknown) => {
           if (err instanceof Error && err.name === "AbortError") return;
@@ -5369,6 +5419,7 @@ export default function Workspace() {
   const committedCount = entries?.filter((e) => e.status === "committed").length ?? 0;
   const healthPct = entryCount > 0 ? Math.round((committedCount / entryCount) * 100) : 0;
   const [mapReadiness, setMapReadiness] = useState(0);
+  const [pendingResolvedNodeIds, setPendingResolvedNodeIds] = useState<string[]>([]);
   const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(undefined);
 
   // ── Handover (Flow → Workspace) ──────────────────────────────────────────
@@ -6407,6 +6458,8 @@ export default function Workspace() {
                 handoverPending={handoverPending}
                 lastHandoverHash={project?.lastHandoverHash ?? null}
                 isMobile={false}
+                resolvedNodeIds={pendingResolvedNodeIds}
+                onResolvedConsumed={() => setPendingResolvedNodeIds([])}
               />
             </div>
           </>
@@ -6466,6 +6519,8 @@ export default function Workspace() {
                 handoverPending={handoverPending}
                 lastHandoverHash={project?.lastHandoverHash ?? null}
                 isMobile
+                resolvedNodeIds={pendingResolvedNodeIds}
+                onResolvedConsumed={() => setPendingResolvedNodeIds([])}
               />
             </div>
           </div>

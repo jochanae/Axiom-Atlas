@@ -194,6 +194,14 @@ When you learn something durable about this project, write it at the END of your
 
 Only write a memory when you've confirmed something durable. Skip for observations or questions. Maximum one MEMORY_Tn line per response.
 
+NODE_RESOLVED protocol:
+The user has an architecture System Map with six nodes: auth, db, api, state, ui, logic. When the user has fully answered the pivot question for one of these layers (confirmed their auth strategy, data model, API design, state approach, UI structure, or business rules) — emit on its own line at the END of your response using EXACTLY this format:
+
+  NODE_RESOLVED: auth
+
+Where "auth" is replaced with the relevant node ID. Node IDs are exactly: auth, db, api, state, ui, logic
+Only emit this after the user has given a concrete, committed answer — not when they're still exploring. Maximum one NODE_RESOLVED per response. Do NOT emit it for partial or uncertain answers.
+
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub or applying self-repairs):
 When the user asks you to fix or build something AND a complete file is in context, output the corrected complete file(s) at the very END of your response using this EXACT format — one block per file:
 
@@ -323,6 +331,29 @@ function extractAllFileEdits(content: string): { visibleContent: string; fileEdi
   }
 
   return { visibleContent, fileEdits };
+}
+
+// Matches NODE_RESOLVED: auth  /  NODE_RESOLVED: [auth]  /  NODE_RESOLVED: {auth}
+const NODE_RESOLVED_RE = /^NODE_RESOLVED:\s*[\[{]?(\w+)[\]}]?\s*$/i;
+
+function extractNodeResolved(content: string): { content: string; resolvedNodes: string[] } {
+  const validIds = new Set(["auth", "db", "api", "state", "ui", "logic"]);
+  const lines = content.split("\n");
+  const resolvedNodes: string[] = [];
+  const kept: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(NODE_RESOLVED_RE);
+    if (match) {
+      const nodeId = match[1].toLowerCase().trim();
+      if (validIds.has(nodeId) && !resolvedNodes.includes(nodeId)) {
+        resolvedNodes.push(nodeId);
+      }
+    } else {
+      kept.push(line);
+    }
+  }
+  return { content: kept.join("\n").trim(), resolvedNodes };
 }
 
 function matchEntryChips(
@@ -473,10 +504,11 @@ You are now in THINK mode. This changes how you respond:
   const rawContent =
     response.content[0]?.type === "text" ? response.content[0].text : "";
 
-  // Parse: FILE_EDITs → MEMORY_Tn → MEMORY_CHIPS
+  // Parse: FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → MEMORY_CHIPS
   const { visibleContent, fileEdits } = extractAllFileEdits(rawContent);
   const { content: afterMemory, newFacts } = extractMemoryLines(visibleContent);
-  const { content: finalContent, memoryChips: aiMemoryChips } = detectMemoryChips(afterMemory);
+  const { content: afterNodeResolved, resolvedNodes } = extractNodeResolved(afterMemory);
+  const { content: finalContent, memoryChips: aiMemoryChips } = detectMemoryChips(afterNodeResolved);
 
   // Auto-match ledger entries referenced in the response
   const entryChips = matchEntryChips(
@@ -543,6 +575,7 @@ You are now in THINK mode. This changes how you respond:
     memoryUpdated: newFacts.length > 0,
     fileEdits: fileEdits.length > 0 ? fileEdits : undefined,
     fileEdit: fileEdits.length > 0 ? fileEdits[0] : undefined,
+    resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     ...(imageB64 ? { imageB64, imageMimeType } : {}),
   });
 });
