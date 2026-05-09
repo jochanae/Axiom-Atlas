@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useRequireAuth } from "@/hooks/useAuth";
+import { useSound } from "@/hooks/useSound";
 import { SystemMap } from "../components/SystemMap";
 import type { ArchNode } from "../components/SystemMap";
 import { QuickPromptSheet } from "../components/QuickPromptSheet";
@@ -4328,20 +4329,22 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         </div>
       </div>
 
-      {/* Toggle bar */}
+      {/* Toggle bar — purple glow matching header */}
+      <style>{`@keyframes toggle-bar-pulse{0%,100%{box-shadow:0 -1px 14px rgba(139,92,246,0.14),0 1px 8px rgba(139,92,246,0.08)}50%{box-shadow:0 -1px 24px rgba(139,92,246,0.28),0 1px 12px rgba(139,92,246,0.15)}}`}</style>
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "5px 12px",
         background: "rgba(13,11,9,0.97)",
-        borderTop: "1px solid rgba(212,175,55,0.09)",
-        borderBottom: "1px solid rgba(212,175,55,0.05)",
+        borderTop: "1px solid rgba(139,92,246,0.28)",
+        borderBottom: "1px solid rgba(139,92,246,0.10)",
         flexShrink: 0,
+        animation: "toggle-bar-pulse 3s ease-in-out infinite",
       }}>
         <button
           onClick={() => setShowChat(v => !v)}
           style={{
             background: "none", border: "none", cursor: "pointer",
-            color: "rgba(212,175,55,0.6)", fontSize: 10.5,
+            color: "rgba(212,175,55,0.72)", fontSize: 10.5,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           }}
         >
@@ -4350,9 +4353,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         <button
           onClick={() => setShowChat(v => !v)}
           style={{
-            background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.18)",
+            background: "rgba(139,92,246,0.07)", border: "1px solid rgba(139,92,246,0.25)",
             borderRadius: 6, padding: "3px 10px", cursor: "pointer",
-            color: "rgba(212,175,55,0.65)", fontSize: 9.5,
+            color: "rgba(212,175,55,0.72)", fontSize: 9.5,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           }}>
           {showChat ? "⛶ Fullscreen" : "⊠ Restore"}
@@ -4928,6 +4931,7 @@ export default function Workspace() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
+  const { playSend, playCatch, playCommit, playPark, playNavigate } = useSound();
   const [memoryChips, setMemoryChips] = useState<string[]>([]);
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
   const [rightOpen, setRightOpen] = useState(false);
@@ -5301,7 +5305,7 @@ export default function Workspace() {
             ...(chips.length > 0 ? { memoryChips: chips } : {}),
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
           }]);
-          if (cp) setActiveCatch(cp);
+          if (cp) { playCatch(); setActiveCatch(cp); }
           if (res.memoryChips && res.memoryChips.length > 0) {
             setMemoryChips((prev) => {
               const merged = [...prev];
@@ -5385,6 +5389,7 @@ export default function Workspace() {
   const handleSend = () => {
     const text = input.trim();
     if (!text || !sessionId || chatPending) return;
+    playSend();
     const current = messages;
     const file = attachedFile;
     setInput("");
@@ -5413,6 +5418,7 @@ export default function Workspace() {
   const handlePark = useCallback(
     (content: string) => {
       if (!sessionId) return;
+      playPark();
       const title = content.replace(/\n/g, " ").slice(0, 80).trim();
       createEntry.mutate(
         { projectId: id, data: { title, summary: content.slice(0, 500), status: "parked", severity: "parked", mode: "think", sessionId } },
@@ -5428,10 +5434,10 @@ export default function Workspace() {
       const title = content.replace(/\n/g, " ").slice(0, 80).trim();
       createEntry.mutate(
         { projectId: id, data: { title, summary: content.slice(0, 500), status: "committed", severity: "committed", mode: "think", sessionId } },
-        { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }) }
+        { onSuccess: () => { playCommit(); queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); } }
       );
     },
-    [id, sessionId, createEntry, queryClient]
+    [id, sessionId, createEntry, queryClient, playCommit]
   );
 
   const handleRollbackPush = useCallback(async (record: PushRecord) => {
@@ -5477,6 +5483,8 @@ export default function Workspace() {
   const hasInput = input.trim().length > 0;
   const entryCount = entries?.length ?? 0;
   const parkedCount = entries?.filter((e) => e.status === "parked").length ?? 0;
+  const committedCount = entries?.filter((e) => e.status === "committed").length ?? 0;
+  const healthPct = entryCount > 0 ? Math.round((committedCount / entryCount) * 100) : 0;
 
   // ── ZIP import ─────────────────────────────────────────────────────────────
   const [zipFiles, setZipFiles] = useState<ZipEntry[]>([]);
@@ -5592,18 +5600,18 @@ export default function Workspace() {
       <style>{`
         @keyframes header-pulse {
           0%, 100% {
-            box-shadow: 0 1px 16px rgba(201, 162, 76, 0.08);
-            border-bottom-color: rgba(201, 162, 76, 0.12);
+            box-shadow: 0 1px 18px rgba(139, 92, 246, 0.12), 0 0 0 0 rgba(139, 92, 246, 0);
+            border-bottom-color: rgba(139, 92, 246, 0.22);
           }
           50% {
-            box-shadow: 0 1px 28px rgba(201, 162, 76, 0.16);
-            border-bottom-color: rgba(201, 162, 76, 0.22);
+            box-shadow: 0 1px 32px rgba(139, 92, 246, 0.26), 0 0 40px rgba(139, 92, 246, 0.08);
+            border-bottom-color: rgba(139, 92, 246, 0.38);
           }
         }
       `}</style>
       <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(12px)" }}>
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
-        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(201, 162, 76, 0.12)", boxShadow: "0 1px 16px rgba(201, 162, 76, 0.08)", animation: "header-pulse 3s ease-in-out infinite" }}>
+        <div style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: "1px solid rgba(139, 92, 246, 0.22)", boxShadow: "0 1px 18px rgba(139, 92, 246, 0.12)", animation: "header-pulse 3s ease-in-out infinite" }}>
 
           {/* Left: drawer button + Atlas logo → home */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -5734,8 +5742,14 @@ export default function Workspace() {
             )}
           </div>
 
-          {/* Right: mode + P + avatar */}
+          {/* Right: % score + mode + P + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+
+            {/* Gold readiness percentage + dot */}
+            <span style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", flexShrink: 0, opacity: 0.92 }}>
+              {healthPct}%
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", boxShadow: "0 0 7px rgba(201,162,76,0.7)", flexShrink: 0 }} />
+            </span>
 
             {/* Mode pill — always visible, tappable */}
             {(() => {
