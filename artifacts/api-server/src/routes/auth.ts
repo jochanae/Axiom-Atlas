@@ -8,6 +8,27 @@ import { eq, and, gt } from "drizzle-orm";
 const router: IRouter = Router();
 const scryptAsync = promisify(scrypt);
 
+// ── In-memory rate limiter ────────────────────────────────────────────────────
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_MAX) return false;
+  entry.count++;
+  return true;
+}
+
+// ── In-memory password reset tokens ──────────────────────────────────────────
+const resetTokens = new Map<string, { email: string; expiresAt: number }>();
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
 const SUPER_ADMIN_EMAIL = "jochanae@gmail.com";
 const SESSION_COOKIE = "atlas-session";
 const SESSION_DAYS = 30;
@@ -53,6 +74,9 @@ export async function getUserFromCookie(req: import("express").Request) {
 
 // POST /api/auth/signup
 router.post("/auth/signup", async (req, res): Promise<void> => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+  if (!checkRateLimit(ip)) { res.status(429).json({ error: "Too many attempts. Try again in 15 minutes." }); return; }
+
   const { email, password, name } = req.body as { email?: string; password?: string; name?: string };
   if (!email || !password) { res.status(400).json({ error: "Email and password are required" }); return; }
   if (password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters" }); return; }
@@ -83,6 +107,9 @@ router.post("/auth/signup", async (req, res): Promise<void> => {
 
 // POST /api/auth/login
 router.post("/auth/login", async (req, res): Promise<void> => {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+  if (!checkRateLimit(ip)) { res.status(429).json({ error: "Too many attempts. Try again in 15 minutes." }); return; }
+
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) { res.status(400).json({ error: "Email and password are required" }); return; }
 
@@ -107,6 +134,43 @@ router.post("/auth/logout", async (req, res): Promise<void> => {
     await db.delete(userSessionsTable).where(eq(userSessionsTable.token, token)).catch(() => {});
   }
   res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.json({ ok: true });
+});
+
+// POST /api/auth/forgot-password
+router.post("/auth/forgot-password", async (req, res): Promise<void> => {
+  const { email } = req.body as { email?: string };
+  if (!email) { res.status(400).json({ error: "Email is required" }); return; }
+
+  const [user] = await db.select({ id: usersTable.id, email: usersTable.email })
+    .from(usersTable).where(eq(usersTable.email, email.toLowerCase())).limit(1);
+
+  if (user) {
+    const token = randomBytes(32).toString("hex");
+    resetTokens.set(token, { email: user.email, expiresAt: Date.now() + RESET_TOKEN_TTL_MS });
+    if (process.env.NODE_ENV !== "production") {
+      req.log?.info({ token }, "password-reset-token");
+    }
+  }
+
+  res.json({ ok: true, message: "Password reset link will be sent to your email" });
+});
+
+// POST /api/auth/reset-password
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const { token, password } = req.body as { token?: string; password?: string };
+  if (!token || !password) { res.status(400).json({ error: "Token and password are required" }); return; }
+  if (password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters" }); return; }
+
+  const entry = resetTokens.get(token);
+  if (!entry || Date.now() > entry.expiresAt) {
+    res.status(400).json({ error: "Reset link is invalid or has expired" }); return;
+  }
+
+  const passwordHash = await hashPassword(password);
+  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.email, entry.email));
+  resetTokens.delete(token);
+
   res.json({ ok: true });
 });
 
