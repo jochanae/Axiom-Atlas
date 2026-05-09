@@ -22,6 +22,7 @@ import Terms from "./pages/terms";
 import Privacy from "./pages/privacy";
 import Help from "./pages/help";
 import Vault from "./pages/vault";
+import Admin from "./pages/admin";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,6 +54,7 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/help" component={Help} />
       <Route path="/vault" component={Vault} />
+      <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
   );
