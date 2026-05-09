@@ -4371,21 +4371,26 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
             isMobile={isMobile}
           />
         </div>
-        {/* System Map — architecture layer readiness (auth/db/api/state/ui/logic) */}
-        <div style={{
-          flexShrink: 0, height: 180, position: "relative", overflow: "hidden",
-          borderTop: "1px solid rgba(212,175,55,0.12)",
-        }}>
-          <SystemMap
-            projectId={projectId}
-            compact
-            detectedBuilder={platform.toLowerCase()}
-            onNodesChange={handleArchNodesChange}
-            initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
-            resolvedNodeIds={resolvedNodeIds}
-            onResolvedConsumed={onResolvedConsumed}
-          />
-        </div>
+        {/* System Map — architecture layer readiness (auth/db/api/state/ui/logic)
+            Hidden on mobile: its readiness score feeds the workspace header ring,
+            and stacking two full canvases in the mobile overlay is confusing.
+            Desktop keeps both views so the two layers remain visible at once. */}
+        {!isMobile && (
+          <div style={{
+            flexShrink: 0, height: 180, position: "relative", overflow: "hidden",
+            borderTop: "1px solid rgba(212,175,55,0.12)",
+          }}>
+            <SystemMap
+              projectId={projectId}
+              compact
+              detectedBuilder={platform.toLowerCase()}
+              onNodesChange={handleArchNodesChange}
+              initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
+              resolvedNodeIds={resolvedNodeIds}
+              onResolvedConsumed={onResolvedConsumed}
+            />
+          </div>
+        )}
       </div>
 
       {/* Toggle bar — thin seam between map and intent capture */}
@@ -4590,6 +4595,33 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
             </svg>
             Chat
           </button>
+        ) : undefined}
+        navRight={isMobile && onHandover ? (
+          // On mobile the handover trigger lives here, in the cockpit bar footer,
+          // rather than as a floating pill inside the canvas.
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <button
+              onClick={() => onHandoverOpenChange?.(true)}
+              disabled={handoverPending}
+              title="Send Flow snapshot to Atlas as a new chat"
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "8px 12px", borderRadius: 10,
+                background: handoverPending
+                  ? "rgba(120,113,108,0.1)"
+                  : "rgba(146,64,14,0.22)",
+                border: `1px solid ${handoverPending ? "rgba(120,113,108,0.35)" : "rgba(146,64,14,0.65)"}`,
+                color: handoverPending ? "rgba(120,113,108,0.7)" : "rgba(230,150,90,0.95)",
+                fontSize: 11, fontWeight: 700,
+                letterSpacing: "0.06em",
+                fontFamily: "var(--app-font-mono)",
+                cursor: handoverPending ? "not-allowed" : "pointer",
+                transition: "all 160ms ease",
+              }}
+            >
+              {handoverPending ? "Sending…" : "→ Atlas"}
+            </button>
+          </div>
         ) : undefined}
       />
     </div>

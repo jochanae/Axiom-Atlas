@@ -247,7 +247,7 @@ export function CockpitBar({
                 onClick={onHomeNav}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: "rgba(212,175,55,0.1)", border: "1px solid rgba(212,175,55,0.25)", color: "#D4AF37", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}
               >
-                → Atlas
+                ← Home
               </button>
               <button
                 onClick={() => setShowExport(true)}

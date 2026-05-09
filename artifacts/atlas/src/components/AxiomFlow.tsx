@@ -732,75 +732,14 @@ export function AxiomFlow({
         backgroundSize: "40px 40px",
       }} />
 
-      {/* Header label + platform detection badge */}
+      {/* Header label */}
       <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
         <span className="text-xs font-bold tracking-widest text-gold uppercase">AXIOM FLOW</span>
-        {detectedBuilder && detectedBuilder !== "web" && (
-          <span style={{
-            fontSize: 8.5,
-            fontFamily: "var(--app-font-mono)",
-            fontWeight: 700,
-            letterSpacing: "0.1em",
-            color: detectedBuilder === "lovable" ? "oklch(0.65 0.20 300)"
-              : detectedBuilder === "cursor" ? "oklch(0.65 0.18 240)"
-              : "oklch(0.65 0.18 150)",
-            background: detectedBuilder === "lovable" ? "oklch(0.30 0.12 300 / 30%)"
-              : detectedBuilder === "cursor" ? "oklch(0.30 0.12 240 / 30%)"
-              : "oklch(0.30 0.12 150 / 30%)",
-            border: `1px solid ${detectedBuilder === "lovable" ? "oklch(0.55 0.20 300 / 40%)"
-              : detectedBuilder === "cursor" ? "oklch(0.55 0.18 240 / 40%)"
-              : "oklch(0.55 0.18 150 / 40%)"}`,
-            borderRadius: 999,
-            padding: "2px 8px",
-            textTransform: "uppercase",
-            display: "inline-block",
-          }}>
-            {detectedBuilder.toUpperCase()} DETECTED
-          </span>
-        )}
       </div>
 
-      {/* Handover footer button — mobile only. On desktop, the trigger lives
-          in the right-pane tab bar (workspace.tsx). */}
-      {onHandover && isMobile && !handoverOpen && (
-        <button
-          onClick={openHandover}
-          disabled={!handoverEnabled || !!handoverPending}
-          title={
-            !handoverEnabled
-              ? "Lock in at least one answer first"
-              : handoverPending
-                ? "Handing over…"
-                : "Hand the current Flow snapshot off to a new Atlas chat"
-          }
-          className="absolute z-20"
-          style={{
-            bottom: 14,
-            left: "50%",
-            transform: "translateX(-50%)",
-            padding: "8px 16px",
-            borderRadius: 999,
-            background: handoverEnabled
-              ? "rgba(212,175,55,0.14)"
-              : "rgba(120,113,108,0.08)",
-            border: `1px solid ${handoverEnabled ? "rgba(212,175,55,0.55)" : "rgba(120,113,108,0.25)"}`,
-            color: handoverEnabled ? "#D4AF37" : "rgba(120,113,108,0.55)",
-            fontFamily: "var(--app-font-mono)",
-            fontSize: 10.5,
-            fontWeight: 700,
-            letterSpacing: "0.10em",
-            textTransform: "uppercase",
-            cursor: handoverEnabled && !handoverPending ? "pointer" : "not-allowed",
-            boxShadow: handoverEnabled
-              ? "0 4px 14px rgba(0,0,0,0.45), 0 0 12px rgba(212,175,55,0.18)"
-              : "0 2px 6px rgba(0,0,0,0.35)",
-            transition: "all 180ms ease",
-            backdropFilter: "blur(6px)",
-          }}
-        >
-          {handoverPending ? "Handing over…" : "→ Atlas"}
-        </button>
-      )}
+      {/* No floating pill in the canvas — handover is triggered from the
+          CockpitBar navRight (mobile) or the RightPanel tab bar (desktop).
+          The popover below still renders inside the canvas when open. */}
 
       {/* Handover inline confirm popover */}
       {onHandover && handoverOpen && currentSnapshot && (
