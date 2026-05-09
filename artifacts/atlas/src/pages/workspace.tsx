@@ -6026,12 +6026,41 @@ export default function Workspace() {
           {/* Messages */}
           <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px", position: "relative" }} className="scrollbar-none atlas-chat-timeline">
             {messages.length === 0 && !chatPending && (
-              <div style={{ textAlign: "center", padding: "72px 20px" }}>
-                <div style={{ fontSize: 22, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 8, letterSpacing: "-0.01em" }}>
+              <div style={{ padding: "52px 20px 32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 6, letterSpacing: "-0.01em", textAlign: "center" }}>
                   {project ? project.name : "Ready."}
                 </div>
-                <div style={{ fontSize: 12, color: "rgba(120,113,108,0.45)" }}>
+                <div style={{ fontSize: 12, color: "rgba(120,113,108,0.4)", marginBottom: 28, textAlign: "center" }}>
                   What are we working through today?
+                </div>
+                {/* Starter prompts */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 420 }}>
+                  {[
+                    { label: "I need to make a decision", sub: "Walk me through it and lock it in" },
+                    { label: "I'm not sure which direction to take", sub: "Think out loud, I'll catch contradictions" },
+                    { label: "Audit my recent decisions", sub: "Review what I've committed to" },
+                    { label: "I want to map my architecture", sub: "System Map + layer-by-layer spec" },
+                  ].map((p, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setInput(p.label);
+                        setTimeout(() => textareaRef.current?.focus(), 0);
+                      }}
+                      style={{
+                        display: "flex", flexDirection: "column", alignItems: "flex-start",
+                        padding: "11px 14px", borderRadius: 9, cursor: "pointer",
+                        background: "rgba(201,162,76,0.03)",
+                        border: "1px solid rgba(201,162,76,0.08)",
+                        textAlign: "left", transition: "all 160ms ease",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.07)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.18)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.03)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.08)"; }}
+                    >
+                      <span style={{ fontSize: 12.5, color: "var(--atlas-fg)", opacity: 0.8, fontWeight: 500, lineHeight: 1.3 }}>{p.label}</span>
+                      <span style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.5, marginTop: 2 }}>{p.sub}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

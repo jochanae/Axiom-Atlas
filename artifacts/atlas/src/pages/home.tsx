@@ -476,85 +476,141 @@ function FirstRunOverlay({
   loading,
   onSpecMode,
   onWorkspace,
+  onDismiss,
 }: {
   loading: boolean;
   onSpecMode: () => void;
   onWorkspace: () => void;
+  onDismiss?: () => void;
 }) {
+  const bullets = [
+    { icon: "⚡", text: "Catches you when you're about to contradict a prior decision" },
+    { icon: "📋", text: "Keeps a permanent ledger of every commitment you make" },
+    { icon: "🧠", text: "Remembers context across every session, so you never repeat yourself" },
+  ];
+
   return createPortal(
     <div
       style={{
         position: "fixed",
         inset: 0,
         zIndex: 9999,
-        background: "rgba(13,11,9,0.95)",
+        background: "rgba(8,6,5,0.97)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         animation: "atlas-overlay-fadein 500ms ease forwards",
+        padding: "0 24px",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 14,
-          width: "100%",
-          maxWidth: 320,
-          padding: "0 24px",
-        }}
-      >
-        {/* Gold filled — Start Speccing */}
-        <button
-          disabled={loading}
-          onClick={onSpecMode}
-          style={{
-            width: "100%",
-            padding: "16px 24px",
-            background: "#D4AF37",
-            border: "none",
-            borderRadius: 12,
-            color: "#0C0A09",
-            fontSize: 14,
-            fontWeight: 700,
-            fontFamily: "var(--app-font-mono, 'IBM Plex Mono', monospace)",
-            letterSpacing: "0.04em",
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.55 : 1,
-            animation: "atlas-btn-rise 500ms cubic-bezier(0.34,1.56,0.64,1) 200ms both, atlas-btn-glow 2.8s ease-in-out 800ms infinite",
-            transition: "background 160ms ease",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#C9A24C"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "#D4AF37"; }}
-        >
-          Start Speccing →
-        </button>
+      <div style={{ display: "flex", flexDirection: "column", width: "100%", maxWidth: 340 }}>
 
-        {/* Gold outlined — Go to Workspace */}
-        <button
-          disabled={loading}
-          onClick={onWorkspace}
-          style={{
-            width: "100%",
-            padding: "16px 24px",
-            background: "transparent",
-            border: "1px solid #D4AF37",
-            borderRadius: 12,
-            color: "#D4AF37",
-            fontSize: 14,
-            fontWeight: 700,
-            fontFamily: "var(--app-font-mono, 'IBM Plex Mono', monospace)",
-            letterSpacing: "0.04em",
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.55 : 1,
-            animation: "atlas-btn-rise 500ms cubic-bezier(0.34,1.56,0.64,1) 320ms both",
-            transition: "background 160ms ease, border-color 160ms ease",
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.07)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "#D4AF37"; }}
-        >
-          Go to Workspace
-        </button>
+        {/* Identity */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 11, background: "rgba(201,162,76,0.1)",
+            border: "1.5px solid rgba(201,162,76,0.35)", display: "flex", alignItems: "center",
+            justifyContent: "center", margin: "0 auto 14px",
+          }}>
+            <svg viewBox="0 0 48 48" width="26" height="26">
+              <polygon points="24,8 16,40 20,40 25.5,18" fill="#D4AF37" />
+              <polygon points="24,8 32,40 28,40 22.5,18" fill="#D4AF37" />
+              <rect x="16" y="27" width="16" height="4" rx="1" fill="#D4AF37" />
+            </svg>
+          </div>
+          <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", color: "rgba(201,162,76,0.7)", textTransform: "uppercase", marginBottom: 10 }}>
+            AXIOM
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 300, color: "var(--atlas-fg, #E7E5E4)", letterSpacing: "-0.02em", lineHeight: 1.3, marginBottom: 6 }}>
+            Decisions you won't regret.
+          </div>
+          <div style={{ fontSize: 12, color: "rgba(120,113,108,0.65)", lineHeight: 1.6 }}>
+            A thinking partner that enforces your own commitments.
+          </div>
+        </div>
+
+        {/* What it does */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
+          {bullets.map((b, i) => (
+            <div key={i} style={{
+              display: "flex", alignItems: "flex-start", gap: 11,
+              padding: "10px 13px", borderRadius: 9,
+              background: "rgba(201,162,76,0.04)",
+              border: "1px solid rgba(201,162,76,0.09)",
+              animation: `atlas-btn-rise 400ms cubic-bezier(0.34,1.56,0.64,1) ${180 + i * 80}ms both`,
+            }}>
+              <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>{b.icon}</span>
+              <span style={{ fontSize: 12, color: "rgba(231,229,228,0.72)", lineHeight: 1.5 }}>{b.text}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* CTA buttons */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            disabled={loading}
+            onClick={onWorkspace}
+            style={{
+              width: "100%", padding: "15px 24px",
+              background: "#D4AF37", border: "none", borderRadius: 11,
+              color: "#0C0A09", cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.55 : 1,
+              animation: "atlas-btn-rise 500ms cubic-bezier(0.34,1.56,0.64,1) 480ms both, atlas-btn-glow 2.8s ease-in-out 1000ms infinite",
+              transition: "background 160ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "#C9A24C"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "#D4AF37"; }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
+              Start a project →
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.6, marginTop: 3, fontFamily: "var(--app-font-mono)" }}>
+              Chat + Decision Ledger
+            </div>
+          </button>
+
+          <button
+            disabled={loading}
+            onClick={onSpecMode}
+            style={{
+              width: "100%", padding: "14px 24px",
+              background: "transparent", border: "1px solid rgba(201,162,76,0.4)",
+              borderRadius: 11, color: "#D4AF37",
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.55 : 1,
+              animation: "atlas-btn-rise 500ms cubic-bezier(0.34,1.56,0.64,1) 560ms both",
+              transition: "background 160ms ease, border-color 160ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.06)"; e.currentTarget.style.borderColor = "rgba(212,175,55,0.65)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)"; }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
+              Map my architecture
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 400, opacity: 0.55, marginTop: 3, fontFamily: "var(--app-font-mono)" }}>
+              System Map + Intent Capture
+            </div>
+          </button>
+        </div>
+
+        {/* Skip */}
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: "rgba(120,113,108,0.45)", fontSize: 11,
+              fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em",
+              marginTop: 18, textAlign: "center", padding: "4px 0",
+              animation: "atlas-btn-rise 400ms ease 640ms both",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "rgba(120,113,108,0.75)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
+          >
+            Skip for now
+          </button>
+        )}
+
       </div>
     </div>,
     document.body
@@ -813,6 +869,7 @@ export default function Home() {
               },
             });
           }}
+          onDismiss={dismissOverlay}
         />
       )}
 
