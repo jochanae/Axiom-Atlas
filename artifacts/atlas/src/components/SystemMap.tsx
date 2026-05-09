@@ -1,6 +1,6 @@
+import { toast } from "sonner";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// ── Exact types from original ─────────────────────────────────────────────────
 export interface ArchNode {
   id: string;
   label: string;
@@ -17,7 +17,6 @@ export interface ArchEdge {
   to: string;
 }
 
-// ── Exact constants from original ─────────────────────────────────────────────
 const NODE_ICONS: Record<string, string> = {
   database: "⬡",
   api: "◈",
@@ -51,24 +50,10 @@ const SPRINT_LABELS = [
   { sprint: 3, x: 180, y: 390 },
 ];
 
-// ── Exact animation from original ─────────────────────────────────────────────
 const EDGE_FLOW_STYLE = `
 @keyframes edge-flow {
   from { stroke-dashoffset: 0; }
   to   { stroke-dashoffset: -20; }
-}
-@keyframes amber-pulse-node {
-  0%, 100% { box-shadow: 0 0 8px oklch(0.70 0.15 70 / 40%); }
-  50% { box-shadow: 0 0 20px oklch(0.70 0.15 70 / 70%); }
-}
-@keyframes gold-pulse-node {
-  0%, 100% { box-shadow: 0 0 8px oklch(0.76 0.12 85 / 30%); }
-  50% { box-shadow: 0 0 24px oklch(0.76 0.12 85 / 60%); }
-}
-@keyframes node-resolve-pop {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.08); }
-  100% { transform: scale(1); }
 }
 `;
 
@@ -82,7 +67,6 @@ const STORAGE_KEY = "axiom-system-map-nodes";
 
 type BuilderType = "lovable" | "cursor" | "replit" | null;
 
-// ── Exact initial data from original ─────────────────────────────────────────
 const INITIAL_NODES: ArchNode[] = [
   { id: "auth",  label: "Authentication",  type: "auth",     resolved: false, x: 300, y: 80  },
   { id: "db",    label: "Database",         type: "database", resolved: false, x: 150, y: 200 },
@@ -99,7 +83,7 @@ const INITIAL_EDGES: ArchEdge[] = [
   { id: "e4", from: "api",   to: "state" },
   { id: "e5", from: "state", to: "ui"    },
   { id: "e6", from: "state", to: "logic" },
-  { id: "e7", from: "logic", to: "api"   },
+  { id: "e7", from: "logic", to: "api"  },
 ];
 
 function loadNodes(): ArchNode[] {
@@ -113,8 +97,8 @@ function detectBuilder(): BuilderType {
   try {
     const host = window.location.hostname;
     if (host.includes("replit") || host.includes("janeway") || host.includes("worf") ||
-        host.includes("repl.co") || host.includes("repl.run") || host.includes("id.replit") ||
-        typeof (window as any).__REPLIT__ !== "undefined") return "replit";
+        host.includes("repl.co") || host.includes("repl.run") ||
+        typeof (window as unknown as Record<string, unknown>).__REPLIT__ !== "undefined") return "replit";
     if (host.includes("lovable") || host.includes("lovableproject")) return "lovable";
     if (host.includes("cursor")) return "cursor";
   } catch {}
@@ -125,9 +109,12 @@ interface SystemMapProps {
   onReadinessChange?: (score: number) => void;
   onNodesChange?: (nodes: ArchNode[]) => void;
   compact?: boolean;
+  onNodeFocus?: (text: string) => void;
+  atmosphere?: string;
+  detectedBuilder?: string;
 }
 
-export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemMapProps) {
+export function SystemMap({ onReadinessChange, onNodesChange, compact, onNodeFocus, atmosphere, detectedBuilder: detectedBuilderProp }: SystemMapProps) {
   const isMobile = window.innerWidth < 768;
   const [nodes, setNodes] = useState<ArchNode[]>(loadNodes);
   const edges = INITIAL_EDGES;
@@ -135,6 +122,11 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [activeCardNodeId, setActiveCardNodeId] = useState<string | null>(null);
   const [builder] = useState<BuilderType>(detectBuilder);
+
+  // Use the prop if provided, otherwise fall back to auto-detected
+  const effectiveBuilder: BuilderType = detectedBuilderProp
+    ? (detectedBuilderProp.toLowerCase() as BuilderType)
+    : builder;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -159,7 +151,6 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nodes)); } catch {}
   }, [nodes, onNodesChange]);
 
-  // ── Fit map to container (exact from original) ────────────────────────────
   const fitMap = useCallback(() => {
     if (!containerRef.current || nodes.length === 0) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -185,7 +176,6 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     return () => observer.disconnect();
   }, [fitMap]);
 
-  // ── Mouse events (exact from original) ────────────────────────────────────
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     const ds = dragState.current;
     ds.dragging = true; ds.startX = e.clientX; ds.startY = e.clientY;
@@ -208,7 +198,15 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     setZoom(z => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z - e.deltaY * 0.001)));
   }, []);
 
-  const onDoubleClick = useCallback(() => { fitMap(); }, [fitMap]);
+  const resetView = useCallback(() => {
+    fitMap();
+    toast("Map Reset", {
+      duration: 1000,
+      style: { color: "#D4AF37", background: "oklch(0.15 0.01 60)", border: "1px solid oklch(0.76 0.12 85 / 30%)" },
+    });
+  }, [fitMap]);
+
+  const onDoubleClick = useCallback(() => { resetView(); }, [resetView]);
 
   const onContainerClick = useCallback(() => {
     if (!dragState.current.moved && Date.now() - dragState.current.lastNodeTapTime > 150) {
@@ -216,7 +214,6 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     }
   }, []);
 
-  // ── Touch events (exact from original) ────────────────────────────────────
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     const ds = dragState.current;
     if (e.touches.length === 1) {
@@ -252,10 +249,14 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     ds.dragging = false;
     if (e.changedTouches.length === 1 && !ds.moved) {
       const now = Date.now();
-      if (now - ds.lastTap < 180) { fitMap(); ds.lastTap = 0; }
-      else ds.lastTap = now;
+      if (now - ds.lastTap < 180) {
+        resetView();
+        ds.lastTap = 0;
+      } else {
+        ds.lastTap = now;
+      }
     }
-  }, [fitMap]);
+  }, [resetView]);
 
   const handleNodeTap = useCallback((nodeId: string, e: React.MouseEvent | React.TouchEvent) => {
     dragState.current.lastNodeTapTime = Date.now();
@@ -263,19 +264,29 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     if (!dragState.current.moved) {
       e.stopPropagation();
       setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, resolved: !n.resolved } : n));
-      if (activeCardNodeId === nodeId) setActiveCardNodeId(null);
-      else setActiveCardNodeId(nodeId);
-    }
-  }, [activeCardNodeId]);
 
-  // ── Builder class → exact pulse shadow ────────────────────────────────────
-  const builderClass = builder === "lovable" ? "pulse-lovable"
-    : builder === "cursor" ? "pulse-cursor"
-    : builder === "replit" ? "pulse-replit" : "";
+      if (activeCardNodeId === nodeId) {
+        setActiveCardNodeId(null);
+      } else {
+        setActiveCardNodeId(nodeId);
+        // Inject pivot message into chat — same as original addMessage behavior
+        const node = nodes.find(n => n.id === nodeId);
+        if (node && onNodeFocus) {
+          const pivotText = node.resolved
+            ? `Your ${node.label} layer is locked. To modify it, describe what you want to change.`
+            : `Let's define your ${node.label}. ${NODE_PIVOT_QUESTIONS[nodeId] || ""}`;
+          onNodeFocus(pivotText);
+        }
+      }
+    }
+  }, [activeCardNodeId, nodes, onNodeFocus]);
+
+  const builderClass = effectiveBuilder === "lovable" ? "pulse-lovable"
+    : effectiveBuilder === "cursor" ? "pulse-cursor"
+    : effectiveBuilder === "replit" ? "pulse-replit" : "";
 
   const strokeWidth = Math.max(1, Math.min(2, 1.5 / zoom));
 
-  // ── Card position (exact from original) ───────────────────────────────────
   const activeCardNode = activeCardNodeId ? nodes.find(n => n.id === activeCardNodeId) : null;
   let cardLeft = 0;
   let cardTop = 0;
@@ -290,7 +301,6 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     if (cardTop < 50) cardTop = nodeScreenY + 70;
   }
 
-  // ── Exact original render ──────────────────────────────────────────────────
   return (
     <div
       ref={containerRef}
@@ -314,37 +324,23 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
     >
       <style>{EDGE_FLOW_STYLE}</style>
 
-      {/* Exact original dot grid — subtle dark gray dots */}
+      {/* Dot grid */}
       <div className="absolute inset-0" style={{
         backgroundImage: `radial-gradient(circle at 1px 1px, oklch(0.30 0.01 60 / 30%) 1px, transparent 0)`,
         backgroundSize: "40px 40px",
       }} />
 
-      {/* SYSTEM MAP header — exact original */}
+      {/* Header */}
       <div className="absolute left-4 top-4 z-10 flex flex-col gap-1.5">
-        <span style={{
-          fontSize: 11, fontWeight: 700,
-          color: "oklch(0.76 0.12 85)",
-          letterSpacing: "0.1em", textTransform: "uppercase",
-        }}>
-          SYSTEM MAP
-        </span>
-        {builder && (
-          <span style={{
-            alignSelf: "flex-start",
-            borderRadius: 999,
-            border: "1px solid oklch(0.76 0.12 85 / 30%)",
-            background: "oklch(0.25 0.012 60)",
-            padding: "1px 8px",
-            fontSize: 10,
-            color: "oklch(0.60 0.08 85)",
-          }}>
-            {builder.toUpperCase()} DETECTED
+        <span className="text-xs font-bold tracking-widest text-gold uppercase">SYSTEM MAP</span>
+        {effectiveBuilder && (
+          <span className="self-start rounded-full border border-gold/30 bg-obsidian-surface px-2 py-0.5 text-[10px] text-gold-muted">
+            {effectiveBuilder.toUpperCase()} DETECTED
           </span>
         )}
       </div>
 
-      {/* % READY badge — top-right */}
+      {/* % READY badge */}
       <div style={{ position: "absolute", right: 14, top: 14, zIndex: 10 }}>
         <span style={{
           fontSize: 9, fontWeight: 700, color: "oklch(0.60 0.08 85)",
@@ -356,7 +352,7 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
         </span>
       </div>
 
-      {/* Transformable canvas — exact from original */}
+      {/* Transformable canvas */}
       <div
         ref={canvasRef}
         style={{
@@ -365,7 +361,7 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
           transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
         }}
       >
-        {/* Sprint ghost labels — exact from original */}
+        {/* Sprint ghost labels */}
         {SPRINT_LABELS.map(({ sprint, x, y }) => (
           <div key={sprint} style={{
             position: "absolute", left: x, top: y,
@@ -378,7 +374,7 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
           </div>
         ))}
 
-        {/* SVG edges — exact from original */}
+        {/* SVG edges */}
         <svg className="absolute inset-0 h-full w-full" style={{ overflow: "visible" }}>
           {edges.map(edge => {
             const fromNode = nodes.find(n => n.id === edge.from);
@@ -401,18 +397,18 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
 
         {/* Nodes */}
         {nodes.map(node => (
-          <NodeComponent key={node.id} node={node} onFocus={handleNodeTap} />
+          <NodeComponent key={node.id} node={node} onFocus={handleNodeTap} atmosphere={atmosphere} />
         ))}
       </div>
 
-      {/* Node info card — exact from original */}
+      {/* Node info card */}
       {activeCardNode && (
         <div
           style={{
             position: "absolute", left: cardLeft, top: cardTop,
             width: CARD_W, zIndex: 50,
             background: "rgba(20, 18, 14, 0.95)",
-            border: "1px solid oklch(0.76 0.12 85 / 40%)",
+            border: "1px solid rgba(212, 175, 55, 0.4)",
             borderRadius: 10, padding: 12,
             boxShadow: "0 4px 20px rgba(0,0,0,0.6)",
             pointerEvents: "auto",
@@ -423,36 +419,42 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
             onClick={e => { e.stopPropagation(); setActiveCardNodeId(null); }}
             style={{
               position: "absolute", top: 6, right: 8,
-              color: "oklch(0.55 0.015 80)", background: "none", border: "none",
+              color: "#9ca3af", background: "none", border: "none",
               cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px",
             }}
           >✕</button>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "oklch(0.76 0.12 85)", marginBottom: 4, paddingRight: 20 }}>
+
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#D4AF37", marginBottom: 4, paddingRight: 20 }}>
             {activeCardNode.label}
           </div>
-          <div style={{ fontSize: 11, marginBottom: 8, color: activeCardNode.resolved ? "oklch(0.76 0.12 85)" : "oklch(0.70 0.15 70)" }}>
+
+          <div style={{ fontSize: 11, marginBottom: 8, color: activeCardNode.resolved ? "#D4AF37" : "#F59E0B" }}>
             {activeCardNode.resolved ? "✓ Resolved" : "○ Needs Definition"}
           </div>
-          <div style={{ fontSize: 11, color: "oklch(0.55 0.015 80)", lineHeight: 1.5, marginBottom: 8 }}>
+
+          <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: 1.5, marginBottom: 8 }}>
             {NODE_DESCRIPTIONS[activeCardNodeId!] || ""}
           </div>
-          {activeCardNode.resolved ? (
+
+          {activeCardNode.resolved && (
             <div style={{
-              fontSize: 12, color: "oklch(0.88 0.01 80)", lineHeight: 1.6,
+              fontSize: 12, color: "rgba(229,231,235,0.8)", lineHeight: 1.6,
               maxHeight: 160, overflowY: "auto", marginTop: 8,
-              borderTop: "1px solid oklch(0.76 0.12 85 / 15%)", paddingTop: 8,
+              borderTop: "1px solid rgba(212,175,55,0.15)", paddingTop: 8,
             }}>
               {activeCardNode.details || "No details captured yet for this node."}
             </div>
-          ) : (
-            <div style={{ fontSize: 11, color: "oklch(0.55 0.015 80)", fontStyle: "italic" }}>
-              {NODE_PIVOT_QUESTIONS[activeCardNodeId!] || "Tap to define this layer in the chat"}
+          )}
+
+          {!activeCardNode.resolved && (
+            <div style={{ fontSize: 11, color: "#9ca3af", fontStyle: "italic" }}>
+              Tap to define this layer in the chat
             </div>
           )}
         </div>
       )}
 
-      {/* Hint — exact from original */}
+      {/* Hint */}
       <div style={{
         position: "absolute", bottom: 10, left: 0, right: 0,
         textAlign: "center", pointerEvents: "none",
@@ -466,60 +468,39 @@ export function SystemMap({ onReadinessChange, onNodesChange, compact }: SystemM
   );
 }
 
-// ── NodeComponent — exact original visual ─────────────────────────────────────
 function NodeComponent({
   node,
   onFocus,
+  atmosphere: _atmosphere,
 }: {
   node: ArchNode;
   onFocus: (id: string, e: React.MouseEvent | React.TouchEvent) => void;
+  atmosphere?: string;
 }) {
   return (
     <button
       onClick={e => onFocus(node.id, e)}
       onTouchEnd={e => { e.preventDefault(); onFocus(node.id, e); }}
-      style={{
-        position: "absolute",
-        left: node.x - 40,
-        top: node.y - 30,
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-        background: "none", border: "none", padding: 0, cursor: "pointer",
-        transition: "all 300ms",
-        animation: node.resolved ? "node-resolve-pop 0.4s ease-out" : undefined,
-      }}
+      className={`absolute flex flex-col items-center gap-1 transition-all duration-300 ${
+        node.resolved ? "animate-node-resolve" : ""
+      }`}
+      style={{ left: node.x - 40, top: node.y - 30, background: "none", border: "none", padding: 0, cursor: "pointer" }}
     >
-      {/* Node box — exact original colors */}
-      <div style={{
-        width: 64, height: 64,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        borderRadius: 12, fontSize: 18, transition: "all 0.3s",
-        border: node.resolved
-          ? "1px solid oklch(0.76 0.12 85 / 60%)"
-          : "1px solid oklch(0.70 0.15 70 / 40%)",
-        background: node.resolved
-          ? "oklch(0.76 0.12 85 / 15%)"
-          : "oklch(0.25 0.012 60)",
-        color: node.resolved
-          ? "oklch(0.76 0.12 85)"
-          : "oklch(0.70 0.15 70)",
-        boxShadow: node.resolved
-          ? "0 0 20px oklch(0.76 0.12 85 / 15%)"
-          : undefined,
-        animation: node.resolved ? undefined : "amber-pulse-node 2s ease-in-out infinite",
-      }}>
+      <div className={`flex h-16 w-16 items-center justify-center rounded-xl border text-lg transition-all ${
+        node.resolved
+          ? "border-gold bg-gold/15 text-gold shadow-gold"
+          : "border-amber-glow/40 bg-obsidian-surface text-amber-glow animate-amber-pulse"
+      }`}>
         {NODE_ICONS[node.type] || "●"}
       </div>
-      {/* Label */}
-      <span style={{
-        fontSize: 10, fontWeight: 500, whiteSpace: "nowrap",
-        color: node.resolved ? "oklch(0.76 0.12 85)" : "oklch(0.50 0.01 80)",
-      }}>
+      <span className={`text-[10px] font-medium whitespace-nowrap ${
+        node.resolved ? "text-gold" : "text-silver-muted"
+      }`}>
         {node.label}
       </span>
-      {/* Percentage */}
       <span style={{
         fontSize: 9, lineHeight: 1,
-        color: node.resolved ? "oklch(0.76 0.12 85)" : "oklch(0.70 0.15 70)",
+        color: node.resolved ? "#D4AF37" : "#F59E0B",
       }}>
         {node.resolved ? "100%" : node.details ? "50%" : "0%"}
       </span>
