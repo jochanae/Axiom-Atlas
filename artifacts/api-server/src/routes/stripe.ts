@@ -1,36 +1,16 @@
 import { Router } from 'express';
 import { stripeStorage } from '../stripeStorage';
 import { stripeService } from '../stripeService';
+// stripeStorage kept for subscription/user helpers below
 import { requireAuth } from './auth';
 
 const router = Router();
 
-// Public: list products with prices (used on pricing page)
+// Public: list products with prices — fetched live from Stripe API
 router.get('/stripe/products', async (req, res) => {
   try {
-    const rows = await stripeStorage.listProductsWithPrices();
-    const map = new Map<string, any>();
-    for (const row of rows) {
-      if (!map.has(row.product_id as string)) {
-        map.set(row.product_id as string, {
-          id: row.product_id,
-          name: row.product_name,
-          description: row.product_description,
-          metadata: row.product_metadata,
-          prices: [],
-        });
-      }
-      if (row.price_id) {
-        map.get(row.product_id as string).prices.push({
-          id: row.price_id,
-          unitAmount: row.unit_amount,
-          currency: row.currency,
-          recurring: row.recurring,
-          metadata: row.price_metadata,
-        });
-      }
-    }
-    res.json({ data: Array.from(map.values()) });
+    const products = await stripeService.listProductsWithPrices();
+    res.json({ data: products });
   } catch (err: any) {
     req.log.error({ err }, 'Failed to list products');
     res.status(500).json({ error: 'Failed to load products' });
