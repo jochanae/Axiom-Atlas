@@ -5180,6 +5180,7 @@ export default function Workspace() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialSent = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const importPrimed = useRef(false);
   const touchStartX = useRef(0);
 
@@ -5380,10 +5381,14 @@ export default function Workspace() {
         ...(imageData ? { imageData } : {}),
       };
 
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       })
         .then((r) => {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -5412,13 +5417,18 @@ export default function Workspace() {
             });
           }
         })
-        .catch(() => {
+        .catch((err: unknown) => {
+          if (err instanceof Error && err.name === "AbortError") return;
           setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again.", sentAt: new Date().toISOString() }]);
         })
-        .finally(() => setChatPending(false));
+        .finally(() => { setChatPending(false); abortControllerRef.current = null; });
     },
     [entries, id, fileContext, projectMode]
   );
+
+  const handleStop = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
 
   const handleRegenerate = useCallback(
     (assistantMsgIndex: number) => {
@@ -6492,26 +6502,43 @@ export default function Workspace() {
                       </svg>
                     </button>
                   )}
-                  <button
-                    className="atlas-send-btn"
-                    onClick={handleSend}
-                    disabled={!hasInput || chatPending || !sessionId}
-                    style={{
-                      width: 38, height: 38,
-                      background: hasInput && !chatPending && sessionId ? "var(--atlas-ember)" : "var(--atlas-surface)",
-                      border: hasInput ? "none" : "1px solid var(--atlas-border)",
-                      boxShadow: hasInput && !chatPending ? "0 0 16px -3px rgba(146,64,14,0.5)" : "none",
-                      opacity: chatPending ? 0.5 : 1,
-                    }}
-                  >
-                    <svg viewBox="0 0 20 20" width={13} height={13}
-                      fill={hasInput ? "var(--atlas-fg)" : "none"}
-                      stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
-                      strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
-                      <path d="M17 3 9.5 11.5" />
-                    </svg>
-                  </button>
+                  {chatPending ? (
+                    <button
+                      onClick={handleStop}
+                      title="Stop generating"
+                      style={{
+                        width: 38, height: 38, borderRadius: 10,
+                        background: "var(--atlas-surface)",
+                        border: "1px solid rgba(146,64,14,0.55)",
+                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0, transition: "all 150ms ease",
+                      }}
+                    >
+                      <svg viewBox="0 0 20 20" width={12} height={12} fill="var(--atlas-ember)">
+                        <rect x="4" y="4" width="12" height="12" rx="2.5" />
+                      </svg>
+                    </button>
+                  ) : (
+                    <button
+                      className="atlas-send-btn"
+                      onClick={handleSend}
+                      disabled={!hasInput || !sessionId}
+                      style={{
+                        width: 38, height: 38,
+                        background: hasInput && sessionId ? "var(--atlas-ember)" : "var(--atlas-surface)",
+                        border: hasInput ? "none" : "1px solid var(--atlas-border)",
+                        boxShadow: hasInput ? "0 0 16px -3px rgba(146,64,14,0.5)" : "none",
+                      }}
+                    >
+                      <svg viewBox="0 0 20 20" width={13} height={13}
+                        fill={hasInput ? "var(--atlas-fg)" : "none"}
+                        stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
+                        strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
+                        <path d="M17 3 9.5 11.5" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
