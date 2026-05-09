@@ -4061,7 +4061,7 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
@@ -4168,6 +4168,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
             onHandover={onHandover}
             handoverPending={handoverPending}
             lastHandoverHash={lastHandoverHash}
+            onSnapshotChange={onSnapshotChange}
+            handoverOpen={handoverOpen}
+            onHandoverOpenChange={onHandoverOpenChange}
+            isMobile={isMobile}
           />
         </div>
         {/* System Map — architecture layer readiness (auth/db/api/state/ui/logic) */}
@@ -4418,6 +4422,10 @@ function RightPanel({
   lastHandoverHash,
   resolvedNodeIds,
   onResolvedConsumed,
+  currentSnapshot,
+  onSnapshotChange,
+  handoverOpen,
+  onHandoverOpenChange,
 }: {
   projectId: number;
   entries: Entry[];
@@ -4441,6 +4449,10 @@ function RightPanel({
   lastHandoverHash?: string | null;
   resolvedNodeIds?: string[];
   onResolvedConsumed?: () => void;
+  currentSnapshot?: HandoverSnapshot | null;
+  onSnapshotChange?: (s: HandoverSnapshot | null) => void;
+  handoverOpen?: boolean;
+  onHandoverOpenChange?: (open: boolean) => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -4575,6 +4587,57 @@ function RightPanel({
             </button>
           );
         })}
+        {/* Desktop: handover trigger button — pushed to the right of the tabs.
+            Mirrors the mobile footer pill in AxiomFlow. Switches to the Map
+            tab and opens the popover so the user can confirm/title the
+            snapshot before sending it to Atlas. */}
+        {!isMobile && onHandover && (
+          <>
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={() => {
+                setTab("map");
+                onHandoverOpenChange?.(true);
+              }}
+              disabled={!currentSnapshot || (currentSnapshot?.definedCount ?? 0) === 0 || !!handoverPending}
+              title={
+                handoverPending
+                  ? "Handing over to Atlas…"
+                  : !currentSnapshot || currentSnapshot.definedCount === 0
+                    ? "Define at least one node to hand over"
+                    : "Send the current Axiom Flow snapshot to Atlas as a new chat"
+              }
+              style={{
+                marginRight: 8,
+                padding: "5px 11px",
+                borderRadius: 5,
+                background: !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
+                  ? "rgba(120,113,108,0.15)"
+                  : "rgba(146,64,14,0.22)",
+                border: `1px solid ${
+                  !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
+                    ? "rgba(120,113,108,0.35)"
+                    : "rgba(146,64,14,0.65)"
+                }`,
+                color: !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
+                  ? "rgba(120,113,108,0.7)"
+                  : "rgba(230,150,90,0.95)",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 9.5,
+                fontWeight: 600,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                cursor: !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
+                  ? "not-allowed"
+                  : "pointer",
+                transition: "all 160ms ease",
+              }}
+            >
+              {handoverPending ? "Sending…" : "→ Atlas"}
+            </button>
+          </>
+        )}
+
         {/* Mobile: spacer so close/fullscreen stay right-aligned */}
         {isMobile && <div style={{ flex: 1 }} />}
 
@@ -4633,7 +4696,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
     </div>
   );
 }
@@ -5425,6 +5488,19 @@ export default function Workspace() {
   // ── Handover (Flow → Workspace) ──────────────────────────────────────────
   const updateProjectFromHandover = useUpdateProject();
   const [handoverPending, setHandoverPending] = useState(false);
+  // Live snapshot streamed up from AxiomFlow — drives the workspace-header
+  // drift pill and the desktop "→ Atlas" trigger button in RightPanel.
+  const [currentSnapshot, setCurrentSnapshot] = useState<HandoverSnapshot | null>(null);
+  // Controlled state for the handover popover so a desktop trigger in the
+  // tab bar can open the same popover that lives inside AxiomFlow.
+  const [handoverOpen, setHandoverOpen] = useState(false);
+  // Reset handover-derived UI when the active project changes, otherwise the
+  // header drift pill and tab-bar button can briefly reflect the previous
+  // project's snapshot until AxiomFlow remounts and streams a fresh one.
+  useEffect(() => {
+    setCurrentSnapshot(null);
+    setHandoverOpen(false);
+  }, [id]);
 
   const handleHandover = useCallback(({ snapshot, title }: { snapshot: HandoverSnapshot; title: string }) => {
     if (!id || handoverPending) return;
@@ -5472,6 +5548,8 @@ export default function Workspace() {
             setMobileTab("chat");
             setRightOpen(false);
           }
+          // Close the popover on success regardless of which trigger opened it.
+          setHandoverOpen(false);
         },
         onSettled: () => setHandoverPending(false),
       }
@@ -5684,6 +5762,33 @@ export default function Workspace() {
               onClick={focusSystemMap}
               title={`Architecture readiness: ${mapReadiness}%. Click to open System Map.`}
             />
+
+            {/* Drift pill — flow has changed since the last Atlas handover.
+                Lives next to the project name so it's visible from any tab,
+                not just the Map tab. */}
+            {!!project?.lastHandoverHash && !!currentSnapshot && currentSnapshot.hash !== project.lastHandoverHash && (
+              <span
+                title="Architecture flow has changed since last Atlas handover"
+                onClick={focusSystemMap}
+                style={{
+                  marginLeft: 6,
+                  padding: "2px 7px",
+                  borderRadius: 4,
+                  background: "rgba(146,64,14,0.18)",
+                  border: "1px solid rgba(146,64,14,0.55)",
+                  color: "rgba(230,150,90,0.95)",
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 8.5,
+                  fontWeight: 700,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  cursor: "pointer",
+                  flexShrink: 0,
+                }}
+              >
+                Updated since handover
+              </span>
+            )}
 
             {/* Dropdown menu — portaled to escape any parent stacking context */}
             {showProjectMenu && createPortal(
@@ -6460,6 +6565,10 @@ export default function Workspace() {
                 isMobile={false}
                 resolvedNodeIds={pendingResolvedNodeIds}
                 onResolvedConsumed={() => setPendingResolvedNodeIds([])}
+                currentSnapshot={currentSnapshot}
+                onSnapshotChange={setCurrentSnapshot}
+                handoverOpen={handoverOpen}
+                onHandoverOpenChange={setHandoverOpen}
               />
             </div>
           </>
@@ -6521,6 +6630,10 @@ export default function Workspace() {
                 isMobile
                 resolvedNodeIds={pendingResolvedNodeIds}
                 onResolvedConsumed={() => setPendingResolvedNodeIds([])}
+                currentSnapshot={currentSnapshot}
+                onSnapshotChange={setCurrentSnapshot}
+                handoverOpen={handoverOpen}
+                onHandoverOpenChange={setHandoverOpen}
               />
             </div>
           </div>
