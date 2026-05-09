@@ -70,36 +70,42 @@ export function buildHandoverSnapshot(
   );
   const blockers = nodes.filter(n => n.type === "blocker");
 
-  const fmtList = (items: ArchNode[]) =>
+  const fmtInline = (items: ArchNode[]) =>
     items.length === 0
-      ? "(none)"
-      : items.map(n => {
-          const ans = isNodeDefined(n) ? ` → ${n.strategicAnswer!.trim()}` : "";
-          const meta = n.meta ? ` (${n.meta})` : "";
-          return `• ${n.label}${meta}${ans}`;
-        }).join("\n");
+      ? "none"
+      : items
+          .map(n => {
+            const ans = isNodeDefined(n) ? ` → ${n.strategicAnswer!.trim()}` : "";
+            const meta = n.meta ? ` (${n.meta})` : "";
+            return `${n.label}${meta}${ans}`;
+          })
+          .join(", ");
 
-  const definedSection = fmtList(defined.filter(n => n.id !== goalNode?.id));
-  const unansweredSection = fmtList(unanswered.filter(n => n.id !== goalNode?.id));
-  const blockersSection = fmtList(blockers);
+  const edgeList =
+    edges.length === 0
+      ? "none"
+      : edges
+          .map(e => {
+            const from = nodes.find(n => n.id === e.from)?.label ?? e.from;
+            const to = nodes.find(n => n.id === e.to)?.label ?? e.to;
+            return `${from} → ${to}`;
+          })
+          .join(", ");
 
-  const summary = [
-    `Working from this Flow snapshot: ${goalLabel}.`,
-    "",
-    "Defined:",
-    definedSection,
-    "",
-    "Unresolved:",
-    unansweredSection,
-    "",
-    "Open blockers:",
-    blockersSection,
-    "",
-    `(${defined.length}/${nodes.length} nodes defined · ${edges.length} connections)`,
-  ].join("\n");
+  const definedInline = fmtInline(defined.filter(n => n.id !== goalNode?.id));
+  const unansweredInline = fmtInline(unanswered.filter(n => n.id !== goalNode?.id));
+  const blockersInline = fmtInline(blockers);
 
+  const summary =
+    `Working from this Flow snapshot: ${goalLabel}. ` +
+    `Defined: ${definedInline}. ` +
+    `Unresolved: ${unansweredInline}. ` +
+    `Open blockers: ${blockersInline}. ` +
+    `Edges: ${edgeList}.`;
+
+  const titleBase = `Working session — ${goalLabel}`;
   return {
-    title: goalLabel.length > 80 ? `${goalLabel.slice(0, 77)}…` : goalLabel,
+    title: titleBase.length > 80 ? `${titleBase.slice(0, 77)}…` : titleBase,
     summary,
     hash: computeNodeStateHash(nodes),
     definedCount: defined.length,

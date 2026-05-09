@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, sessionsTable, chatMessagesTable } from "@workspace/db";
 import {
   CreateSessionBody,
@@ -53,6 +53,10 @@ router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => 
       content: seedMessage,
       intentType: seedIntentType ?? "handover_snapshot",
     });
+    await db
+      .update(sessionsTable)
+      .set({ messageCount: sql`${sessionsTable.messageCount} + 1` })
+      .where(eq(sessionsTable.id, session.id));
   }
   res.status(201).json({
     ...session,
