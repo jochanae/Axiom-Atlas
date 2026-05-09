@@ -12,11 +12,23 @@ const SESSION_COOKIE = "atlas-session";
 const SESSION_DAYS = 30;
 const SUPER_ADMIN_EMAIL = "jochanae@gmail.com";
 
-function getRedirectUri() {
+function getRedirectUri(req?: import("express").Request) {
+  // Use the actual host from the incoming request so dev and prod both work
+  // without needing separate Google Console entries per environment
+  if (req) {
+    const forwarded = req.headers["x-forwarded-host"];
+    const host = (Array.isArray(forwarded) ? forwarded[0] : forwarded) || req.headers.host;
+    if (host) return `https://${host}/api/auth/google/callback`;
+  }
   const domain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
   if (domain) return `https://${domain}/api/auth/google/callback`;
   return `http://localhost:80/api/auth/google/callback`;
 }
+
+// GET /api/auth/google/redirect-uri — diagnostic: returns the exact URI to register in Google Console
+router.get("/auth/google/redirect-uri", (req, res): void => {
+  res.json({ redirectUri: getRedirectUri(req) });
+});
 
 function createSessionCookie(token: string, res: import("express").Response) {
   const expires = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
@@ -36,7 +48,7 @@ router.get("/auth/google", (req, res): void => {
 
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: getRedirectUri(req),
     response_type: "code",
     scope: "openid email profile",
     state,
@@ -71,7 +83,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         code,
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
-        redirect_uri: getRedirectUri(),
+        redirect_uri: getRedirectUri(req),
         grant_type: "authorization_code",
       }),
     });

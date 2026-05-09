@@ -39,6 +39,12 @@ export default function Login() {
     if (!isLoading && user) navigate("/home");
   }, [user, isLoading, navigate]);
 
+  // Allow page scrolling (global CSS sets overflow:hidden on html/body/root)
+  useEffect(() => {
+    document.documentElement.classList.add("atlas-login-active");
+    return () => document.documentElement.classList.remove("atlas-login-active");
+  }, []);
+
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
