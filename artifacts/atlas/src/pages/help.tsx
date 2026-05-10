@@ -23,8 +23,8 @@ const FAQS: { q: string; a: string }[] = [
     a: "The Parking Lot holds ideas and decisions that aren't ready to commit to yet. You can park something from a catch card or manually from the Ledger. Parked items can be resumed (moved back to chat), committed directly, or deleted.",
   },
   {
-    q: "What is Nexium?",
-    a: "Nexium is your permanently pinned, cross-project command space — the cognitive layer where you think strategically across all your projects without being scoped to any single one. It's always accessible from the center button in the mobile footer and from the top of the Projects drawer. When a decision crystallizes in Nexium, use the 'Commit →' button to stamp it directly into a specific project's Decision Ledger.",
+    q: "What is Nexus?",
+    a: "Nexus is your cross-project strategic command space — the cognitive layer where you think across all your projects without being scoped to any single one. It has a persistent Living Thread (conversation that carries over between sessions) and a Global Ledger (read-only view of committed decisions across every project). Access it from the Projects drawer, the ↑ Nexus button in any workspace header, or the center node on the Master Map.",
   },
   {
     q: "How does Atlas remember things between sessions?",
@@ -32,7 +32,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What is the Master Map?",
-    a: "The Master Map (/map) is the satellite view of your entire Axiom ecosystem. Nexium sits at the center as the anchor hub, and all your projects orbit around it as satellite nodes. Node glow intensity reflects recent activity — bright means actively worked on, dim means dormant. Tap any node to open its workspace or jump directly to its local System Map. Access it from the Projects drawer or directly from Nexium.",
+    a: "The Master Map (/map) is the satellite view of your entire Atlas ecosystem. Nexus sits at the center as the anchor hub, and all your projects orbit around it as satellite nodes. Node glow intensity reflects recent activity — bright means actively worked on, dim means dormant. Tap any node to open its workspace or jump directly to its local System Map. Access it from the Projects drawer or directly from Nexus.",
   },
   {
     q: "What is the System Map?",
