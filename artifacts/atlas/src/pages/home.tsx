@@ -995,16 +995,6 @@ export default function Home() {
     }, [queryClient]),
   );
 
-  const [nexusProject, setNexusProject] = useState<{ id: number; name: string } | null>(null);
-  const [nexusLoading, setNexusLoading] = useState(false);
-
-  useEffect(() => {
-    const base = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
-    fetch(`${base}/api/projects/nexus`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.id) setNexusProject(d); })
-      .catch(() => {});
-  }, []);
 
   const handleNewProject = useCallback((name = "New Project") => {
     if (isFree && (projects?.length ?? 0) >= 1) {
@@ -1054,22 +1044,12 @@ export default function Home() {
     [input, setLocation]
   );
 
-  const handleSubmit = useCallback(async () => {
-    setNexusLoading(true);
-    setCreateError(null);
-    try {
-      const base = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
-      const res = await fetch(`${base}/api/projects/nexus`, { credentials: "include" });
-      if (!res.ok) throw new Error("Could not open Nexium");
-      const nexus = await res.json();
-      setNexusProject(nexus);
-      navigateToProject(nexus.id);
-    } catch (err: any) {
-      setCreateError(err?.message ?? "Could not open Nexium");
-    } finally {
-      setNexusLoading(false);
+  const handleSubmit = useCallback(() => {
+    if (input.trim()) {
+      try { sessionStorage.setItem("atlas-nexus-initial", input.trim()); } catch {}
     }
-  }, [navigateToProject]);
+    setLocation("/nexus");
+  }, [input, setLocation]);
 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1087,7 +1067,7 @@ export default function Home() {
   };
 
   const hasInput = input.trim().length > 0;
-  const loading = nexusLoading;
+  const loading = false;
 
   return (
     <div
@@ -1592,7 +1572,6 @@ export default function Home() {
         open={showDrawer}
         onClose={() => setShowDrawer(false)}
         projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description, latestSnapshotScore: p.latestSnapshotScore ?? null }))}
-        nexusProject={nexusProject}
         onOpenProject={navigateToProject}
         onNewProject={() => { setShowDrawer(false); handleNewProject("New Project"); }}
         onOpenLedger={(id) => setLocation(`/ledger/${id}`)}
@@ -1687,19 +1666,7 @@ export default function Home() {
                 animation: "homeAxiomPulse 2.5s ease-in-out infinite",
                 flexShrink: 0,
               }}
-              onClick={() => {
-                // Nexus is the default "talk to Atlas" space — always go there first
-                if (nexusProject?.id) {
-                  setLocation(`/project/${nexusProject.id}`);
-                } else {
-                  // Nexus not loaded yet — fetch it now and navigate
-                  const base = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
-                  fetch(`${base}/api/projects/nexus`, { credentials: "include" })
-                    .then(r => r.ok ? r.json() : null)
-                    .then(d => { if (d?.id) setLocation(`/project/${d.id}`); })
-                    .catch(() => {});
-                }
-              }}
+              onClick={() => setLocation("/nexus")}
             >
               <svg viewBox="0 0 512 512" width="40" height="40">
                 <defs>
