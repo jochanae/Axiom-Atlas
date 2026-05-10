@@ -5158,12 +5158,12 @@ function MobileTabBar({
     },
     {
       id: "map",
-      label: "Flow",
+      label: "Orbit",
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-          <line x1="8" y1="2" x2="8" y2="18" />
-          <line x1="16" y1="6" x2="16" y2="22" />
+          <circle cx="12" cy="12" r="4" />
+          <ellipse cx="12" cy="12" rx="10" ry="4.5" />
+          <line x1="12" y1="2" x2="12" y2="22" />
         </svg>
       ),
     },
@@ -5846,6 +5846,42 @@ export default function Workspace() {
   useEffect(() => {
     if (!rightOpen && isMobile) setMobileTab("chat");
   }, [rightOpen, isMobile]);
+
+  // Pinch-to-zoom-out → return to Master Map (satellite view)
+  useEffect(() => {
+    if (!isMobile) return;
+    let startDist = 0;
+    let fired = false;
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        startDist = Math.hypot(dx, dy);
+        fired = false;
+      }
+    };
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || startDist === 0 || fired) return;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      if (dist - startDist > 90) {
+        fired = true;
+        startDist = 0;
+        try { navigator.vibrate?.([6, 40, 6]); } catch {}
+        setLocation("/map");
+      }
+    };
+    const onEnd = () => { startDist = 0; fired = false; };
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchmove", onMove, { passive: true });
+    document.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+    };
+  }, [isMobile, setLocation]);
 
   const autoResize = () => {
     const el = textareaRef.current;
@@ -7395,7 +7431,14 @@ export default function Workspace() {
       {isMobile && mobileTab !== "map" && (
         <MobileTabBar
           activeTab={mobileTab}
-          onTabChange={(tab) => setMobileTab(tab)}
+          onTabChange={(tab) => {
+            if (tab === "map") {
+              try { navigator.vibrate?.(8); } catch {}
+              setLocation("/map");
+            } else {
+              setMobileTab(tab);
+            }
+          }}
           entryCount={entryCount}
           activeCatch={!!activeCatch}
         />
