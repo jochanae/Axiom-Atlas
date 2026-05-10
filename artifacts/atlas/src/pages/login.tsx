@@ -139,8 +139,11 @@ export default function Login() {
 
           {/* Header */}
           <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <div style={{ fontSize: 11, ...mono, letterSpacing: "0.35em", color: "var(--atlas-gold)", opacity: 0.6, textTransform: "uppercase", marginBottom: 10 }}>
-              Axiom
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
+              <img src="/axiom-logo.svg" alt="Axiom" width={28} height={28} style={{ borderRadius: "20%", flexShrink: 0 }} />
+              <span style={{ fontSize: 11, ...mono, letterSpacing: "0.35em", color: "var(--atlas-gold)", opacity: 0.6, textTransform: "uppercase" }}>
+                Axiom
+              </span>
             </div>
             <div style={{ fontSize: 22, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "0.04em", marginBottom: 6 }}>
               {mode === "login" ? "Enter the system." : mode === "signup" ? "Request access." : "Reset key."}
