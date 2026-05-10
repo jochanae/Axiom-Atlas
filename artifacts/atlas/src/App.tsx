@@ -25,7 +25,6 @@ import Vault from "./pages/vault";
 import Admin from "./pages/admin";
 import Dashboard from "./pages/dashboard";
 import ResetPassword from "./pages/reset-password";
-import WeatherPage from "./pages/weather";
 
 // ── Global 401 interceptor ────────────────────────────────────────────────────
 const _originalFetch = window.fetch.bind(window);
@@ -121,7 +120,6 @@ function Router() {
       <Route path="/vault" component={Vault} />
       <Route path="/admin" component={Admin} />
       <Route path="/dashboard" component={Dashboard} />
-      <Route path="/weather" component={WeatherPage} />
       <Route component={NotFound} />
     </Switch>
   );
