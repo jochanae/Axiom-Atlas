@@ -83,12 +83,14 @@ interface ChatMessage {
   catchResolved?: boolean;
   fileEdit?: FileEdit;
   fileEdits?: FileEdit[];
-  memoryChips?: string[];
+  memoryChips?: MemoryChip[];
   sentAt?: string;
   imageB64?: string;
   imageMimeType?: string;
   autoFetchedFiles?: string[];
 }
+
+type MemoryChip = { label: string; insight?: string };
 
 interface LinkedRepo {
   fullName: string;
@@ -444,53 +446,120 @@ function DecisionCatchCard({
 }
 
 // ── Chat bubbles + Memory Chips ──────────────────────────────────────────────
-// ── MemoryChips ───────────────────────────────────────────────────────────────
+
+// ── InsightChip ───────────────────────────────────────────────────────────────
+function InsightChip({
+  chip,
+  onPark,
+  onDismiss,
+}: {
+  chip: MemoryChip;
+  onPark: (chip: MemoryChip) => void;
+  onDismiss?: (label: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasInsight = !!chip.insight;
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 4,
+          padding: "2px 8px", borderRadius: 20,
+          background: open ? "rgba(201,162,76,0.14)" : "rgba(201,162,76,0.07)",
+          border: `1px solid ${open ? "rgba(201,162,76,0.42)" : "rgba(201,162,76,0.18)"}`,
+          fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em",
+          color: open ? "rgba(201,162,76,1)" : "rgba(201,162,76,0.75)",
+          cursor: "pointer", transition: "all 140ms ease",
+        }}
+        onMouseEnter={(e) => { if (!open) { e.currentTarget.style.background = "rgba(201,162,76,0.12)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; } }}
+        onMouseLeave={(e) => { if (!open) { e.currentTarget.style.background = "rgba(201,162,76,0.07)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.18)"; } }}
+      >
+        <span style={{ opacity: 0.55, fontSize: 9 }}>◆</span>
+        {chip.label}
+        {hasInsight && (
+          <span style={{ fontSize: 8, opacity: 0.45, display: "inline-block", transform: open ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }}>▾</span>
+        )}
+      </button>
+      {open && (
+        <div
+          className="atlas-bubble-in"
+          style={{
+            marginTop: 5, borderRadius: 9,
+            background: "var(--atlas-surface-alt)",
+            border: "1px solid rgba(201,162,76,0.2)",
+            padding: "11px 13px", maxWidth: 300,
+            position: "relative", zIndex: 5,
+          }}
+        >
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--atlas-fg)", marginBottom: hasInsight ? 6 : 8, letterSpacing: "-0.01em" }}>
+            {chip.label}
+          </div>
+          {chip.insight && (
+            <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", lineHeight: 1.65, marginBottom: 10, fontStyle: "italic", opacity: 0.85 }}>
+              {chip.insight}
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <button
+              type="button"
+              onClick={() => { onPark(chip); setOpen(false); }}
+              style={{
+                background: "color-mix(in oklab, var(--atlas-gold) 12%, transparent)",
+                border: "1px solid rgba(201,162,76,0.3)",
+                borderRadius: 6, color: "var(--atlas-gold)",
+                fontSize: 10, fontFamily: "var(--app-font-mono)",
+                cursor: "pointer", padding: "4px 10px",
+                letterSpacing: "0.05em", transition: "background 130ms",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in oklab, var(--atlas-gold) 20%, transparent)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "color-mix(in oklab, var(--atlas-gold) 12%, transparent)")}
+            >
+              Park this →
+            </button>
+            {onDismiss && (
+              <button
+                type="button"
+                onClick={() => { onDismiss(chip.label); setOpen(false); }}
+                style={{ background: "transparent", border: "none", color: "var(--atlas-muted)", cursor: "pointer", fontSize: 11, opacity: 0.38, padding: "4px 5px", transition: "opacity 120ms", fontFamily: "var(--app-font-mono)" }}
+                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
+                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.38")}
+              >
+                Dismiss
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              style={{ background: "transparent", border: "none", color: "var(--atlas-muted)", cursor: "pointer", fontSize: 14, opacity: 0.3, padding: "2px 6px", marginLeft: "auto", lineHeight: 1, transition: "opacity 120ms" }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.65")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.3")}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MemoryChips (session-level, above the input) ──────────────────────────────
 function MemoryChips({
   chips,
   onDismiss,
+  onPark,
 }: {
-  chips: string[];
-  onDismiss: (chip: string) => void;
+  chips: MemoryChip[];
+  onDismiss: (label: string) => void;
+  onPark: (chip: MemoryChip) => void;
 }) {
   if (chips.length === 0) return null;
   return (
-    <div
-      style={{
-        display: "flex", flexWrap: "wrap", gap: 5,
-        padding: "6px 14px 2px", flexShrink: 0,
-      }}
-    >
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "6px 14px 2px", flexShrink: 0 }}>
       {chips.map((chip) => (
-        <span
-          key={chip}
-          className="atlas-bubble-in"
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 4,
-            padding: "3px 7px 3px 9px", borderRadius: 20,
-            fontFamily: "var(--app-font-mono)", fontSize: 9.5,
-            letterSpacing: "0.05em",
-            color: "var(--atlas-muted)",
-            background: "color-mix(in oklab, var(--atlas-surface) 85%, var(--atlas-bg))",
-            border: "0.5px solid var(--atlas-border)",
-            transition: "border-color 160ms ease",
-          }}
-          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "rgba(201,162,76,0.22)")}
-          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "var(--atlas-border)")}
-        >
-          {chip}
-          <button
-            onClick={() => onDismiss(chip)}
-            aria-label={`Dismiss ${chip}`}
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: "var(--atlas-muted)", opacity: 0.45,
-              fontSize: 12, lineHeight: 1, padding: "0 1px",
-              display: "flex", alignItems: "center",
-            }}
-          >
-            ×
-          </button>
-        </span>
+        <InsightChip key={chip.label} chip={chip} onPark={onPark} onDismiss={onDismiss} />
       ))}
     </div>
   );
@@ -1272,23 +1341,15 @@ function AssistantBubble({
             </span>
           )}
         </div>
-        {/* Memory chips */}
+        {/* Memory chips — click to expand insight and park */}
         {message.memoryChips && message.memoryChips.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 5, marginBottom: 8 }}>
             {message.memoryChips.map((chip) => (
-              <span
-                key={chip}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 4,
-                  padding: "2px 8px", borderRadius: 20,
-                  background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.18)",
-                  fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em",
-                  color: "rgba(201,162,76,0.7)",
-                }}
-              >
-                <span style={{ opacity: 0.6, fontSize: 9 }}>◆</span>
-                {chip}
-              </span>
+              <InsightChip
+                key={chip.label}
+                chip={chip}
+                onPark={(c) => onPark(`${c.label}${c.insight ? `: ${c.insight}` : ""}`)}
+              />
             ))}
           </div>
         )}
@@ -5286,7 +5347,7 @@ export default function Workspace() {
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
   const { playSend, playCatch, playCommit, playPark, playNavigate } = useSound();
-  const [memoryChips, setMemoryChips] = useState<string[]>([]);
+  const [memoryChips, setMemoryChips] = useState<MemoryChip[]>([]);
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
   const [leftTab, setLeftTab] = useState<"chat" | "diff">("chat");
   const [sessionPrUrl, setSessionPrUrl] = useState<string | null>(null);
@@ -5729,23 +5790,26 @@ export default function Workspace() {
         .then((res) => {
           const cp = res.catchPayload as CatchPayload | null;
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
-          const chips = (res.memoryChips ?? []) as string[];
+          const rawChips = (res.memoryChips ?? []) as Array<string | MemoryChip>;
+          const normalizedChips: MemoryChip[] = rawChips.map((c) =>
+            typeof c === "string" ? { label: c } : c
+          );
           const aff = (res.autoFetchedFiles ?? []) as string[];
           setMessages((prev) => [...prev, {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
             sentAt: new Date().toISOString(),
             ...(fes.length > 0 ? { fileEdits: fes, fileEdit: fes[0] } : {}),
-            ...(chips.length > 0 ? { memoryChips: chips } : {}),
+            ...(normalizedChips.length > 0 ? { memoryChips: normalizedChips } : {}),
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
             ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),
           }]);
           if (cp) { playCatch(); setActiveCatch(cp); }
-          if (res.memoryChips && res.memoryChips.length > 0) {
+          if (normalizedChips.length > 0) {
             setMemoryChips((prev) => {
               const merged = [...prev];
-              for (const c of res.memoryChips!) {
-                if (!merged.includes(c)) merged.push(c);
+              for (const c of normalizedChips) {
+                if (!merged.some((m) => m.label === c.label)) merged.push(c);
               }
               return merged.slice(-12);
             });
@@ -6000,8 +6064,8 @@ export default function Workspace() {
     textareaRef.current?.focus();
   };
 
-  const dismissChip = useCallback((chip: string) => {
-    setMemoryChips((prev) => prev.filter((c) => c !== chip));
+  const dismissChip = useCallback((label: string) => {
+    setMemoryChips((prev) => prev.filter((c) => c.label !== label));
   }, []);
 
 
@@ -7062,7 +7126,14 @@ export default function Workspace() {
           </div>
 
           {/* Memory chips — what Atlas is tracking this session */}
-          <MemoryChips chips={memoryChips} onDismiss={dismissChip} />
+          <MemoryChips
+            chips={memoryChips}
+            onDismiss={dismissChip}
+            onPark={(c) => {
+              handlePark(`${c.label}${c.insight ? `: ${c.insight}` : ""}`);
+              dismissChip(c.label);
+            }}
+          />
 
           {/* Input */}
           <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>

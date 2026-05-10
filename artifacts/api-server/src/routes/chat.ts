@@ -279,6 +279,17 @@ At the very END of every response, emit exactly one line indicating the primary 
 Valid values: BUILD (writing or applying code), PLAN (architecture, structure, sequence), DEBUG (finding and fixing a bug), DECIDE (decision analysis, tradeoffs), EXPLORE (brainstorming, open-ended ideas), THINK (strategic reasoning, no code).
 This line is invisible to the user — it powers the workspace mode indicator. Always emit it, every response, no exceptions.
 
+MEMORY_CHIPS protocol:
+After INTENT_TYPE, you may surface key concepts from this exchange as gold clickable chips the user can expand and park. Format — emit on its own line at the very end:
+
+  MEMORY_CHIPS: [{"label": "auth strategy", "insight": "Choosing email-only auth now delays OAuth complexity — revisit when you have paying users."}, {"label": "cost of lesson", "insight": "The previous pivot away from microservices saved ~3 weeks of infra overhead."}]
+
+Rules:
+- 1–4 chips per response, only when something is genuinely worth surfacing.
+- Each "insight" is exactly one sentence: what this concept means for THIS project specifically, not a generic definition.
+- Omit MEMORY_CHIPS entirely if nothing notable came up.
+- The user sees these as expandable gold chips — clicking reveals your insight, and they can park it to their decision ledger.
+
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub or applying self-repairs):
 When the user asks you to fix or build something AND a complete file is in context, output the corrected complete file(s) at the very END of your response using this EXACT format — one block per file:
 
@@ -360,7 +371,9 @@ Self-repair rules:
 - NEVER include package.json in a self-repair — the system will block it.`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function detectMemoryChips(content: string): { content: string; memoryChips: string[] } {
+export type MemoryChipRich = { label: string; insight?: string };
+
+function detectMemoryChips(content: string): { content: string; memoryChips: MemoryChipRich[] } {
   const marker = "MEMORY_CHIPS:";
   const idx = content.lastIndexOf(marker);
   if (idx === -1) return { content, memoryChips: [] };
@@ -368,8 +381,18 @@ function detectMemoryChips(content: string): { content: string; memoryChips: str
   const jsonStr = content.slice(idx + marker.length).trim();
   try {
     const chips = JSON.parse(jsonStr);
-    if (Array.isArray(chips) && chips.every((c): c is string => typeof c === "string")) {
-      return { content: before, memoryChips: chips.slice(0, 6) };
+    if (Array.isArray(chips)) {
+      const normalized: MemoryChipRich[] = chips.slice(0, 6).map((c) => {
+        if (typeof c === "string") return { label: c };
+        if (c && typeof c === "object" && typeof c.label === "string") {
+          return {
+            label: c.label,
+            insight: typeof c.insight === "string" ? c.insight : undefined,
+          };
+        }
+        return { label: String(c) };
+      });
+      return { content: before, memoryChips: normalized };
     }
   } catch {}
   return { content, memoryChips: [] };
@@ -721,11 +744,20 @@ Your role here is CEO-level advisor and thinking partner:
   const { content: finalContent, memoryChips: aiMemoryChips } = detectMemoryChips(afterIntent);
 
   // Auto-match ledger entries referenced in the response
-  const entryChips = matchEntryChips(
+  const entryChipStrings = matchEntryChips(
     finalContent,
     entries as Array<{ id: number; title: string; status: string }>
   );
-  const allChips = [...new Set([...aiMemoryChips, ...entryChips])].slice(0, 6);
+  const entryChipRich: MemoryChipRich[] = entryChipStrings.map((s) => ({ label: s }));
+  const seenLabels = new Set<string>();
+  const allChips: MemoryChipRich[] = [];
+  for (const c of [...aiMemoryChips, ...entryChipRich]) {
+    if (!seenLabels.has(c.label)) {
+      seenLabels.add(c.label);
+      allChips.push(c);
+    }
+    if (allChips.length >= 6) break;
+  }
 
   // Persist updated memory to DB
   if (newFacts.length > 0 || retrievedIds.length > 0) {
