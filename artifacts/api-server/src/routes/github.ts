@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { db, projectsTable } from "@workspace/db";
+import { eq, and, isNull, isNotNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -392,6 +394,64 @@ router.get("/github/deployment", async (req, res): Promise<void> => {
   ] : results;
 
   res.json({ detected: results, suggestions });
+});
+
+// POST /api/github/auto-link — match all unlinked projects to GitHub repos by name
+router.post("/github/auto-link", async (req, res): Promise<void> => {
+  const token = req.headers["x-github-token"] as string | undefined;
+  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  // 1. Fetch all user's GitHub repos
+  const reposResp = await fetch(`${GH_API}/user/repos?per_page=100&sort=pushed&type=owner`, { headers: ghHeaders(token) });
+  if (!reposResp.ok) {
+    res.status(reposResp.status).json({ error: "GitHub API error", detail: await reposResp.text() });
+    return;
+  }
+  const repos = await reposResp.json() as any[];
+
+  // 2. Get all user's projects
+  const allProjects = await db.select().from(projectsTable).where(eq(projectsTable.userId, userId));
+
+  // Ensure every project has the token (backfill missing ones)
+  const tokenUpdates = allProjects
+    .filter(p => !p.githubToken)
+    .map(p => db.update(projectsTable).set({ githubToken: token }).where(eq(projectsTable.id, p.id)));
+  await Promise.all(tokenUpdates);
+
+  // 3. Match each unlinked project to a GitHub repo by name
+  const normalize = (s: string) => s.toLowerCase().replace(/[-_\s]/g, "");
+  const unlinked = allProjects.filter(p => !p.linkedRepo);
+
+  const linked: Array<{ projectId: number; projectName: string; repoFullName: string }> = [];
+  const skipped: string[] = [];
+
+  for (const project of unlinked) {
+    const projectNorm = normalize(project.name);
+    const match = repos.find((r: any) =>
+      normalize(r.name) === projectNorm ||
+      normalize(r.full_name.split("/")[1] ?? "") === projectNorm
+    );
+
+    if (match) {
+      const linkedRepo = JSON.stringify({
+        id: match.id, name: match.name, fullName: match.full_name,
+        private: match.private, description: match.description,
+        language: match.language, defaultBranch: match.default_branch,
+        updatedAt: match.pushed_at, url: match.html_url,
+      });
+      await db.update(projectsTable)
+        .set({ linkedRepo, githubToken: token })
+        .where(and(eq(projectsTable.id, project.id), eq(projectsTable.userId, userId)));
+      linked.push({ projectId: project.id, projectName: project.name, repoFullName: match.full_name });
+    } else {
+      skipped.push(project.name);
+    }
+  }
+
+  res.json({ linked, skipped, tokenBackfilled: tokenUpdates.length });
 });
 
 export default router;
