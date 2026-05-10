@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
@@ -9,12 +8,10 @@ import {
   useGetNexusThread,
   useListProjects,
   useListEntries,
-  useCreateEntry,
   getGetNexusThreadQueryKey,
   getListProjectsQueryKey,
   getListEntriesQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface NexusMsg {
@@ -199,7 +196,7 @@ function GlobalLedger({ projects, onNavigate }: {
       <div style={{ flex: 1, overflowY: "auto" }} className="scrollbar-none">
         {projects.length === 0 ? (
           <div style={{ padding: "32px 18px", textAlign: "center", fontSize: 12, color: "var(--atlas-muted)", opacity: 0.5, fontStyle: "italic" }}>
-            No projects yet — create one to start tracking decisions.
+            No committed decisions yet across your projects.
           </div>
         ) : (
           projects.map(p => (
@@ -215,7 +212,6 @@ function GlobalLedger({ projects, onNavigate }: {
 export default function NexusPage() {
   useRequireAuth();
   const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
 
   const { data: thread, isLoading: threadLoading } = useGetNexusThread({
     query: { queryKey: getGetNexusThreadQueryKey() },
@@ -224,8 +220,6 @@ export default function NexusPage() {
   const { data: allProjects } = useListProjects({
     query: { queryKey: getListProjectsQueryKey() },
   });
-
-  const createEntry = useCreateEntry();
 
   // ── Local chat state ──────────────────────────────────────────────────────
   const [messages, setMessages] = useState<NexusMsg[]>([]);
@@ -264,14 +258,6 @@ export default function NexusPage() {
     initialSent.current = true;
     setTimeout(() => doSend(initial), 80);
   }, [threadLoading]);
-
-  // ── Commit to Project modal ───────────────────────────────────────────────
-  const [showCommit, setShowCommit] = useState(false);
-  const [commitTargetId, setCommitTargetId] = useState<number | null>(null);
-  const [commitTitle, setCommitTitle] = useState("");
-  const [commitSummary, setCommitSummary] = useState("");
-  const [commitPending, setCommitPending] = useState(false);
-  const [commitDone, setCommitDone] = useState(false);
 
   // ── Send ──────────────────────────────────────────────────────────────────
   const doSend = useCallback((text: string) => {
@@ -411,26 +397,6 @@ export default function NexusPage() {
             Atlas
           </span>
         </div>
-
-        {/* Commit to Project button */}
-        {!isMobile && (
-          <button
-            title="Stamp a Nexus decision into a specific project's ledger"
-            onClick={() => { setCommitTargetId(null); setCommitTitle(""); setCommitSummary(""); setCommitDone(false); setShowCommit(true); }}
-            style={{
-              display: "flex", alignItems: "center", gap: 5,
-              padding: "4px 10px", borderRadius: 7,
-              background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.22)",
-              color: "var(--atlas-gold)", cursor: "pointer", fontSize: 11,
-              fontFamily: "var(--app-font-mono)", fontWeight: 600, letterSpacing: "0.06em",
-              transition: "background 140ms ease", whiteSpace: "nowrap", flexShrink: 0,
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.16)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
-          >
-            Commit →
-          </button>
-        )}
 
         {/* Toggle right panel */}
         {!isMobile && (
@@ -679,126 +645,6 @@ export default function NexusPage() {
         onOpenParking={() => { setLocation("/parking"); setShowDrawer(false); }}
         userLabel={userLabel}
       />
-
-      {/* Commit to Project modal */}
-      {showCommit && createPortal(
-        <>
-          <div onClick={() => setShowCommit(false)} style={{ position: "fixed", inset: 0, zIndex: 9990, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }} />
-          <div style={{
-            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
-            zIndex: 9991, width: "min(440px, calc(100vw - 32px))",
-            background: "var(--atlas-surface)", border: "1px solid rgba(201,162,76,0.25)",
-            borderRadius: 16, padding: "26px 26px 22px", boxShadow: "0 32px 80px rgba(0,0,0,0.7)",
-          }}>
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", flexShrink: 0 }} />
-                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--atlas-gold)" }}>Commit to Project</span>
-              </div>
-              <div style={{ fontSize: 13, color: "var(--atlas-muted)", lineHeight: 1.5 }}>
-                Stamp a Nexus decision into a specific project's Decision Ledger.
-              </div>
-            </div>
-
-            {commitDone ? (
-              <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
-                <div style={{ fontSize: 24, marginBottom: 8, color: "var(--atlas-gold)" }}>✓</div>
-                <div style={{ fontSize: 13, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)" }}>Decision committed to ledger.</div>
-              </div>
-            ) : (
-              <>
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 7, opacity: 0.7 }}>Target project</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 180, overflowY: "auto" }}>
-                    {(allProjects ?? []).map(p => (
-                      <button key={p.id} onClick={() => setCommitTargetId(p.id)} style={{
-                        display: "flex", alignItems: "center", gap: 9, padding: "7px 10px", borderRadius: 7,
-                        background: commitTargetId === p.id ? "rgba(201,162,76,0.1)" : "transparent",
-                        border: `1px solid ${commitTargetId === p.id ? "rgba(201,162,76,0.4)" : "var(--atlas-border)"}`,
-                        cursor: "pointer", textAlign: "left", transition: "all 120ms ease",
-                      }}>
-                        <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0, background: `hsl(${(p.name.charCodeAt(0) * 37) % 360}, 22%, 22%)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "var(--atlas-fg)", fontFamily: "var(--app-font-mono)" }}>
-                          {p.name[0]?.toUpperCase()}
-                        </div>
-                        <span style={{ fontSize: 12.5, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)" }}>{p.name}</span>
-                        {commitTargetId === p.id && <svg style={{ marginLeft: "auto", flexShrink: 0 }} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--atlas-gold)" strokeWidth="2.4" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
-                      </button>
-                    ))}
-                    {(allProjects ?? []).length === 0 && (
-                      <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.5, padding: "8px 4px", fontStyle: "italic" }}>No projects yet. Create one first.</div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ marginBottom: 11 }}>
-                  <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 5, opacity: 0.7 }}>Decision title</div>
-                  <input
-                    placeholder="e.g. Pivot IntoIQ toward lead-gen funnel"
-                    value={commitTitle}
-                    onChange={(e) => setCommitTitle(e.target.value)}
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12.5, fontFamily: "var(--app-font-sans)", outline: "none", boxSizing: "border-box" as const }}
-                  />
-                </div>
-
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 5, opacity: 0.7 }}>Summary (optional)</div>
-                  <textarea
-                    placeholder="Brief context or rationale…"
-                    value={commitSummary}
-                    onChange={(e) => setCommitSummary(e.target.value)}
-                    rows={2}
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12, fontFamily: "var(--app-font-sans)", outline: "none", resize: "none" as const, boxSizing: "border-box" as const }}
-                  />
-                </div>
-
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                  <button onClick={() => setShowCommit(false)} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--atlas-border)", background: "transparent", color: "var(--atlas-muted)", cursor: "pointer", fontSize: 12, fontFamily: "var(--app-font-mono)" }}>
-                    Cancel
-                  </button>
-                  <button
-                    disabled={!commitTargetId || !commitTitle.trim() || commitPending}
-                    onClick={async () => {
-                      if (!commitTargetId || !commitTitle.trim()) return;
-                      setCommitPending(true);
-                      try {
-                        await createEntry.mutateAsync({
-                          projectId: commitTargetId,
-                          data: {
-                            title: commitTitle.trim().slice(0, 120),
-                            summary: commitSummary.trim() || `Committed from Nexus on ${new Date().toLocaleDateString()}`,
-                            status: "committed",
-                            severity: "committed",
-                            mode: "decide",
-                            sessionId: null,
-                          },
-                        });
-                        queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(commitTargetId, {}) });
-                        setCommitDone(true);
-                        setTimeout(() => setShowCommit(false), 1800);
-                      } catch {
-                        // silent
-                      } finally {
-                        setCommitPending(false);
-                      }
-                    }}
-                    style={{
-                      padding: "7px 16px", borderRadius: 8, border: "none",
-                      background: (!commitTargetId || !commitTitle.trim() || commitPending)
-                        ? "rgba(201,162,76,0.3)"
-                        : "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 75%, #6a4a18) 100%)",
-                      color: "var(--atlas-bg)", cursor: (!commitTargetId || !commitTitle.trim() || commitPending) ? "not-allowed" : "pointer",
-                      fontSize: 12, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.06em",
-                    }}
-                  >
-                    {commitPending ? "Saving…" : "Commit"}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </>,
-        document.body
-      )}
 
       <style>{`
         @keyframes nexus-dots {
