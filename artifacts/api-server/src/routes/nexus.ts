@@ -159,13 +159,22 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
 
   const userId = (req as any).authUser.id as number;
-  const { message, history: clientHistory, userProfile = "" } = body;
+  // history from the client body is accepted in the schema for API compatibility
+  // but ignored server-side — the Living Thread in nexus_messages is authoritative.
+  const { message, userProfile = "" } = body;
 
-  // Load all of this user's projects and aggregate their memories
-  const projects = await db
-    .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory })
-    .from(projectsTable)
-    .where(eq(projectsTable.userId, userId));
+  // Load projects + Living Thread in parallel
+  const [projects, dbMessages] = await Promise.all([
+    db
+      .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory })
+      .from(projectsTable)
+      .where(eq(projectsTable.userId, userId)),
+    db
+      .select()
+      .from(nexusMessagesTable)
+      .where(eq(nexusMessagesTable.userId, userId))
+      .orderBy(asc(nexusMessagesTable.createdAt)),
+  ]);
 
   const aggregatedMemory = projects
     .map((p) => {
@@ -177,21 +186,11 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     .filter(Boolean)
     .join("\n\n");
 
-  // Use client-supplied history if provided; otherwise load from the Living Thread
-  let conversationHistory: Array<{ role: "user" | "assistant"; content: string }>;
-  if (clientHistory && clientHistory.length > 0) {
-    conversationHistory = clientHistory.slice(-40);
-  } else {
-    const dbMessages = await db
-      .select()
-      .from(nexusMessagesTable)
-      .where(eq(nexusMessagesTable.userId, userId))
-      .orderBy(asc(nexusMessagesTable.createdAt));
-    conversationHistory = dbMessages.slice(-40).map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    }));
-  }
+  // Always source conversation context from the persisted Living Thread (last 40 turns)
+  const conversationHistory = dbMessages.slice(-40).map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.content,
+  }));
 
   // Build system prompt
   let systemPrompt = NEXUS_SYSTEM_PROMPT;
