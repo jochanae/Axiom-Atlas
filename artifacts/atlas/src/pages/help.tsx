@@ -23,6 +23,10 @@ const FAQS: { q: string; a: string }[] = [
     a: "The Parking Lot holds ideas and decisions that aren't ready to commit to yet. You can park something from a catch card or manually from the Ledger. Parked items can be resumed (moved back to chat), committed directly, or deleted.",
   },
   {
+    q: "What is Nexus?",
+    a: "Nexus is your permanently pinned, project-agnostic thinking space — the place you go when you want to think across all your projects at once without being scoped to any single one. It's always accessible from the center button in the mobile footer and from the top of the Projects drawer. When a decision crystallizes in Nexus, use the 'Commit →' button to stamp it directly into a specific project's Decision Ledger.",
+  },
+  {
     q: "How does Atlas remember things between sessions?",
     a: "Atlas uses three memory layers: (1) Project Memory — a running log of facts Atlas learns about your project, stored in the database and injected into every chat. (2) Your User Profile — name, stack, and project notes stored in your browser's local storage. (3) AI Memory Protocol — during sessions, Atlas emits structured memory facts that are automatically saved and recalled next time.",
   },

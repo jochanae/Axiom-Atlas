@@ -6792,20 +6792,43 @@ export default function Workspace() {
           <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px", position: "relative" }} className="scrollbar-none atlas-chat-timeline">
             {messages.length === 0 && !chatPending && (
               <div style={{ padding: "52px 20px 32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 6, letterSpacing: "-0.01em", textAlign: "center" }}>
-                  {project ? project.name : "Ready."}
-                </div>
-                <div style={{ fontSize: 12, color: "rgba(120,113,108,0.4)", marginBottom: 28, textAlign: "center" }}>
-                  What are we working through today?
-                </div>
+                {isNexusProject ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.6 }}>
+                        <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                      </svg>
+                      <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-gold)", letterSpacing: "-0.01em", opacity: 0.8 }}>
+                        Nexus
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 12, color: "rgba(120,113,108,0.4)", marginBottom: 28, textAlign: "center" }}>
+                      Your cross-project thinking space. No scope, no constraints.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 6, letterSpacing: "-0.01em", textAlign: "center" }}>
+                      {project ? project.name : "Ready."}
+                    </div>
+                    <div style={{ fontSize: 12, color: "rgba(120,113,108,0.4)", marginBottom: 28, textAlign: "center" }}>
+                      What are we working through today?
+                    </div>
+                  </>
+                )}
                 {/* Starter prompts */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 420 }}>
-                  {[
+                  {(isNexusProject ? [
+                    { label: "Which of my projects needs the most clarity right now?", sub: "Cross-project audit, honest answer" },
+                    { label: "Pressure-test an idea I'm sitting on", sub: "I'll push back before it becomes a commitment" },
+                    { label: "What am I avoiding?", sub: "Surface the thing I keep not doing" },
+                    { label: "Help me think through a decision that spans projects", sub: "Commit it where it belongs when we land" },
+                  ] : [
                     { label: "I need to make a decision", sub: "Walk me through it and lock it in" },
                     { label: "I'm not sure which direction to take", sub: "Think out loud, I'll catch contradictions" },
                     { label: "Audit my recent decisions", sub: "Review what I've committed to" },
                     { label: "I want to map my architecture", sub: "System Map + layer-by-layer spec" },
-                  ].map((p, i) => (
+                  ]).map((p, i) => (
                     <button
                       key={i}
                       onClick={() => {
