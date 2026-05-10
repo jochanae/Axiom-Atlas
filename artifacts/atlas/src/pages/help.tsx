@@ -23,8 +23,8 @@ const FAQS: { q: string; a: string }[] = [
     a: "The Parking Lot holds ideas and decisions that aren't ready to commit to yet. You can park something from a catch card or manually from the Ledger. Parked items can be resumed (moved back to chat), committed directly, or deleted.",
   },
   {
-    q: "What is Nexus?",
-    a: "Nexus is your permanently pinned, project-agnostic thinking space — the place you go when you want to think across all your projects at once without being scoped to any single one. It's always accessible from the center button in the mobile footer and from the top of the Projects drawer. When a decision crystallizes in Nexus, use the 'Commit →' button to stamp it directly into a specific project's Decision Ledger.",
+    q: "What is Nexium?",
+    a: "Nexium is your permanently pinned, cross-project command space — the cognitive layer where you think strategically across all your projects without being scoped to any single one. It's always accessible from the center button in the mobile footer and from the top of the Projects drawer. When a decision crystallizes in Nexium, use the 'Commit →' button to stamp it directly into a specific project's Decision Ledger.",
   },
   {
     q: "How does Atlas remember things between sessions?",

@@ -6519,7 +6519,7 @@ export default function Workspace() {
             {/* Nexus: Commit to Project button */}
             {isNexusProject && !isMobile && (
               <button
-                title="Commit a decision from Nexus into a specific project's ledger"
+                title="Commit a decision from Nexium into a specific project's ledger"
                 onClick={() => { setCommitTargetId(null); setCommitTitle(""); setCommitSummary(""); setCommitDone(false); setShowCommitModal(true); }}
                 style={{
                   display: "flex", alignItems: "center", gap: 5,
@@ -6799,7 +6799,7 @@ export default function Workspace() {
                         <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
                       </svg>
                       <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-gold)", letterSpacing: "-0.01em", opacity: 0.8 }}>
-                        Nexus
+                        Nexium
                       </div>
                     </div>
                     <div style={{ fontSize: 12, color: "rgba(120,113,108,0.4)", marginBottom: 28, textAlign: "center" }}>
@@ -7420,7 +7420,7 @@ export default function Workspace() {
                 <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--atlas-gold)" }}>Commit to Project</span>
               </div>
               <div style={{ fontSize: 13, color: "var(--atlas-muted)", lineHeight: 1.5 }}>
-                Stamp a Nexus decision into a specific project's Decision Ledger.
+                Stamp a Nexium decision into a specific project's Decision Ledger.
               </div>
             </div>
 
@@ -7489,7 +7489,7 @@ export default function Workspace() {
                           projectId: commitTargetId,
                           data: {
                             title: commitTitle.trim().slice(0, 140),
-                            summary: commitSummary.trim() || `Committed from Nexus on ${new Date().toLocaleDateString()}`,
+                            summary: commitSummary.trim() || `Committed from Nexium on ${new Date().toLocaleDateString()}`,
                             status: "committed",
                             severity: "committed",
                             verb: "DECIDED",

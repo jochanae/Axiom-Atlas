@@ -1035,12 +1035,12 @@ export default function Home() {
     try {
       const base = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
       const res = await fetch(`${base}/api/projects/nexus`, { credentials: "include" });
-      if (!res.ok) throw new Error("Could not open Nexus");
+      if (!res.ok) throw new Error("Could not open Nexium");
       const nexus = await res.json();
       setNexusProject(nexus);
       navigateToProject(nexus.id);
     } catch (err: any) {
-      setCreateError(err?.message ?? "Could not open Nexus");
+      setCreateError(err?.message ?? "Could not open Nexium");
     } finally {
       setNexusLoading(false);
     }
