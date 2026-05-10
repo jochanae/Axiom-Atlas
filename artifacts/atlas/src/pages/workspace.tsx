@@ -665,12 +665,14 @@ function GitHubPushModal({
   projectId,
   onClose,
   onPushSuccess,
+  onPrCreated,
 }: {
   fileEdits: FileEdit[];
   linkedRepo: LinkedRepo | null;
   projectId: number;
   onClose: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
+  onPrCreated?: (prUrl: string) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const _projectId = projectId; void _projectId;
@@ -832,6 +834,7 @@ function GitHubPushModal({
       const d = await prRes.json() as any;
       if (!prRes.ok) throw new Error(d.error || d.detail || `PR creation failed: HTTP ${prRes.status}`);
       setPrResult({ prUrl: d.prUrl, prNumber: d.prNumber });
+      onPrCreated?.(d.prUrl);
     } catch (e: any) {
       setPrError(e.message ?? "PR creation failed");
     } finally {
@@ -1149,6 +1152,7 @@ function AssistantBubble({
   onRegenerate,
   onPushSuccess,
   onPreviewCode,
+  onPrCreated,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -1162,6 +1166,7 @@ function AssistantBubble({
   onRegenerate: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
   onPreviewCode?: (code: string) => void;
+  onPrCreated?: (prUrl: string) => void;
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
@@ -1541,6 +1546,7 @@ function AssistantBubble({
           projectId={projectId}
           onClose={() => setShowPushModal(false)}
           onPushSuccess={(records) => { onPushSuccess(records); setShowPushModal(false); }}
+          onPrCreated={onPrCreated}
         />
       )}
     </div>
@@ -1928,20 +1934,37 @@ function PushDiffCard({ records, onRollbackAll }: { records: PushRecord[]; onRol
       {/* File list */}
       {open && (
         <div style={{ borderTop: "1px solid var(--atlas-border)" }}>
-          {stats.map(r => (
-            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid rgba(37,34,32,0.6)" }}>
-              {/* File icon — colored by extension */}
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
-                <path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6L9 1z" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinejoin="round" />
-                <path d="M9 1v5h5" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinejoin="round" />
-              </svg>
-              <span style={{ flex: 1, fontFamily: "var(--app-font-mono)", fontSize: 10.5, color: "var(--atlas-fg)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.filename}
-              </span>
-              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "#4ade80", flexShrink: 0 }}>+{r.additions}</span>
-              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "#f87171", flexShrink: 0 }}>-{r.deletions}</span>
-            </div>
-          ))}
+          {stats.map(r => {
+            const ext = r.filename.split(".").pop()?.toLowerCase() ?? "";
+            const iconColor =
+              ext === "ts" || ext === "tsx" ? "#60a5fa"
+              : ext === "js" || ext === "jsx" ? "#fbbf24"
+              : ext === "css" || ext === "scss" ? "#a78bfa"
+              : ext === "json" ? "#34d399"
+              : ext === "md" ? "#C9A24C"
+              : ext === "py" ? "#4ade80"
+              : ext === "html" ? "#f97316"
+              : ext === "sh" || ext === "bash" ? "#86efac"
+              : "rgba(120,113,108,0.65)";
+            const isNew = r.originalContent === null;
+            return (
+              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid rgba(37,34,32,0.6)" }}>
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.8 }}>
+                  <path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6L9 1z" stroke={iconColor} strokeWidth="1.2" strokeLinejoin="round" />
+                  <path d="M9 1v5h5" stroke={iconColor} strokeWidth="1.2" strokeLinejoin="round" />
+                </svg>
+                <span style={{ flex: 1, fontFamily: "var(--app-font-mono)", fontSize: 10.5, color: "var(--atlas-fg)", opacity: 0.85, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.filename}
+                </span>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "#4ade80", flexShrink: 0 }}>+{r.additions}</span>
+                {isNew ? (
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8.5, background: "rgba(74,222,128,0.12)", border: "1px solid rgba(74,222,128,0.3)", color: "#4ade80", padding: "0px 5px", borderRadius: 4, flexShrink: 0, letterSpacing: "0.04em" }}>New</span>
+                ) : (
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "#f87171", flexShrink: 0 }}>-{r.deletions}</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -5476,6 +5499,8 @@ export default function Workspace() {
   const { playSend, playCatch, playCommit, playPark, playNavigate } = useSound();
   const [memoryChips, setMemoryChips] = useState<string[]>([]);
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
+  const [leftTab, setLeftTab] = useState<"chat" | "diff">("chat");
+  const [sessionPrUrl, setSessionPrUrl] = useState<string | null>(null);
   const [rightOpen, setRightOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [chatWidthPct, setChatWidthPct] = useState(45);
@@ -6835,7 +6860,93 @@ export default function Workspace() {
             overflow: "hidden",
           }}
         >
-          {/* Messages */}
+          {/* ── Chat / Diff tab strip ── */}
+          <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, paddingLeft: 4, background: "rgba(0,0,0,0.15)" }}>
+            {(["chat", "diff"] as const).map((tab) => {
+              const active = leftTab === tab;
+              const label = tab === "chat" ? "Chat" : "Diff";
+              const badge = tab === "diff" && pushHistory.length > 0 ? pushHistory.length : undefined;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setLeftTab(tab)}
+                  style={{
+                    padding: "8px 14px", background: "transparent", border: "none",
+                    borderBottom: `2px solid ${active ? "var(--atlas-gold)" : "transparent"}`,
+                    color: active ? "var(--atlas-fg)" : "var(--atlas-muted)",
+                    fontSize: 12, fontFamily: "var(--app-font-sans)", fontWeight: active ? 500 : 400,
+                    cursor: "pointer", transition: "color 160ms ease, border-color 160ms ease",
+                    marginBottom: -1, display: "flex", alignItems: "center", gap: 6,
+                    opacity: active ? 1 : 0.6,
+                  }}
+                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.opacity = "0.9"; }}
+                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.opacity = "0.6"; }}
+                >
+                  {label}
+                  {badge !== undefined && (
+                    <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", background: "rgba(201,162,76,0.15)", border: "1px solid rgba(201,162,76,0.3)", color: "var(--atlas-gold)", padding: "0 4px", borderRadius: 8, lineHeight: "15px" }}>
+                      {badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            {/* View PR pill — appears after a PR is created */}
+            {sessionPrUrl && (
+              <div style={{ marginLeft: "auto", paddingRight: 10 }}>
+                <a
+                  href={sessionPrUrl} target="_blank" rel="noopener noreferrer"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    padding: "3px 10px", borderRadius: 6,
+                    background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.28)",
+                    color: "rgba(74,222,128,0.9)", fontSize: 10.5, fontFamily: "var(--app-font-mono)",
+                    textDecoration: "none", letterSpacing: "0.02em", whiteSpace: "nowrap",
+                  }}
+                >
+                  {/* PR icon */}
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="4" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="4" r="2"/>
+                    <path d="M4 6v4M6 4h3a1 1 0 011 1v3"/>
+                  </svg>
+                  View PR
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* ── Session Diff view (when leftTab === "diff") ── */}
+          {leftTab === "diff" ? (
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }} className="scrollbar-none">
+              {pushHistory.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8, paddingBottom: 40 }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinecap="round" style={{ opacity: 0.25 }}>
+                    <path d="M9 1H3a1 1 0 00-1 1v18a1 1 0 001 1h18a1 1 0 001-1V9L13 1z"/><path d="M13 1v8h8"/><path d="M8 13h8M8 17h5"/>
+                  </svg>
+                  <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.65 }}>
+                    No code changes this session yet.<br />
+                    <span style={{ fontSize: 10.5 }}>Push files from a Build response to see diffs here.</span>
+                  </div>
+                </div>
+              ) : (() => {
+                const groups: PushRecord[][] = [];
+                const seen = new Map<string, PushRecord[]>();
+                for (const r of [...pushHistory].reverse()) {
+                  const key = r.commitUrl || r.id;
+                  if (!seen.has(key)) { seen.set(key, []); groups.push(seen.get(key)!); }
+                  seen.get(key)!.push(r);
+                }
+                return groups.map((group) => (
+                  <PushDiffCard
+                    key={group[0].commitUrl || group[0].id}
+                    records={group}
+                    onRollbackAll={async () => { for (const r of group) await handleRollbackPush(r); }}
+                  />
+                ));
+              })()}
+            </div>
+          ) : (
+          /* ── Chat view ── */
           <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px", position: "relative" }} className="scrollbar-none atlas-chat-timeline">
             {messages.length === 0 && !chatPending && (
               <div style={{ padding: "52px 20px 32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -6903,6 +7014,7 @@ export default function Workspace() {
                   onCommit={handleCommit}
                   onRegenerate={() => handleRegenerate(i)}
                   onPreviewCode={handlePreviewCode}
+                  onPrCreated={(url) => { setSessionPrUrl(url); setLeftTab("diff"); }}
                   onPushSuccess={(records) => {
                     setPushHistory((prev) => {
                       const next = [...prev, ...records].slice(-20);
@@ -6942,6 +7054,7 @@ export default function Workspace() {
 
             <div ref={bottomRef} />
           </div>
+          )} {/* end chat/diff ternary */}
 
           {/* Ledger status bar */}
           <div className="atlas-ledger-bar">
