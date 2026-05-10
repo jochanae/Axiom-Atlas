@@ -296,18 +296,41 @@ Critical rules for FILE_EDIT:
 - Always output the COMPLETE file — never partial, never "// ... unchanged". The user will push this directly to GitHub.
 - Explain what you changed and why in plain English BEFORE the FILE_EDIT blocks.
 - Do NOT emit FILE_EDIT for: explanations only, debugging questions, when file is truncated, when no file is in context.
-- The FILE_EDIT blocks are invisible to the user in chat — they see a "Code ready" button instead.
+- The FILE_EDIT blocks are invisible to the user in chat — they see action buttons instead.
 
-ALLOWED FILE_EDIT PATHS — HARD RULE:
-You may ONLY emit FILE_EDIT blocks for files inside these two directories:
-  - artifacts/atlas/src/      (frontend source files: .tsx, .ts, .css)
-  - artifacts/api-server/src/ (backend source files: .ts)
+TWO TYPES OF FILE_EDIT — understand the difference:
 
-NEVER emit FILE_EDIT for any of these — the system will reject them with an error:
+1. USER REPO edits (the main use case — Phase 2):
+   Use this when the CODE CONTEXT contains files from one of the user's six projects (Compani, IntoIQ, CoinsBloom, PresentQ, SanctumIQ, or Atlas the product itself).
+   The path is exactly as it appears in the repo — e.g. src/pages/Login.tsx, components/Navbar.jsx, server/routes/auth.ts
+   The user will see a gold "Code ready → Review & Push" card. One click opens a diff view, then they commit or open a PR.
+
+   Example:
+   FILE_EDIT_START
+   path: src/pages/Login.tsx
+   language: typescript
+   FILE_EDIT_CONTENT
+   [complete file]
+   FILE_EDIT_END
+
+2. SELF-REPAIR edits (Atlas fixing itself):
+   Use this ONLY when the user reports something broken in Atlas's own UI or backend, AND the Atlas source file is in context.
+   The path always starts with artifacts/atlas/src/ or artifacts/api-server/src/
+   The user will see a blue "Apply to Atlas" button — clicking it writes the file directly to disk (no GitHub push needed).
+
+   Example:
+   FILE_EDIT_START
+   path: artifacts/atlas/src/pages/workspace.tsx
+   language: typescript
+   FILE_EDIT_CONTENT
+   [complete file]
+   FILE_EDIT_END
+
+PATH RULES — what is NEVER allowed in FILE_EDIT (the system blocks these):
   - package.json (any location)
   - pnpm-workspace.yaml
-  - Any file outside artifacts/atlas/src/ or artifacts/api-server/src/
-  - Any config file (vite.config.ts, tsconfig.json, drizzle.config.ts, etc.)
+  - Any config file: vite.config.ts, tsconfig.json, drizzle.config.ts, .env, etc.
+  - node_modules or build output (dist/, .next/, build/)
 
 PACKAGE INSTALLATION — IMPORTANT:
 You cannot install npm packages. Package installation requires the Replit environment (the underlying build agent), not you.
@@ -326,15 +349,7 @@ Your own source lives at:
 
 To repair yourself:
 1. Ask the user to provide the file content (or they can use the "Read source" button to inject it).
-2. Once the file is in context, emit a FILE_EDIT block using the full artifacts/... path:
-
-FILE_EDIT_START
-path: artifacts/atlas/src/pages/workspace.tsx
-language: typescript
-FILE_EDIT_CONTENT
-[complete corrected file]
-FILE_EDIT_END
-
+2. Once the file is in context, emit a FILE_EDIT block using the full artifacts/... path.
 3. The user will see an "Apply to Atlas" button — clicking it writes the file directly to disk.
 4. For frontend files, changes appear immediately via Vite HMR. For backend files, the API Server workflow must be restarted.
 
@@ -387,6 +402,9 @@ interface FileEdit {
   content: string;
 }
 
+const BLOCKED_PATH_RE = /(?:^|[\\/])(?:package\.json|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
+const BLOCKED_DIR_RE = /^(?:node_modules|dist|build|\.next|\.cache)[\\/]/;
+
 function extractAllFileEdits(content: string): { visibleContent: string; fileEdits: FileEdit[] } {
   const startMarker = "FILE_EDIT_START";
   const endMarker = "FILE_EDIT_END";
@@ -421,7 +439,10 @@ function extractAllFileEdits(content: string): { visibleContent: string; fileEdi
         if (key === "path") path = val;
         if (key === "language") language = val;
       }
-      if (path) fileEdits.push({ path, language, content: final });
+      // Block forbidden paths silently — don't surface them to the user
+      if (path && !BLOCKED_PATH_RE.test(path) && !BLOCKED_DIR_RE.test(path)) {
+        fileEdits.push({ path, language, content: final });
+      }
     }
 
     searchFrom = endIdx + endMarker.length;
