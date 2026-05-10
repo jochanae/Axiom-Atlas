@@ -88,6 +88,8 @@ interface ChatMessage {
   imageB64?: string;
   imageMimeType?: string;
   autoFetchedFiles?: string[];
+  model?: string;
+  isDeepDive?: boolean;
 }
 
 type MemoryChip = { label: string; insight?: string };
@@ -1305,6 +1307,34 @@ function AssistantBubble({
           }}
         >
           <span>Atlas</span>
+          {message.model && message.model !== "claude" && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 3,
+              padding: "1px 6px", borderRadius: 4,
+              background: message.model === "gpt4o"
+                ? "rgba(16,163,127,0.12)"
+                : message.model === "gemini"
+                ? "rgba(66,133,244,0.12)"
+                : "rgba(201,162,76,0.08)",
+              border: `1px solid ${message.model === "gpt4o" ? "rgba(16,163,127,0.28)" : message.model === "gemini" ? "rgba(66,133,244,0.28)" : "rgba(201,162,76,0.2)"}`,
+              fontSize: 8, fontWeight: 700, letterSpacing: "0.08em",
+              color: message.model === "gpt4o" ? "#10a37f" : message.model === "gemini" ? "#4285f4" : "var(--atlas-gold)",
+            }}>
+              {message.model === "gpt4o" ? "GPT-4o" : message.model === "gemini" ? "Gemini" : message.model}
+            </span>
+          )}
+          {message.isDeepDive && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 3,
+              padding: "1px 6px", borderRadius: 4,
+              background: "rgba(139,92,246,0.12)",
+              border: "1px solid rgba(139,92,246,0.28)",
+              fontSize: 8, fontWeight: 700, letterSpacing: "0.08em",
+              color: "#a78bfa",
+            }}>
+              DEEP DIVE
+            </span>
+          )}
           {message.sentAt && (
             <span style={{ opacity: 0.75 }}>
               · {(() => {
@@ -5765,6 +5795,7 @@ export default function Workspace() {
         sessionId: sid,
         projectId: id,
         message: text,
+        model: wsModel,
         mode: projectMode.toLowerCase(),
         history,
         entries: ledgerEntries,
@@ -5799,6 +5830,8 @@ export default function Workspace() {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
             sentAt: new Date().toISOString(),
+            model: res.model ?? wsModel,
+            isDeepDive: !!res.isDeepDive,
             ...(fes.length > 0 ? { fileEdits: fes, fileEdit: fes[0] } : {}),
             ...(normalizedChips.length > 0 ? { memoryChips: normalizedChips } : {}),
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
@@ -7088,6 +7121,33 @@ export default function Workspace() {
               )
             )}
 
+            {messages.filter(m => m.role !== "user").length >= 60 && !chatPending && wsModel !== "gemini" && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8, margin: "4px 0 16px",
+                padding: "8px 12px", borderRadius: 8,
+                background: "rgba(66,133,244,0.06)", border: "1px solid rgba(66,133,244,0.2)",
+              }}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                  <circle cx="8" cy="8" r="6" stroke="rgba(66,133,244,0.7)" strokeWidth="1.3" />
+                  <path d="M8 5v4M8 10.5v.5" stroke="rgba(66,133,244,0.7)" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "rgba(231,229,228,0.6)", letterSpacing: "0.04em", flex: 1 }}>
+                  Long thread. Gemini handles more context without losing the top.
+                </span>
+                <button
+                  onClick={() => { setWsModel("gemini"); }}
+                  style={{
+                    fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.08em",
+                    padding: "3px 8px", borderRadius: 4, cursor: "pointer",
+                    background: "rgba(66,133,244,0.15)", border: "1px solid rgba(66,133,244,0.35)",
+                    color: "#4285f4", whiteSpace: "nowrap",
+                  }}
+                >
+                  Switch →
+                </button>
+              </div>
+            )}
+
             {chatPending && (
               <div className="atlas-bubble-in" style={{ marginBottom: 24 }}>
                 <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.35, marginBottom: 8 }}>
@@ -7367,7 +7427,7 @@ export default function Workspace() {
                       <path d="M5.5 8.5L7 10l3-4" />
                     </svg>
                     <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "rgba(231,229,228,0.55)", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>
-                      {wsModel === "claude" ? "Claude" : wsModel === "gpt4o" ? "GPT-4o" : "Gemini"}
+                      {wsModel === "claude" ? "Claude" : wsModel === "gpt4o" ? "GPT-4o" : wsModel === "gemini" ? "Gemini" : wsModel}
                     </span>
                     <svg width="7" height="7" viewBox="0 0 8 8" fill="none" style={{ opacity: 0.35, flexShrink: 0 }}>
                       <path d="M1.5 3L4 5.5L6.5 3" stroke="var(--atlas-fg)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -7752,10 +7812,12 @@ export default function Workspace() {
             </div>
             <div style={{ padding: "0 14px" }}>
               {([
-                { id: "claude", label: "Claude", available: true },
-                { id: "gpt4o", label: "GPT-4o", available: false },
-                { id: "gemini", label: "Gemini", available: false },
-              ] as const).map(m => (
+                { id: "claude",      label: "Claude",      sub: "Architect · Nuance & Strategy",    available: true,  icon: "C" },
+                { id: "gpt4o",       label: "GPT-4o",      sub: "Mechanic · Speed & Logic",         available: true,  icon: "G" },
+                { id: "gemini",      label: "Gemini",       sub: "Strategy · Long Context",          available: true,  icon: "Ge" },
+                { id: "perplexity",  label: "Perplexity",  sub: "Librarian · Live Research",        available: false, icon: "P" },
+                { id: "deepseek",    label: "DeepSeek",    sub: "Analyst · Deep Reasoning",         available: false, icon: "D" },
+              ]).map(m => (
                 <button
                   key={m.id}
                   disabled={!m.available}
@@ -7766,24 +7828,28 @@ export default function Workspace() {
                     border: `1px solid ${wsModel === m.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
                     cursor: m.available ? "pointer" : "default",
                     display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
-                    opacity: m.available ? 1 : 0.38, transition: "all 140ms ease",
+                    opacity: m.available ? 1 : 0.32, transition: "all 140ms ease",
                   }}
                 >
                   <div style={{
-                    width: 28, height: 28, borderRadius: 8,
+                    width: 28, height: 28, borderRadius: 8, flexShrink: 0,
                     background: m.available ? "rgba(201,162,76,0.1)" : "rgba(37,34,32,0.8)",
                     border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "rgba(37,34,32,0.9)"}`,
-                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
+                    color: m.available ? "rgba(201,162,76,0.85)" : "rgba(120,113,108,0.4)",
+                    letterSpacing: "0.02em",
                   }}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke={m.available ? "rgba(201,162,76,0.8)" : "rgba(120,113,108,0.5)"} strokeWidth="1.4" strokeLinecap="round">
-                      <circle cx="8" cy="8" r="6" /><path d="M5.5 8.5L7 10l3-4" />
-                    </svg>
+                    {m.icon}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>{m.label}</div>
-                    {!m.available && (
-                      <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.08em", marginTop: 1, opacity: 0.5 }}>COMING SOON</div>
-                    )}
+                    <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", display: "flex", alignItems: "center", gap: 6 }}>
+                      {m.label}
+                      {!m.available && (
+                        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", letterSpacing: "0.1em", opacity: 0.55, border: "1px solid rgba(120,113,108,0.2)", borderRadius: 3, padding: "1px 4px" }}>KEY NEEDED</span>
+                      )}
+                    </div>
+                    <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", marginTop: 2, opacity: m.available ? 0.7 : 0.4 }}>{m.sub}</div>
                   </div>
                   {wsModel === m.id && (
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -7792,6 +7858,11 @@ export default function Workspace() {
                   )}
                 </button>
               ))}
+              <div style={{ margin: "12px 0 4px", padding: "8px 12px", background: "rgba(201,162,76,0.04)", borderRadius: 6, border: "1px solid rgba(201,162,76,0.1)" }}>
+                <p style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.07em", margin: 0, lineHeight: 1.6 }}>
+                  TIP: Type <span style={{ color: "rgba(201,162,76,0.7)" }}>/deep [topic]</span> in any message to run a structured research analysis via Gemini — regardless of selected model.
+                </p>
+              </div>
             </div>
           </div>
         </div>,
