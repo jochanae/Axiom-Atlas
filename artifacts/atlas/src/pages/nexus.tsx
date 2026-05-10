@@ -233,6 +233,7 @@ export default function NexusPage() {
   const initialSent = useRef(false);
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   // Hydrate messages from the Living Thread when it loads
   useEffect(() => {
@@ -386,9 +387,15 @@ export default function NexusPage() {
           <span style={{
             fontFamily: "'IBM Plex Mono', var(--app-font-mono)", fontSize: 11,
             fontWeight: 700, letterSpacing: "0.18em", color: "var(--atlas-gold)",
-            textTransform: "uppercase",
+            textTransform: "uppercase", display: "inline-flex",
           }}>
-            NEXUS
+            {"NEXUS".split("").map((ch, i) => (
+              <span key={i} style={{
+                display: "inline-block",
+                animation: "nexus-letter-in 0.45s cubic-bezier(0.22,1,0.36,1) both",
+                animationDelay: `${i * 0.07}s`,
+              }}>{ch}</span>
+            ))}
           </span>
           <span style={{
             fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-sans)",
@@ -537,13 +544,49 @@ export default function NexusPage() {
                         <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
                       </svg>
                     </div>
-                    <div style={{
-                      flex: 1, padding: "10px 14px", borderRadius: "4px 14px 14px 14px",
-                      background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)",
-                      fontSize: 13.5, color: "var(--atlas-fg)", lineHeight: 1.65,
-                      whiteSpace: "pre-wrap", wordBreak: "break-word",
-                    }}>
-                      {msg.content}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        padding: "10px 14px", borderRadius: "4px 14px 14px 14px",
+                        background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)",
+                        fontSize: 13.5, color: "var(--atlas-fg)", lineHeight: 1.65,
+                        whiteSpace: "pre-wrap", wordBreak: "break-word",
+                      }}>
+                        {msg.content}
+                      </div>
+                      {/* Copy button */}
+                      <button
+                        title="Copy message"
+                        onClick={() => {
+                          navigator.clipboard.writeText(msg.content).then(() => {
+                            setCopiedIdx(i);
+                            setTimeout(() => setCopiedIdx(null), 1600);
+                          });
+                        }}
+                        style={{
+                          marginTop: 5, marginLeft: 2, display: "inline-flex", alignItems: "center",
+                          gap: 4, padding: "2px 7px", borderRadius: 5, border: "none",
+                          background: "transparent", cursor: "pointer",
+                          color: copiedIdx === i ? "rgba(201,162,76,0.85)" : "rgba(120,113,108,0.5)",
+                          fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+                          transition: "color 150ms ease",
+                        }}
+                        onMouseEnter={e => { if (copiedIdx !== i) e.currentTarget.style.color = "rgba(201,162,76,0.6)"; }}
+                        onMouseLeave={e => { if (copiedIdx !== i) e.currentTarget.style.color = "rgba(120,113,108,0.5)"; }}
+                      >
+                        {copiedIdx === i ? (
+                          <>
+                            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7"/></svg>
+                            copied
+                          </>
+                        ) : (
+                          <>
+                            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="5" y="5" width="8" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v9A1.5 1.5 0 003.5 14H5"/>
+                            </svg>
+                            copy
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 )
@@ -650,6 +693,10 @@ export default function NexusPage() {
         @keyframes nexus-dots {
           0%, 100% { opacity: 0.55; }
           50% { opacity: 0.9; }
+        }
+        @keyframes nexus-letter-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

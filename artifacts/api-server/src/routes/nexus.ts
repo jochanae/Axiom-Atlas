@@ -176,6 +176,11 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       .orderBy(asc(nexusMessagesTable.createdAt)),
   ]);
 
+  // Project roster — always list every project by name so Atlas knows the full portfolio
+  const projectRoster = projects.length > 0
+    ? projects.map((p) => `• ${p.name}`).join("\n")
+    : "(no projects yet)";
+
   const aggregatedMemory = projects
     .map((p) => {
       const store = parseMemoryStore(p.memory ?? null);
@@ -197,6 +202,8 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
   }
+  // Always inject the full project roster so Atlas knows every room, even empty ones
+  systemPrompt += `\n\n--- YOUR PROJECT PORTFOLIO (${projects.length} project${projects.length !== 1 ? "s" : ""}) ---\n${projectRoster}`;
   if (aggregatedMemory) {
     systemPrompt += `\n\n--- AGGREGATED PROJECT MEMORY (Atlas knows this across all projects) ---\n${aggregatedMemory}\n--- END AGGREGATED MEMORY ---`;
   }
