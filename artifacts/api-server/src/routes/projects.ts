@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, desc, and } from "drizzle-orm";
+import { eq, sql, desc, and, isNotNull } from "drizzle-orm";
 import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable } from "@workspace/db";
 import {
   CreateProjectBody,
