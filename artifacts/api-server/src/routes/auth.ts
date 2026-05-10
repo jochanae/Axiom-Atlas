@@ -260,4 +260,36 @@ export async function requireAdmin(
   next();
 }
 
+// GET /api/auth/dev-test-login — DEV ONLY: creates a fresh test account and sets session cookie
+// Blocked in production. Used by automated e2e tests to bypass OAuth UI.
+router.get("/auth/dev-test-login", async (req, res): Promise<void> => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const ts = Date.now();
+  const email = `e2e-auto-${ts}@test.internal`;
+  const rawPassword = "E2eTestPass999!";
+  const passwordHash = await hashPassword(rawPassword);
+
+  const [user] = await db.insert(usersTable).values({
+    email,
+    passwordHash,
+    name: "E2E Test User",
+    role: "user",
+    subscriptionTier: "free",
+  }).returning();
+
+  if (!user) { res.status(500).json({ error: "Failed to create test user" }); return; }
+
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
+
+  createSessionCookie(token, res);
+  // Redirect straight to the home page so the browser lands authenticated
+  res.redirect("/home");
+});
+
 export default router;
