@@ -1045,17 +1045,20 @@ export default function Home() {
   );
 
   const handleSubmit = useCallback(() => {
-    const mostRecent = (projects ?? [])[0];
+    // Wait for projects to finish loading before navigating
+    if (isLoading) return;
+    // API returns projects sorted ascending by updatedAt — last = most recent
+    const mostRecent = projects?.at(-1);
     if (mostRecent) {
       if (input.trim()) {
         try { sessionStorage.setItem(`atlas-initial-${mostRecent.id}`, input.trim()); } catch {}
       }
       setLocation(`/project/${mostRecent.id}`);
-    } else {
-      // No projects yet — create one and carry the text in
+    } else if (projects !== undefined) {
+      // Projects loaded but empty — create the first one
       handleNewProject();
     }
-  }, [input, projects, setLocation, handleNewProject]);
+  }, [input, projects, isLoading, setLocation, handleNewProject]);
 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1073,7 +1076,6 @@ export default function Home() {
   };
 
   const hasInput = input.trim().length > 0;
-  const loading = false;
 
   return (
     <div
@@ -1167,7 +1169,7 @@ export default function Home() {
             <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
             <button
               title={isSuperAdmin(authUser) ? "Invite someone" : "New project"}
-              disabled={loading}
+              disabled={isLoading}
               onClick={() => {
                 if (isSuperAdmin(authUser)) {
                   setShowInvite(true);
@@ -1180,14 +1182,14 @@ export default function Home() {
                 border: "1px dashed rgba(212,175,55,0.45)",
                 background: "transparent",
                 display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: loading ? "not-allowed" : "pointer",
+                cursor: isLoading ? "not-allowed" : "pointer",
                 color: "rgba(212,175,55,0.55)",
                 fontSize: 14, lineHeight: 1, fontWeight: 300,
                 flexShrink: 0, marginLeft: -4, position: "relative", zIndex: 1,
-                opacity: loading ? 0.4 : 1,
+                opacity: isLoading ? 0.4 : 1,
                 transition: "all 160ms ease",
               }}
-              onMouseEnter={(e) => { if (!loading) { e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; e.currentTarget.style.color = "#D4AF37"; } }}
+              onMouseEnter={(e) => { if (!isLoading) { e.currentTarget.style.borderColor = "rgba(212,175,55,0.75)"; e.currentTarget.style.color = "#D4AF37"; } }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; e.currentTarget.style.color = "rgba(212,175,55,0.55)"; }}
             >
               +
@@ -1199,7 +1201,7 @@ export default function Home() {
       {/* First-run overlay — new users with no projects, once per session */}
       {showOverlay && (
         <FirstRunOverlay
-          loading={loading}
+          loading={isLoading}
           onSpecMode={() => {
             createProject.mutate({ data: { name: "My Project" } }, {
               onSuccess: (p) => {
@@ -1450,16 +1452,16 @@ export default function Home() {
               <button
                 className="atlas-send-btn"
                 onClick={handleSubmit}
-                disabled={loading}
+                disabled={isLoading}
                 style={{
                   width: 40, height: 40, flexShrink: 0,
-                  background: hasInput && !loading ? "var(--atlas-ember)" : "var(--atlas-surface-alt)",
+                  background: hasInput && !isLoading ? "var(--atlas-ember)" : "var(--atlas-surface-alt)",
                   border: hasInput ? "none" : "1px solid var(--atlas-border)",
-                  boxShadow: hasInput && !loading ? "0 0 18px -3px rgba(146,64,14,0.55)" : "none",
-                  opacity: loading ? 0.5 : 1,
+                  boxShadow: hasInput && !isLoading ? "0 0 18px -3px rgba(146,64,14,0.55)" : "none",
+                  opacity: isLoading ? 0.5 : 1,
                 }}
               >
-                {loading ? (
+                {isLoading ? (
                   <LoadingSpinner size="sm" color="ember" />
                 ) : (
                   <svg viewBox="0 0 20 20" width={13} height={13}
