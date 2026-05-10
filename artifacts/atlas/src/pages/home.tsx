@@ -1045,11 +1045,17 @@ export default function Home() {
   );
 
   const handleSubmit = useCallback(() => {
-    if (input.trim()) {
-      try { sessionStorage.setItem("atlas-nexus-initial", input.trim()); } catch {}
+    const mostRecent = (projects ?? [])[0];
+    if (mostRecent) {
+      if (input.trim()) {
+        try { sessionStorage.setItem(`atlas-initial-${mostRecent.id}`, input.trim()); } catch {}
+      }
+      setLocation(`/project/${mostRecent.id}`);
+    } else {
+      // No projects yet — create one and carry the text in
+      handleNewProject();
     }
-    setLocation("/nexus");
-  }, [input, setLocation]);
+  }, [input, projects, setLocation, handleNewProject]);
 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
