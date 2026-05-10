@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import * as THREE from "three";
 import { haptics } from "@/lib/haptics";
@@ -21,12 +21,6 @@ type Project = {
   isNexus?: boolean;
 };
 type Connection = { a: number; b: number; strength: number };
-type ScreenPos = { x: number; y: number };
-type SceneHandles = {
-  camera: THREE.PerspectiveCamera;
-  nodeMeshes: THREE.Mesh[];
-  stars: THREE.Points;
-};
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -87,13 +81,12 @@ export default function MasterMap() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
-  const [focusedId, setFocusedId] = useState<number | null>(null);
-  const [focusedPos, setFocusedPos] = useState<ScreenPos | null>(null);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [warping, setWarping] = useState(false);
 
   const projectsRef = useRef<Project[]>([]);
   const nexusRef = useRef<Project | null>(null);
-  const focusedIdRef = useRef<number | null>(null);
+  const hoveredIdxRef = useRef<number | null>(null);
   const rippleIds = useRef<Set<number>>(new Set());
   const rippleTimers = useRef<number[]>([]);
   const prevEntryDates = useRef<Map<number, string>>(new Map());
@@ -103,9 +96,8 @@ export default function MasterMap() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelEls = useRef<(HTMLDivElement | null)[]>([]);
-  const sceneHandles = useRef<SceneHandles | null>(null);
 
-  useEffect(() => { focusedIdRef.current = focusedId; }, [focusedId]);
+  useEffect(() => { hoveredIdxRef.current = hoveredIdx; }, [hoveredIdx]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
   useEffect(() => { nexusRef.current = nexusProject; }, [nexusProject]);
 
@@ -374,26 +366,35 @@ export default function MasterMap() {
       return { x: (v.x * 0.5 + 0.5) * canvas.clientWidth, y: (-v.y * 0.5 + 0.5) * canvas.clientHeight };
     };
 
+    const warpTo = (destId: number, targetPos: THREE.Vector3) => {
+      const camNow = camera.position.clone();
+      const dir = targetPos.clone().sub(camNow).normalize();
+      warpTarget.current = {
+        pos: camNow.clone().add(dir.multiplyScalar(500)),
+        start: Date.now(),
+        cb: () => setLocation(`/project/${destId}`),
+      };
+      setWarping(true);
+      setTimeout(() => {
+        if (!warpTarget.current) return;
+        setLocation(`/project/${destId}`);
+      }, 950);
+    };
+
     const handleClick = (cx: number, cy: number) => {
       const hits = hitTest(cx, cy);
-      if (!hits.length) { setFocusedId(null); setFocusedPos(null); return; }
+      if (!hits.length) return;
       const obj = hits[0].object as THREE.Mesh;
+      haptics.tap();
       if (obj === nexMesh || obj === nexWire) {
-        haptics.tap();
         const nex = nexusRef.current;
-        if (nex) setLocation(`/project/${nex.id}`);
+        if (nex) warpTo(nex.id, new THREE.Vector3(0, 0, 0));
         return;
       }
       const idx = nodeMeshes.indexOf(obj);
       if (idx < 0) return;
       const proj = projectsRef.current[idx];
-      haptics.tap();
-      if (focusedIdRef.current === proj.id) {
-        setFocusedId(null); setFocusedPos(null);
-      } else {
-        setFocusedId(proj.id);
-        setFocusedPos(toScreen(nodeMeshes[idx].position));
-      }
+      warpTo(proj.id, nodeMeshes[idx].position);
     };
 
     const onCanvasClick = (e: MouseEvent) => handleClick(e.clientX, e.clientY);
@@ -405,7 +406,15 @@ export default function MasterMap() {
         handleClick(t.clientX, t.clientY);
     };
     const onMouseMove = (e: MouseEvent) => {
-      canvas.style.cursor = hitTest(e.clientX, e.clientY).length ? "pointer" : "crosshair";
+      const hits = hitTest(e.clientX, e.clientY);
+      canvas.style.cursor = hits.length ? "pointer" : "crosshair";
+      if (hits.length) {
+        const obj = hits[0].object as THREE.Mesh;
+        const i = nodeMeshes.indexOf(obj);
+        setHoveredIdx(i >= 0 ? i : null);
+      } else {
+        setHoveredIdx(null);
+      }
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -426,7 +435,6 @@ export default function MasterMap() {
     });
     ro.observe(canvas.parentElement!);
 
-    sceneHandles.current = { camera, nodeMeshes, stars: starsBack };
 
     // ── Animation loop ─────────────────────────────────────────────────────
     let frameId = 0;
@@ -492,14 +500,13 @@ export default function MasterMap() {
         mat.opacity = edge * 0.72;
       });
 
-      // ── Node focus glow + scale ──
+      // ── Node hover glow + scale ──
       nodeMeshes.forEach((mesh, i) => {
-        const pid = projectsRef.current[i]?.id;
-        const focused = pid === focusedIdRef.current;
+        const hovered = i === hoveredIdxRef.current;
         const mat = mesh.material as THREE.MeshPhysicalMaterial;
         const base = 0.12 + actLevel(projectsRef.current[i]?.updatedAt ?? "") * 0.3;
-        mat.emissiveIntensity = focused ? base + 0.32 + Math.sin(t * 3.5) * 0.12 : base;
-        const tgt = focused ? 1.2 : 1.0;
+        mat.emissiveIntensity = hovered ? base + 0.32 + Math.sin(t * 3.5) * 0.12 : base;
+        const tgt = hovered ? 1.15 : 1.0;
         mesh.scale.setScalar(mesh.scale.x + (tgt - mesh.scale.x) * 0.11);
       });
 
@@ -547,41 +554,9 @@ export default function MasterMap() {
       canvas.removeEventListener("wheel", onWheel);
       ro.disconnect();
       renderer.dispose();
-      sceneHandles.current = null;
     };
   }, [loading, nexusProject]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Navigate with actual camera warp ───────────────────────────────────────
-
-  const navigate = useCallback((id: number, openMap = false) => {
-    haptics.tap();
-    const idx = projectsRef.current.findIndex(p => p.id === id);
-    const sc = sceneHandles.current;
-    if (idx >= 0 && sc) {
-      const nodePos = sc.nodeMeshes[idx]?.position;
-      if (nodePos) {
-        const camNow = sc.camera.position.clone();
-        const dir = nodePos.clone().sub(camNow).normalize();
-        const dest = camNow.clone().add(dir.multiplyScalar(500));
-        warpTarget.current = {
-          pos: dest, start: Date.now(),
-          cb: () => {
-            try { if (openMap) sessionStorage.setItem("atlas-open-tab", "map"); } catch {}
-            setLocation(`/project/${id}`);
-          },
-        };
-      }
-    }
-    setWarping(true);
-    // Fallback if scene not ready
-    setTimeout(() => {
-      if (!warpTarget.current) return;
-      try { if (openMap) sessionStorage.setItem("atlas-open-tab", "map"); } catch {}
-      setLocation(`/project/${id}`);
-    }, 950);
-  }, [setLocation]);
-
-  const focusedProject = focusedId !== null ? projects.find(p => p.id === focusedId) : null;
   const isMobile = window.innerWidth < 768;
 
   return (
@@ -608,15 +583,15 @@ export default function MasterMap() {
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
         {projects.map((p, i) => {
           const act = actLevel(p.updatedAt);
-          const isFocused = p.id === focusedId;
+          const isHovered = i === hoveredIdx;
           return (
             <div key={p.id} ref={el => { labelEls.current[i] = el; }} style={{
               position: "absolute", transform: "translateX(-50%)", textAlign: "center",
               pointerEvents: "none",
-              opacity: focusedId !== null && !isFocused ? 0.3 : 1,
-              transition: "opacity 250ms ease",
+              opacity: hoveredIdx !== null && !isHovered ? 0.28 : 1,
+              transition: "opacity 180ms ease",
             }}>
-              <div style={{ fontSize: 10.5, fontWeight: 600, color: isFocused ? "rgba(231,229,228,0.98)" : "rgba(231,229,228,0.6)", letterSpacing: "0.01em", whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: isHovered ? 11.5 : 10.5, fontWeight: 600, color: isHovered ? "rgba(231,229,228,1)" : "rgba(231,229,228,0.58)", letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "font-size 150ms ease, color 150ms ease" }}>
                 {p.name}
               </div>
               <div style={{ fontSize: 8.5, color: act > 0.6 ? "rgba(201,162,76,0.65)" : "rgba(120,113,108,0.42)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
@@ -631,17 +606,6 @@ export default function MasterMap() {
           );
         })}
       </div>
-
-      {/* Node card */}
-      {focusedProject && focusedPos && (
-        <NodeCard
-          project={focusedProject}
-          pos={focusedPos}
-          onClose={() => { setFocusedId(null); setFocusedPos(null); }}
-          onWorkspace={() => navigate(focusedProject.id)}
-          onMap={() => navigate(focusedProject.id, true)}
-        />
-      )}
 
       {/* Warp overlay */}
       {warping && (
@@ -718,98 +682,9 @@ export default function MasterMap() {
   );
 }
 
-// ── NodeCard ─────────────────────────────────────────────────────────────────
-
-function NodeCard({ project, pos, onClose, onWorkspace, onMap }: {
-  project: Project; pos: ScreenPos;
-  onClose: () => void; onWorkspace: () => void; onMap: () => void;
-}) {
-  const CARD_W = 220, CARD_H = 162;
-  const vw = window.innerWidth, vh = window.innerHeight;
-  let left = pos.x - CARD_W / 2;
-  let top = pos.y + NODE_R + 16;
-  left = Math.max(8, Math.min(left, vw - CARD_W - 8));
-  if (top + CARD_H > vh - 8) top = pos.y - CARD_H - NODE_R - 10;
-  if (top < 56) top = 56;
-
-  const hue = nodeHue(project.name);
-  const act = actLevel(project.updatedAt);
-
-  return (
-    <div style={{
-      position: "absolute", left, top, width: CARD_W, zIndex: 55,
-      background: "rgba(10,8,5,0.94)",
-      border: `1px solid hsla(${hue},55%,55%,0.32)`,
-      borderRadius: 14, padding: "13px 15px",
-      backdropFilter: "blur(20px)",
-      boxShadow: `0 16px 48px rgba(0,0,0,0.9), 0 0 0 1px rgba(0,0,0,0.5), 0 0 32px -8px hsla(${hue},55%,55%,0.22)`,
-      animation: "card-in 160ms cubic-bezier(0.22,1,0.36,1) both",
-      fontFamily: "var(--app-font-sans)",
-    }}>
-      <button onClick={onClose} style={{
-        position: "absolute", top: 8, right: 9, background: "none", border: "none",
-        cursor: "pointer", color: "rgba(120,113,108,0.4)", fontSize: 12, lineHeight: 1, padding: "3px 5px",
-      }}>✕</button>
-
-      {/* Colored accent bar */}
-      <div style={{
-        position: "absolute", top: 0, left: 14, right: 14, height: 1.5,
-        borderRadius: 1,
-        background: `linear-gradient(90deg, transparent, hsla(${hue},55%,55%,0.6), transparent)`,
-      }} />
-
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: "rgba(231,229,228,0.92)", marginBottom: 2, paddingRight: 20, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {project.name}
-      </div>
-      <div style={{ fontSize: 8.5, color: "rgba(120,113,108,0.45)", fontFamily: "var(--app-font-mono)", marginBottom: 11, display: "flex", gap: 7, alignItems: "center" }}>
-        <span style={{ color: act > 0.6 ? `hsla(${hue},55%,65%,0.7)` : "rgba(120,113,108,0.45)" }}>
-          {actLabel(project.updatedAt)}
-        </span>
-        {(project.entryCount ?? 0) > 0 && (
-          <span style={{ color: "rgba(201,162,76,0.38)" }}>· {project.entryCount} decision{project.entryCount !== 1 ? "s" : ""}</span>
-        )}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-        <button onClick={onWorkspace} style={{
-          width: "100%", padding: "8px 11px", borderRadius: 8,
-          background: `hsla(${hue},45%,18%,0.6)`,
-          border: `1px solid hsla(${hue},55%,55%,0.28)`,
-          color: `hsla(${hue},60%,72%,0.95)`,
-          fontSize: 11, fontWeight: 600,
-          fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.04em",
-          textAlign: "left", display: "flex", alignItems: "center", gap: 7,
-        }}>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 2H3a1 1 0 00-1 1v10a1 1 0 001 1h10a1 1 0 001-1V8" /><path d="M10 2h4v4M14 2L8 8" />
-          </svg>
-          Dive into Street View
-        </button>
-        <button onClick={onMap} style={{
-          width: "100%", padding: "8px 11px", borderRadius: 8,
-          background: "transparent", border: "1px solid rgba(201,162,76,0.1)",
-          color: "rgba(120,113,108,0.58)", fontSize: 11,
-          fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.04em",
-          textAlign: "left", display: "flex", alignItems: "center", gap: 7,
-        }}>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="1" y="1" width="6" height="6" rx="1.5" /><rect x="9" y="1" width="6" height="6" rx="1.5" />
-            <rect x="1" y="9" width="6" height="6" rx="1.5" /><rect x="9" y="9" width="6" height="6" rx="1.5" />
-          </svg>
-          Open System Map
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── CSS ──────────────────────────────────────────────────────────────────────
 
 const STYLES = `
-@keyframes card-in {
-  from { opacity: 0; transform: translateY(6px) scale(0.96); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
 @keyframes warp-dark {
   0%   { opacity: 0; }
   35%  { opacity: 0; }
