@@ -129,9 +129,11 @@ export function UserMenuDropdown({ openSignal, onOpenProfile }: Props) {
 
   const name: string = user?.name || user?.email?.split("@")[0] || "Account";
   const email: string = user?.email || "";
-  const photoUrl: string = (() => {
+  // DB avatar takes priority — localStorage photoUrl is only used as a transient
+  // preview before the user saves (AccountHubPanel writes to DB on save).
+  const photoUrl: string = user?.avatarUrl || (() => {
     try { const r = localStorage.getItem("atlas-user-profile"); return r ? (JSON.parse(r).photoUrl ?? "") : ""; } catch { return ""; }
-  })() || user?.avatarUrl || "";
+  })();
 
   const openShortcuts = useCallback(() => {
     setOpen(false);

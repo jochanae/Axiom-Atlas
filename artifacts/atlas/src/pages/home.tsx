@@ -11,6 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Project } from "@workspace/api-client-react";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
+import { AccountHubPanel } from "../components/AccountHubPanel";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
 import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
@@ -778,127 +779,6 @@ function ModelPickerSheet({ current, onSelect, onClose }: {
   );
 }
 
-// ── HomeProfileSheet ─────────────────────────────────────────────────────────
-function HomeProfileSheet({ onClose }: { onClose: () => void }) {
-  const [name, setName] = useState(() => {
-    try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name ?? "" : ""; } catch { return ""; }
-  });
-  const [photoUrl, setPhotoUrl] = useState(() => {
-    try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).photoUrl ?? "" : ""; } catch { return ""; }
-  });
-  const [saved, setSaved] = useState(false);
-  const sMono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
-
-  const save = () => {
-    try {
-      const raw = localStorage.getItem("atlas-user-profile");
-      const existing = raw ? JSON.parse(raw) : {};
-      localStorage.setItem("atlas-user-profile", JSON.stringify({ ...existing, name, photoUrl }));
-    } catch {}
-    setSaved(true);
-    setTimeout(() => { setSaved(false); onClose(); }, 700);
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }} />
-      <div style={{
-        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
-        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
-        borderTop: "1px solid var(--atlas-border)", padding: "20px 20px 36px",
-        display: "flex", flexDirection: "column", gap: 14,
-        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
-      }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "0 auto 4px" }} />
-        <div style={{ fontSize: 12, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-fg)", opacity: 0.7 }}>YOUR PROFILE</div>
-        {photoUrl && (
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <img src={photoUrl} alt="" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(201,162,76,0.3)" }} />
-          </div>
-        )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-          <label style={{ fontSize: 9, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name"
-            style={{ padding: "8px 10px", borderRadius: 6, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 13, outline: "none", ...sMono }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <label style={{ fontSize: 9, ...sMono, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase" }}>Photo</label>
-          {/* Upload button */}
-          <label style={{ cursor: "pointer" }}>
-            <div style={{
-              padding: "8px 12px", borderRadius: 6, border: "1px dashed rgba(201,162,76,0.3)",
-              background: "var(--atlas-surface-alt)", display: "flex", alignItems: "center", gap: 8,
-              transition: "border-color 160ms ease",
-            }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "rgba(201,162,76,0.55)")}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = "rgba(201,162,76,0.3)")}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(201,162,76,0.65)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              <span style={{ fontSize: 11, color: "var(--atlas-muted)", ...sMono, opacity: 0.65 }}>Upload photo from device</span>
-            </div>
-            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: "none" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                  const dataUrl = ev.target?.result as string;
-                  if (!dataUrl) return;
-                  const img = new Image();
-                  img.onload = () => {
-                    const MAX = 256;
-                    let w = img.width, h = img.height;
-                    if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-                    else { w = Math.round(w * MAX / h); h = MAX; }
-                    const canvas = document.createElement("canvas");
-                    canvas.width = w; canvas.height = h;
-                    const ctx = canvas.getContext("2d");
-                    if (ctx) { ctx.drawImage(img, 0, 0, w, h); setPhotoUrl(canvas.toDataURL("image/jpeg", 0.75)); }
-                    else { setPhotoUrl(dataUrl); }
-                  };
-                  img.src = dataUrl;
-                };
-                reader.readAsDataURL(file);
-              }}
-            />
-          </label>
-          {/* Divider */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ flex: 1, height: 1, background: "var(--atlas-border)" }} />
-            <span style={{ fontSize: 9, ...sMono, color: "var(--atlas-muted)", opacity: 0.35, letterSpacing: "0.06em" }}>OR</span>
-            <div style={{ flex: 1, height: 1, background: "var(--atlas-border)" }} />
-          </div>
-          {/* URL paste */}
-          <input value={photoUrl.startsWith("data:") ? "" : photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} placeholder="Paste a photo URL"
-            style={{ padding: "8px 10px", borderRadius: 6, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 11, outline: "none", ...sMono }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
-          {photoUrl.startsWith("data:") && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 9, ...sMono, color: "#34d399", opacity: 0.75 }}>✓ Photo uploaded</span>
-              <button onClick={() => setPhotoUrl("")} style={{ background: "transparent", border: "none", cursor: "pointer", fontSize: 9, ...sMono, color: "var(--atlas-muted)", opacity: 0.45, padding: 0 }}
-                onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
-                onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.45")}>Remove</button>
-            </div>
-          )}
-        </div>
-        <button onClick={save} style={{
-          marginTop: 4, padding: "11px", borderRadius: 8, border: "none",
-          background: saved ? "rgba(52,211,153,0.15)" : "var(--atlas-ember)",
-          color: saved ? "#34d399" : "var(--atlas-fg)",
-          fontSize: 11, ...sMono, letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer",
-        }}>
-          {saved ? "Saved ✓" : "Save"}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ── First-run overlay ────────────────────────────────────────────────────────
 function FirstRunOverlay({
@@ -1612,7 +1492,7 @@ export default function Home() {
       </div>
 
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
-      {showProfile && <HomeProfileSheet onClose={() => setShowProfile(false)} />}
+      {showProfile && <AccountHubPanel onClose={() => setShowProfile(false)} />}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} reason="project_limit" />}
 
       {showRepoSheet && (

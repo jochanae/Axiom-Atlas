@@ -188,7 +188,51 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
 router.get("/auth/me", async (req, res): Promise<void> => {
   const user = await getUserFromCookie(req);
   if (!user) { res.status(401).json({ error: "Not authenticated" }); return; }
-  res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, googleLinked: !!user.googleId });
+  res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, googleLinked: !!user.googleId, hasPassword: !!user.passwordHash });
+});
+
+// PATCH /api/auth/profile — update own name and/or avatarUrl
+router.patch("/auth/profile", async (req, res): Promise<void> => {
+  const user = await getUserFromCookie(req);
+  if (!user) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const { name, avatarUrl } = req.body as { name?: string | null; avatarUrl?: string | null };
+  const updates: Partial<{ name: string | null; avatarUrl: string | null }> = {};
+  if (name !== undefined) updates.name = name?.trim() || null;
+  if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl || null;
+
+  if (Object.keys(updates).length === 0) { res.json({ ok: true }); return; }
+
+  const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, user.id)).returning();
+  res.json({ id: updated.id, name: updated.name, avatarUrl: updated.avatarUrl });
+});
+
+// PATCH /api/auth/change-password — change own password (requires current password)
+router.patch("/auth/change-password", async (req, res): Promise<void> => {
+  const user = await getUserFromCookie(req);
+  if (!user) { res.status(401).json({ error: "Not authenticated" }); return; }
+  if (!user.passwordHash) { res.status(400).json({ error: "No password set on this account" }); return; }
+
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+  if (!currentPassword || !newPassword) { res.status(400).json({ error: "Current and new password are required" }); return; }
+  if (newPassword.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters" }); return; }
+
+  const valid = await verifyPassword(currentPassword, user.passwordHash);
+  if (!valid) { res.status(401).json({ error: "Current password is incorrect" }); return; }
+
+  const newHash = await hashPassword(newPassword);
+  await db.update(usersTable).set({ passwordHash: newHash }).where(eq(usersTable.id, user.id));
+  res.json({ ok: true });
+});
+
+// DELETE /api/auth/account — permanently delete own account
+router.delete("/auth/account", async (req, res): Promise<void> => {
+  const user = await getUserFromCookie(req);
+  if (!user) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  await db.delete(usersTable).where(eq(usersTable.id, user.id));
+  res.clearCookie("atlas-session", { path: "/" });
+  res.json({ ok: true });
 });
 
 // Middleware: require a valid session cookie — attaches authUser to req

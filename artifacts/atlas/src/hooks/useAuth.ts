@@ -10,6 +10,7 @@ export interface AuthUser {
   role: "user" | "admin" | "super_admin";
   subscriptionTier: string;
   googleLinked: boolean;
+  hasPassword: boolean;
 }
 
 async function fetchMe(): Promise<AuthUser | null> {

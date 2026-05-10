@@ -148,6 +148,13 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     // ── Normal sign-in / sign-up flow ────────────────────────────────────────
     let user = (await db.select().from(usersTable).where(eq(usersTable.googleId, profile.id)).limit(1))[0];
 
+    if (user) {
+      // Existing Google user — always refresh avatarUrl so stale photos self-heal on every login
+      if (profile.picture && user.avatarUrl !== profile.picture) {
+        [user] = await db.update(usersTable).set({ avatarUrl: profile.picture }).where(eq(usersTable.id, user.id)).returning();
+      }
+    }
+
     if (!user) {
       // Check if an email/password account already exists — if so, link Google to it.
       // Google has verified email ownership so this is safe.
@@ -157,7 +164,8 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
           .update(usersTable)
           .set({
             googleId: profile.id,
-            ...(existing.avatarUrl ? {} : { avatarUrl: profile.picture ?? null }),
+            // Always sync the Google photo when linking — overwrite any stale URL
+            avatarUrl: profile.picture ?? existing.avatarUrl ?? null,
           })
           .where(eq(usersTable.id, existing.id))
           .returning();
