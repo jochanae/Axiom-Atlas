@@ -8,14 +8,17 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
     <Toaster
-      position="bottom-right"
+      position="top-center"
       toastOptions={{
         style: {
-          background: "rgba(15,15,20,0.95)",
-          border: "1px solid rgba(139,92,246,0.4)",
-          color: "#e2e8f0",
-          backdropFilter: "blur(12px)",
-          borderRadius: 12,
+          background: "rgba(28,25,23,0.97)",
+          border: "1px solid rgba(201,162,76,0.28)",
+          color: "var(--atlas-fg, #E7E5E4)",
+          backdropFilter: "blur(16px)",
+          borderRadius: 10,
+          fontFamily: "var(--app-font-sans, sans-serif)",
+          fontSize: 13,
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
         },
       }}
     />
