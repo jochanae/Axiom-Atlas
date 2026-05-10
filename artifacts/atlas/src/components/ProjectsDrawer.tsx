@@ -23,7 +23,7 @@ type Props = {
 };
 
 export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, userLabel }: Props) {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(false);
   void sessionsExpanded;
@@ -32,7 +32,6 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
   })();
 
   const navigate = (path: string) => { setLocation(path); onClose(); };
-  const isNexusActive = location === "/nexus";
 
   useEffect(() => {
     if (!open) return;
@@ -97,49 +96,28 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
         {/* Body */}
         <div style={{ flex: 1, minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y", padding: "10px 8px 16px" }}>
 
-          {/* NEXIUM — global strategic mode */}
+          {/* Nexus — subtle top link */}
           <button
             type="button"
             onClick={() => navigate("/nexus")}
             style={{
-              display: "flex", alignItems: "center", gap: 10,
-              width: "100%", padding: "9px 10px", marginBottom: 10,
-              borderRadius: 9, border: "none",
-              background: isNexusActive
-                ? "rgba(201,162,76,0.1)"
-                : "rgba(201,162,76,0.04)",
-              borderLeft: `2px solid ${isNexusActive ? "rgba(201,162,76,0.6)" : "rgba(201,162,76,0.25)"}`,
+              display: "flex", alignItems: "center", gap: 5,
+              width: "100%", padding: "5px 10px", marginBottom: 8,
+              borderRadius: 6, border: "none",
+              background: "transparent",
               cursor: "pointer", textAlign: "left",
-              transition: "all 140ms ease",
-              boxShadow: isNexusActive ? "0 0 14px -4px rgba(201,162,76,0.18)" : "none",
+              transition: "opacity 130ms ease",
+              opacity: 0.55,
             }}
-            onMouseEnter={(e) => { if (!isNexusActive) e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
-            onMouseLeave={(e) => { if (!isNexusActive) e.currentTarget.style.background = "rgba(201,162,76,0.04)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.55"; }}
           >
-            <div style={{
-              width: 30, height: 30, borderRadius: 7, flexShrink: 0,
-              background: "rgba(201,162,76,0.1)",
-              border: "1px solid rgba(201,162,76,0.3)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 0 10px -3px rgba(201,162,76,0.3)",
-            }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-                <circle cx="12" cy="4" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
-                <circle cx="12" cy="20" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
-                <circle cx="4" cy="12" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
-                <circle cx="20" cy="12" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
-              </svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--atlas-gold)", fontFamily: "var(--app-font-sans)", display: "block", letterSpacing: "0.01em" }}>
-                Nexus
-              </span>
-              <span style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.6, display: "block", marginTop: 1, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
-                cross-project thinking space
-              </span>
-            </div>
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            </svg>
+            <span style={{ fontSize: 10.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              ↑ Nexus
+            </span>
           </button>
 
           {/* PROJECTS section */}
