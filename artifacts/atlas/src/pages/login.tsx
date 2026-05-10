@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 
 type Mode = "login" | "signup" | "forgot";
@@ -38,7 +39,11 @@ export default function Login() {
   const googleEmailConflict = false; // Removed: server now auto-links Google to existing email accounts
 
   useEffect(() => {
-    if (!isLoading && user) navigate("/home");
+    if (!isLoading && user) {
+      const first = user.name ? ` ${user.name.split(" ")[0]}` : "";
+      toast.success(`Welcome back${first}`, { description: "Session restored.", duration: 3000 });
+      navigate("/home");
+    }
   }, [user, isLoading, navigate]);
 
   // Allow page scrolling (global CSS sets overflow:hidden on html/body/root)
@@ -71,6 +76,7 @@ export default function Login() {
       if (mode === "signup" && name.trim()) body.name = name.trim();
       await apiPost(path, body);
       await queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+      sessionStorage.setItem("atlas-just-authed", "1");
       navigate("/home");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -79,7 +85,20 @@ export default function Login() {
     }
   };
 
-  if (isLoading) return null;
+  if (isLoading) return (
+    <div style={{
+      position: "fixed", inset: 0, display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", background: "var(--atlas-bg)", gap: 18,
+    }}>
+      <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.35em", color: "var(--atlas-gold)", opacity: 0.5, textTransform: "uppercase" }}>Axiom</div>
+      <div style={{
+        width: 28, height: 28, borderRadius: "50%",
+        border: "2px solid rgba(201,162,76,0.15)",
+        borderTopColor: "rgba(201,162,76,0.75)",
+        animation: "spin 0.9s linear infinite",
+      }} />
+    </div>
+  );
 
   const mono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
 
