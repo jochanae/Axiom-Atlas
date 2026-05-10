@@ -5290,7 +5290,9 @@ export default function Workspace() {
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
   const [leftTab, setLeftTab] = useState<"chat" | "diff">("chat");
   const [sessionPrUrl, setSessionPrUrl] = useState<string | null>(null);
-  const [rightOpen, setRightOpen] = useState(false);
+  const [rightOpen, setRightOpen] = useState(() =>
+    new URLSearchParams(window.location.search).get("view") === "flow"
+  );
   const [showProfile, setShowProfile] = useState(false);
   const [chatWidthPct, setChatWidthPct] = useState(45);
   const resizeDrag = useRef({ active: false, startX: 0, startPct: 45 });
@@ -5355,7 +5357,9 @@ export default function Workspace() {
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
-  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">("chat");
+  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">(() =>
+    new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
+  );
   const [showDrawer, setShowDrawer] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -5853,6 +5857,13 @@ export default function Workspace() {
     if (!rightOpen && isMobile) setMobileTab("chat");
   }, [rightOpen, isMobile]);
 
+  // Clean ?view=flow from URL after reading it on mount
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("view") === "flow") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   // Pinch-to-zoom-out → return to Master Map (satellite view)
   useEffect(() => {
     if (!isMobile) return;
@@ -6006,7 +6017,9 @@ export default function Workspace() {
   };
   const blendedReadiness = computeBlendedScore(mapReadiness, healthPct);
   const [pendingResolvedNodeIds, setPendingResolvedNodeIds] = useState<string[]>([]);
-  const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(undefined);
+  const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(() =>
+    new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : undefined
+  );
   const [sandboxCode, setSandboxCode] = useState<string | null>(null);
   const handlePreviewCode = useCallback((code: string) => {
     setSandboxCode(code);
