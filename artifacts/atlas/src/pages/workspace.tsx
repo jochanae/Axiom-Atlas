@@ -4026,6 +4026,29 @@ function MapTab({ projectId }: { projectId: number }) {
   const token = mapProject?.githubToken ?? null;
   const linkedRepo = (() => { try { return mapProject?.linkedRepo ? JSON.parse(mapProject.linkedRepo) as { fullName: string; defaultBranch: string } : null; } catch { return null; } })();
 
+  const saveMapToMemory = (data: ProjectScan, existingMemory: string) => {
+    const scanBlock = [
+      `[Project map — ${data.repo} — scanned ${data.scannedAt.slice(0, 10)}]`,
+      data.description ? `Description: ${data.description}` : "",
+      data.stack?.length ? `Stack: ${data.stack.join(", ")}` : "",
+      data.routes?.length ? `Routes (${data.routes.length}): ${data.routes.slice(0, 12).join(", ")}` : "",
+      data.pages?.length ? `Pages: ${data.pages.slice(0, 12).join(", ")}` : "",
+      data.tables?.length ? `Tables: ${data.tables.join(", ")}` : "",
+      `Auth: ${data.authEnabled ? "enabled" : "not found"}`,
+      `Total files: ${data.totalFiles}`,
+    ].filter(Boolean).join("\n");
+
+    // Replace any previous project map block, or append
+    const MAP_RE = /\[Project map —[^\]]*\][^\[]*/g;
+    const stripped = existingMemory.replace(MAP_RE, "").trim();
+    const updated = stripped ? `${stripped}\n\n${scanBlock}` : scanBlock;
+
+    updateProject.mutate(
+      { id: projectId, data: { memory: updated } },
+      { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) }); setSavedToMemory(true); } }
+    );
+  };
+
   const handleScan = async () => {
     if (!linkedRepo || !token) return;
     setScanning(true);
@@ -4044,38 +4067,13 @@ function MapTab({ projectId }: { projectId: number }) {
       const data = await res.json() as ProjectScan;
       setScan(data);
       try { localStorage.setItem(scanKey, JSON.stringify(data)); } catch {}
+      // Auto-save to Atlas memory so every future chat knows the structure
+      saveMapToMemory(data, project?.memory ?? "");
     } catch (e: any) {
       setError(e.message ?? "Scan failed");
     } finally {
       setScanning(false);
     }
-  };
-
-  const handleSaveToMemory = () => {
-    if (!scan) return;
-    const scanBlock = [
-      `[Project map — ${scan.repo} — scanned ${scan.scannedAt.slice(0, 10)}]`,
-      `Description: ${scan.description}`,
-      `Stack: ${(scan.stack || []).join(", ")}`,
-      `Routes (${scan.routes?.length ?? 0}): ${(scan.routes || []).slice(0, 12).join(", ")}`,
-      `Pages: ${(scan.pages || []).slice(0, 12).join(", ")}`,
-      `Supabase tables: ${(scan.tables || []).join(", ")}`,
-      `Auth enabled: ${scan.authEnabled ? "yes" : "not found"}`,
-      `Total files: ${scan.totalFiles}`,
-    ].join("\n");
-
-    const existing = project?.memory ?? "";
-    const updated = existing.trim() ? `${existing.trim()}\n\n${scanBlock}` : scanBlock;
-
-    updateProject.mutate(
-      { id: projectId, data: { memory: updated } },
-      {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(projectId) });
-          setSavedToMemory(true);
-        },
-      }
-    );
   };
 
   const sMono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
@@ -4224,24 +4222,18 @@ function MapTab({ projectId }: { projectId: number }) {
             ))}
           </div>
 
-          {/* Save to memory */}
-          <button
-            onClick={handleSaveToMemory}
-            disabled={savedToMemory || updateProject.isPending}
-            style={{
-              width: "100%", padding: "8px", borderRadius: 6,
-              background: savedToMemory ? "rgba(34,197,94,0.1)" : "rgba(201,162,76,0.08)",
-              border: `1px solid ${savedToMemory ? "rgba(34,197,94,0.25)" : "rgba(201,162,76,0.2)"}`,
-              color: savedToMemory ? "rgba(134,239,172,0.8)" : "var(--atlas-gold)",
-              fontSize: 10, ...sMono, letterSpacing: "0.08em",
-              cursor: savedToMemory ? "default" : "pointer",
-              transition: "all 160ms ease",
-            }}
-          >
-            {savedToMemory ? "✓ Saved to Atlas Memory" : "Save map to Atlas Memory"}
-          </button>
-          <div style={{ marginTop: 7, fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.4, lineHeight: 1.6 }}>
-            Saving adds this map to project memory so Atlas knows your structure in every future chat.
+          {/* Memory save status — auto-saved after every scan */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 7,
+            padding: "8px 11px", borderRadius: 6,
+            background: savedToMemory ? "rgba(34,197,94,0.06)" : "rgba(255,255,255,0.025)",
+            border: `1px solid ${savedToMemory ? "rgba(34,197,94,0.2)" : "var(--atlas-border)"}`,
+            transition: "all 300ms ease",
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: savedToMemory ? "#34d399" : "var(--atlas-muted)", opacity: savedToMemory ? 1 : 0.3 }} />
+            <span style={{ fontSize: 10, ...sMono, color: savedToMemory ? "rgba(134,239,172,0.8)" : "var(--atlas-muted)", opacity: savedToMemory ? 1 : 0.45, letterSpacing: "0.04em" }}>
+              {updateProject.isPending ? "Saving to memory…" : savedToMemory ? "Saved to Atlas memory — active in chat" : "Scan to save map to Atlas memory"}
+            </span>
           </div>
         </div>
       )}
@@ -5621,6 +5613,28 @@ export default function Workspace() {
 
       const userProfileStr = profileToString(loadProfile());
 
+      // Read cached project scan from localStorage and send as compact map string
+      let projectMap: string | undefined;
+      try {
+        const rawScan = localStorage.getItem(`atlas-scan-${id}`);
+        if (rawScan) {
+          const s = JSON.parse(rawScan) as ProjectScan;
+          const lines = [
+            `Repo: ${s.repo} (scanned ${s.scannedAt?.slice(0, 10) ?? "recently"})`,
+            s.description ? `What it does: ${s.description}` : "",
+            s.stack?.length ? `Stack: ${s.stack.join(", ")}` : "",
+            s.routes?.length ? `Routes (${s.routes.length}): ${s.routes.slice(0, 15).join(", ")}` : "",
+            s.pages?.length ? `Pages: ${s.pages.slice(0, 12).join(", ")}` : "",
+            s.components?.length ? `Components: ${s.components.slice(0, 12).join(", ")}` : "",
+            s.tables?.length ? `DB Tables: ${s.tables.join(", ")}` : "",
+            `Auth: ${s.authEnabled ? "enabled" : "not found"}`,
+            `Total files: ${s.totalFiles}`,
+            s.summary ? `Summary: ${s.summary}` : "",
+          ].filter(Boolean).join("\n");
+          if (lines.trim()) projectMap = lines;
+        }
+      } catch { /* non-fatal */ }
+
       const body = {
         sessionId: sid,
         projectId: id,
@@ -5630,6 +5644,7 @@ export default function Workspace() {
         entries: ledgerEntries,
         ...(activeCtx ? { fileContext: activeCtx } : {}),
         ...(userProfileStr ? { userProfile: userProfileStr } : {}),
+        ...(projectMap ? { projectMap } : {}),
         ...(imageData ? { imageData } : {}),
       };
 

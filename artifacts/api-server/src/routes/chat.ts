@@ -507,6 +507,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const { sessionId, projectId, message, history = [], entries = [] } = body;
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
+  const projectMap = (body as any).projectMap as string | undefined;
   const imageData = body.imageData;
   const now = new Date();
 
@@ -603,6 +604,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   }
   if (memoryText) {
     systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
+  }
+  if (projectMap) {
+    systemPrompt += `\n\n--- PROJECT MAP (auto-scanned structure — use this to answer "what do I have?" questions without needing files) ---\n${projectMap}\n--- END PROJECT MAP ---`;
   }
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
