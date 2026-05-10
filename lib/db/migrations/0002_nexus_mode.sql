@@ -1,13 +1,13 @@
 -- Nexus Mode Backend Refactor
 -- Nexus is a global MODE (environment state), not a project entity.
--- Remove the fake isNexus project column, create the Living Thread table,
--- and delete any legacy Nexus/Nexium project rows.
+-- Clean up legacy Nexus project rows by their flag before dropping the column,
+-- then create the per-user Living Thread table.
 --> statement-breakpoint
-DELETE FROM projects WHERE name IN ('Nexus', 'Nexium');
+DELETE FROM projects WHERE is_nexus = true;
 --> statement-breakpoint
 ALTER TABLE "projects" DROP COLUMN IF EXISTS "is_nexus";
 --> statement-breakpoint
-CREATE TABLE "nexus_messages" (
+CREATE TABLE IF NOT EXISTS "nexus_messages" (
         "id" serial PRIMARY KEY NOT NULL,
         "user_id" integer NOT NULL,
         "role" text NOT NULL,
