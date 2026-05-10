@@ -1047,18 +1047,32 @@ export default function Home() {
   const handleSubmit = useCallback(() => {
     // Wait for projects to finish loading before navigating
     if (isLoading) return;
-    // API returns projects sorted ascending by updatedAt — last = most recent
-    const mostRecent = projects?.at(-1);
-    if (mostRecent) {
+
+    // Default: most recently updated project (API sorts ascending, last = newest)
+    let target = projects?.at(-1);
+
+    // If a repo is selected on the home context bar, prefer the project linked to it
+    if (homeRepo && projects?.length) {
+      const linked = projects.find(p => {
+        if (!p.linkedRepo) return false;
+        try {
+          const r = JSON.parse(p.linkedRepo) as { fullName?: string };
+          return r.fullName === homeRepo.fullName;
+        } catch { return false; }
+      });
+      if (linked) target = linked;
+    }
+
+    if (target) {
       if (input.trim()) {
-        try { sessionStorage.setItem(`atlas-initial-${mostRecent.id}`, input.trim()); } catch {}
+        try { sessionStorage.setItem(`atlas-initial-${target.id}`, input.trim()); } catch {}
       }
-      setLocation(`/project/${mostRecent.id}`);
+      setLocation(`/project/${target.id}`);
     } else if (projects !== undefined) {
-      // Projects loaded but empty — create the first one
+      // No projects yet — create the first one
       handleNewProject();
     }
-  }, [input, projects, isLoading, setLocation, handleNewProject]);
+  }, [input, projects, isLoading, homeRepo, setLocation, handleNewProject]);
 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
