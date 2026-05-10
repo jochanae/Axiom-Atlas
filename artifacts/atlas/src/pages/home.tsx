@@ -1297,11 +1297,22 @@ export default function Home() {
                 flexShrink: 0,
               }}
               onClick={() => {
-                const lastId = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
+                const lastIdRaw = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
+                const lastId = Number(lastIdRaw) || null;
                 const targetId = lastId || (projects ?? [])[0]?.id;
                 if (targetId) {
-                  sessionStorage.setItem("atlas-open-tab", "map");
                   setLocation(`/project/${targetId}`);
+                } else if (isLoading) {
+                  // Projects still loading — navigate once they arrive
+                  const unsub = setInterval(() => {
+                    const raw = localStorage.getItem("atlas-last-project");
+                    const lid = Number(raw) || null;
+                    if (lid) { clearInterval(unsub); setLocation(`/project/${lid}`); }
+                  }, 150);
+                  setTimeout(() => clearInterval(unsub), 5000);
+                } else {
+                  // No projects yet — create one
+                  handleNewProject("New Project");
                 }
               }}
             >
