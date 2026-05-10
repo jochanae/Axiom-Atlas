@@ -1435,33 +1435,6 @@ function AssistantBubble({
           />
         )}
 
-        {/* Code ready — push to GitHub (user repo edits) */}
-        {userEdits.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <button
-              onClick={() => setShowPushModal(true)}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 7,
-                padding: "7px 13px", borderRadius: 7,
-                background: "rgba(201,162,76,0.1)",
-                border: "1px solid rgba(201,162,76,0.35)",
-                color: "var(--atlas-gold)",
-                fontSize: 11.5, fontFamily: "var(--app-font-mono)",
-                letterSpacing: "0.05em", cursor: "pointer",
-                transition: "all 160ms ease",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.18)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.6)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.1)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; }}
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                <path d="M8 1C4.13 1 1 4.13 1 8c0 3.09 2 5.71 4.78 6.64.35.06.48-.15.48-.34v-1.2c-1.94.42-2.35-.94-2.35-.94-.32-.81-.78-1.03-.78-1.03-.64-.43.05-.42.05-.42.7.05 1.07.72 1.07.72.62 1.07 1.63.76 2.03.58.06-.45.24-.76.44-.93-1.55-.18-3.18-.77-3.18-3.44 0-.76.27-1.38.72-1.87-.07-.18-.31-.88.07-1.84 0 0 .59-.19 1.92.72A6.6 6.6 0 018 4.82c.59 0 1.19.08 1.74.23 1.33-.9 1.92-.72 1.92-.72.38.96.14 1.66.07 1.84.45.49.72 1.11.72 1.87 0 2.68-1.63 3.26-3.19 3.44.25.22.48.64.48 1.3v1.92c0 .19.13.4.48.33C13 13.71 15 11.09 15 8c0-3.87-3.13-7-7-7z" fill="currentColor" />
-              </svg>
-              {userEdits.length === 1
-                ? `Push ${userEdits[0].path.split("/").pop()} to GitHub`
-                : `Push ${userEdits.length} files to GitHub`}
-            </button>
-          </div>
-        )}
 
         {/* Apply to Atlas itself (self-edits to artifacts/atlas or artifacts/api-server) */}
         {selfEdits.length > 0 && (
