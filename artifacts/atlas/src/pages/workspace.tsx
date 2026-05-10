@@ -6372,25 +6372,23 @@ export default function Workspace() {
               <AtlasLogo small mode={isMobile && mobileTab === "map" ? undefined : projectMode} />
             </button>
             {/* Exit to Nexus */}
-            {!isMobile && (
-              <button
-                title="Exit to Nexus"
-                onClick={() => setLocation("/nexus")}
-                style={{
-                  display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
-                  padding: "3px 8px", borderRadius: 6,
-                  background: "transparent", border: "1px solid rgba(201,162,76,0.18)",
-                  color: "rgba(201,162,76,0.5)", cursor: "pointer",
-                  fontSize: 9, fontFamily: "var(--app-font-mono)",
-                  fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase",
-                  transition: "all 130ms ease",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; e.currentTarget.style.color = "rgba(201,162,76,0.85)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(201,162,76,0.5)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.18)"; }}
-              >
-                ↑ Nexus
-              </button>
-            )}
+            <button
+              title="Exit to Nexus"
+              onClick={() => setLocation("/nexus")}
+              style={{
+                display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
+                padding: "3px 8px", borderRadius: 6,
+                background: "transparent", border: "1px solid rgba(201,162,76,0.18)",
+                color: "rgba(201,162,76,0.5)", cursor: "pointer",
+                fontSize: 9, fontFamily: "var(--app-font-mono)",
+                fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase",
+                transition: "all 130ms ease",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; e.currentTarget.style.color = "rgba(201,162,76,0.85)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(201,162,76,0.5)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.18)"; }}
+            >
+              ↑ Nexus
+            </button>
           </div>
 
           {/* Center: project name + readiness ring + dropdown — hidden in mobile map mode */}
