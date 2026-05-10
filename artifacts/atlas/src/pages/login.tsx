@@ -229,74 +229,8 @@ export default function Login() {
             </div>
           )}
 
-          {/* Social gates */}
-          {mode !== "forgot" && <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-            {/* Google — live */}
-            <a
-              href={`${BASE}/api/auth/google`}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 10,
-                padding: "11px 16px",
-                borderRadius: 10,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                color: "var(--atlas-fg)",
-                fontSize: 11,
-                ...mono,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                cursor: "pointer",
-                textDecoration: "none",
-                transition: "all 200ms ease",
-                boxSizing: "border-box",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
-            >
-              <GoogleIcon />
-              <span>Continue with Google</span>
-            </a>
-
-            {/* Apple — coming soon */}
-            <button
-              disabled
-              title="Apple Sign-In coming soon"
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 10,
-                padding: "11px 16px",
-                borderRadius: 10,
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.07)",
-                color: "var(--atlas-muted)",
-                fontSize: 11,
-                ...mono,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                cursor: "not-allowed",
-                opacity: 0.35,
-                transition: "all 200ms ease",
-              }}
-            >
-              <AppleIcon />
-              <span>Continue with Apple</span>
-            </button>
-          </div>}
-
-          {/* Divider + Form — hidden in forgot mode */}
+          {/* Form — hidden in forgot mode */}
           {mode !== "forgot" && <>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-            <div style={{ flex: 1, height: 1, background: "var(--atlas-border)" }} />
-            <span style={{ fontSize: 9, ...mono, color: "var(--atlas-muted)", opacity: 0.35, letterSpacing: "0.3em", textTransform: "uppercase" }}>or</span>
-            <div style={{ flex: 1, height: 1, background: "var(--atlas-border)" }} />
-          </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -435,8 +369,50 @@ export default function Login() {
             </button>
           </form>
 
+          {/* Divider */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 22, marginBottom: 16 }}>
+            <div style={{ flex: 1, height: 1, background: "var(--atlas-border)" }} />
+            <span style={{ fontSize: 9, ...mono, color: "var(--atlas-muted)", opacity: 0.35, letterSpacing: "0.3em", textTransform: "uppercase" }}>or</span>
+            <div style={{ flex: 1, height: 1, background: "var(--atlas-border)" }} />
+          </div>
+
+          {/* Social gates */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <a
+              href={`${BASE}/api/auth/google`}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 10, padding: "10px 16px", borderRadius: 10,
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)",
+                color: "var(--atlas-fg)", fontSize: 11, ...mono, letterSpacing: "0.12em",
+                textTransform: "uppercase", cursor: "pointer", textDecoration: "none",
+                transition: "all 200ms ease", boxSizing: "border-box",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+            >
+              <GoogleIcon />
+              <span>Continue with Google</span>
+            </a>
+            <button
+              disabled
+              title="Apple Sign-In coming soon"
+              style={{
+                width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                gap: 10, padding: "10px 16px", borderRadius: 10,
+                background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
+                color: "var(--atlas-muted)", fontSize: 11, ...mono, letterSpacing: "0.12em",
+                textTransform: "uppercase", cursor: "not-allowed", opacity: 0.35,
+                transition: "all 200ms ease",
+              }}
+            >
+              <AppleIcon />
+              <span>Continue with Apple</span>
+            </button>
+          </div>
+
           {/* Mode toggle */}
-          <div style={{ textAlign: "center", marginTop: 24 }}>
+          <div style={{ textAlign: "center", marginTop: 22 }}>
             <span style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.4 }}>
               {mode === "login" ? "No access yet? " : "Already inside? "}
             </span>
