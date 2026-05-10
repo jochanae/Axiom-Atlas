@@ -134,10 +134,10 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--atlas-gold)", fontFamily: "var(--app-font-sans)", display: "block", letterSpacing: "0.01em" }}>
-                Nexium
+                Nexus
               </span>
               <span style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.6, display: "block", marginTop: 1, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
-                strategic command space
+                cross-project thinking space
               </span>
             </div>
           </button>
