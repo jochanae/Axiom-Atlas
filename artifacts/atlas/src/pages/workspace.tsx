@@ -5335,6 +5335,10 @@ export default function Workspace() {
   }, [doResize, endResize]);
 
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [wsModel, setWsModel] = useState<string>(() => {
+    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).model ?? "claude") : "claude"; } catch { return "claude"; }
+  });
+  const [showWsModelSheet, setShowWsModelSheet] = useState(false);
   const [rightFullscreen, setRightFullscreen] = useState(false);
   const [showSrcPicker, setShowSrcPicker] = useState(false);
   const [srcReadLoading, setSrcReadLoading] = useState(false);
@@ -7271,8 +7275,33 @@ export default function Workspace() {
                   {isMobile ? (projectMode === "PLAN" ? "What should we structure…" : projectMode === "BUILD" ? "What needs to be built or fixed…" : "Say it plainly…") : "Enter · Shift+Enter for newline"}
                 </span>
 
-                {/* Right: mic + send */}
+                {/* Right: model chip + mic + send */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {/* Model selector — tappable chip, reserved slot for future model switching */}
+                  <button
+                    onClick={() => setShowWsModelSheet(true)}
+                    title="Switch model"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4,
+                      padding: "4px 8px", borderRadius: 20,
+                      background: "rgba(28,25,23,0.6)",
+                      border: "1px solid rgba(37,34,32,0.9)",
+                      cursor: "pointer", transition: "all 160ms ease", flexShrink: 0,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.07)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.32)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(28,25,23,0.6)"; e.currentTarget.style.borderColor = "rgba(37,34,32,0.9)"; }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="rgba(120,113,108,0.7)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="8" cy="8" r="6" />
+                      <path d="M5.5 8.5L7 10l3-4" />
+                    </svg>
+                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "rgba(231,229,228,0.55)", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>
+                      {wsModel === "claude" ? "Claude" : wsModel === "gpt4o" ? "GPT-4o" : "Gemini"}
+                    </span>
+                    <svg width="7" height="7" viewBox="0 0 8 8" fill="none" style={{ opacity: 0.35, flexShrink: 0 }}>
+                      <path d="M1.5 3L4 5.5L6.5 3" stroke="var(--atlas-fg)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
                   {voiceSupported && (
                     <button
                       onClick={toggleVoice}
@@ -7632,6 +7661,69 @@ export default function Workspace() {
             )}
           </div>
         </>,
+        document.body
+      )}
+
+      {/* ── Workspace model picker sheet ── */}
+      {showWsModelSheet && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={() => setShowWsModelSheet(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+          <div style={{
+            position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
+            background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
+            borderTop: "1px solid rgba(201,162,76,0.18)",
+            boxShadow: "0 -8px 40px rgba(0,0,0,0.5)", paddingBottom: 32,
+          }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Model</span>
+              <button onClick={() => setShowWsModelSheet(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+            </div>
+            <div style={{ padding: "0 14px" }}>
+              {([
+                { id: "claude", label: "Claude", available: true },
+                { id: "gpt4o", label: "GPT-4o", available: false },
+                { id: "gemini", label: "Gemini", available: false },
+              ] as const).map(m => (
+                <button
+                  key={m.id}
+                  disabled={!m.available}
+                  onClick={() => { if (m.available) { setWsModel(m.id); setShowWsModelSheet(false); } }}
+                  style={{
+                    width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 8,
+                    background: wsModel === m.id ? "rgba(201,162,76,0.06)" : "transparent",
+                    border: `1px solid ${wsModel === m.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
+                    cursor: m.available ? "pointer" : "default",
+                    display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
+                    opacity: m.available ? 1 : 0.38, transition: "all 140ms ease",
+                  }}
+                >
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    background: m.available ? "rgba(201,162,76,0.1)" : "rgba(37,34,32,0.8)",
+                    border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "rgba(37,34,32,0.9)"}`,
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke={m.available ? "rgba(201,162,76,0.8)" : "rgba(120,113,108,0.5)"} strokeWidth="1.4" strokeLinecap="round">
+                      <circle cx="8" cy="8" r="6" /><path d="M5.5 8.5L7 10l3-4" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>{m.label}</div>
+                    {!m.available && (
+                      <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.08em", marginTop: 1, opacity: 0.5 }}>COMING SOON</div>
+                    )}
+                  </div>
+                  {wsModel === m.id && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>,
         document.body
       )}
 
