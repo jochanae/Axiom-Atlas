@@ -6802,9 +6802,28 @@ export default function Workspace() {
                         Nexium
                       </div>
                     </div>
-                    <div style={{ fontSize: 12, color: "rgba(120,113,108,0.4)", marginBottom: 28, textAlign: "center" }}>
+                    <div style={{ fontSize: 12, color: "rgba(120,113,108,0.4)", marginBottom: 16, textAlign: "center" }}>
                       Your cross-project thinking space. No scope, no constraints.
                     </div>
+                    <button
+                      onClick={() => setLocation("/map")}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 6,
+                        padding: "6px 14px", borderRadius: 8, marginBottom: 20,
+                        background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.2)",
+                        color: "rgba(201,162,76,0.65)", cursor: "pointer",
+                        fontSize: 10.5, fontFamily: "var(--app-font-mono)", fontWeight: 600, letterSpacing: "0.06em",
+                        transition: "background 140ms ease",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.13)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(201,162,76,0.07)"; }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+                        <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+                      </svg>
+                      Open Master Map
+                    </button>
                   </>
                 ) : (
                   <>

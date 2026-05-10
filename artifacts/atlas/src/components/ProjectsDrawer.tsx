@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, X, ChevronDown, ChevronRight, MessageSquare, BookOpen, Inbox, Feather, Hammer, Compass, ShieldCheck, Archive, LayoutDashboard } from "lucide-react";
+import { Plus, X, ChevronDown, ChevronRight, MessageSquare, BookOpen, Inbox, Feather, Hammer, Compass, ShieldCheck, Archive, LayoutDashboard, Globe } from "lucide-react";
 import { CompactReadinessRing } from "./ReadinessRing";
 
 export type DrawerProject = {
@@ -219,6 +219,8 @@ export function ProjectsDrawer({ open, onClose, projects, nexusProject, activePr
 
           {/* NAVIGATE section */}
           <SectionLabel>Navigate</SectionLabel>
+
+          <NavRow icon={<Globe size={14} strokeWidth={1.6} />} label="Master Map" onClick={() => { navigate("/map"); onClose(); }} />
 
           {/* Sessions */}
           <NavRow icon={<MessageSquare size={14} strokeWidth={1.6} />} label="Sessions" onClick={() => navigate("/sessions")} />

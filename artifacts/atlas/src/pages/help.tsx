@@ -31,8 +31,12 @@ const FAQS: { q: string; a: string }[] = [
     a: "Atlas uses three memory layers: (1) Project Memory — a running log of facts Atlas learns about your project, stored in the database and injected into every chat. (2) Your User Profile — name, stack, and project notes stored in your browser's local storage. (3) AI Memory Protocol — during sessions, Atlas emits structured memory facts that are automatically saved and recalled next time.",
   },
   {
+    q: "What is the Master Map?",
+    a: "The Master Map (/map) is the satellite view of your entire Axiom ecosystem. Nexium sits at the center as the anchor hub, and all your projects orbit around it as satellite nodes. Node glow intensity reflects recent activity — bright means actively worked on, dim means dormant. Tap any node to open its workspace or jump directly to its local System Map. Access it from the Projects drawer or directly from Nexium.",
+  },
+  {
     q: "What is the System Map?",
-    a: "The System Map is a visual canvas showing the architecture of your project — routes, components, tables, auth, and business logic as interconnected nodes. You can link a GitHub repo to populate it automatically, or build it manually. Access it via the Map tab in the workspace.",
+    a: "The System Map is the street view — a technical blueprint for a single project. It shows the architecture of your project (auth, database, API routes, state, UI, and business logic) as interconnected nodes. It lives inside each Atlas workspace under the Map tab. The Master Map is your satellite view of all projects; the System Map is your ground-level view of one.",
   },
   {
     q: "How do I link a GitHub repository?",
