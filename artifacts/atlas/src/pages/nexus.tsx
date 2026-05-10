@@ -8,10 +8,12 @@ import {
   useGetNexusThread,
   useListProjects,
   useListEntries,
+  useClearNexusThread,
   getGetNexusThreadQueryKey,
   getListProjectsQueryKey,
   getListEntriesQueryKey,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface NexusMsg {
@@ -32,11 +34,12 @@ function getBase() {
 
 // ── Global Ledger subcomponents ───────────────────────────────────────────────
 
-function ProjectEntryGroup({ projectId, projectName, onNavigate, onCountReady }: {
+function ProjectEntryGroup({ projectId, projectName, onNavigate, onCountReady, searchTerm }: {
   projectId: number;
   projectName: string;
   onNavigate: (id: number) => void;
   onCountReady?: (projectId: number, count: number) => void;
+  searchTerm?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { data: entries, isLoading } = useListEntries(projectId, {}, {
@@ -44,6 +47,13 @@ function ProjectEntryGroup({ projectId, projectName, onNavigate, onCountReady }:
   });
 
   const committed = (entries ?? []).filter((e: Entry) => e.status === "committed");
+  const q = searchTerm?.trim().toLowerCase() ?? "";
+  const visible = q
+    ? committed.filter(e =>
+        e.title.toLowerCase().includes(q) ||
+        (e.summary ?? "").toLowerCase().includes(q)
+      )
+    : committed;
   const initial = projectName.trim()[0]?.toUpperCase() ?? "?";
   const hue = (projectName.charCodeAt(0) * 37) % 360;
 
@@ -97,19 +107,19 @@ function ProjectEntryGroup({ projectId, projectName, onNavigate, onCountReady }:
         </svg>
       </button>
 
-      {expanded && (
+      {(expanded || (q && visible.length > 0)) && (
         <div style={{ padding: "0 14px 10px" }}>
           {isLoading ? (
             <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: 0.5, padding: "6px 0" }}>
               Loading…
             </div>
-          ) : committed.length === 0 ? (
+          ) : visible.length === 0 ? (
             <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.45, fontStyle: "italic", padding: "4px 0" }}>
-              No committed decisions in this project yet.
+              {q ? "No matches." : "No committed decisions in this project yet."}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              {committed.map((e: Entry) => (
+              {visible.map((e: Entry) => (
                 <div key={e.id} style={{
                   padding: "8px 10px", borderRadius: 7,
                   background: "rgba(201,162,76,0.03)",
@@ -150,6 +160,7 @@ function GlobalLedger({ projects, onNavigate }: {
   onNavigate: (id: number) => void;
 }) {
   const [counts, setCounts] = useState<Record<number, number>>({});
+  const [search, setSearch] = useState("");
 
   const handleCountReady = useCallback((projectId: number, count: number) => {
     setCounts(prev => {
@@ -192,10 +203,30 @@ function GlobalLedger({ projects, onNavigate }: {
         </span>
       </div>
 
+      {/* Search input */}
+      <div style={{ flexShrink: 0, padding: "6px 10px", borderBottom: "1px solid var(--atlas-border)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.03)", border: "1px solid var(--atlas-border)", borderRadius: 7, padding: "5px 9px" }}>
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.6" strokeLinecap="round"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5l3 3"/></svg>
+          <input
+            type="text"
+            placeholder="Search decisions…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{
+              flex: 1, background: "transparent", border: "none", outline: "none",
+              fontSize: 11, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)",
+            }}
+          />
+          {search && (
+            <button onClick={() => setSearch("")} style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 13, lineHeight: 1, padding: 0, opacity: 0.6 }}>×</button>
+          )}
+        </div>
+      </div>
+
       {/* Project list */}
       <div style={{ flex: 1, overflowY: "auto" }} className="scrollbar-none">
         {projects.map(p => (
-          <ProjectEntryGroup key={p.id} projectId={p.id} projectName={p.name} onNavigate={onNavigate} onCountReady={handleCountReady} />
+          <ProjectEntryGroup key={p.id} projectId={p.id} projectName={p.name} onNavigate={onNavigate} onCountReady={handleCountReady} searchTerm={search} />
         ))}
         {/* Global empty state: shown when all project counts are in and none have commits */}
         {countsLoaded && totalCommitted === 0 && (
@@ -234,6 +265,10 @@ export default function NexusPage() {
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const queryClient = useQueryClient();
+  const clearThread = useClearNexusThread();
 
   // Hydrate messages from the Living Thread when it loads
   useEffect(() => {
@@ -471,6 +506,46 @@ export default function NexusPage() {
 
         {/* ── Left pane: Living Thread ── */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+
+          {/* Thread sub-header: clear thread button when there are messages */}
+          {messages.length > 0 && (
+            <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "4px 16px", borderBottom: "1px solid rgba(37,34,32,0.6)" }}>
+              {showClearConfirm ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10.5, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.7 }}>Erase the Living Thread?</span>
+                  <button
+                    onClick={async () => {
+                      setClearing(true);
+                      try {
+                        await clearThread.mutateAsync();
+                        setMessages([]);
+                        queryClient.invalidateQueries({ queryKey: getGetNexusThreadQueryKey() });
+                      } finally {
+                        setClearing(false);
+                        setShowClearConfirm(false);
+                      }
+                    }}
+                    disabled={clearing}
+                    style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", fontWeight: 700, color: "var(--atlas-ember)", background: "transparent", border: "none", cursor: "pointer", padding: "1px 6px", letterSpacing: "0.06em" }}
+                  >
+                    {clearing ? "Clearing…" : "Yes, clear"}
+                  </button>
+                  <button onClick={() => setShowClearConfirm(false)} style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", background: "transparent", border: "none", cursor: "pointer", padding: "1px 4px", opacity: 0.6 }}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowClearConfirm(true)}
+                  style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", background: "transparent", border: "none", cursor: "pointer", padding: "3px 0", opacity: 0.45, letterSpacing: "0.06em", transition: "opacity 130ms ease" }}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = "0.8"; }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = "0.45"; }}
+                >
+                  × clear thread
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Chat scroll area */}
           <div style={{ flex: 1, overflowY: "auto", padding: "24px 0 12px", position: "relative" }} className="scrollbar-none">

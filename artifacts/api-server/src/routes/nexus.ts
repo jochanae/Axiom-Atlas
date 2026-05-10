@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, nexusMessagesTable, projectsTable } from "@workspace/db";
-import { eq, asc } from "drizzle-orm";
+import { db, nexusMessagesTable, projectsTable, entriesTable } from "@workspace/db";
+import { eq, asc, and, inArray } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -22,6 +22,7 @@ Your role in Nexus:
 • Default to conversational, strategic mode — no code writing here
 • Ask clarifying questions. Challenge assumptions. Hold the long view.
 • Reference specific project names from the aggregated memory when relevant
+• CROSS-PROJECT TENSION DETECTION: When the user says something that conflicts with or undermines a committed decision in ANY project, flag it explicitly. Use this format inline in your response: "⚠️ Cross-project tension: [what the user is proposing] conflicts with a committed decision in [Project Name] — '[Decision Title]'. Worth resolving before moving forward." Only flag genuine strategic conflicts, not superficial overlaps.
 
 What you're NOT doing here:
 • Writing code or FILE_EDIT blocks
@@ -176,6 +177,29 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       .orderBy(asc(nexusMessagesTable.createdAt)),
   ]);
 
+  // Load committed decisions across all projects for cross-project tension detection
+  const projectIds = projects.map((p) => p.id);
+  const committedEntries = projectIds.length > 0
+    ? await db
+        .select({ projectId: entriesTable.projectId, title: entriesTable.title, summary: entriesTable.summary })
+        .from(entriesTable)
+        .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.status, "committed")))
+    : [];
+
+  // Group committed entries by project name
+  const projectNameById = new Map(projects.map((p) => [p.id, p.name]));
+  const entriesByProject = new Map<string, string[]>();
+  for (const e of committedEntries) {
+    const name = projectNameById.get(e.projectId) ?? "Unknown";
+    if (!entriesByProject.has(name)) entriesByProject.set(name, []);
+    const line = `  • ${e.title}${e.summary ? ` — ${e.summary.slice(0, 100)}` : ""}`;
+    entriesByProject.get(name)!.push(line);
+  }
+
+  const committedLedger = [...entriesByProject.entries()]
+    .map(([name, lines]) => `[${name}]\n${lines.join("\n")}`)
+    .join("\n\n");
+
   // Project roster — always list every project by name so Atlas knows the full portfolio
   const projectRoster = projects.length > 0
     ? projects.map((p) => `• ${p.name}`).join("\n")
@@ -204,6 +228,9 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
   // Always inject the full project roster so Atlas knows every room, even empty ones
   systemPrompt += `\n\n--- YOUR PROJECT PORTFOLIO (${projects.length} project${projects.length !== 1 ? "s" : ""}) ---\n${projectRoster}`;
+  if (committedLedger) {
+    systemPrompt += `\n\n--- COMMITTED DECISIONS ACROSS PORTFOLIO (use for cross-project tension detection) ---\n${committedLedger}\n--- END COMMITTED DECISIONS ---`;
+  }
   if (aggregatedMemory) {
     systemPrompt += `\n\n--- AGGREGATED PROJECT MEMORY (Atlas knows this across all projects) ---\n${aggregatedMemory}\n--- END AGGREGATED MEMORY ---`;
   }
