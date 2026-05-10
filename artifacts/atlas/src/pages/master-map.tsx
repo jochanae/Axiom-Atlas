@@ -64,20 +64,15 @@ function buildConns(projects: Project[]): Connection[] {
   return out;
 }
 async function fetchAll(): Promise<{ nexus: Project | null; list: Project[] }> {
-  const [nR, lR] = await Promise.all([
-    fetch(`${BASE_URL}/api/projects/nexus`, { credentials: "include" }),
-    fetch(`${BASE_URL}/api/projects`, { credentials: "include" }),
-  ]);
-  const nexus = nR.ok ? await nR.json() : null;
+  const lR = await fetch(`${BASE_URL}/api/projects`, { credentials: "include" });
   const raw: Project[] = lR.ok ? await lR.json() : [];
-  return { nexus, list: raw.filter(p => !p.isNexus) };
+  return { nexus: null, list: raw };
 }
 
 // ── component ────────────────────────────────────────────────────────────────
 
 export default function MasterMap() {
   const [, setLocation] = useLocation();
-  const [nexusProject, setNexusProject] = useState<Project | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +80,6 @@ export default function MasterMap() {
   const [warping, setWarping] = useState(false);
 
   const projectsRef = useRef<Project[]>([]);
-  const nexusRef = useRef<Project | null>(null);
   const hoveredIdxRef = useRef<number | null>(null);
   const rippleIds = useRef<Set<number>>(new Set());
   const rippleTimers = useRef<number[]>([]);
@@ -103,14 +97,12 @@ export default function MasterMap() {
 
   useEffect(() => { hoveredIdxRef.current = hoveredIdx; }, [hoveredIdx]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
-  useEffect(() => { nexusRef.current = nexusProject; }, [nexusProject]);
 
   // ── data ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     setLoading(true);
-    fetchAll().then(({ nexus, list }) => {
-      setNexusProject(nexus);
+    fetchAll().then(({ list }) => {
       setProjects(list);
       setConnections(buildConns(list));
       const m = new Map<number, string>();
@@ -165,7 +157,7 @@ export default function MasterMap() {
   // ── Three.js scene ─────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (loading || !canvasRef.current || !nexusProject) return;
+    if (loading || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const W = canvas.offsetWidth || window.innerWidth;
     const H = canvas.offsetHeight || window.innerHeight;
@@ -391,8 +383,8 @@ export default function MasterMap() {
       const obj = hits[0].object as THREE.Mesh;
       haptics.tap();
       if (obj === nexMesh || obj === nexWire) {
-        const nex = nexusRef.current;
-        if (nex) warpTo(nex.id, new THREE.Vector3(0, 0, 0));
+        setWarping(true);
+        setTimeout(() => setLocation("/nexus"), 950);
         return;
       }
       const idx = nodeMeshes.indexOf(obj);
@@ -510,7 +502,6 @@ export default function MasterMap() {
       const projs = projectsRef.current;
       const idx = projs.findIndex(p => p.id === destId);
       if (idx >= 0) warpTo(destId, nodeMeshes[idx].position, "?view=flow");
-      else if (nexusRef.current?.id === destId) warpTo(destId, new THREE.Vector3(0, 0, 0), "?view=flow");
     };
 
     canvas.addEventListener("mousedown", onMouseDown);
@@ -658,7 +649,7 @@ export default function MasterMap() {
       ro.disconnect();
       renderer.dispose();
     };
-  }, [loading, nexusProject]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isMobile = window.innerWidth < 768;
 
@@ -777,7 +768,6 @@ export default function MasterMap() {
       {!loading && (
         <ViewKey
           allProjects={projects}
-          nexusProject={nexusProject}
           onRecenter={() => recenterFnRef.current?.()}
           onDive={(id) => warpFnRef.current?.(id)}
         />
@@ -797,17 +787,13 @@ export default function MasterMap() {
 
 // ── ViewKey HUD ───────────────────────────────────────────────────────────────
 
-function ViewKey({ allProjects, nexusProject, onRecenter, onDive }: {
+function ViewKey({ allProjects, onRecenter, onDive }: {
   allProjects: Project[];
-  nexusProject: Project | null;
   onRecenter: () => void;
   onDive: (id: number) => void;
 }) {
   const [flowOpen, setFlowOpen] = useState(false);
-  const allNodes = [
-    ...(nexusProject ? [{ ...nexusProject, isNexus: true }] : []),
-    ...allProjects,
-  ];
+  const allNodes = [...allProjects];
 
   return (
     <div style={{ position: "absolute", top: 68, right: 14, zIndex: 50 }}>

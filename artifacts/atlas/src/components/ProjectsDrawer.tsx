@@ -14,7 +14,6 @@ type Props = {
   open: boolean;
   onClose: () => void;
   projects: DrawerProject[];
-  nexusProject?: { id: number; name: string } | null;
   activeProjectId?: number | null;
   onOpenProject: (id: number) => void;
   onNewProject: () => void;
@@ -23,15 +22,17 @@ type Props = {
   userLabel?: string | null;
 };
 
-export function ProjectsDrawer({ open, onClose, projects, nexusProject, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, userLabel }: Props) {
-  const [, setLocation] = useLocation();
+export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, userLabel }: Props) {
+  const [location, setLocation] = useLocation();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(false);
+  void sessionsExpanded;
   const userPhoto: string = (() => {
     try { const r = localStorage.getItem("atlas-user-profile"); return r ? (JSON.parse(r).photoUrl ?? "") : ""; } catch { return ""; }
   })();
 
   const navigate = (path: string) => { setLocation(path); onClose(); };
+  const isNexusActive = location === "/nexus";
 
   useEffect(() => {
     if (!open) return;
@@ -96,53 +97,50 @@ export function ProjectsDrawer({ open, onClose, projects, nexusProject, activePr
         {/* Body */}
         <div style={{ flex: 1, minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y", padding: "10px 8px 16px" }}>
 
-          {/* NEXUS — pinned strategic brain */}
-          {nexusProject && (
-            <button
-              type="button"
-              onClick={() => { onOpenProject(nexusProject.id); onClose(); }}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                width: "100%", padding: "9px 10px", marginBottom: 10,
-                borderRadius: 9, border: "none",
-                background: nexusProject.id === activeProjectId
-                  ? "rgba(201,162,76,0.1)"
-                  : "rgba(201,162,76,0.04)",
-                borderLeft: `2px solid ${nexusProject.id === activeProjectId ? "rgba(201,162,76,0.6)" : "rgba(201,162,76,0.25)"}`,
-                cursor: "pointer", textAlign: "left",
-                transition: "all 140ms ease",
-                boxShadow: nexusProject.id === activeProjectId ? "0 0 14px -4px rgba(201,162,76,0.18)" : "none",
-              }}
-              onMouseEnter={(e) => { if (nexusProject.id !== activeProjectId) e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
-              onMouseLeave={(e) => { if (nexusProject.id !== activeProjectId) e.currentTarget.style.background = "rgba(201,162,76,0.04)"; }}
-            >
-              {/* Brain/nexus icon */}
-              <div style={{
-                width: 30, height: 30, borderRadius: 7, flexShrink: 0,
-                background: "rgba(201,162,76,0.1)",
-                border: "1px solid rgba(201,162,76,0.3)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: "0 0 10px -3px rgba(201,162,76,0.3)",
-              }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-                  <circle cx="12" cy="4" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
-                  <circle cx="12" cy="20" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
-                  <circle cx="4" cy="12" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
-                  <circle cx="20" cy="12" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
-                </svg>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--atlas-gold)", fontFamily: "var(--app-font-sans)", display: "block", letterSpacing: "0.01em" }}>
-                  Nexium
-                </span>
-                <span style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.6, display: "block", marginTop: 1, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
-                  strategic command space
-                </span>
-              </div>
-            </button>
-          )}
+          {/* NEXIUM — global strategic mode */}
+          <button
+            type="button"
+            onClick={() => navigate("/nexus")}
+            style={{
+              display: "flex", alignItems: "center", gap: 10,
+              width: "100%", padding: "9px 10px", marginBottom: 10,
+              borderRadius: 9, border: "none",
+              background: isNexusActive
+                ? "rgba(201,162,76,0.1)"
+                : "rgba(201,162,76,0.04)",
+              borderLeft: `2px solid ${isNexusActive ? "rgba(201,162,76,0.6)" : "rgba(201,162,76,0.25)"}`,
+              cursor: "pointer", textAlign: "left",
+              transition: "all 140ms ease",
+              boxShadow: isNexusActive ? "0 0 14px -4px rgba(201,162,76,0.18)" : "none",
+            }}
+            onMouseEnter={(e) => { if (!isNexusActive) e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
+            onMouseLeave={(e) => { if (!isNexusActive) e.currentTarget.style.background = "rgba(201,162,76,0.04)"; }}
+          >
+            <div style={{
+              width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+              background: "rgba(201,162,76,0.1)",
+              border: "1px solid rgba(201,162,76,0.3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 0 10px -3px rgba(201,162,76,0.3)",
+            }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                <circle cx="12" cy="4" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
+                <circle cx="12" cy="20" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
+                <circle cx="4" cy="12" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
+                <circle cx="20" cy="12" r="1.2" fill="var(--atlas-gold)" opacity="0.6" />
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--atlas-gold)", fontFamily: "var(--app-font-sans)", display: "block", letterSpacing: "0.01em" }}>
+                Nexium
+              </span>
+              <span style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.6, display: "block", marginTop: 1, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
+                strategic command space
+              </span>
+            </div>
+          </button>
 
           {/* PROJECTS section */}
           <div style={{ display: "flex", alignItems: "center", padding: "2px 4px", marginBottom: 2 }}>
