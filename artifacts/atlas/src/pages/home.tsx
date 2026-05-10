@@ -826,15 +826,9 @@ export default function Home() {
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
             <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
             <button
-              title={isSuperAdmin(authUser) ? "Invite someone" : "New project"}
+              title="New project"
               disabled={loading}
-              onClick={() => {
-                if (isSuperAdmin(authUser)) {
-                  setShowInvite(true);
-                } else {
-                  handleNewProject("New Project");
-                }
-              }}
+              onClick={() => handleNewProject("New Project")}
               style={{
                 width: 26, height: 26, borderRadius: "22%",
                 border: "1px dashed rgba(212,175,55,0.45)",
