@@ -482,15 +482,28 @@ export interface NexusMessage {
   createdAt: string;
 }
 
+export type NexusHistoryMessageRole =
+  (typeof NexusHistoryMessageRole)[keyof typeof NexusHistoryMessageRole];
+
+export const NexusHistoryMessageRole = {
+  user: "user",
+  assistant: "assistant",
+} as const;
+
+export interface NexusHistoryMessage {
+  role: NexusHistoryMessageRole;
+  content: string;
+}
+
 export interface NexusChatRequest {
   message: string;
+  history?: NexusHistoryMessage[];
   /** @nullable */
   userProfile?: string | null;
 }
 
 export interface NexusChatResponse {
-  content: string;
-  messageId: number;
+  response: string;
   memoryUpdated: boolean;
 }
 
