@@ -35,19 +35,27 @@ function getBase() {
 
 // ── Global Ledger subcomponents ───────────────────────────────────────────────
 
-function ProjectEntryGroup({ projectId, projectName, onNavigate }: {
+function ProjectEntryGroup({ projectId, projectName, onNavigate, onCountReady }: {
   projectId: number;
   projectName: string;
   onNavigate: (id: number) => void;
+  onCountReady?: (projectId: number, count: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { data: entries, isLoading } = useListEntries(projectId, {}, {
-    query: { enabled: expanded, queryKey: getListEntriesQueryKey(projectId, {}) },
+    query: { queryKey: getListEntriesQueryKey(projectId, {}) },
   });
 
   const committed = (entries ?? []).filter((e: Entry) => e.status === "committed");
   const initial = projectName.trim()[0]?.toUpperCase() ?? "?";
   const hue = (projectName.charCodeAt(0) * 37) % 360;
+
+  // Report count upward once loaded
+  useEffect(() => {
+    if (entries !== undefined && onCountReady) {
+      onCountReady(projectId, committed.length);
+    }
+  }, [entries, committed.length, projectId, onCountReady]);
 
   return (
     <div style={{ borderBottom: "1px solid var(--atlas-border)" }}>
@@ -73,8 +81,21 @@ function ProjectEntryGroup({ projectId, projectName, onNavigate }: {
         <span style={{ flex: 1, fontSize: 12.5, fontWeight: 500, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {projectName}
         </span>
+        {committed.length > 0 && (
+          <span style={{
+            fontSize: 9, fontFamily: "var(--app-font-mono)", fontWeight: 700,
+            color: "rgba(201,162,76,0.55)", letterSpacing: "0.06em",
+            background: "rgba(201,162,76,0.07)", borderRadius: 4,
+            padding: "1px 5px", flexShrink: 0,
+          }}>
+            {committed.length}
+          </span>
+        )}
+        {isLoading && (
+          <span style={{ fontSize: 9, color: "var(--atlas-muted)", opacity: 0.4, flexShrink: 0, fontFamily: "var(--app-font-mono)" }}>…</span>
+        )}
         <svg width="9" height="9" viewBox="0 0 12 8" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.8" strokeLinecap="round"
-          style={{ flexShrink: 0, opacity: 0.55, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 180ms ease" }}>
+          style={{ flexShrink: 0, opacity: 0.55, transform: expanded ? "rotate(180deg)" : "none", transition: "transform 180ms ease", marginLeft: 2 }}>
           <path d="M1 1.5l5 5 5-5" />
         </svg>
       </button>
@@ -87,7 +108,7 @@ function ProjectEntryGroup({ projectId, projectName, onNavigate }: {
             </div>
           ) : committed.length === 0 ? (
             <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.45, fontStyle: "italic", padding: "4px 0" }}>
-              No committed decisions yet.
+              No committed decisions in this project yet.
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -131,6 +152,18 @@ function GlobalLedger({ projects, onNavigate }: {
   projects: { id: number; name: string }[];
   onNavigate: (id: number) => void;
 }) {
+  const [counts, setCounts] = useState<Record<number, number>>({});
+
+  const handleCountReady = useCallback((projectId: number, count: number) => {
+    setCounts(prev => {
+      if (prev[projectId] === count) return prev;
+      return { ...prev, [projectId]: count };
+    });
+  }, []);
+
+  const totalCommitted = Object.values(counts).reduce((sum, n) => sum + n, 0);
+  const countsLoaded = Object.keys(counts).length === projects.length;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Panel header */}
@@ -146,8 +179,19 @@ function GlobalLedger({ projects, onNavigate }: {
         <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.85 }}>
           Global Ledger
         </span>
-        <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.4, marginLeft: 2 }}>
-          committed · read-only
+        {/* Total committed count badge */}
+        {countsLoaded && totalCommitted > 0 && (
+          <span style={{
+            fontSize: 9, fontFamily: "var(--app-font-mono)", fontWeight: 700,
+            color: "rgba(201,162,76,0.75)", background: "rgba(201,162,76,0.1)",
+            border: "1px solid rgba(201,162,76,0.22)", borderRadius: 5,
+            padding: "1px 6px", letterSpacing: "0.04em", flexShrink: 0,
+          }}>
+            {totalCommitted}
+          </span>
+        )}
+        <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.4, marginLeft: "auto" }}>
+          read-only
         </span>
       </div>
 
@@ -155,11 +199,11 @@ function GlobalLedger({ projects, onNavigate }: {
       <div style={{ flex: 1, overflowY: "auto" }} className="scrollbar-none">
         {projects.length === 0 ? (
           <div style={{ padding: "32px 18px", textAlign: "center", fontSize: 12, color: "var(--atlas-muted)", opacity: 0.5, fontStyle: "italic" }}>
-            No projects yet.
+            No projects yet — create one to start tracking decisions.
           </div>
         ) : (
           projects.map(p => (
-            <ProjectEntryGroup key={p.id} projectId={p.id} projectName={p.name} onNavigate={onNavigate} />
+            <ProjectEntryGroup key={p.id} projectId={p.id} projectName={p.name} onNavigate={onNavigate} onCountReady={handleCountReady} />
           ))
         )}
       </div>
