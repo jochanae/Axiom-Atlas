@@ -1,10 +1,16 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { db, chatMessagesTable, sessionsTable, projectsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
+
+const openaiClient = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
 
 const IMAGE_REQUEST_RE = /\b(generate|create|make|draw|sketch|visualize|design|mock.?up|wireframe|show me|build me)\b.{0,60}\b(image|picture|visual|ui|screen|layout|logo|icon|banner|mockup|diagram|chart|graphic|illustration)\b/i;
 
@@ -508,12 +514,120 @@ function matchEntryChips(
     .slice(0, 5);
 }
 
+// ── Deep Dive detector ────────────────────────────────────────────────────────
+const DEEP_DIVE_RE = /^\/deep\s+(.+)/si;
+
+function isDeepDive(message: string): { isDive: boolean; topic: string } {
+  const m = message.match(DEEP_DIVE_RE);
+  if (m) return { isDive: true, topic: m[1].trim() };
+  return { isDive: false, topic: "" };
+}
+
+async function runDeepDive(topic: string, systemPrompt: string): Promise<string> {
+  // Use Gemini for deep dives — large context window, good at synthesis
+  const prompt = `You are Atlas performing a Deep Dive research analysis. The user wants comprehensive technical insight on:
+
+"${topic}"
+
+Produce a structured research card in this exact format:
+
+## Deep Dive: ${topic}
+
+**Summary**
+[2-3 sentence plain English summary of what this is and why it matters]
+
+**Key Patterns**
+[3-5 bullet points of the most important technical patterns, approaches, or concepts]
+
+**Practical Considerations**
+[2-3 bullets on real-world gotchas, tradeoffs, or things to watch out for]
+
+**Relevant for You**
+[1-2 sentences on how this applies specifically to your Z Fold 6 / mobile-first / luxury UI context]
+
+**Open Questions**
+[2-3 questions worth answering before committing to an approach]
+
+Be specific and practical. No filler. This is research output, not a chat reply.`;
+
+  const result = await genai.models.generateContent({
+    model: "gemini-2.5-pro",
+    contents: prompt,
+    config: { systemInstruction: systemPrompt },
+  });
+  return result.text ?? "Deep Dive returned no content.";
+}
+
+// ── Multi-model dispatcher ────────────────────────────────────────────────────
+type ModelId = "claude" | "gpt4o" | "gemini";
+
+async function callModel(
+  modelId: ModelId,
+  systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> }>,
+  imageData?: { base64: string; mediaType: string }
+): Promise<string> {
+  if (modelId === "gpt4o") {
+    // Build OpenAI messages
+    type OAIMsg = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> };
+    const oaiMessages: OAIMsg[] = [{ role: "system", content: systemPrompt }];
+    for (const m of messages) {
+      if (m.role === "user" && imageData && m === messages[messages.length - 1]) {
+        oaiMessages.push({
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${imageData.mediaType};base64,${imageData.base64}` } },
+            { type: "text", text: typeof m.content === "string" ? m.content : JSON.stringify(m.content) },
+          ],
+        });
+      } else {
+        oaiMessages.push({
+          role: m.role as "user" | "assistant",
+          content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+        });
+      }
+    }
+    const resp = await openaiClient.chat.completions.create({
+      model: "gpt-4o",
+      max_tokens: 8192,
+      messages: oaiMessages as Parameters<typeof openaiClient.chat.completions.create>[0]["messages"],
+    });
+    return resp.choices[0]?.message?.content ?? "";
+  }
+
+  if (modelId === "gemini") {
+    const textParts = messages.map((m) => {
+      const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+      return `${m.role === "user" ? "User" : "Atlas"}: ${text}`;
+    });
+    const result = await genai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: textParts.join("\n\n"),
+      config: { systemInstruction: systemPrompt },
+    });
+    return result.text ?? "";
+  }
+
+  // Default: Claude
+  type TextBlock = { type: "text"; text: string };
+  type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
+  const claudeMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = messages as typeof claudeMessages;
+  const response = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 8192,
+    system: systemPrompt,
+    messages: claudeMessages,
+  });
+  return response.content[0]?.type === "text" ? response.content[0].text : "";
+}
+
 // ── Route ─────────────────────────────────────────────────────────────────────
 router.post("/chat", async (req, res): Promise<void> => {
   const body = req.body as {
     sessionId: number;
     projectId: number;
     message: string;
+    model?: string;
     mode?: string;
     history?: Array<{ role: string; content: string }>;
     entries?: Array<{ id: number; title: string; status: string }>;
@@ -532,6 +646,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
   const imageData = body.imageData;
+  const activeModel: ModelId = (body.model === "gpt4o" || body.model === "gemini") ? body.model : "claude";
   const now = new Date();
 
   // Load project memory + repo info from DB
@@ -680,38 +795,32 @@ Your role here is CEO-level advisor and thinking partner:
     systemPrompt += modeInstructions[activeMode] ?? modeInstructions.think;
   }
 
+  // ── Deep Dive shortcut — /deep <topic> ───────────────────────────────────────
+  const { isDive, topic: diveTopic } = isDeepDive(message);
+  if (isDive) {
+    await db.insert(chatMessagesTable).values({ sessionId, role: "user", content: message, intentType: body.mode ?? null });
+    const diveContent = await runDeepDive(diveTopic, systemPrompt);
+    const [savedDive] = await db.insert(chatMessagesTable).values({ sessionId, role: "assistant", content: diveContent, intentType: "EXPLORE" }).returning();
+    await db.update(sessionsTable).set({ messageCount: sql`${sessionsTable.messageCount} + 2` }).where(eq(sessionsTable.id, sessionId));
+    res.json({ content: diveContent, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
+    return;
+  }
+
+  // ── Build message history for multi-model dispatcher ─────────────────────
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = {
     type: "image";
-    source: {
-      type: "base64";
-      media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-      data: string;
-    };
+    source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string };
   };
 
   const userContent: string | Array<TextBlock | ImageBlock> = imageData
     ? [
-        {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: imageData.mediaType as
-              | "image/jpeg"
-              | "image/png"
-              | "image/gif"
-              | "image/webp",
-            data: imageData.base64,
-          },
-        },
+        { type: "image", source: { type: "base64", media_type: imageData.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData.base64 } },
         { type: "text", text: message },
       ]
     : message;
 
-  const messages: Array<{
-    role: "user" | "assistant";
-    content: string | Array<TextBlock | ImageBlock>;
-  }> = [
+  const dispatchMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = [
     ...(history || []).map((h: { role: string; content: string }) => ({
       role: h.role as "user" | "assistant",
       content: h.content,
@@ -726,15 +835,7 @@ Your role here is CEO-level advisor and thinking partner:
     intentType: body.mode ?? null,
   });
 
-  const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8192,
-    system: systemPrompt,
-    messages,
-  });
-
-  const rawContent =
-    response.content[0]?.type === "text" ? response.content[0].text : "";
+  const rawContent = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
 
   // Parse: FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent, fileEdits } = extractAllFileEdits(rawContent);
@@ -812,6 +913,7 @@ Your role here is CEO-level advisor and thinking partner:
     content: finalContent,
     intentType: detectedIntentType ?? null,
     catchPayload: null,
+    model: activeModel,
     memoryChips: allChips.length > 0 ? allChips : undefined,
     messageId: savedMsg.id,
     memoryUpdated: newFacts.length > 0,

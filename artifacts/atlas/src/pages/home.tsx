@@ -420,9 +420,11 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
 type HomeRepo = { fullName: string; name: string; defaultBranch: string };
 
 const MODELS = [
-  { id: "claude", label: "Claude", available: true },
-  { id: "gpt4o", label: "GPT-4o", available: false },
-  { id: "gemini", label: "Gemini", available: false },
+  { id: "claude",     label: "Claude",     sub: "Architect · Nuance & Strategy",  available: true },
+  { id: "gpt4o",      label: "GPT-4o",     sub: "Mechanic · Speed & Logic",       available: true },
+  { id: "gemini",     label: "Gemini",     sub: "Strategy · Long Context",        available: true },
+  { id: "perplexity", label: "Perplexity", sub: "Librarian · Live Research",      available: false },
+  { id: "deepseek",   label: "DeepSeek",   sub: "Analyst · Deep Reasoning",       available: false },
 ];
 
 function ContextChip({
@@ -745,28 +747,28 @@ function ModelPickerSheet({ current, onSelect, onClose }: {
                 border: `1px solid ${current === m.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
                 cursor: m.available ? "pointer" : "default",
                 display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
-                opacity: m.available ? 1 : 0.38,
+                opacity: m.available ? 1 : 0.32,
                 transition: "all 140ms ease",
               }}
             >
               <div style={{
-                width: 28, height: 28, borderRadius: 8,
+                width: 28, height: 28, borderRadius: 8, flexShrink: 0,
                 background: m.available ? "rgba(201,162,76,0.1)" : "rgba(37,34,32,0.8)",
                 border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "rgba(37,34,32,0.9)"}`,
-                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
+                color: m.available ? "rgba(201,162,76,0.85)" : "rgba(120,113,108,0.4)",
               }}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke={m.available ? "rgba(201,162,76,0.8)" : "rgba(120,113,108,0.5)"} strokeWidth="1.4" strokeLinecap="round">
-                  <circle cx="8" cy="8" r="6" />
-                  <path d="M5.5 8.5L7 10l3-4" />
-                </svg>
+                {m.id === "claude" ? "C" : m.id === "gpt4o" ? "G" : m.id === "gemini" ? "Ge" : m.id === "perplexity" ? "P" : "D"}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>{m.label}</div>
-                {!m.available && (
-                  <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.08em", marginTop: 1, opacity: 0.5 }}>
-                    COMING SOON
-                  </div>
-                )}
+                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", display: "flex", alignItems: "center", gap: 6 }}>
+                  {m.label}
+                  {!m.available && (
+                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", letterSpacing: "0.1em", opacity: 0.55, border: "1px solid rgba(120,113,108,0.2)", borderRadius: 3, padding: "1px 4px" }}>KEY NEEDED</span>
+                  )}
+                </div>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", marginTop: 2, opacity: m.available ? 0.7 : 0.4 }}>{m.sub}</div>
               </div>
               {current === m.id && (
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -775,6 +777,11 @@ function ModelPickerSheet({ current, onSelect, onClose }: {
               )}
             </button>
           ))}
+          <div style={{ margin: "12px 0 4px", padding: "8px 12px", background: "rgba(201,162,76,0.04)", borderRadius: 6, border: "1px solid rgba(201,162,76,0.1)" }}>
+            <p style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.07em", margin: 0, lineHeight: 1.6 }}>
+              In workspace: type <span style={{ color: "rgba(201,162,76,0.7)" }}>/deep [topic]</span> for a structured Gemini research card.
+            </p>
+          </div>
         </div>
       </div>
     </div>
