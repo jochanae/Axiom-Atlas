@@ -188,7 +188,7 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
 router.get("/auth/me", async (req, res): Promise<void> => {
   const user = await getUserFromCookie(req);
   if (!user) { res.status(401).json({ error: "Not authenticated" }); return; }
-  res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+  res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, googleLinked: !!user.googleId });
 });
 
 // Middleware: require a valid session cookie — attaches authUser to req

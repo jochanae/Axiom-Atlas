@@ -43,9 +43,20 @@ function createSessionCookie(token: string, res: import("express").Response) {
 }
 
 // GET /api/auth/google — redirect to Google consent screen
+// Pass ?link=1 when user is already signed in and wants to link Google to their account.
 router.get("/auth/google", (req, res): void => {
   const state = randomBytes(16).toString("hex");
+  const isLink = req.query.link === "1";
+
   res.cookie("oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600_000, path: "/" });
+
+  // If linking, carry the existing session token so the callback can find the user
+  if (isLink) {
+    const existingSession = req.cookies?.[SESSION_COOKIE];
+    if (existingSession) {
+      res.cookie("oauth_link_session", existingSession, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600_000, path: "/" });
+    }
+  }
 
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -64,7 +75,10 @@ router.get("/auth/google", (req, res): void => {
 router.get("/auth/google/callback", async (req, res): Promise<void> => {
   const { code, state, error } = req.query as Record<string, string>;
   const storedState = req.cookies?.oauth_state;
+  const linkSessionToken = req.cookies?.oauth_link_session as string | undefined;
+
   res.clearCookie("oauth_state", { path: "/" });
+  res.clearCookie("oauth_link_session", { path: "/" });
 
   if (error || !code) {
     res.redirect("/?auth_error=" + encodeURIComponent(error ?? "no_code"));
@@ -105,16 +119,40 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       return;
     }
 
-    // Find or create user
+    // ── Link flow: user was already signed in and clicked "Link Google" ──────
+    if (linkSessionToken) {
+      const now = new Date();
+      const rows = await db
+        .select({ user: usersTable })
+        .from(userSessionsTable)
+        .innerJoin(usersTable, eq(userSessionsTable.userId, usersTable.id))
+        .where(eq(userSessionsTable.token, linkSessionToken))
+        .limit(1);
+      const existingUser = rows[0]?.user;
+      if (existingUser) {
+        // Check the Google ID isn't already on a different account
+        const googleOwner = (await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.googleId, profile.id)).limit(1))[0];
+        if (googleOwner && googleOwner.id !== existingUser.id) {
+          res.redirect("/home?link_error=google_used_by_another_account");
+          return;
+        }
+        await db.update(usersTable).set({
+          googleId: profile.id,
+          ...(existingUser.avatarUrl ? {} : { avatarUrl: profile.picture ?? null }),
+        }).where(eq(usersTable.id, existingUser.id));
+        res.redirect("/home?linked=google");
+        return;
+      }
+    }
+
+    // ── Normal sign-in / sign-up flow ────────────────────────────────────────
     let user = (await db.select().from(usersTable).where(eq(usersTable.googleId, profile.id)).limit(1))[0];
 
     if (!user) {
-      // Check if an email/password account already exists with this email.
-      // If so, link the Google identity to that existing account rather than
-      // blocking — Google has already verified the email ownership.
+      // Check if an email/password account already exists — if so, link Google to it.
+      // Google has verified email ownership so this is safe.
       const existing = (await db.select().from(usersTable).where(eq(usersTable.email, profile.email.toLowerCase())).limit(1))[0];
       if (existing) {
-        // Link Google ID (and avatar if not already set) to the existing account
         [user] = await db
           .update(usersTable)
           .set({
@@ -124,7 +162,6 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
           .where(eq(usersTable.id, existing.id))
           .returning();
       } else {
-        // Create new Google user
         const role = (SUPER_ADMIN_EMAIL && profile.email.toLowerCase() === SUPER_ADMIN_EMAIL) ? "super_admin" : "user";
         [user] = await db.insert(usersTable).values({
           email: profile.email.toLowerCase(),

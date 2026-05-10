@@ -35,8 +35,7 @@ export default function Login() {
   const sessionExpired = typeof window !== "undefined"
     && new URLSearchParams(window.location.search).get("reason") === "session_expired";
 
-  const googleEmailConflict = typeof window !== "undefined"
-    && new URLSearchParams(window.location.search).get("auth_error") === "email_exists_use_password";
+  const googleEmailConflict = false; // Removed: server now auto-links Google to existing email accounts
 
   useEffect(() => {
     if (!isLoading && user) navigate("/home");

@@ -9,6 +9,7 @@ export interface AuthUser {
   avatarUrl: string | null;
   role: "user" | "admin" | "super_admin";
   subscriptionTier: string;
+  googleLinked: boolean;
 }
 
 async function fetchMe(): Promise<AuthUser | null> {
