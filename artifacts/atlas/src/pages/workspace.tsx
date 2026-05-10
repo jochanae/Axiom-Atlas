@@ -1870,32 +1870,105 @@ function LedgerEntry({ entry }: { entry: Entry }) {
 }
 
 // ── PushHistoryEntry ──────────────────────────────────────────────────────────
-function PushHistoryEntry({ record, onRollback }: { record: PushRecord; onRollback: () => Promise<void> }) {
+// ── diff stat helper ──────────────────────────────────────────────────────────
+function diffStat(original: string | null, next: string): { additions: number; deletions: number } {
+  if (!original) return { additions: next.split("\n").filter(l => l.trim()).length, deletions: 0 };
+  // Bag-of-lines approach: O(n), handles repeated lines correctly
+  const bag = (s: string) => {
+    const m = new Map<string, number>();
+    for (const l of s.split("\n")) m.set(l, (m.get(l) ?? 0) + 1);
+    return m;
+  };
+  const aBag = bag(original);
+  const bBag = bag(next);
+  let deletions = 0;
+  for (const [l, c] of aBag) { const bc = bBag.get(l) ?? 0; if (c > bc) deletions += c - bc; }
+  let additions = 0;
+  for (const [l, c] of bBag) { const ac = aBag.get(l) ?? 0; if (c > ac) additions += c - ac; }
+  return { additions, deletions };
+}
+
+// ── PushDiffCard ──────────────────────────────────────────────────────────────
+// Groups one commit's worth of file pushes into a collapsible diff card.
+function PushDiffCard({ records, onRollbackAll }: { records: PushRecord[]; onRollbackAll: () => Promise<void> }) {
+  const [open, setOpen] = useState(true);
   const [rolling, setRolling] = useState(false);
-  const [done, setDone] = useState(record.rolledBack);
+  const [done, setDone] = useState(records.every(r => r.rolledBack));
+
+  const first = records[0];
+  const canRollback = records.some(r => r.originalContent && !r.rolledBack);
+
+  const stats = records.map(r => ({ ...r, ...diffStat(r.originalContent, r.newContent) }));
+  const totalAdded = stats.reduce((s, r) => s + r.additions, 0);
+  const totalDeleted = stats.reduce((s, r) => s + r.deletions, 0);
+
   return (
-    <div style={{ padding: "10px 12px", borderRadius: 7, background: "rgba(0,0,0,0.2)", border: "1px solid var(--atlas-border)", marginBottom: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-fg)" }}>{record.filename}</span>
-        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.5 }}>
-          {new Date(record.pushedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+    <div style={{ borderRadius: 8, background: "rgba(0,0,0,0.22)", border: "1px solid var(--atlas-border)", marginBottom: 7, overflow: "hidden" }}>
+      {/* Collapsible header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", background: "transparent", border: "none", cursor: "pointer", textAlign: "left" }}
+      >
+        <svg
+          width="10" height="10" viewBox="0 0 10 10" fill="none"
+          style={{ flexShrink: 0, transition: "transform 160ms ease", transform: open ? "rotate(90deg)" : "rotate(0deg)", opacity: 0.45 }}
+        >
+          <path d="M3 2l4 3-4 3" stroke="var(--atlas-fg)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10.5, color: "var(--atlas-fg)", flex: 1 }}>
+          {records.length} File{records.length !== 1 ? "s" : ""} Changed
         </span>
-      </div>
-      <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.55, marginBottom: 7 }}>{record.branch}</div>
-      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-        <a href={record.commitUrl} target="_blank" rel="noopener noreferrer" style={{ padding: "3px 9px", borderRadius: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", textDecoration: "none", cursor: "pointer" }}>
-          View →
-        </a>
-        {record.originalContent && !done && (
-          <button
-            disabled={rolling}
-            onClick={async () => { setRolling(true); await onRollback(); setRolling(false); setDone(true); }}
-            style={{ padding: "3px 9px", borderRadius: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: rolling ? "rgba(255,255,255,0.03)" : "rgba(239,68,68,0.07)", border: `1px solid ${rolling ? "var(--atlas-border)" : "rgba(239,68,68,0.22)"}`, color: rolling ? "var(--atlas-muted)" : "rgba(252,165,165,0.8)", cursor: rolling ? "not-allowed" : "pointer", transition: "all 150ms ease" }}
-          >
-            {rolling ? "…" : "↺ Rollback"}
-          </button>
-        )}
-        {done && <span style={{ padding: "3px 9px", fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5 }}>rolled back</span>}
+        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "#4ade80", opacity: 0.8 }}>+{totalAdded}</span>
+        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "#f87171", opacity: 0.8, marginRight: 4 }}>-{totalDeleted}</span>
+        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8.5, color: "var(--atlas-muted)", opacity: 0.45 }}>
+          {new Date(first.pushedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </button>
+
+      {/* File list */}
+      {open && (
+        <div style={{ borderTop: "1px solid var(--atlas-border)" }}>
+          {stats.map(r => (
+            <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid rgba(37,34,32,0.6)" }}>
+              {/* File icon — colored by extension */}
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+                <path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6L9 1z" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinejoin="round" />
+                <path d="M9 1v5h5" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinejoin="round" />
+              </svg>
+              <span style={{ flex: 1, fontFamily: "var(--app-font-mono)", fontSize: 10.5, color: "var(--atlas-fg)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.filename}
+              </span>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "#4ade80", flexShrink: 0 }}>+{r.additions}</span>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "#f87171", flexShrink: 0 }}>-{r.deletions}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Footer actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", justifyContent: "space-between" }}>
+        <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {first.branch}
+        </div>
+        <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+          {first.commitUrl && (
+            <a href={first.commitUrl} target="_blank" rel="noopener noreferrer"
+              style={{ padding: "3px 9px", borderRadius: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", textDecoration: "none", opacity: 0.75 }}
+            >
+              View →
+            </a>
+          )}
+          {canRollback && !done && (
+            <button
+              disabled={rolling}
+              onClick={async () => { setRolling(true); await onRollbackAll(); setRolling(false); setDone(true); }}
+              style={{ padding: "3px 9px", borderRadius: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", background: rolling ? "rgba(255,255,255,0.03)" : "rgba(239,68,68,0.07)", border: `1px solid ${rolling ? "var(--atlas-border)" : "rgba(239,68,68,0.22)"}`, color: rolling ? "var(--atlas-muted)" : "rgba(252,165,165,0.8)", cursor: rolling ? "not-allowed" : "pointer", transition: "all 150ms ease" }}
+            >
+              {rolling ? "…" : "↺ Rollback"}
+            </button>
+          )}
+          {done && <span style={{ padding: "3px 9px", fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.45 }}>rolled back</span>}
+        </div>
       </div>
     </div>
   );
@@ -2161,17 +2234,25 @@ function LedgerTab({
             </span>
           )}
         </div>
-        {pushHistory.length > 0 ? (
-          [...pushHistory].reverse().map((record) => (
-            <PushHistoryEntry
-              key={record.id}
-              record={record}
-              onRollback={async () => {
-                await onRollbackPush(record);
+        {pushHistory.length > 0 ? (() => {
+          // Group records by commitUrl so multi-file commits show as one card
+          const groups: PushRecord[][] = [];
+          const seen = new Map<string, PushRecord[]>();
+          for (const r of [...pushHistory].reverse()) {
+            const key = r.commitUrl || r.id;
+            if (!seen.has(key)) { seen.set(key, []); groups.push(seen.get(key)!); }
+            seen.get(key)!.push(r);
+          }
+          return groups.map((group) => (
+            <PushDiffCard
+              key={group[0].commitUrl || group[0].id}
+              records={group}
+              onRollbackAll={async () => {
+                for (const r of group) await onRollbackPush(r);
               }}
             />
-          ))
-        ) : (
+          ));
+        })() : (
           <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.35, lineHeight: 1.65 }}>
             Code pushes will appear here. Tap <strong style={{ opacity: 0.6 }}>Rollback</strong> on any to instantly restore the original.
           </div>
