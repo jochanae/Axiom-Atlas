@@ -370,18 +370,18 @@ export default function MasterMap() {
       return { x: (v.x * 0.5 + 0.5) * canvas.clientWidth, y: (-v.y * 0.5 + 0.5) * canvas.clientHeight };
     };
 
-    const warpTo = (destId: number, targetPos: THREE.Vector3) => {
+    const warpTo = (destId: number, targetPos: THREE.Vector3, params = "") => {
       const camNow = camera.position.clone();
       const dir = targetPos.clone().sub(camNow).normalize();
       warpTarget.current = {
         pos: camNow.clone().add(dir.multiplyScalar(500)),
         start: Date.now(),
-        cb: () => setLocation(`/project/${destId}`),
+        cb: () => setLocation(`/project/${destId}${params}`),
       };
       setWarping(true);
       setTimeout(() => {
         if (!warpTarget.current) return;
-        setLocation(`/project/${destId}`);
+        setLocation(`/project/${destId}${params}`);
       }, 950);
     };
 
@@ -509,8 +509,8 @@ export default function MasterMap() {
     warpFnRef.current = (destId: number) => {
       const projs = projectsRef.current;
       const idx = projs.findIndex(p => p.id === destId);
-      if (idx >= 0) warpTo(destId, nodeMeshes[idx].position);
-      else if (nexusRef.current?.id === destId) warpTo(destId, new THREE.Vector3(0, 0, 0));
+      if (idx >= 0) warpTo(destId, nodeMeshes[idx].position, "?view=flow");
+      else if (nexusRef.current?.id === destId) warpTo(destId, new THREE.Vector3(0, 0, 0), "?view=flow");
     };
 
     canvas.addEventListener("mousedown", onMouseDown);
