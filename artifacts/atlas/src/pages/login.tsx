@@ -124,6 +124,38 @@ export default function Login() {
         pointerEvents: "none",
       }} />
 
+      {/* Back breadcrumb */}
+      <button
+        onClick={() => navigate("/")}
+        style={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: "6px 8px",
+          borderRadius: 6,
+          color: "var(--atlas-muted)",
+          opacity: 0.55,
+          fontFamily: "var(--app-font-mono)",
+          fontSize: 10,
+          letterSpacing: "0.15em",
+          textTransform: "uppercase",
+          transition: "opacity 160ms ease, color 160ms ease",
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.color = "var(--atlas-gold)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.55"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 2L4 6l4 4" />
+        </svg>
+        Back
+      </button>
+
       {/* Auth card */}
       <div style={{ width: "100%", maxWidth: 400, position: "relative" }}>
 
