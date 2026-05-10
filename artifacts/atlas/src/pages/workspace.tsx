@@ -2401,9 +2401,27 @@ function FilesTab({
   const setGlobalToken = (t: string | null) => { try { if (t) localStorage.setItem("atlas-github-token", t); else localStorage.removeItem("atlas-github-token"); } catch {} };
 
   const [tokenState, setTokenState] = useState<string | null>(() => getGlobalToken());
+  const [serverTokenAvailable, setServerTokenAvailable] = useState(false);
+  const [serverTokenChecked, setServerTokenChecked] = useState(false);
   const tokenSynced = useRef(false);
   const [autoLinkStatus, setAutoLinkStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [autoLinkResult, setAutoLinkResult] = useState<{ linked: Array<{ projectName: string; repoFullName: string }>; skipped: string[] } | null>(null);
+
+  // Check if server has a GITHUB_TOKEN configured — auto-connect if no manual token exists
+  useEffect(() => {
+    fetch("/api/github/server-token")
+      .then(r => r.ok ? r.json() : { available: false })
+      .then((d: any) => {
+        const avail = !!d.available;
+        setServerTokenAvailable(avail);
+        setServerTokenChecked(true);
+        if (avail && !getGlobalToken()) {
+          setTokenState("__server__");
+        }
+      })
+      .catch(() => setServerTokenChecked(true));
+  }, []);
+
   useEffect(() => {
     if (!filesProject) return;
     const globalToken = getGlobalToken();
@@ -2713,8 +2731,16 @@ function FilesTab({
   const sMono: React.CSSProperties = { fontFamily: "var(--app-font-mono)" };
   const sMuted = { color: "var(--atlas-muted)", ...sMono };
 
-  // Token setup screen
+  // Token setup screen — only show after server check, and only if no token at all
   if (!tokenState) {
+    if (!serverTokenChecked) {
+      // Still checking — show a brief loading state to avoid flash
+      return (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.5 }}>connecting…</div>
+        </div>
+      );
+    }
     return (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 18px", gap: 14 }}>
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" opacity={0.25}>
@@ -2843,7 +2869,22 @@ function FilesTab({
               {isUnlinking ? "unlinking…" : "unlink"}
             </button>
           )}
-          {disconnectConfirm ? (
+          {tokenState === "__server__" ? (
+            <span
+              title="Connected automatically via Replit GitHub integration"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "3px 8px", borderRadius: 6,
+                background: "rgba(52,211,153,0.07)",
+                border: "1px solid rgba(52,211,153,0.18)",
+                fontSize: 9.5, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.05em", color: "rgba(52,211,153,0.75)",
+              }}
+            >
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", flexShrink: 0 }} />
+              via Replit
+            </span>
+          ) : disconnectConfirm ? (
             <div style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 6, padding: "4px 8px" }}>
               <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(252,165,165,0.85)", letterSpacing: "0.04em" }}>Remove token?</span>
               <button
