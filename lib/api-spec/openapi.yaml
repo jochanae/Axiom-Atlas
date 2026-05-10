@@ -19,6 +19,8 @@ tags:
     description: Decision ledger entries
   - name: chat
     description: AI chat
+  - name: nexus
+    description: Nexus global command space (mode, not a project)
   - name: import
     description: Axiom handoff import
   - name: forge
@@ -580,6 +582,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChatResponse"
+
+  /nexus/thread:
+    get:
+      operationId: getNexusThread
+      tags: [nexus]
+      summary: Get the full Nexus Living Thread for the authenticated user
+      responses:
+        "200":
+          description: List of Nexus messages (oldest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NexusMessage"
+    delete:
+      operationId: clearNexusThread
+      tags: [nexus]
+      summary: Clear the entire Nexus thread (emergency reset)
+      responses:
+        "204":
+          description: Cleared
+
+  /nexus/chat:
+    post:
+      operationId: sendNexusMessage
+      tags: [nexus]
+      summary: Send a message in Nexus Mode — Atlas responds with full cross-project awareness
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NexusChatRequest"
+      responses:
+        "200":
+          description: Atlas response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NexusChatResponse"
+        "400":
+          description: Invalid request
 
 components:
   schemas:
@@ -1190,3 +1235,45 @@ components:
       required:
         - nodes
         - summary
+
+    NexusMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - role
+        - content
+        - createdAt
+
+    NexusChatRequest:
+      type: object
+      properties:
+        message:
+          type: string
+        userProfile:
+          type: ["string", "null"]
+      required:
+        - message
+
+    NexusChatResponse:
+      type: object
+      properties:
+        content:
+          type: string
+        messageId:
+          type: integer
+        memoryUpdated:
+          type: boolean
+      required:
+        - content
+        - messageId
+        - memoryUpdated

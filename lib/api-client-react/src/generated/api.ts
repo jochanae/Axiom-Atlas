@@ -33,6 +33,9 @@ import type {
   HealthStatus,
   ListEntriesParams,
   Message,
+  NexusChatRequest,
+  NexusChatResponse,
+  NexusMessage,
   Project,
   ProjectSummary,
   ReadinessSnapshot,
@@ -2527,4 +2530,246 @@ export const useSendMessage = <
   TContext
 > => {
   return useMutation(getSendMessageMutationOptions(options));
+};
+
+/**
+ * @summary Get the full Nexus Living Thread for the authenticated user
+ */
+export const getGetNexusThreadUrl = () => {
+  return `/api/nexus/thread`;
+};
+
+export const getNexusThread = async (
+  options?: RequestInit,
+): Promise<NexusMessage[]> => {
+  return customFetch<NexusMessage[]>(getGetNexusThreadUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNexusThreadQueryKey = () => {
+  return [`/api/nexus/thread`] as const;
+};
+
+export const getGetNexusThreadQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNexusThread>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNexusThread>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNexusThreadQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNexusThread>>> = ({
+    signal,
+  }) => getNexusThread({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNexusThread>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNexusThreadQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNexusThread>>
+>;
+export type GetNexusThreadQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the full Nexus Living Thread for the authenticated user
+ */
+
+export function useGetNexusThread<
+  TData = Awaited<ReturnType<typeof getNexusThread>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNexusThread>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNexusThreadQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Clear the entire Nexus thread (emergency reset)
+ */
+export const getClearNexusThreadUrl = () => {
+  return `/api/nexus/thread`;
+};
+
+export const clearNexusThread = async (
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getClearNexusThreadUrl(), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getClearNexusThreadMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearNexusThread>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof clearNexusThread>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["clearNexusThread"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof clearNexusThread>>,
+    void
+  > = () => {
+    return clearNexusThread(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ClearNexusThreadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof clearNexusThread>>
+>;
+
+export type ClearNexusThreadMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Clear the entire Nexus thread (emergency reset)
+ */
+export const useClearNexusThread = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof clearNexusThread>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof clearNexusThread>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getClearNexusThreadMutationOptions(options));
+};
+
+/**
+ * @summary Send a message in Nexus Mode — Atlas responds with full cross-project awareness
+ */
+export const getSendNexusMessageUrl = () => {
+  return `/api/nexus/chat`;
+};
+
+export const sendNexusMessage = async (
+  nexusChatRequest: NexusChatRequest,
+  options?: RequestInit,
+): Promise<NexusChatResponse> => {
+  return customFetch<NexusChatResponse>(getSendNexusMessageUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(nexusChatRequest),
+  });
+};
+
+export const getSendNexusMessageMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendNexusMessage>>,
+    TError,
+    { data: BodyType<NexusChatRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendNexusMessage>>,
+  TError,
+  { data: BodyType<NexusChatRequest> },
+  TContext
+> => {
+  const mutationKey = ["sendNexusMessage"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendNexusMessage>>,
+    { data: BodyType<NexusChatRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return sendNexusMessage(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendNexusMessageMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendNexusMessage>>
+>;
+export type SendNexusMessageMutationBody = BodyType<NexusChatRequest>;
+export type SendNexusMessageMutationError = ErrorType<void>;
+
+/**
+ * @summary Send a message in Nexus Mode — Atlas responds with full cross-project awareness
+ */
+export const useSendNexusMessage = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendNexusMessage>>,
+    TError,
+    { data: BodyType<NexusChatRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendNexusMessage>>,
+  TError,
+  { data: BodyType<NexusChatRequest> },
+  TContext
+> => {
+  return useMutation(getSendNexusMessageMutationOptions(options));
 };

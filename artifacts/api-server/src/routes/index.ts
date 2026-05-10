@@ -18,6 +18,7 @@ import adminRouter from "./admin";
 import invitesRouter from "./invites";
 import stripeRouter from "./stripe";
 import statsRouter from "./stats";
+import nexusRouter from "./nexus";
 
 const router: IRouter = Router();
 
@@ -48,6 +49,9 @@ router.use(requireAuth, importRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
+
+// Nexus — global command space (mode, not a project)
+router.use(requireAuth, nexusRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);
