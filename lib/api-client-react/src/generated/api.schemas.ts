@@ -467,6 +467,33 @@ export interface ForgeResponse {
   summary: string;
 }
 
+export type NexusMessageRole =
+  (typeof NexusMessageRole)[keyof typeof NexusMessageRole];
+
+export const NexusMessageRole = {
+  user: "user",
+  assistant: "assistant",
+} as const;
+
+export interface NexusMessage {
+  id: number;
+  role: NexusMessageRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface NexusChatRequest {
+  message: string;
+  /** @nullable */
+  userProfile?: string | null;
+}
+
+export interface NexusChatResponse {
+  content: string;
+  messageId: number;
+  memoryUpdated: boolean;
+}
+
 export type ListEntriesParams = {
   status?: ListEntriesStatus;
 };

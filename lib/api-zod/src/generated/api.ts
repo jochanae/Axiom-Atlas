@@ -576,3 +576,28 @@ export const SendMessageResponse = zod.object({
     ),
   messageId: zod.number(),
 });
+
+/**
+ * @summary Get the full Nexus Living Thread for the authenticated user
+ */
+export const GetNexusThreadResponseItem = zod.object({
+  id: zod.number(),
+  role: zod.enum(["user", "assistant"]),
+  content: zod.string(),
+  createdAt: zod.string(),
+});
+export const GetNexusThreadResponse = zod.array(GetNexusThreadResponseItem);
+
+/**
+ * @summary Send a message in Nexus Mode — Atlas responds with full cross-project awareness
+ */
+export const SendNexusMessageBody = zod.object({
+  message: zod.string(),
+  userProfile: zod.string().nullish(),
+});
+
+export const SendNexusMessageResponse = zod.object({
+  content: zod.string(),
+  messageId: zod.number(),
+  memoryUpdated: zod.boolean(),
+});
