@@ -5444,7 +5444,21 @@ export default function Workspace() {
 
   const [fileContext, setFileContext] = useState<string | null>(null);
   const [chatPending, setChatPending] = useState(false);
+  const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
   const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(null);
+
+  const PENDING_PHRASES = [
+    "Loading context…",
+    "Reviewing your decisions…",
+    "Thinking…",
+    "Composing a response…",
+  ];
+
+  useEffect(() => {
+    if (!chatPending) { setPendingPhraseIdx(0); return; }
+    const t = setInterval(() => setPendingPhraseIdx(i => (i + 1) % PENDING_PHRASES.length), 2400);
+    return () => clearInterval(t);
+  }, [chatPending]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -6877,6 +6891,18 @@ export default function Workspace() {
                   Atlas
                 </div>
                 <LoadingSpinner size="sm" color="atlas" />
+                <div style={{
+                  marginTop: 10,
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 10,
+                  color: "var(--atlas-muted)",
+                  letterSpacing: "0.07em",
+                  opacity: 0.65,
+                  transition: "opacity 400ms ease",
+                  minHeight: "1em",
+                }}>
+                  {PENDING_PHRASES[pendingPhraseIdx]}
+                </div>
               </div>
             )}
 
