@@ -96,6 +96,10 @@ export default function MasterMap() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelEls = useRef<(HTMLDivElement | null)[]>([]);
+  const panRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const warpFnRef = useRef<((destId: number) => void) | null>(null);
+  const recenterFnRef = useRef<(() => void) | null>(null);
 
   useEffect(() => { hoveredIdxRef.current = hoveredIdx; }, [hoveredIdx]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
@@ -397,34 +401,124 @@ export default function MasterMap() {
       warpTo(proj.id, nodeMeshes[idx].position);
     };
 
-    const onCanvasClick = (e: MouseEvent) => handleClick(e.clientX, e.clientY);
-    let tx = 0, ty = 0;
-    const onTouchStart = (e: TouchEvent) => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; };
-    const onTouchEnd = (e: TouchEvent) => {
-      const t = e.changedTouches[0];
-      if (Math.abs(t.clientX - tx) < 10 && Math.abs(t.clientY - ty) < 10)
-        handleClick(t.clientX, t.clientY);
+    // ── Mouse drag + click ────────────────────────────────────────────────
+    let mouseDownX = 0, mouseDownY = 0, lastMX = 0, lastMY = 0;
+    let isMouseDrag = false;
+
+    const onMouseDown = (e: MouseEvent) => {
+      mouseDownX = lastMX = e.clientX;
+      mouseDownY = lastMY = e.clientY;
+      isMouseDrag = false;
     };
     const onMouseMove = (e: MouseEvent) => {
-      const hits = hitTest(e.clientX, e.clientY);
-      canvas.style.cursor = hits.length ? "pointer" : "crosshair";
-      if (hits.length) {
-        const obj = hits[0].object as THREE.Mesh;
-        const i = nodeMeshes.indexOf(obj);
-        setHoveredIdx(i >= 0 ? i : null);
+      if (e.buttons & 1) {
+        const dx = e.clientX - lastMX;
+        const dy = e.clientY - lastMY;
+        if (Math.hypot(e.clientX - mouseDownX, e.clientY - mouseDownY) > 6) {
+          isMouseDrag = true;
+          isDraggingRef.current = true;
+        }
+        if (isMouseDrag) {
+          panRef.current.x += dx * 1.4;
+          panRef.current.y -= dy * 1.4;
+          canvas.style.cursor = "grabbing";
+        }
       } else {
-        setHoveredIdx(null);
+        isDraggingRef.current = false;
+        const hits = hitTest(e.clientX, e.clientY);
+        canvas.style.cursor = hits.length ? "pointer" : "grab";
+        if (hits.length) {
+          const obj = hits[0].object as THREE.Mesh;
+          const i = nodeMeshes.indexOf(obj);
+          setHoveredIdx(i >= 0 ? i : null);
+        } else {
+          setHoveredIdx(null);
+        }
       }
+      lastMX = e.clientX;
+      lastMY = e.clientY;
     };
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      camZTarget.current = Math.max(260, Math.min(800, camZTarget.current + e.deltaY * 0.28));
+    const onCanvasClick = (e: MouseEvent) => {
+      if (isMouseDrag) { isMouseDrag = false; return; }
+      handleClick(e.clientX, e.clientY);
     };
 
+    // ── Touch drag + pinch + tap ──────────────────────────────────────────
+    let tStartX = 0, tStartY = 0, tLastX = 0, tLastY = 0;
+    let isTouchDrag = false;
+    let pinchStartDist = 0, pinchStartZ = CAM_Z;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        tStartX = tLastX = e.touches[0].clientX;
+        tStartY = tLastY = e.touches[0].clientY;
+        isTouchDrag = false;
+        isDraggingRef.current = false;
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        pinchStartDist = Math.hypot(dx, dy);
+        pinchStartZ = camZTarget.current;
+        isDraggingRef.current = true;
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const dx = e.touches[0].clientX - tLastX;
+        const dy = e.touches[0].clientY - tLastY;
+        if (Math.hypot(e.touches[0].clientX - tStartX, e.touches[0].clientY - tStartY) > 8) {
+          isTouchDrag = true;
+          isDraggingRef.current = true;
+        }
+        if (isTouchDrag) {
+          panRef.current.x += dx * 1.4;
+          panRef.current.y -= dy * 1.4;
+        }
+        tLastX = e.touches[0].clientX;
+        tLastY = e.touches[0].clientY;
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        if (pinchStartDist > 0) {
+          camZTarget.current = Math.max(220, Math.min(900, pinchStartZ * (pinchStartDist / dist)));
+        }
+      }
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        isDraggingRef.current = false;
+        if (!isTouchDrag) {
+          const t = e.changedTouches[0];
+          handleClick(t.clientX, t.clientY);
+        }
+        isTouchDrag = false;
+      }
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      camZTarget.current = Math.max(220, Math.min(900, camZTarget.current + e.deltaY * 0.28));
+    };
+
+    // ── Expose recenter + warpFn to React layer ───────────────────────────
+    recenterFnRef.current = () => {
+      panRef.current = { x: 0, y: 0 };
+      camZTarget.current = CAM_Z;
+    };
+    warpFnRef.current = (destId: number) => {
+      const projs = projectsRef.current;
+      const idx = projs.findIndex(p => p.id === destId);
+      if (idx >= 0) warpTo(destId, nodeMeshes[idx].position);
+      else if (nexusRef.current?.id === destId) warpTo(destId, new THREE.Vector3(0, 0, 0));
+    };
+
+    canvas.addEventListener("mousedown", onMouseDown);
     canvas.addEventListener("click", onCanvasClick);
-    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
-    canvas.addEventListener("touchend", onTouchEnd);
     canvas.addEventListener("mousemove", onMouseMove);
+    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: true });
+    canvas.addEventListener("touchend", onTouchEnd);
     canvas.addEventListener("wheel", onWheel, { passive: false });
 
     // Resize
@@ -454,12 +548,19 @@ export default function MasterMap() {
       nexMat.emissiveIntensity = glow;
       goldLight.intensity = 6 + Math.sin(t * 1.8) * 2;
 
-      // ── Gyro parallax (true layered depth) ──
+      // ── Camera: gyro + pan offset + zoom ──
       const gx = gyroTilt.current.x;
       const gy = gyroTilt.current.y;
-      // Camera position drifts with gyro — each Z-layer appears to shift at different rate
-      camera.position.x += (gy * 95 - camera.position.x) * 0.032;
-      camera.position.y += (-gx * 70 - camera.position.y) * 0.032;
+      // Rubber-band: spring pan back toward center if beyond threshold
+      const panDist = Math.hypot(panRef.current.x, panRef.current.y);
+      if (!isDraggingRef.current && panDist > 480) {
+        panRef.current.x *= 0.96;
+        panRef.current.y *= 0.96;
+      }
+      const targetX = gy * 95 + panRef.current.x;
+      const targetY = -gx * 70 + panRef.current.y;
+      camera.position.x += (targetX - camera.position.x) * 0.055;
+      camera.position.y += (targetY - camera.position.y) * 0.055;
       camera.position.z += (camZTarget.current - camera.position.z) * 0.07;
       // Star layers parallax: further back = moves less (nearer to camera parallaxes faster)
       starsBack.position.x  = camera.position.x * 0.12;
@@ -547,10 +648,12 @@ export default function MasterMap() {
 
     return () => {
       cancelAnimationFrame(frameId);
+      canvas.removeEventListener("mousedown", onMouseDown);
       canvas.removeEventListener("click", onCanvasClick);
-      canvas.removeEventListener("touchstart", onTouchStart);
-      canvas.removeEventListener("touchend", onTouchEnd);
       canvas.removeEventListener("mousemove", onMouseMove);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
       canvas.removeEventListener("wheel", onWheel);
       ro.disconnect();
       renderer.dispose();
@@ -565,7 +668,7 @@ export default function MasterMap() {
 
       <canvas
         ref={canvasRef}
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair" }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "grab" }}
       />
 
       {/* Nexium label (center of canvas) */}
@@ -670,14 +773,135 @@ export default function MasterMap() {
         </div>
       )}
 
+      {/* View Key HUD — floating glassmorphism pod, top-right */}
+      {!loading && (
+        <ViewKey
+          allProjects={projects}
+          nexusProject={nexusProject}
+          onRecenter={() => recenterFnRef.current?.()}
+          onDive={(id) => warpFnRef.current?.(id)}
+        />
+      )}
+
       <div style={{
         position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center",
         pointerEvents: "none", zIndex: 10,
         fontSize: 8, letterSpacing: "0.18em", textTransform: "uppercase",
         color: "rgba(201,162,76,0.13)", fontFamily: "var(--app-font-mono)",
       }}>
-        {isMobile ? "Tap node to dive · Tilt for parallax depth" : "Tap node to dive · Scroll to zoom"}
+        {isMobile ? "Tap node · Drag to pan · Pinch to zoom" : "Tap node · Drag to pan · Scroll to zoom"}
       </div>
+    </div>
+  );
+}
+
+// ── ViewKey HUD ───────────────────────────────────────────────────────────────
+
+function ViewKey({ allProjects, nexusProject, onRecenter, onDive }: {
+  allProjects: Project[];
+  nexusProject: Project | null;
+  onRecenter: () => void;
+  onDive: (id: number) => void;
+}) {
+  const [flowOpen, setFlowOpen] = useState(false);
+  const allNodes = [
+    ...(nexusProject ? [{ ...nexusProject, isNexus: true }] : []),
+    ...allProjects,
+  ];
+
+  return (
+    <div style={{ position: "absolute", top: 68, right: 14, zIndex: 50 }}>
+      {/* Glass pod */}
+      <div style={{
+        background: "rgba(9,8,6,0.84)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        border: "1px solid rgba(201,162,76,0.22)",
+        borderRadius: 12,
+        overflow: "hidden",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.72), 0 0 0 0.5px rgba(0,0,0,0.5)",
+      }}>
+        {/* SATELLITE — active, re-centers camera */}
+        <button onClick={onRecenter} style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+          padding: "10px 14px", width: "100%",
+          background: "rgba(201,162,76,0.11)",
+          border: "none", borderBottom: "1px solid rgba(201,162,76,0.14)",
+          cursor: "pointer", color: "rgba(201,162,76,0.92)",
+          transition: "background 150ms ease",
+        }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.18)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.11)")}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <circle cx="12" cy="12" r="3" fill="rgba(201,162,76,0.28)" />
+            <circle cx="12" cy="12" r="7" />
+            <circle cx="12" cy="12" r="11" />
+          </svg>
+          <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.12em" }}>SATELLITE</span>
+        </button>
+
+        {/* FLOW — opens project quick-picker */}
+        <button onClick={() => setFlowOpen(v => !v)} style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+          padding: "10px 14px", width: "100%",
+          background: flowOpen ? "rgba(201,162,76,0.07)" : "transparent",
+          border: "none", cursor: "pointer",
+          color: flowOpen ? "rgba(201,162,76,0.72)" : "rgba(120,113,108,0.52)",
+          transition: "color 160ms ease, background 160ms ease",
+        }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "rgba(201,162,76,0.72)"; }}
+          onMouseLeave={(e) => { if (!flowOpen) e.currentTarget.style.color = "rgba(120,113,108,0.52)"; }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="5" cy="5" r="1.5" />
+            <circle cx="19" cy="5" r="1.5" />
+            <circle cx="5" cy="19" r="1.5" />
+            <circle cx="19" cy="19" r="1.5" />
+            <line x1="6.5" y1="6.5" x2="10.5" y2="10.5" />
+            <line x1="17.5" y1="6.5" x2="13.5" y2="10.5" />
+            <line x1="6.5" y1="17.5" x2="10.5" y2="13.5" />
+            <line x1="17.5" y1="17.5" x2="13.5" y2="13.5" />
+          </svg>
+          <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.12em" }}>FLOW</span>
+        </button>
+      </div>
+
+      {/* Project quick-picker — slides out to the left */}
+      {flowOpen && (
+        <div style={{
+          position: "absolute", top: 0, right: "calc(100% + 8px)",
+          background: "rgba(9,8,6,0.95)",
+          backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
+          border: "1px solid rgba(201,162,76,0.16)", borderRadius: 10,
+          padding: "6px 0", minWidth: 188, maxHeight: 320, overflowY: "auto",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.82)",
+          animation: "picker-in 140ms cubic-bezier(0.22,1,0.36,1) both",
+        }}>
+          <div style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.4)", letterSpacing: "0.12em", padding: "5px 12px 7px", textTransform: "uppercase" }}>
+            Select Flow
+          </div>
+          {allNodes.map(p => {
+            const hue = nodeHue(p.name);
+            return (
+              <button key={p.id} onClick={() => { setFlowOpen(false); onDive(p.id); }} style={{
+                width: "100%", padding: "8px 12px", background: "transparent", border: "none",
+                cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
+                color: "rgba(231,229,228,0.76)", fontSize: 12.5,
+                fontFamily: "var(--app-font-sans)", transition: "background 120ms ease",
+              }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.08)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: `hsl(${hue},55%,55%)`, flexShrink: 0 }} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{p.name}</span>
+                {p.isNexus && <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.4)", flexShrink: 0 }}>SOURCE</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -685,6 +909,10 @@ export default function MasterMap() {
 // ── CSS ──────────────────────────────────────────────────────────────────────
 
 const STYLES = `
+@keyframes picker-in {
+  from { opacity: 0; transform: translateX(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
 @keyframes warp-dark {
   0%   { opacity: 0; }
   35%  { opacity: 0; }
