@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, desc, and, isNotNull } from "drizzle-orm";
+import { eq, sql, desc, and, isNotNull, inArray } from "drizzle-orm";
 import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable } from "@workspace/db";
 import {
   CreateProjectBody,
@@ -82,9 +82,26 @@ router.get("/projects", async (req, res): Promise<void> => {
 
   const scoreMap = new Map(latestScores.map(s => [s.projectId, s.score]));
 
+  const projectIds = projects.map(p => p.id);
+  let entryStatsMap = new Map<number, { entryCount: number; latestEntryAt: string | null }>();
+  if (projectIds.length > 0) {
+    const entryStats = await db
+      .select({
+        projectId: entriesTable.projectId,
+        entryCount: sql<number>`count(*)::int`,
+        latestEntryAt: sql<string | null>`max(created_at)::text`,
+      })
+      .from(entriesTable)
+      .where(inArray(entriesTable.projectId, projectIds))
+      .groupBy(entriesTable.projectId);
+    entryStatsMap = new Map(entryStats.map(s => [s.projectId, { entryCount: s.entryCount, latestEntryAt: s.latestEntryAt }]));
+  }
+
   res.json(projects.map(p => ({
-    ...serializeProject(p, false), // token never sent in list
+    ...serializeProject(p, false),
     latestSnapshotScore: scoreMap.get(p.id) ?? null,
+    entryCount: entryStatsMap.get(p.id)?.entryCount ?? 0,
+    latestEntryAt: entryStatsMap.get(p.id)?.latestEntryAt ?? null,
   })));
 });
 
