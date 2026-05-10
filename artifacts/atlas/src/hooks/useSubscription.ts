@@ -44,7 +44,7 @@ export function useSubscription() {
   });
 
   const tier = data?.tier ?? user?.subscriptionTier ?? "free";
-  const isPro = tier === "pro" || tier === "teams";
+  const isPro = tier === "pro" || tier === "teams" || tier === "founder";
   const isFree = !isPro;
 
   return { tier, isPro, isFree, subscription: data?.subscription ?? null, isLoading };
