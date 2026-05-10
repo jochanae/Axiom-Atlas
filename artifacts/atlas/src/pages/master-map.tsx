@@ -726,7 +726,7 @@ export default function MasterMap() {
         borderBottom: "1px solid rgba(201,162,76,0.07)",
         background: "rgba(9,8,6,0.78)", backdropFilter: "blur(16px)",
       }}>
-        <button onClick={() => setLocation("/home")} style={{
+        <button onClick={() => setLocation("/nexus")} style={{
           width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(201,162,76,0.18)",
           background: "rgba(201,162,76,0.06)", display: "flex", alignItems: "center",
           justifyContent: "center", cursor: "pointer", color: "rgba(201,162,76,0.7)", flexShrink: 0,

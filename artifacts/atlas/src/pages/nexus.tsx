@@ -176,8 +176,8 @@ function GlobalLedger({ projects, onNavigate }: {
         <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.85 }}>
           Global Ledger
         </span>
-        {/* Total committed count badge */}
-        {countsLoaded && totalCommitted > 0 && (
+        {/* Total committed count badge — always shown once counts are loaded */}
+        {countsLoaded && (
           <span style={{
             fontSize: 9, fontFamily: "var(--app-font-mono)", fontWeight: 700,
             color: "rgba(201,162,76,0.75)", background: "rgba(201,162,76,0.1)",
@@ -194,14 +194,14 @@ function GlobalLedger({ projects, onNavigate }: {
 
       {/* Project list */}
       <div style={{ flex: 1, overflowY: "auto" }} className="scrollbar-none">
-        {projects.length === 0 ? (
+        {projects.map(p => (
+          <ProjectEntryGroup key={p.id} projectId={p.id} projectName={p.name} onNavigate={onNavigate} onCountReady={handleCountReady} />
+        ))}
+        {/* Global empty state: shown when all project counts are in and none have commits */}
+        {countsLoaded && totalCommitted === 0 && (
           <div style={{ padding: "32px 18px", textAlign: "center", fontSize: 12, color: "var(--atlas-muted)", opacity: 0.5, fontStyle: "italic" }}>
             No committed decisions yet across your projects.
           </div>
-        ) : (
-          projects.map(p => (
-            <ProjectEntryGroup key={p.id} projectId={p.id} projectName={p.name} onNavigate={onNavigate} onCountReady={handleCountReady} />
-          ))
         )}
       </div>
     </div>
