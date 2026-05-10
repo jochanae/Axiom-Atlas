@@ -1,5 +1,5 @@
 import { useEffect, Component, type ReactNode } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,9 +12,7 @@ import Projects from "./pages/projects";
 import Workspace from "./pages/workspace";
 import Ledger from "./pages/ledger";
 import ParkingLot from "./pages/parking-lot";
-import GuardReport from "./pages/guard-report";
 import EntryDetail from "./pages/entry-detail";
-import Sessions from "./pages/sessions";
 import ThinkFreely from "./pages/think-freely";
 import Workshop from "./pages/workshop";
 import ProjectCompass from "./pages/project-compass";
@@ -109,9 +107,9 @@ function Router() {
       <Route path="/project/:projectId" component={Workspace} />
       <Route path="/ledger/:projectId" component={Ledger} />
       <Route path="/parking" component={ParkingLot} />
-      <Route path="/guard-report" component={GuardReport} />
+      <Route path="/guard-report" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/compass", { replace: true }), []); return null; }} />
       <Route path="/entry/:id" component={EntryDetail} />
-      <Route path="/sessions" component={Sessions} />
+      <Route path="/sessions" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/dashboard", { replace: true }), []); return null; }} />
       <Route path="/think-freely" component={ThinkFreely} />
       <Route path="/workshop" component={Workshop} />
       <Route path="/compass" component={ProjectCompass} />

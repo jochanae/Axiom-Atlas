@@ -225,10 +225,10 @@ export default function Ledger() {
             Parking Lot →
           </Link>
           <Link
-            href="/guard-report"
+            href="/compass"
             style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--phosphor)", textDecoration: "none", marginLeft: "auto" }}
           >
-            Guard Report →
+            Compass →
           </Link>
         </div>
 
