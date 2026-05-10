@@ -18,7 +18,6 @@ type Project = {
   updatedAt: string;
   entryCount?: number;
   latestEntryAt?: string | null;
-  isNexus?: boolean;
 };
 type Connection = { a: number; b: number; strength: number };
 
@@ -882,7 +881,6 @@ function ViewKey({ allProjects, onRecenter, onDive }: {
               >
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: `hsl(${hue},55%,55%)`, flexShrink: 0 }} />
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{p.name}</span>
-                {p.isNexus && <span style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.4)", flexShrink: 0 }}>SOURCE</span>}
               </button>
             );
           })}
