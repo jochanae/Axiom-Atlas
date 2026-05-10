@@ -5375,6 +5375,14 @@ export default function Workspace() {
   const [showHandoffModal, setShowHandoffModal] = useState(false);
   const [handoffSelected, setHandoffSelected] = useState<Set<number>>(new Set());
 
+  // Nexus: Commit to Project modal state
+  const [showCommitModal, setShowCommitModal] = useState(false);
+  const [commitTargetId, setCommitTargetId] = useState<number | null>(null);
+  const [commitTitle, setCommitTitle] = useState("");
+  const [commitSummary, setCommitSummary] = useState("");
+  const [commitPending, setCommitPending] = useState(false);
+  const [commitDone, setCommitDone] = useState(false);
+
   // Intercept mode switch to BUILD — if there are PLAN messages, show the handoff modal
   const handleModeSelect = (m: "THINK" | "PLAN" | "BUILD") => {
     if (m === "BUILD" && projectMode !== "BUILD") {
@@ -5448,6 +5456,17 @@ export default function Workspace() {
 
   const { data: allProjects } = useListProjects();
   const { data: project, isLoading: projectLoading } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
+  const isNexusProject = Boolean((project as any)?.isNexus);
+
+  const [nexusProject, setNexusProject] = useState<{ id: number; name: string } | null>(null);
+  useEffect(() => {
+    const base = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
+    fetch(`${base}/api/projects/nexus`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.id) setNexusProject(d); })
+      .catch(() => {});
+  }, []);
+
   const { data: sessions, isLoading: sessionsLoading } = useListSessions(id, {
     query: { enabled: !!id, queryKey: getListSessionsQueryKey(id) },
   });
@@ -6242,8 +6261,14 @@ export default function Workspace() {
                 <>
                   {/* Title row: status dot + name */}
                   <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, overflow: "hidden", width: "100%" }}>
-                    <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 6, height: 6, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
-                    <span style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.92, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
+                    {isNexusProject ? (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.85 }}>
+                        <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                      </svg>
+                    ) : (
+                      <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 6, height: 6, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
+                    )}
+                    <span style={{ fontSize: 13, color: isNexusProject ? "var(--atlas-gold)" : "var(--atlas-fg)", opacity: 0.92, fontWeight: isNexusProject ? 600 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
                       {project?.name ?? "…"}
                     </span>
                   </span>
@@ -6341,7 +6366,7 @@ export default function Workspace() {
                     );
                   })()}
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "6px 6px 4px", opacity: 0.5 }} />
-                  <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />
+                  {!isNexusProject && <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M11 2l3 3-8 8H3v-3l8-8z" /></svg>} label="Rename project" onClick={() => { setRenameDraft(project?.name ?? ""); setRenaming(true); setShowProjectMenu(false); }} />}
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2" /><path d="M13.7 9.4a1 1 0 010-2.8l.5-.2a1 1 0 00.6-1.5l-.7-1.2a1 1 0 00-1.5-.3l-.4.3a1 1 0 01-1.4-.6l-.1-.5a1 1 0 00-1-.8H8.3a1 1 0 00-1 .8l-.1.5a1 1 0 01-1.4.6l-.4-.3a1 1 0 00-1.5.3l-.7 1.2a1 1 0 00.6 1.5l.5.2a1 1 0 010 2.8l-.5.2a1 1 0 00-.6 1.5l.7 1.2a1 1 0 001.5.3l.4-.3a1 1 0 011.4.6l.1.5a1 1 0 001 .8h1.4a1 1 0 001-.8l.1-.5a1 1 0 011.4-.6l.4.3a1 1 0 001.5-.3l.7-1.2a1 1 0 00-.6-1.5l-.5-.2z" /></svg>} label="Project settings" onClick={() => { setShowProjectMenu(false); setShowProjectSettings(true); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 6h6M5 9h4" /></svg>} label="Parking Lot" onClick={() => { setLocation(`/parking?project=${id}`); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="9" height="9" rx="1.5" /><path d="M11 4V3a1 1 0 00-1-1H4a1 1 0 00-1 1v6a1 1 0 001 1h1" /></svg>} label={cloningProject ? "Cloning…" : "Clone project"} onClick={async () => { if (cloningProject) return; setShowProjectMenu(false); setCloningProject(true); try { const base = import.meta.env.BASE_URL.replace(/\/$/, ""); const res = await fetch(`${base}/api/projects/${id}/clone`, { method: "POST" }); if (res.ok) { const clone = await res.json(); queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() }); setLocation(`/project/${clone.id}`); } } finally { setCloningProject(false); } }} />
@@ -6349,7 +6374,7 @@ export default function Workspace() {
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><path d="M2 4h12M2 8h8M2 12h6" /></svg>} label="View ledger" onClick={() => { setLocation(`/ledger/${id}`); setShowProjectMenu(false); }} />
                   <MenuBtn icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="14" height="10" rx="1.5" /><path d="M1 6h14" /><circle cx="3.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} /><circle cx="5.5" cy="4.5" r="0.7" fill="currentColor" opacity={0.5} /></svg>} label="Dashboard" onClick={() => { setLocation("/dashboard"); setShowProjectMenu(false); }} />
                   <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
-                  {confirmDeleteProject ? (
+                  {!isNexusProject && (confirmDeleteProject ? (
                     <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
                       <div style={{ fontSize: 11.5, color: "rgba(252,165,165,0.9)", fontFamily: "var(--app-font-mono)" }}>Delete "{project?.name}"?</div>
                       <div style={{ display: "flex", gap: 6 }}>
@@ -6374,7 +6399,7 @@ export default function Workspace() {
                       label="Delete project"
                       onClick={() => setConfirmDeleteProject(true)}
                     />
-                  )}
+                  ))}
                 </div>
               </>,
               document.body
@@ -6476,6 +6501,26 @@ export default function Workspace() {
             })()}
 
             {/* Parking Lot removed from header — lives in the Projects Drawer (Navigate → Parking Lot) */}
+
+            {/* Nexus: Commit to Project button */}
+            {isNexusProject && !isMobile && (
+              <button
+                title="Commit a decision from Nexus into a specific project's ledger"
+                onClick={() => { setCommitTargetId(null); setCommitTitle(""); setCommitSummary(""); setCommitDone(false); setShowCommitModal(true); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  padding: "4px 10px", borderRadius: 7,
+                  background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.22)",
+                  color: "var(--atlas-gold)", cursor: "pointer", fontSize: 11,
+                  fontFamily: "var(--app-font-mono)", fontWeight: 600, letterSpacing: "0.06em",
+                  transition: "background 140ms ease", whiteSpace: "nowrap",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.16)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; }}
+              >
+                Commit →
+              </button>
+            )}
 
             {/* Avatar only — New Project moved to Projects Drawer (+ next to Projects heading) */}
             <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
@@ -7293,6 +7338,7 @@ export default function Workspace() {
         open={showDrawer}
         onClose={() => setShowDrawer(false)}
         projects={allProjects ?? []}
+        nexusProject={nexusProject}
         activeProjectId={id}
         onOpenProject={(projectId) => { setLocation(`/project/${projectId}`); setShowDrawer(false); }}
         onNewProject={() => {
@@ -7308,6 +7354,125 @@ export default function Workspace() {
         onOpenParking={() => { setLocation(`/parking?project=${id}`); setShowDrawer(false); }}
         userLabel={loadProfile().name || null}
       />
+
+      {/* Nexus: Commit to Project modal */}
+      {showCommitModal && createPortal(
+        <>
+          <div onClick={() => setShowCommitModal(false)} style={{ position: "fixed", inset: 0, zIndex: 9990, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }} />
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+            zIndex: 9991, width: "min(440px, calc(100vw - 32px))",
+            background: "var(--atlas-surface)", border: "1px solid rgba(201,162,76,0.25)",
+            borderRadius: 16, padding: "26px 26px 22px", boxShadow: "0 32px 80px rgba(0,0,0,0.7)",
+          }}>
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", flexShrink: 0 }} />
+                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--atlas-gold)" }}>Commit to Project</span>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--atlas-muted)", lineHeight: 1.5 }}>
+                Stamp a Nexus decision into a specific project's Decision Ledger.
+              </div>
+            </div>
+
+            {commitDone ? (
+              <div style={{ textAlign: "center", padding: "24px 0 8px" }}>
+                <div style={{ fontSize: 24, marginBottom: 8, color: "var(--atlas-gold)" }}>✓</div>
+                <div style={{ fontSize: 13, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)" }}>Decision committed to ledger.</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 7, opacity: 0.7 }}>Target project</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 180, overflowY: "auto" }}>
+                    {(allProjects ?? []).filter((p: any) => !p.isNexus).map((p: any) => (
+                      <button key={p.id} onClick={() => setCommitTargetId(p.id)} style={{
+                        display: "flex", alignItems: "center", gap: 9, padding: "7px 10px", borderRadius: 7,
+                        background: commitTargetId === p.id ? "rgba(201,162,76,0.1)" : "transparent",
+                        border: `1px solid ${commitTargetId === p.id ? "rgba(201,162,76,0.4)" : "var(--atlas-border)"}`,
+                        cursor: "pointer", textAlign: "left", transition: "all 120ms ease",
+                      }}>
+                        <div style={{ width: 22, height: 22, borderRadius: 5, flexShrink: 0, background: `hsl(${(p.name.charCodeAt(0) * 37) % 360}, 22%, 22%)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "var(--atlas-fg)", fontFamily: "var(--app-font-mono)" }}>
+                          {p.name[0]?.toUpperCase()}
+                        </div>
+                        <span style={{ fontSize: 12.5, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)" }}>{p.name}</span>
+                        {commitTargetId === p.id && <svg style={{ marginLeft: "auto", flexShrink: 0 }} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--atlas-gold)" strokeWidth="2.4" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
+                      </button>
+                    ))}
+                    {(allProjects ?? []).filter((p: any) => !p.isNexus).length === 0 && (
+                      <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.5, padding: "8px 4px", fontStyle: "italic" }}>No projects yet. Create one first.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 11 }}>
+                  <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 5, opacity: 0.7 }}>Decision title</div>
+                  <input
+                    placeholder="e.g. Pivot IntoIQ toward lead-gen funnel"
+                    value={commitTitle}
+                    onChange={(e) => setCommitTitle(e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12.5, fontFamily: "var(--app-font-sans)", outline: "none", boxSizing: "border-box" as const }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.1em", textTransform: "uppercase" as const, marginBottom: 5, opacity: 0.7 }}>Summary (optional)</div>
+                  <textarea
+                    placeholder="Brief context or rationale…"
+                    value={commitSummary}
+                    onChange={(e) => setCommitSummary(e.target.value)}
+                    rows={2}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12, fontFamily: "var(--app-font-sans)", outline: "none", resize: "none" as const, boxSizing: "border-box" as const }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setShowCommitModal(false)} style={{ flex: 1, padding: "9px 0", borderRadius: 7, fontSize: 12, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer", fontFamily: "var(--app-font-sans)" }}>
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!commitTargetId || !commitTitle.trim() || commitPending}
+                    onClick={async () => {
+                      if (!commitTargetId || !commitTitle.trim()) return;
+                      setCommitPending(true);
+                      try {
+                        await createEntry.mutateAsync({
+                          projectId: commitTargetId,
+                          data: {
+                            title: commitTitle.trim().slice(0, 140),
+                            summary: commitSummary.trim() || `Committed from Nexus on ${new Date().toLocaleDateString()}`,
+                            status: "committed",
+                            severity: "committed",
+                            verb: "DECIDED",
+                            mode: "plan",
+                          },
+                        });
+                        setCommitDone(true);
+                        setTimeout(() => setShowCommitModal(false), 1600);
+                      } catch { /* silent */ } finally {
+                        setCommitPending(false);
+                      }
+                    }}
+                    style={{
+                      flex: 2, padding: "9px 0", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                      background: commitTargetId && commitTitle.trim() && !commitPending ? "var(--atlas-ember)" : "var(--atlas-surface-alt)",
+                      border: "none",
+                      color: commitTargetId && commitTitle.trim() && !commitPending ? "var(--atlas-fg)" : "var(--atlas-muted)",
+                      cursor: commitTargetId && commitTitle.trim() && !commitPending ? "pointer" : "not-allowed",
+                      fontFamily: "var(--app-font-sans)",
+                      opacity: commitPending ? 0.6 : 1,
+                      transition: "all 140ms ease",
+                    }}
+                  >
+                    {commitPending ? "Committing…" : "Commit to Ledger"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </>,
+        document.body
+      )}
 
     </div>
   );

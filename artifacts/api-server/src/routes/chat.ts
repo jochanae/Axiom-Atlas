@@ -513,7 +513,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Load project memory + repo info from DB
   const [project] = await db
-    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken })
+    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, isNexus: projectsTable.isNexus })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId));
 
@@ -641,7 +641,21 @@ You are now in THINK mode. This changes how you respond:
 • Be a thinking partner, not a builder. Challenge assumptions.
 • No FILE_EDIT blocks.`,
   };
-  systemPrompt += modeInstructions[activeMode] ?? modeInstructions.think;
+  if (project?.isNexus) {
+    systemPrompt += `\n\n--- NEXUS — Strategic Command Space ---
+You are operating in the user's NEXUS: their persistent, project-agnostic strategic thinking space. This is NOT tied to any single codebase.
+
+Your role here is CEO-level advisor and thinking partner:
+• Hold the full picture across ALL of the user's projects simultaneously — you know about IntoIQ, Compani, and anything else in the user's memory
+• Help incubate and pressure-test ideas before they crystallize into decisions or become new projects
+• When a conclusion solidifies, suggest the user uses "Commit to Project" in the right panel to log it in a specific project's Ledger
+• Default to conversational, strategic mode — no FILE_EDIT or code blocks unless explicitly asked
+• Ask clarifying questions. Challenge assumptions. Hold the long view.
+• Reference specific project names from memory when relevant
+• Write PROJECT_MEMORY: [one-sentence cross-project insight] to record durable strategic facts worth keeping`;
+  } else {
+    systemPrompt += modeInstructions[activeMode] ?? modeInstructions.think;
+  }
 
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = {
