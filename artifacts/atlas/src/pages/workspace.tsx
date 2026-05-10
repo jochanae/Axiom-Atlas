@@ -6596,8 +6596,8 @@ export default function Workspace() {
               title="Return to Satellite View — Master Map"
               onClick={() => { try { navigator.vibrate?.(8); } catch {} setLocation("/map"); }}
               style={{
-                display: "flex", alignItems: "center", gap: 5,
-                padding: "4px 10px", borderRadius: 7, flexShrink: 0,
+                display: "flex", alignItems: "center", gap: isMobile ? 0 : 5,
+                padding: isMobile ? "5px 8px" : "4px 10px", borderRadius: 7, flexShrink: 0,
                 background: "rgba(201,162,76,0.06)", border: "1px solid rgba(201,162,76,0.18)",
                 color: "rgba(201,162,76,0.6)", cursor: "pointer",
                 fontSize: 9.5, fontFamily: "var(--app-font-mono)",
@@ -6608,11 +6608,25 @@ export default function Workspace() {
               onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.14)"; e.currentTarget.style.color = "rgba(201,162,76,0.95)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.38)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "rgba(201,162,76,0.06)"; e.currentTarget.style.color = "rgba(201,162,76,0.6)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.18)"; }}
             >
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 11V3M4 6l4-4 4 4" />
-                <path d="M2 13h12" opacity={0.45} />
-              </svg>
-              Orbit
+              {isMobile ? (
+                /* Globe icon — mobile only */
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <ellipse cx="12" cy="12" rx="4" ry="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <line x1="4.5" y1="6" x2="19.5" y2="6" />
+                  <line x1="4.5" y1="18" x2="19.5" y2="18" />
+                </svg>
+              ) : (
+                /* Arrow + text — desktop */
+                <>
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 11V3M4 6l4-4 4 4" />
+                    <path d="M2 13h12" opacity={0.45} />
+                  </svg>
+                  Orbit
+                </>
+              )}
             </button>
 
             {/* Avatar only — New Project moved to Projects Drawer (+ next to Projects heading) */}
