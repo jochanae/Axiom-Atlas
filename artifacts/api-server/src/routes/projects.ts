@@ -87,6 +87,23 @@ router.post("/projects", async (req, res): Promise<void> => {
     .insert(projectsTable)
     .values({ ...parsed.data, userId })
     .returning();
+
+  // Auto-propagate GitHub token from any existing project of this user
+  if (!project.githubToken) {
+    const [sibling] = await db
+      .select({ githubToken: projectsTable.githubToken })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.userId, userId), isNotNull(projectsTable.githubToken)))
+      .limit(1);
+    if (sibling?.githubToken) {
+      await db
+        .update(projectsTable)
+        .set({ githubToken: sibling.githubToken })
+        .where(eq(projectsTable.id, project.id));
+      project.githubToken = sibling.githubToken;
+    }
+  }
+
   res.status(201).json(serializeProject(project, true));
 });
 

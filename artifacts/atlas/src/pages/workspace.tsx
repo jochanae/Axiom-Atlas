@@ -2429,6 +2429,8 @@ function FilesTab({
 
   const [tokenState, setTokenState] = useState<string | null>(() => getGlobalToken());
   const tokenSynced = useRef(false);
+  const [autoLinkStatus, setAutoLinkStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const [autoLinkResult, setAutoLinkResult] = useState<{ linked: Array<{ projectName: string; repoFullName: string }>; skipped: string[] } | null>(null);
   useEffect(() => {
     if (!filesProject) return;
     const globalToken = getGlobalToken();
@@ -2518,6 +2520,26 @@ function FilesTab({
     setView("repos");
     onFileContext(null);
   }, [projectId]);
+
+  const handleAutoLink = async () => {
+    if (!tokenState || autoLinkStatus === "running") return;
+    setAutoLinkStatus("running");
+    setAutoLinkResult(null);
+    try {
+      const res = await fetch("/api/github/auto-link", {
+        method: "POST",
+        headers: { "x-github-token": tokenState },
+      });
+      const data = await res.json() as any;
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setAutoLinkResult({ linked: data.linked ?? [], skipped: data.skipped ?? [] });
+      setAutoLinkStatus("done");
+      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+    } catch (e: any) {
+      setAutoLinkStatus("error");
+      setAutoLinkResult({ linked: [], skipped: [e.message ?? "Unknown error"] });
+    }
+  };
 
   const saveToken = (t: string) => {
     setTokenSaveError(null);
@@ -2906,6 +2928,56 @@ function FilesTab({
       {/* Repos list */}
       {view === "repos" && (
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 6px" }} className="scrollbar-none">
+
+          {/* Auto-link all projects button — appears when repos are loaded */}
+          {!reposLoading && repos.length > 0 && (allProjects ?? []).some(p => !p.linkedRepo) && (
+            <div style={{ margin: "0 0 8px", padding: "8px 10px", borderRadius: 6, background: "rgba(201,162,76,0.04)", border: "1px solid rgba(201,162,76,0.14)" }}>
+              {autoLinkStatus !== "done" && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", lineHeight: 1.4, opacity: 0.75 }}>
+                    {(allProjects ?? []).filter(p => !p.linkedRepo).length} project{(allProjects ?? []).filter(p => !p.linkedRepo).length !== 1 ? "s" : ""} need a repo
+                  </div>
+                  <button
+                    onClick={handleAutoLink}
+                    disabled={autoLinkStatus === "running"}
+                    style={{
+                      flexShrink: 0, padding: "4px 10px", borderRadius: 4,
+                      background: autoLinkStatus === "running" ? "rgba(201,162,76,0.08)" : "rgba(201,162,76,0.14)",
+                      border: "1px solid rgba(201,162,76,0.3)",
+                      color: "var(--atlas-gold)", fontSize: 10, fontFamily: "var(--app-font-mono)",
+                      letterSpacing: "0.06em", cursor: autoLinkStatus === "running" ? "not-allowed" : "pointer",
+                      opacity: autoLinkStatus === "running" ? 0.6 : 1, transition: "opacity 140ms ease",
+                    }}
+                  >
+                    {autoLinkStatus === "running" ? "Linking…" : "Auto-link all →"}
+                  </button>
+                </div>
+              )}
+              {autoLinkStatus === "done" && autoLinkResult && (
+                <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", lineHeight: 1.7 }}>
+                  {autoLinkResult.linked.length > 0 && (
+                    <div style={{ color: "#34d399" }}>
+                      ✓ Linked: {autoLinkResult.linked.map(l => l.projectName).join(", ")}
+                    </div>
+                  )}
+                  {autoLinkResult.skipped.length > 0 && (
+                    <div style={{ color: "var(--atlas-muted)", opacity: 0.65 }}>
+                      — No match: {autoLinkResult.skipped.join(", ")}
+                    </div>
+                  )}
+                  {autoLinkResult.linked.length === 0 && autoLinkResult.skipped.length === 0 && (
+                    <div style={{ color: "var(--atlas-muted)" }}>All projects already linked.</div>
+                  )}
+                </div>
+              )}
+              {autoLinkStatus === "error" && autoLinkResult && (
+                <div style={{ fontSize: 10, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)" }}>
+                  ✗ {autoLinkResult.skipped[0] ?? "Auto-link failed"}
+                </div>
+              )}
+            </div>
+          )}
+
           {reposLoading && (
             <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 10, ...sMuted, opacity: 0.4 }}>
               Loading repos…
