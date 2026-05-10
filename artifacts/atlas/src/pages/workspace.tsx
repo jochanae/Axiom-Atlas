@@ -5158,12 +5158,18 @@ function MobileTabBar({
     },
     {
       id: "map",
-      label: "Orbit",
+      label: "Flow",
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="4" />
-          <ellipse cx="12" cy="12" rx="10" ry="4.5" />
-          <line x1="12" y1="2" x2="12" y2="22" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="4" cy="4" r="1.5" />
+          <circle cx="20" cy="4" r="1.5" />
+          <circle cx="4" cy="20" r="1.5" />
+          <circle cx="20" cy="20" r="1.5" />
+          <line x1="5.5" y1="5.5" x2="10.5" y2="10.5" />
+          <line x1="18.5" y1="5.5" x2="13.5" y2="10.5" />
+          <line x1="5.5" y1="18.5" x2="10.5" y2="13.5" />
+          <line x1="18.5" y1="18.5" x2="13.5" y2="13.5" />
         </svg>
       ),
     },
@@ -7431,14 +7437,7 @@ export default function Workspace() {
       {isMobile && mobileTab !== "map" && (
         <MobileTabBar
           activeTab={mobileTab}
-          onTabChange={(tab) => {
-            if (tab === "map") {
-              try { navigator.vibrate?.(8); } catch {}
-              setLocation("/map");
-            } else {
-              setMobileTab(tab);
-            }
-          }}
+          onTabChange={(tab) => setMobileTab(tab)}
           entryCount={entryCount}
           activeCatch={!!activeCatch}
         />
