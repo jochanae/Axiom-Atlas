@@ -377,6 +377,371 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
   );
 }
 
+// ── HomeContextBar ────────────────────────────────────────────────────────────
+type HomeRepo = { fullName: string; name: string; defaultBranch: string };
+
+const MODELS = [
+  { id: "claude", label: "Claude", available: true },
+  { id: "gpt4o", label: "GPT-4o", available: false },
+  { id: "gemini", label: "Gemini", available: false },
+];
+
+function ContextChip({
+  icon, label, onClick, dim,
+}: { icon: React.ReactNode; label: string; onClick: () => void; dim?: boolean }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        padding: "5px 9px", borderRadius: 20,
+        background: hov ? "rgba(201,162,76,0.07)" : "rgba(28,25,23,0.6)",
+        border: `1px solid ${hov ? "rgba(201,162,76,0.32)" : "rgba(37,34,32,0.9)"}`,
+        cursor: "pointer", transition: "all 160ms ease",
+        opacity: dim ? 0.45 : 1,
+      }}
+    >
+      <span style={{ color: "rgba(120,113,108,0.7)", lineHeight: 0, flexShrink: 0 }}>{icon}</span>
+      <span style={{
+        fontFamily: "var(--app-font-mono)", fontSize: 10.5,
+        color: hov ? "rgba(201,162,76,0.9)" : "rgba(231,229,228,0.65)",
+        letterSpacing: "0.03em", whiteSpace: "nowrap",
+        maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis",
+        transition: "color 160ms ease",
+      }}>{label}</span>
+      <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ opacity: 0.4, flexShrink: 0 }}>
+        <path d="M1.5 3L4 5.5L6.5 3" stroke="var(--atlas-fg)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
+function HomeContextBar({
+  repo, branch, model,
+  onRepoClick, onBranchClick, onModelClick,
+}: {
+  repo: HomeRepo | null; branch: string; model: string;
+  onRepoClick: () => void; onBranchClick: () => void; onModelClick: () => void;
+}) {
+  const modelLabel = MODELS.find(m => m.id === model)?.label ?? "Claude";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+      {/* Repo chip */}
+      <ContextChip
+        onClick={onRepoClick}
+        icon={
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+          </svg>
+        }
+        label={repo ? repo.name : "Link repo"}
+        dim={!repo}
+      />
+      {/* Branch chip */}
+      <ContextChip
+        onClick={onBranchClick}
+        icon={
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM4.25 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z" />
+          </svg>
+        }
+        label={branch}
+        dim={!repo}
+      />
+      {/* Divider */}
+      <div style={{ width: 1, height: 14, background: "rgba(37,34,32,0.9)", flexShrink: 0 }} />
+      {/* Model chip */}
+      <ContextChip
+        onClick={onModelClick}
+        icon={
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="8" r="6" />
+            <path d="M5.5 8.5L7 10l3-4" />
+          </svg>
+        }
+        label={modelLabel}
+      />
+    </div>
+  );
+}
+
+// ── RepoSearchSheet ────────────────────────────────────────────────────────────
+function RepoSearchSheet({
+  current, onSelect, onClose,
+}: {
+  current: HomeRepo | null;
+  onSelect: (r: HomeRepo) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [repos, setRepos] = useState<HomeRepo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch("/api/github/repos", { headers: { "x-github-token": "__server__" }, credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        if (cancelled) return;
+        setRepos(data.map((r: any) => ({ fullName: r.fullName, name: r.name, defaultBranch: r.defaultBranch ?? "main" })));
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const filtered = repos.filter(r =>
+    !query || r.fullName.toLowerCase().includes(query.toLowerCase())
+  );
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div style={{
+        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
+        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
+        borderTop: "1px solid rgba(201,162,76,0.18)",
+        display: "flex", flexDirection: "column",
+        maxHeight: "72dvh",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
+      }}>
+        {/* Handle */}
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+            Choose Repository
+          </span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        {/* Search */}
+        <div style={{ padding: "0 14px 10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", borderRadius: 8, background: "var(--atlas-surface-alt)", border: "1px solid var(--atlas-border)" }}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="6.5" cy="6.5" r="4.5" /><path d="M11 11l2.5 2.5" />
+            </svg>
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search repositories..."
+              style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontFamily: "var(--app-font-sans)" }}
+            />
+          </div>
+        </div>
+        {/* List */}
+        <div style={{ overflowY: "auto", flex: 1, padding: "0 14px 32px" }}>
+          {loading && (
+            <div style={{ padding: "24px 0", textAlign: "center", fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5 }}>
+              Loading...
+            </div>
+          )}
+          {!loading && filtered.length === 0 && (
+            <div style={{ padding: "24px 0", textAlign: "center", fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5 }}>
+              No repositories found
+            </div>
+          )}
+          {filtered.map(r => (
+            <button
+              key={r.fullName}
+              onClick={() => { onSelect(r); onClose(); }}
+              style={{
+                width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
+                background: current?.fullName === r.fullName ? "rgba(201,162,76,0.06)" : "transparent",
+                border: `1px solid ${current?.fullName === r.fullName ? "rgba(201,162,76,0.22)" : "transparent"}`,
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
+                transition: "all 140ms ease",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(201,162,76,0.05)")}
+              onMouseLeave={e => (e.currentTarget.style.background = current?.fullName === r.fullName ? "rgba(201,162,76,0.06)" : "transparent")}
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="rgba(120,113,108,0.6)" style={{ flexShrink: 0 }}>
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+              </svg>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 12, fontWeight: 500, color: "var(--atlas-fg)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {r.name}
+                </div>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.6, marginTop: 1 }}>
+                  {r.fullName}
+                </div>
+              </div>
+              {current?.fullName === r.fullName && (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── BranchPickerSheet ─────────────────────────────────────────────────────────
+function BranchPickerSheet({
+  repo, current, onSelect, onClose,
+}: {
+  repo: HomeRepo | null; current: string;
+  onSelect: (b: string) => void; onClose: () => void;
+}) {
+  const [branches, setBranches] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!repo) return;
+    setLoading(true);
+    fetch(`/api/github/repos/${encodeURIComponent(repo.fullName)}/branches`, {
+      headers: { "x-github-token": "__server__" }, credentials: "include",
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then((data: any) => {
+        const list = Array.isArray(data)
+          ? data.map((b: any) => b.name ?? b)
+          : [repo.defaultBranch ?? "main"];
+        setBranches(list.length ? list : [repo.defaultBranch ?? "main"]);
+        setLoading(false);
+      })
+      .catch(() => {
+        setBranches([repo?.defaultBranch ?? "main"]);
+        setLoading(false);
+      });
+  }, [repo]);
+
+  const displayBranches = branches.length ? branches : (repo ? [repo.defaultBranch ?? "main"] : ["main"]);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div style={{
+        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
+        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
+        borderTop: "1px solid rgba(201,162,76,0.18)",
+        maxHeight: "55dvh", display: "flex", flexDirection: "column",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+            Choose Branch
+          </span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        {!repo && (
+          <div style={{ padding: "20px 16px 32px", fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5, textAlign: "center" }}>
+            Link a repository first
+          </div>
+        )}
+        {repo && (
+          <div style={{ overflowY: "auto", flex: 1, padding: "0 14px 32px" }}>
+            {loading ? (
+              <div style={{ padding: "20px 0", textAlign: "center", fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5 }}>Loading...</div>
+            ) : displayBranches.map(b => (
+              <button
+                key={b}
+                onClick={() => { onSelect(b); onClose(); }}
+                style={{
+                  width: "100%", textAlign: "left", padding: "10px 12px", borderRadius: 8,
+                  background: current === b ? "rgba(201,162,76,0.06)" : "transparent",
+                  border: `1px solid ${current === b ? "rgba(201,162,76,0.22)" : "transparent"}`,
+                  cursor: "pointer", display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
+                  transition: "all 140ms ease",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(201,162,76,0.05)")}
+                onMouseLeave={e => (e.currentTarget.style.background = current === b ? "rgba(201,162,76,0.06)" : "transparent")}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="rgba(120,113,108,0.6)" style={{ flexShrink: 0 }}>
+                  <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM4.25 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z" />
+                </svg>
+                <span style={{ fontFamily: "var(--app-font-sans)", fontSize: 12, fontWeight: 500, color: "var(--atlas-fg)" }}>{b}</span>
+                {current === b && (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginLeft: "auto" }}>
+                    <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── ModelPickerSheet ──────────────────────────────────────────────────────────
+function ModelPickerSheet({ current, onSelect, onClose }: {
+  current: string; onSelect: (m: string) => void; onClose: () => void;
+}) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div style={{
+        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
+        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
+        borderTop: "1px solid rgba(201,162,76,0.18)",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
+        paddingBottom: 32,
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+            Model
+          </span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        <div style={{ padding: "0 14px" }}>
+          {MODELS.map(m => (
+            <button
+              key={m.id}
+              disabled={!m.available}
+              onClick={() => { if (m.available) { onSelect(m.id); onClose(); } }}
+              style={{
+                width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 8,
+                background: current === m.id ? "rgba(201,162,76,0.06)" : "transparent",
+                border: `1px solid ${current === m.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
+                cursor: m.available ? "pointer" : "default",
+                display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
+                opacity: m.available ? 1 : 0.38,
+                transition: "all 140ms ease",
+              }}
+            >
+              <div style={{
+                width: 28, height: 28, borderRadius: 8,
+                background: m.available ? "rgba(201,162,76,0.1)" : "rgba(37,34,32,0.8)",
+                border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "rgba(37,34,32,0.9)"}`,
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              }}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke={m.available ? "rgba(201,162,76,0.8)" : "rgba(120,113,108,0.5)"} strokeWidth="1.4" strokeLinecap="round">
+                  <circle cx="8" cy="8" r="6" />
+                  <path d="M5.5 8.5L7 10l3-4" />
+                </svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>{m.label}</div>
+                {!m.available && (
+                  <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.08em", marginTop: 1, opacity: 0.5 }}>
+                    COMING SOON
+                  </div>
+                )}
+              </div>
+              {current === m.id && (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── HomeProfileSheet ─────────────────────────────────────────────────────────
 function HomeProfileSheet({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState(() => {
@@ -635,6 +1000,25 @@ export default function Home() {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const { isFree } = useSubscription();
+
+  // ── Home context: repo / branch / model ────────────────────────────────────
+  const [homeRepo, setHomeRepo] = useState<HomeRepo | null>(() => {
+    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).repo ?? null) : null; } catch { return null; }
+  });
+  const [homeBranch, setHomeBranch] = useState<string>(() => {
+    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).branch ?? "main") : "main"; } catch { return "main"; }
+  });
+  const [homeModel, setHomeModel] = useState<string>(() => {
+    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).model ?? "claude") : "claude"; } catch { return "claude"; }
+  });
+  const [showRepoSheet, setShowRepoSheet] = useState(false);
+  const [showBranchSheet, setShowBranchSheet] = useState(false);
+  const [showModelSheet, setShowModelSheet] = useState(false);
+
+  // Persist context to localStorage whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem("atlas-home-context", JSON.stringify({ repo: homeRepo, branch: homeBranch, model: homeModel })); } catch {}
+  }, [homeRepo, homeBranch, homeModel]);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1135,6 +1519,16 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Repo / Branch / Model context bar */}
+          <HomeContextBar
+            repo={homeRepo}
+            branch={homeBranch}
+            model={homeModel}
+            onRepoClick={() => setShowRepoSheet(true)}
+            onBranchClick={() => setShowBranchSheet(true)}
+            onModelClick={() => setShowModelSheet(true)}
+          />
+
           {/* Inline create error */}
           {createError && (
             <div style={{
@@ -1184,6 +1578,32 @@ export default function Home() {
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       {showProfile && <HomeProfileSheet onClose={() => setShowProfile(false)} />}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} reason="project_limit" />}
+
+      {showRepoSheet && (
+        <RepoSearchSheet
+          current={homeRepo}
+          onSelect={(r) => {
+            setHomeRepo(r);
+            setHomeBranch(r.defaultBranch ?? "main");
+          }}
+          onClose={() => setShowRepoSheet(false)}
+        />
+      )}
+      {showBranchSheet && (
+        <BranchPickerSheet
+          repo={homeRepo}
+          current={homeBranch}
+          onSelect={setHomeBranch}
+          onClose={() => setShowBranchSheet(false)}
+        />
+      )}
+      {showModelSheet && (
+        <ModelPickerSheet
+          current={homeModel}
+          onSelect={setHomeModel}
+          onClose={() => setShowModelSheet(false)}
+        />
+      )}
 
       {showProjectsSheet && (
         <ProjectsGridSheet
