@@ -154,6 +154,52 @@ function appendMemoryFacts(
   return { ...store, entries: [...store.entries, ...newEntries] };
 }
 
+// ── GitHub File Tree Helper ───────────────────────────────────────────────────
+const GH_API = "https://api.github.com";
+
+function ghHeaders(token: string) {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "Atlas-Dev-Env/1.0",
+  };
+}
+
+async function fetchRepoTree(fullName: string, token: string, branch = "main"): Promise<string | null> {
+  try {
+    let resp = await fetch(`${GH_API}/repos/${fullName}/git/trees/${branch}?recursive=1`, { headers: ghHeaders(token) });
+    if (!resp.ok && branch === "main") {
+      resp = await fetch(`${GH_API}/repos/${fullName}/git/trees/master?recursive=1`, { headers: ghHeaders(token) });
+    }
+    if (!resp.ok) return null;
+    const data = await resp.json() as { tree?: Array<{ path: string; type: string }>; truncated?: boolean };
+    if (!data.tree) return null;
+
+    // Filter to only blob (file) paths, skip node_modules and lock files
+    const ignore = /node_modules|\.next|dist\/|\.lock$|\.log$|\.map$|\.min\./;
+    const files = data.tree
+      .filter(f => f.type === "blob" && !ignore.test(f.path))
+      .map(f => `  ${f.path}`)
+      .slice(0, 300); // cap at 300 files to keep context manageable
+
+    return `${fullName} (${files.length} files${data.truncated ? ", truncated" : ""}):\n${files.join("\n")}`;
+  } catch {
+    return null;
+  }
+}
+
+// ── Intent Type Parser ────────────────────────────────────────────────────────
+const INTENT_TYPE_RE = /^INTENT_TYPE:\s*(BUILD|PLAN|THINK|EXPLORE|DECIDE|DEBUG|AUDIT)\s*$/im;
+
+function extractIntentType(content: string): { content: string; intentType: string | null } {
+  const match = content.match(INTENT_TYPE_RE);
+  if (!match) return { content, intentType: null };
+  const intentType = match[1];
+  const cleaned = content.replace(INTENT_TYPE_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { content: cleaned, intentType };
+}
+
 // ── System Prompt ─────────────────────────────────────────────────────────────
 const DEV_SYSTEM_PROMPT = `You are Atlas — a strategic thinking partner and personal AI development environment for a non-technical founder.
 
@@ -224,6 +270,14 @@ The user has an architecture System Map with six nodes: auth, db, api, state, ui
 
 Where "auth" is replaced with the relevant node ID. Node IDs are exactly: auth, db, api, state, ui, logic
 Only emit this after the user has given a concrete, committed answer — not when they're still exploring. Maximum one NODE_RESOLVED per response. Do NOT emit it for partial or uncertain answers.
+
+INTENT_TYPE protocol:
+At the very END of every response, emit exactly one line indicating the primary intent of your response:
+
+  INTENT_TYPE: BUILD
+
+Valid values: BUILD (writing or applying code), PLAN (architecture, structure, sequence), DEBUG (finding and fixing a bug), DECIDE (decision analysis, tradeoffs), EXPLORE (brainstorming, open-ended ideas), THINK (strategic reasoning, no code).
+This line is invisible to the user — it powers the workspace mode indicator. Always emit it, every response, no exceptions.
 
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub or applying self-repairs):
 When the user asks you to fix or build something AND a complete file is in context, output the corrected complete file(s) at the very END of your response using this EXACT format — one block per file:
@@ -435,9 +489,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   const imageData = body.imageData;
   const now = new Date();
 
-  // Load project memory from DB
+  // Load project memory + repo info from DB
   const [project] = await db
-    .select({ memory: projectsTable.memory })
+    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId));
 
@@ -451,6 +505,19 @@ router.post("/chat", async (req, res): Promise<void> => {
     store = incrementRetrievals(store, retrievedIds, now);
   }
 
+  // Auto-fetch repo file tree (Phase 1 — always injected when a repo is linked)
+  let repoTreeContext: string | null = null;
+  if (project?.linkedRepo && project?.githubToken) {
+    try {
+      const repoData = JSON.parse(project.linkedRepo) as { fullName?: string; defaultBranch?: string };
+      if (repoData.fullName) {
+        repoTreeContext = await fetchRepoTree(repoData.fullName, project.githubToken, repoData.defaultBranch ?? "main");
+      }
+    } catch {
+      // Non-fatal: continue without tree context
+    }
+  }
+
   // Build layered system prompt
   let systemPrompt = DEV_SYSTEM_PROMPT;
   if (userProfile) {
@@ -459,8 +526,11 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (memoryText) {
     systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
   }
+  if (repoTreeContext) {
+    systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
+  }
   if (fileContext) {
-    systemPrompt += `\n\n--- CODE CONTEXT ---\n${fileContext}\n--- END CODE CONTEXT ---`;
+    systemPrompt += `\n\n--- CODE CONTEXT (files the user opened — read these carefully) ---\n${fileContext}\n--- END CODE CONTEXT ---`;
   }
 
   // Mode-specific instructions — these override the default disposition
@@ -547,11 +617,12 @@ You are now in THINK mode. This changes how you respond:
   const rawContent =
     response.content[0]?.type === "text" ? response.content[0].text : "";
 
-  // Parse: FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → MEMORY_CHIPS
+  // Parse: FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent, fileEdits } = extractAllFileEdits(rawContent);
   const { content: afterMemory, newFacts } = extractMemoryLines(visibleContent);
   const { content: afterNodeResolved, resolvedNodes } = extractNodeResolved(afterMemory);
-  const { content: finalContent, memoryChips: aiMemoryChips } = detectMemoryChips(afterNodeResolved);
+  const { content: afterIntent, intentType: detectedIntentType } = extractIntentType(afterNodeResolved);
+  const { content: finalContent, memoryChips: aiMemoryChips } = detectMemoryChips(afterIntent);
 
   // Auto-match ledger entries referenced in the response
   const entryChips = matchEntryChips(
@@ -577,7 +648,7 @@ You are now in THINK mode. This changes how you respond:
       sessionId,
       role: "assistant",
       content: finalContent,
-      intentType: null,
+      intentType: detectedIntentType,
       catchPayload: undefined,
     })
     .returning();
@@ -611,7 +682,7 @@ You are now in THINK mode. This changes how you respond:
 
   res.json({
     content: finalContent,
-    intentType: null,
+    intentType: detectedIntentType ?? null,
     catchPayload: null,
     memoryChips: allChips.length > 0 ? allChips : undefined,
     messageId: savedMsg.id,
