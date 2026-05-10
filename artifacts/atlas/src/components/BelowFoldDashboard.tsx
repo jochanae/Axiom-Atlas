@@ -81,73 +81,17 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
         <div style={{ flex: 1, height: 1, background: "var(--atlas-gold-border)" }} />
       </div>
 
-      {/* 1. ATLAS NOTICED */}
-      {lastProject && (
-        <RevealOnScroll delayMs={0}>
-          <div className="atlas-discovery-card">
-            <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)", marginBottom: 10, opacity: 0.8 }}>
-              Atlas noticed
-            </div>
-            <p style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.75, margin: 0, lineHeight: 1.6, fontStyle: "italic" }}>
-              You've been returning to "{lastProject.name}." Every session gets you closer — what's the next move?
-            </p>
-          </div>
-        </RevealOnScroll>
-      )}
-
-      {/* 2. YOUR MOMENTUM */}
-      <RevealOnScroll delayMs={80}>
+      {/* 1. WHERE WERE WE — now first, with timeframe label */}
+      <RevealOnScroll delayMs={0}>
         <div className="atlas-discovery-card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-              Your Momentum
+              Where were we
             </h3>
-            {onOpenLedger && (
-              <button type="button" onClick={onOpenLedger} style={{ background: "transparent", border: "none", fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75 }}>
-                Open ledger →
-              </button>
-            )}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <MetricCell value={committedCount} label="DECISIONS COMMITTED" />
-            <MetricCell value={projects.length} label="PROJECTS ACTIVE" />
-          </div>
-        </div>
-      </RevealOnScroll>
-
-      {/* 3. UNFINISHED THOUGHTS */}
-      <RevealOnScroll delayMs={160}>
-        <div className="atlas-discovery-card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-              Unfinished Thoughts
-            </h3>
-            {onOpenParking && (
-              <button type="button" onClick={onOpenParking} style={{ background: "transparent", border: "none", fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75 }}>
-                Open parking →
-              </button>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 28, fontWeight: 200, color: "var(--atlas-gold)", lineHeight: 1, fontFamily: "var(--app-font-sans)" }}>
-              {actualParked}
-            </span>
-            <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.65 }}>
-              items parked
+            <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.4 }}>
+              Last 30 days
             </span>
           </div>
-          <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--atlas-muted)", opacity: 0.6, fontStyle: "italic", lineHeight: 1.5 }}>
-            Ideas waiting for their moment.
-          </p>
-        </div>
-      </RevealOnScroll>
-
-      {/* 4. WHERE WERE WE */}
-      <RevealOnScroll delayMs={240}>
-        <div className="atlas-discovery-card">
-          <h3 style={{ margin: "0 0 12px", fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-            Where were we
-          </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {recent.map((p, i) => (
               <button
@@ -162,11 +106,9 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
                 onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.05)"; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
               >
-                {/* Mode dot */}
                 <div style={{
                   width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                  background: MODE_COLORS[i % 4],
-                  opacity: 0.8,
+                  background: MODE_COLORS[i % 4], opacity: 0.8,
                 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--atlas-fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-sans)" }}>
@@ -194,6 +136,67 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
               VIEW ALL →
             </button>
           )}
+        </div>
+      </RevealOnScroll>
+
+      {/* 2. ATLAS NOTICED */}
+      {lastProject && (
+        <RevealOnScroll delayMs={80}>
+          <div className="atlas-discovery-card">
+            <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)", marginBottom: 10, opacity: 0.8 }}>
+              Atlas noticed
+            </div>
+            <p style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.75, margin: 0, lineHeight: 1.6, fontStyle: "italic" }}>
+              You've been returning to "{lastProject.name}." Every session gets you closer — what's the next move?
+            </p>
+          </div>
+        </RevealOnScroll>
+      )}
+
+      {/* 3. YOUR MOMENTUM */}
+      <RevealOnScroll delayMs={160}>
+        <div className="atlas-discovery-card">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
+              Your Momentum
+            </h3>
+            {onOpenLedger && (
+              <button type="button" onClick={onOpenLedger} style={{ background: "transparent", border: "none", fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75 }}>
+                Open ledger →
+              </button>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <MetricCell value={committedCount} label="DECISIONS COMMITTED" />
+            <MetricCell value={projects.length} label="PROJECTS ACTIVE" />
+          </div>
+        </div>
+      </RevealOnScroll>
+
+      {/* 4. UNFINISHED THOUGHTS */}
+      <RevealOnScroll delayMs={240}>
+        <div className="atlas-discovery-card">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
+              Unfinished Thoughts
+            </h3>
+            {onOpenParking && (
+              <button type="button" onClick={onOpenParking} style={{ background: "transparent", border: "none", fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75 }}>
+                Open parking →
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 28, fontWeight: 200, color: "var(--atlas-gold)", lineHeight: 1, fontFamily: "var(--app-font-sans)" }}>
+              {actualParked}
+            </span>
+            <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.65 }}>
+              items parked
+            </span>
+          </div>
+          <p style={{ margin: "8px 0 0", fontSize: 12, color: "var(--atlas-muted)", opacity: 0.6, fontStyle: "italic", lineHeight: 1.5 }}>
+            Ideas waiting for their moment.
+          </p>
         </div>
       </RevealOnScroll>
     </div>
