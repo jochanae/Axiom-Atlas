@@ -507,9 +507,10 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Auto-fetch repo file tree (Phase 1 — always injected when a repo is linked)
   let repoTreeContext: string | null = null;
+  let repoData: { fullName?: string; defaultBranch?: string } | null = null;
   if (project?.linkedRepo && project?.githubToken) {
     try {
-      const repoData = JSON.parse(project.linkedRepo) as { fullName?: string; defaultBranch?: string };
+      repoData = JSON.parse(project.linkedRepo) as { fullName?: string; defaultBranch?: string };
       if (repoData.fullName) {
         repoTreeContext = await fetchRepoTree(repoData.fullName, project.githubToken, repoData.defaultBranch ?? "main");
       }
@@ -517,6 +518,62 @@ router.post("/chat", async (req, res): Promise<void> => {
       // Non-fatal: continue without tree context
     }
   }
+
+  // Phase 2 — auto-fetch file contents when the user asks to build/fix something
+  const BUILD_INTENT_RE = /\b(fix|build|add|change|update|create|implement|write|modify|edit|refactor|debug|bug|error|broken|doesn't work|won't work|failing|crash|not working)\b/i;
+  let autoFetchedFiles: string[] = [];
+  let autoFetchedContext = "";
+
+  if (BUILD_INTENT_RE.test(message) && repoData?.fullName && project?.githubToken && repoTreeContext) {
+    try {
+      // Fast selector call: ask Claude which files it needs to read (small, cheap)
+      const selectorResp = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 200,
+        messages: [{
+          role: "user",
+          content: `Given this file tree and user request, return ONLY a JSON array of the 1-3 most relevant file paths to read. Return [] if no specific files are needed (planning/conceptual questions only).\n\nUser request: "${message}"\n\nFile tree:\n${repoTreeContext}\n\nReturn ONLY a JSON array like ["src/pages/Login.tsx"] — no explanation, no markdown fences.`,
+        }],
+      });
+      const selectorText = selectorResp.content[0]?.type === "text" ? selectorResp.content[0].text.trim() : "[]";
+      const cleaned = selectorText.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+      let filePaths: unknown = [];
+      try { filePaths = JSON.parse(cleaned); } catch { /* ignore */ }
+
+      if (Array.isArray(filePaths) && filePaths.length > 0) {
+        const validPaths = (filePaths as unknown[]).filter((p): p is string => typeof p === "string").slice(0, 3);
+        const fetched = await Promise.all(
+          validPaths.map(async (fp) => {
+            try {
+              const r = await fetch(
+                `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
+                { headers: ghHeaders(project.githubToken!) }
+              );
+              if (!r.ok) return null;
+              const d = await r.json() as { encoding?: string; content?: string };
+              if (d.encoding !== "base64" || !d.content) return null;
+              const content = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
+              const lines = content.split("\n");
+              const truncated = lines.length > 600;
+              return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : content, truncated, lineCount: lines.length };
+            } catch { return null; }
+          })
+        );
+        const valid = fetched.filter((f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null);
+        if (valid.length > 0) {
+          autoFetchedFiles = valid.map(f => f.path);
+          autoFetchedContext = valid
+            .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
+            .join("\n\n");
+        }
+      }
+    } catch {
+      // Non-fatal — proceed without auto-fetched content
+    }
+  }
+
+  // Merge auto-fetched content with any manually-opened files from the client
+  const combinedFileContext = [autoFetchedContext, fileContext].filter(Boolean).join("\n\n");
 
   // Build layered system prompt
   let systemPrompt = DEV_SYSTEM_PROMPT;
@@ -529,8 +586,8 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
   }
-  if (fileContext) {
-    systemPrompt += `\n\n--- CODE CONTEXT (files the user opened — read these carefully) ---\n${fileContext}\n--- END CODE CONTEXT ---`;
+  if (combinedFileContext) {
+    systemPrompt += `\n\n--- CODE CONTEXT (files Atlas read for this request — use these to write complete FILE_EDIT blocks) ---\n${combinedFileContext}\n--- END CODE CONTEXT ---`;
   }
 
   // Mode-specific instructions — these override the default disposition
@@ -690,6 +747,7 @@ You are now in THINK mode. This changes how you respond:
     fileEdits: fileEdits.length > 0 ? fileEdits : undefined,
     fileEdit: fileEdits.length > 0 ? fileEdits[0] : undefined,
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
+    autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(imageB64 ? { imageB64, imageMimeType } : {}),
   });
 });

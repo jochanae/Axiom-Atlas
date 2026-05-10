@@ -86,6 +86,7 @@ interface ChatMessage {
   sentAt?: string;
   imageB64?: string;
   imageMimeType?: string;
+  autoFetchedFiles?: string[];
 }
 
 interface LinkedRepo {
@@ -1293,6 +1294,32 @@ function AssistantBubble({
               alt="Generated visual"
               style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid rgba(201,162,76,0.2)", display: "block" }}
             />
+          </div>
+        )}
+
+        {message.autoFetchedFiles && message.autoFetchedFiles.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
+            {message.autoFetchedFiles.map((fp) => (
+              <div
+                key={fp}
+                title={fp}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  padding: "2px 8px", borderRadius: 4,
+                  background: "rgba(201,162,76,0.06)",
+                  border: "1px solid rgba(201,162,76,0.18)",
+                  fontSize: 10, fontFamily: "var(--app-font-mono)",
+                  color: "var(--atlas-muted)", letterSpacing: "0.03em",
+                  maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}
+              >
+                <svg width="9" height="9" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: 0.6 }}>
+                  <path d="M2 1h5l3 3v7H2V1z" stroke="var(--atlas-gold)" strokeWidth="1.1" />
+                  <path d="M7 1v3h3" stroke="var(--atlas-gold)" strokeWidth="1.1" />
+                </svg>
+                {fp.split("/").pop() ?? fp}
+              </div>
+            ))}
           </div>
         )}
 
@@ -5578,6 +5605,7 @@ export default function Workspace() {
           const cp = res.catchPayload as CatchPayload | null;
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
           const chips = (res.memoryChips ?? []) as string[];
+          const aff = (res.autoFetchedFiles ?? []) as string[];
           setMessages((prev) => [...prev, {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
@@ -5585,6 +5613,7 @@ export default function Workspace() {
             ...(fes.length > 0 ? { fileEdits: fes, fileEdit: fes[0] } : {}),
             ...(chips.length > 0 ? { memoryChips: chips } : {}),
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
+            ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),
           }]);
           if (cp) { playCatch(); setActiveCatch(cp); }
           if (res.memoryChips && res.memoryChips.length > 0) {
