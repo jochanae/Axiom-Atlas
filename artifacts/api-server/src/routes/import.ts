@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
+import { eq, and } from "drizzle-orm";
 import { db, projectsTable, entriesTable } from "@workspace/db";
 
 const CORS_HEADERS = {
@@ -43,37 +44,59 @@ router.post("/import", async (req, res): Promise<void> => {
   const { project_name, builder, nodes_resolved, manifest, decisions } = parsed.data;
 
   const today = new Date().toISOString().slice(0, 10);
-
-  let memory: string | null = null;
-  if (manifest) {
-    const header = [
-      `[axiom_handoff] [${today}] Technical Manifest`,
-      builder ? `Builder: ${builder}` : null,
-      nodes_resolved?.length ? `Nodes resolved: ${nodes_resolved.join(", ")}` : null,
-    ].filter(Boolean).join(" | ");
-
-    memory = `${header}\n\n${manifest}`;
-  }
-
   const userId = (req as any).authUser.id as number;
 
-  const [project] = await db
-    .insert(projectsTable)
-    .values({
-      name: project_name,
-      description: [
+  const newMemoryBlock = manifest
+    ? [
+        `[axiom_handoff] [${today}] Technical Manifest`,
         builder ? `Builder: ${builder}` : null,
-        nodes_resolved?.length ? `Nodes: ${nodes_resolved.join(", ")}` : null,
-      ].filter(Boolean).join(" | ") || null,
-      memory,
-      userId,
-    })
-    .returning();
+        nodes_resolved?.length ? `Nodes resolved: ${nodes_resolved.join(", ")}` : null,
+      ].filter(Boolean).join(" | ") + `\n\n${manifest}`
+    : null;
+
+  const existing = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.userId, userId), eq(projectsTable.name, project_name)))
+    .limit(1);
+
+  let projectId: number;
+  let matched = false;
+
+  if (existing.length > 0) {
+    const found = existing[0];
+    projectId = found.id;
+    matched = true;
+
+    if (newMemoryBlock) {
+      const updatedMemory = found.memory
+        ? `${found.memory}\n\n---\n\n${newMemoryBlock}`
+        : newMemoryBlock;
+      await db
+        .update(projectsTable)
+        .set({ memory: updatedMemory })
+        .where(eq(projectsTable.id, projectId));
+    }
+  } else {
+    const [project] = await db
+      .insert(projectsTable)
+      .values({
+        name: project_name,
+        description: [
+          builder ? `Builder: ${builder}` : null,
+          nodes_resolved?.length ? `Nodes: ${nodes_resolved.join(", ")}` : null,
+        ].filter(Boolean).join(" | ") || null,
+        memory: newMemoryBlock,
+        userId,
+      })
+      .returning();
+    projectId = project.id;
+  }
 
   if (decisions?.length) {
     await db.insert(entriesTable).values(
       decisions.map((d) => ({
-        projectId: project.id,
+        projectId,
         title: d.text,
         status: "committed" as const,
         severity: "committed" as const,
@@ -83,7 +106,7 @@ router.post("/import", async (req, res): Promise<void> => {
     );
   }
 
-  res.set(CORS_HEADERS).status(201).json({ projectId: project.id });
+  res.set(CORS_HEADERS).status(matched ? 200 : 201).json({ projectId, matched });
 });
 
 export default router;
