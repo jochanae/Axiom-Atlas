@@ -15,9 +15,9 @@ export type ReadinessMode = "blended" | "arch" | "decisions";
 export const READINESS_MODE_KEY = "atlas-readiness-mode";
 
 export const MODE_META: Record<ReadinessMode, { label: string; abbr: string; description: string }> = {
-  blended:   { label: "Blended",   abbr: "BLD", description: "60% architecture · 40% decisions" },
-  arch:      { label: "Arch",      abbr: "ARC", description: "Architecture nodes only" },
-  decisions: { label: "Decisions", abbr: "DEC", description: "Committed ledger entries only" },
+  blended:   { label: "Blended",   abbr: "MIX", description: "60% architecture · 40% decisions" },
+  arch:      { label: "Arch",      abbr: "STR", description: "Architecture nodes only" },
+  decisions: { label: "Decisions", abbr: "DCN", description: "Committed ledger entries only" },
 };
 
 export function computeBlendedScore(archScore: number, decisionsScore: number): number {
