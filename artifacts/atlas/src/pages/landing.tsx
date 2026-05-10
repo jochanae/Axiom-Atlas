@@ -719,8 +719,8 @@ function PricingSection({ onEnter }: { onEnter: () => void }) {
       name: "Teams",
       priceLabel: "$49",
       sub: "/ seat / month",
-      bullets: ["Coming soon"],
-      cta: "Coming soon",
+      bullets: ["Everything in Pro", "Shared decision ledger", "Team member invites", "Collaborative sessions", "Admin controls"],
+      cta: "Request access",
       highlight: false,
     },
   ];

@@ -199,6 +199,23 @@ router.post("/devserver/stop", (_req, res): void => {
   res.json({ status: "idle" });
 });
 
+const PROXY_BASE = "/api/devserver/proxy";
+
+// Rewrite absolute-path asset references so they route through this proxy
+function rewriteHtml(html: string): string {
+  // Inject a <base> tag so relative URLs also resolve through the proxy
+  let out = html.replace(/(<head[^>]*>)/i, `$1<base href="${PROXY_BASE}/">`);
+  // Rewrite absolute src / href / action / srcset that start with / (not //)
+  out = out.replace(/((?:src|href|action|srcset)=["'])\/(?!\/)/g, `$1${PROXY_BASE}/`);
+  // Rewrite url() in inline styles
+  out = out.replace(/url\((['"]?)\/(?!\/)/g, `url($1${PROXY_BASE}/`);
+  return out;
+}
+
+function rewriteCss(css: string): string {
+  return css.replace(/url\((['"]?)\/(?!\/)/g, `url($1${PROXY_BASE}/`);
+}
+
 router.use("/devserver/proxy", (req, res): void => {
   if (!state.port) {
     res.status(503).json({ error: "Dev server not running" });
@@ -218,14 +235,35 @@ router.use("/devserver/proxy", (req, res): void => {
   };
 
   const proxyReq = http.request(options, (proxyRes) => {
+    const contentType = (proxyRes.headers["content-type"] ?? "").toLowerCase();
+    const isHtml = contentType.includes("text/html");
+    const isCss = contentType.includes("text/css");
+    const needsRewrite = isHtml || isCss;
+
     const headers: Record<string, string | string[] | undefined> = {};
     for (const [k, v] of Object.entries(proxyRes.headers)) {
-      if (k.toLowerCase() === "x-frame-options") continue;
-      if (k.toLowerCase() === "content-security-policy") continue;
+      const lk = k.toLowerCase();
+      if (lk === "x-frame-options") continue;
+      if (lk === "content-security-policy") continue;
+      // Drop these when we buffer + rewrite — we'll recalculate
+      if (needsRewrite && lk === "content-encoding") continue;
+      if (needsRewrite && lk === "content-length") continue;
       headers[k] = v;
     }
-    res.writeHead(proxyRes.statusCode ?? 200, headers);
-    proxyRes.pipe(res, { end: true });
+
+    if (needsRewrite) {
+      const chunks: Buffer[] = [];
+      proxyRes.on("data", (chunk: Buffer) => chunks.push(chunk));
+      proxyRes.on("end", () => {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        const rewritten = isHtml ? rewriteHtml(raw) : rewriteCss(raw);
+        res.writeHead(proxyRes.statusCode ?? 200, headers);
+        res.end(rewritten, "utf8");
+      });
+    } else {
+      res.writeHead(proxyRes.statusCode ?? 200, headers);
+      proxyRes.pipe(res, { end: true });
+    }
   });
 
   req.pipe(proxyReq, { end: true });
