@@ -970,6 +970,17 @@ export default function Home() {
   const { data: projects, isLoading } = useListProjects();
   const createProject = useCreateProject();
 
+  const [nexusProject, setNexusProject] = useState<{ id: number; name: string } | null>(null);
+  const [nexusLoading, setNexusLoading] = useState(false);
+
+  useEffect(() => {
+    const base = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
+    fetch(`${base}/api/projects/nexus`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.id) setNexusProject(d); })
+      .catch(() => {});
+  }, []);
+
   const handleNewProject = useCallback((name = "New Project") => {
     if (isFree && (projects?.length ?? 0) >= 1) {
       setShowUpgrade(true);
@@ -1018,32 +1029,22 @@ export default function Home() {
     [input, setLocation]
   );
 
-  const handleSubmit = useCallback(() => {
-    // Always create a fresh project when submitting from the home input —
-    // never silently drop the user into an existing project.
-    if (isFree && (projects?.length ?? 0) >= 1) {
-      setShowUpgrade(true);
-      return;
-    }
+  const handleSubmit = useCallback(async () => {
+    setNexusLoading(true);
     setCreateError(null);
-    createProject.mutate(
-      { data: { name: "New Project" } },
-      {
-        onSuccess: (p) => {
-          queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-          navigateToProject(p.id);
-        },
-        onError: (err: any) => {
-          const msg = extractApiErrorMessage(err);
-          if (msg?.includes("PROJECT_LIMIT_REACHED") || err?.status === 402) {
-            setShowUpgrade(true);
-          } else {
-            setCreateError(msg ?? "Failed to create project");
-          }
-        },
-      }
-    );
-  }, [isFree, projects, navigateToProject, createProject, queryClient]);
+    try {
+      const base = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
+      const res = await fetch(`${base}/api/projects/nexus`, { credentials: "include" });
+      if (!res.ok) throw new Error("Could not open Nexus");
+      const nexus = await res.json();
+      setNexusProject(nexus);
+      navigateToProject(nexus.id);
+    } catch (err: any) {
+      setCreateError(err?.message ?? "Could not open Nexus");
+    } finally {
+      setNexusLoading(false);
+    }
+  }, [navigateToProject]);
 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1061,7 +1062,7 @@ export default function Home() {
   };
 
   const hasInput = input.trim().length > 0;
-  const loading = createProject.isPending;
+  const loading = nexusLoading;
 
   return (
     <div
@@ -1538,6 +1539,7 @@ export default function Home() {
         open={showDrawer}
         onClose={() => setShowDrawer(false)}
         projects={(projects ?? []).map((p: Project) => ({ id: p.id, name: p.name, description: p.description, latestSnapshotScore: p.latestSnapshotScore ?? null }))}
+        nexusProject={nexusProject}
         onOpenProject={navigateToProject}
         onNewProject={() => { setShowDrawer(false); handleNewProject("New Project"); }}
         onOpenLedger={(id) => setLocation(`/ledger/${id}`)}

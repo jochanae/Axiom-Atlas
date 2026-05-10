@@ -28,13 +28,42 @@ function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = f
   };
 }
 
+// GET /api/projects/nexus — get or auto-create the user's Nexus project.
+// MUST be declared before GET /projects/:id so Express doesn't treat "nexus" as an ID.
+router.get("/projects/nexus", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+
+  const [existing] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.userId, userId), eq(projectsTable.isNexus, true)));
+
+  if (existing) {
+    res.json(serializeProject(existing, false));
+    return;
+  }
+
+  // Auto-create — exempt from free-tier project limit
+  const [nexus] = await db
+    .insert(projectsTable)
+    .values({
+      name: "Nexus",
+      description: "Your persistent strategic command space",
+      userId,
+      isNexus: true,
+    })
+    .returning();
+
+  res.status(201).json(serializeProject(nexus, false));
+});
+
 router.get("/projects", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
 
   const projects = await db
     .select()
     .from(projectsTable)
-    .where(eq(projectsTable.userId, userId))
+    .where(and(eq(projectsTable.userId, userId), eq(projectsTable.isNexus, false)))
     .orderBy(projectsTable.updatedAt);
 
   const latestScores = await db
@@ -73,7 +102,7 @@ router.post("/projects", async (req, res): Promise<void> => {
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(projectsTable)
-      .where(eq(projectsTable.userId, userId));
+      .where(and(eq(projectsTable.userId, userId), eq(projectsTable.isNexus, false)));
     if (count >= 1) {
       res.status(402).json({
         error: "Free plan is limited to 1 project.",
