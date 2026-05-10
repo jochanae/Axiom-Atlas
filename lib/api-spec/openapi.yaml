@@ -1254,11 +1254,27 @@ components:
         - content
         - createdAt
 
+    NexusHistoryMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+      required:
+        - role
+        - content
+
     NexusChatRequest:
       type: object
       properties:
         message:
           type: string
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/NexusHistoryMessage"
         userProfile:
           type: ["string", "null"]
       required:
@@ -1267,13 +1283,10 @@ components:
     NexusChatResponse:
       type: object
       properties:
-        content:
+        response:
           type: string
-        messageId:
-          type: integer
         memoryUpdated:
           type: boolean
       required:
-        - content
-        - messageId
+        - response
         - memoryUpdated

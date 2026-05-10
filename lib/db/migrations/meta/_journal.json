@@ -15,6 +15,13 @@
       "when": 1778349281035,
       "tag": "0001_last_ravenous",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1747000000000,
+      "tag": "0002_nexus_mode",
+      "breakpoints": true
     }
   ]
 }

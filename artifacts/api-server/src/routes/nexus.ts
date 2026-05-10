@@ -28,7 +28,7 @@ What you're NOT doing here:
 • Focusing on one project to the exclusion of others
 • Acting like a task manager or to-do list
 
-Naming (for your own reference — don't repeat this to the user):
+Naming (internal reference only):
 • Nexus = this global space/environment
 • Nexium = the AI engine (you)
 • Atlas = your persona name
@@ -44,7 +44,7 @@ When you learn something durable that applies across the portfolio, write it at 
 
 Maximum one MEMORY_Tn line per response. Only write memory for things genuinely worth keeping.`;
 
-// ── Five-Tier Memory helpers (same as chat.ts) ─────────────────────────────
+// ── Five-Tier Memory helpers ───────────────────────────────────────────────
 interface MemoryEntry {
   tier: 1 | 2 | 3 | 4 | 5;
   text: string;
@@ -105,23 +105,20 @@ function buildMemoryText(store: MemoryStore): string {
 
 function extractMemoryLines(content: string): {
   content: string;
-  newFacts: Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }>;
+  memoryUpdated: boolean;
 } {
   const lines = content.split("\n");
-  const newFacts: Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }> = [];
+  let memoryUpdated = false;
   const kept: string[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
-    const match = trimmed.match(MEMORY_TAG_RE);
-    if (match) {
-      const tier = parseInt(match[1], 10) as 1 | 2 | 3 | 4 | 5;
-      const text = match[2].trim();
-      if (text) newFacts.push({ tier, text });
+    if (MEMORY_TAG_RE.test(trimmed)) {
+      memoryUpdated = true;
     } else {
       kept.push(line);
     }
   }
-  return { content: kept.join("\n").trim(), newFacts };
+  return { content: kept.join("\n").trim(), memoryUpdated };
 }
 
 // GET /api/nexus/thread — return the full Nexus Living Thread for the authenticated user
@@ -152,6 +149,7 @@ router.delete("/nexus/thread", async (req, res): Promise<void> => {
 router.post("/nexus/chat", async (req, res): Promise<void> => {
   const body = req.body as {
     message: string;
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
     userProfile?: string;
   };
 
@@ -161,7 +159,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
 
   const userId = (req as any).authUser.id as number;
-  const { message, userProfile = "" } = body;
+  const { message, history: clientHistory, userProfile = "" } = body;
 
   // Load all of this user's projects and aggregate their memories
   const projects = await db
@@ -179,13 +177,21 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     .filter(Boolean)
     .join("\n\n");
 
-  // Load the last 40 Nexus messages as conversation history
-  const recentMessages = await db
-    .select()
-    .from(nexusMessagesTable)
-    .where(eq(nexusMessagesTable.userId, userId))
-    .orderBy(asc(nexusMessagesTable.createdAt));
-  const historyWindow = recentMessages.slice(-40);
+  // Use client-supplied history if provided; otherwise load from the Living Thread
+  let conversationHistory: Array<{ role: "user" | "assistant"; content: string }>;
+  if (clientHistory && clientHistory.length > 0) {
+    conversationHistory = clientHistory.slice(-40);
+  } else {
+    const dbMessages = await db
+      .select()
+      .from(nexusMessagesTable)
+      .where(eq(nexusMessagesTable.userId, userId))
+      .orderBy(asc(nexusMessagesTable.createdAt));
+    conversationHistory = dbMessages.slice(-40).map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+  }
 
   // Build system prompt
   let systemPrompt = NEXUS_SYSTEM_PROMPT;
@@ -193,50 +199,37 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
   }
   if (aggregatedMemory) {
-    systemPrompt += `\n\n--- AGGREGATED PROJECT MEMORY (what Atlas knows across all projects) ---\n${aggregatedMemory}\n--- END AGGREGATED MEMORY ---`;
+    systemPrompt += `\n\n--- AGGREGATED PROJECT MEMORY (Atlas knows this across all projects) ---\n${aggregatedMemory}\n--- END AGGREGATED MEMORY ---`;
   }
 
   // Build messages array for Claude
   const claudeMessages: Array<{ role: "user" | "assistant"; content: string }> = [
-    ...historyWindow.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
+    ...conversationHistory,
     { role: "user", content: message },
   ];
 
-  // Persist user message
+  // Persist the user message to the Living Thread
   await db.insert(nexusMessagesTable).values({ userId, role: "user", content: message });
 
   // Call Claude
-  const response = await anthropic.messages.create({
+  const aiResponse = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
     system: systemPrompt,
     messages: claudeMessages,
   });
 
-  const rawContent = response.content[0]?.type === "text" ? response.content[0].text : "";
+  const rawContent = aiResponse.content[0]?.type === "text" ? aiResponse.content[0].text : "";
 
-  // Extract memory facts from response
-  const { content: finalContent, newFacts } = extractMemoryLines(rawContent);
+  // Strip MEMORY_Tn tags from visible output
+  const { content: visibleContent, memoryUpdated } = extractMemoryLines(rawContent);
 
-  // Persist assistant message
-  const [savedMsg] = await db
-    .insert(nexusMessagesTable)
-    .values({ userId, role: "assistant", content: finalContent })
-    .returning();
-
-  // If the AI wrote memory facts, persist them to the Nexus-level memory store on the first project
-  // For now we store Nexus-level memories as a special row with the user's user record.
-  // This is tracked via a placeholder — the full cross-project memory store will be
-  // handled in a future schema update. For now, newFacts are returned to the client.
+  // Persist the assistant response to the Living Thread
+  await db.insert(nexusMessagesTable).values({ userId, role: "assistant", content: visibleContent });
 
   res.json({
-    content: finalContent,
-    messageId: savedMsg.id,
-    memoryUpdated: newFacts.length > 0,
-    newFacts,
+    response: visibleContent,
+    memoryUpdated,
   });
 });
 

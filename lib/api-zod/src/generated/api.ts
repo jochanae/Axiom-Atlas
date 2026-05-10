@@ -593,11 +593,18 @@ export const GetNexusThreadResponse = zod.array(GetNexusThreadResponseItem);
  */
 export const SendNexusMessageBody = zod.object({
   message: zod.string(),
+  history: zod
+    .array(
+      zod.object({
+        role: zod.enum(["user", "assistant"]),
+        content: zod.string(),
+      }),
+    )
+    .optional(),
   userProfile: zod.string().nullish(),
 });
 
 export const SendNexusMessageResponse = zod.object({
-  content: zod.string(),
-  messageId: zod.number(),
+  response: zod.string(),
   memoryUpdated: zod.boolean(),
 });
