@@ -33,7 +33,7 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
 
 const SESSION_COOKIE = "atlas-session";
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 90;
 
 async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
@@ -54,7 +54,7 @@ function createSessionCookie(token: string, res: import("express").Response) {
   const expires = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true,
     sameSite: "lax",
     expires,
     path: "/",

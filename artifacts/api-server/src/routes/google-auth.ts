@@ -9,7 +9,7 @@ const router: IRouter = Router();
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const SESSION_COOKIE = "atlas-session";
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 90;
 // Super-admin email from env only — no hardcoded fallback
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
 
