@@ -223,7 +223,7 @@ const MODE_LABEL_COLORS: Record<string, string> = {
 function AtlasLogo({ small, mode }: { small?: boolean; mode?: "THINK" | "PLAN" | "BUILD" }) {
   const imgSize = small ? 22 : 26;
   const modeLabel = mode ? `${mode} MODE` : null;
-  const modeColor = "var(--atlas-muted)";
+  const modeColor = mode ? (MODE_LABEL_COLORS[mode] ?? "var(--atlas-muted)") : "var(--atlas-muted)";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <img
