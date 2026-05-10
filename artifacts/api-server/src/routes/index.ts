@@ -17,6 +17,7 @@ import googleAuthRouter from "./google-auth";
 import adminRouter from "./admin";
 import invitesRouter from "./invites";
 import stripeRouter from "./stripe";
+import statsRouter from "./stats";
 
 const router: IRouter = Router();
 
@@ -44,6 +45,9 @@ router.use(requireAuth, vaultRouter);
 router.use(requireAuth, forgeRouter);
 router.use(requireAuth, devserverRouter);
 router.use(requireAuth, importRouter);
+
+// Stats
+router.use(requireAuth, statsRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);

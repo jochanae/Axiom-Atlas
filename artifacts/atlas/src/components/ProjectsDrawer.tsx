@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, X, ChevronDown, ChevronRight, MessageSquare, BookOpen, Inbox, Feather, Hammer, Compass, ShieldCheck, Archive, LayoutDashboard, Globe } from "lucide-react";
+import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, Feather, Hammer, Compass, Archive, LayoutDashboard, Globe } from "lucide-react";
 import { CompactReadinessRing } from "./ReadinessRing";
 
 export type DrawerProject = {
@@ -220,10 +220,8 @@ export function ProjectsDrawer({ open, onClose, projects, nexusProject, activePr
           {/* NAVIGATE section */}
           <SectionLabel>Navigate</SectionLabel>
 
+          <NavRow icon={<LayoutDashboard size={14} strokeWidth={1.6} />} label="Dashboard" onClick={() => navigate("/dashboard")} />
           <NavRow icon={<Globe size={14} strokeWidth={1.6} />} label="Master Map" onClick={() => { navigate("/map"); onClose(); }} />
-
-          {/* Sessions */}
-          <NavRow icon={<MessageSquare size={14} strokeWidth={1.6} />} label="Sessions" onClick={() => navigate("/sessions")} />
 
           {activeProjectId && onOpenLedger && (
             <NavRow icon={<BookOpen size={14} strokeWidth={1.6} />} label="Decision Ledger" onClick={() => { onOpenLedger(activeProjectId); onClose(); }} />
@@ -236,9 +234,7 @@ export function ProjectsDrawer({ open, onClose, projects, nexusProject, activePr
           <SectionLabel>Tools</SectionLabel>
           <NavRow icon={<Hammer size={14} strokeWidth={1.6} />} label="Workshop" onClick={() => navigate("/workshop")} />
           <NavRow icon={<Compass size={14} strokeWidth={1.6} />} label="Project Compass" onClick={() => navigate("/compass")} />
-          <NavRow icon={<ShieldCheck size={14} strokeWidth={1.6} />} label="Guard Report" onClick={() => navigate("/guard-report")} />
           <NavRow icon={<Archive size={14} strokeWidth={1.6} />} label="The Vault" onClick={() => navigate("/vault")} />
-          <NavRow icon={<LayoutDashboard size={14} strokeWidth={1.6} />} label="Dashboard" onClick={() => navigate("/dashboard")} />
         </div>
 
         {/* User footer */}

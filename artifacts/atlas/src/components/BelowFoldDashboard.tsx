@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocation } from "wouter";
 import { CompactReadinessRing } from "./ReadinessRing";
 
 type RecentProject = {
@@ -160,11 +161,14 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
             <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
               Your Momentum
             </h3>
-            {onOpenLedger && (
-              <button type="button" onClick={onOpenLedger} style={{ background: "transparent", border: "none", fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75 }}>
-                Open ledger →
-              </button>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {onOpenLedger && (
+                <button type="button" onClick={onOpenLedger} style={{ background: "transparent", border: "none", fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75 }}>
+                  Ledger →
+                </button>
+              )}
+              <DashboardLink />
+            </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <MetricCell value={committedCount} label="DECISIONS COMMITTED" />
@@ -200,6 +204,25 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
         </div>
       </RevealOnScroll>
     </div>
+  );
+}
+
+function DashboardLink() {
+  const [, nav] = useLocation();
+  return (
+    <button
+      type="button"
+      onClick={() => nav("/dashboard")}
+      style={{
+        background: "transparent", border: "none", fontSize: 10,
+        color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)",
+        cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+      onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.75")}
+    >
+      Dashboard →
+    </button>
   );
 }
 
