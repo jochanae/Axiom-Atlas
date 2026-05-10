@@ -1635,27 +1635,16 @@ export default function Home() {
                 flexShrink: 0,
               }}
               onClick={() => {
-                const projectList = projects ?? [];
-                const lastIdRaw = (() => { try { return localStorage.getItem("atlas-last-project") || ""; } catch { return ""; } })();
-                const lastId = Number(lastIdRaw) || null;
-                // Validate stored ID against actual project list — stale IDs cause "Project not found"
-                const validLastId = lastId && projectList.some(p => p.id === lastId) ? lastId : null;
-                const targetId = validLastId || projectList[0]?.id;
-                if (targetId) {
-                  setLocation(`/project/${targetId}`);
-                } else if (isLoading) {
-                  // Projects still loading — wait for first valid one
-                  const unsub = setInterval(() => {
-                    try {
-                      const raw = localStorage.getItem("atlas-last-project");
-                      const lid = Number(raw) || null;
-                      if (lid) { clearInterval(unsub); setLocation(`/project/${lid}`); }
-                    } catch { /* ignore */ }
-                  }, 150);
-                  setTimeout(() => clearInterval(unsub), 5000);
+                // Nexus is the default "talk to Atlas" space — always go there first
+                if (nexusProject?.id) {
+                  setLocation(`/project/${nexusProject.id}`);
                 } else {
-                  // No projects yet — create one
-                  handleNewProject("New Project");
+                  // Nexus not loaded yet — fetch it now and navigate
+                  const base = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
+                  fetch(`${base}/api/projects/nexus`, { credentials: "include" })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(d => { if (d?.id) setLocation(`/project/${d.id}`); })
+                    .catch(() => {});
                 }
               }}
             >
