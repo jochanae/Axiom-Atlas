@@ -436,6 +436,27 @@ const MODELS = [
   { id: "deepseek",   label: "DeepSeek",   sub: "Analyst · Deep Reasoning",       available: false },
 ];
 
+const MODES = [
+  {
+    id: "strategic",
+    label: "Strategic",
+    sub: "Wide-lens · Connect dots across the portfolio",
+    description: "Default mode. Atlas sees all your projects simultaneously and thinks at the portfolio level.",
+  },
+  {
+    id: "audit",
+    label: "Audit",
+    sub: "Critical · What's working vs. what's not",
+    description: "Atlas gets direct and hard-nosed. Stress-tests assumptions, flags gaps, and won't soften the assessment.",
+  },
+  {
+    id: "deep-dive",
+    label: "Deep Dive",
+    sub: "Focused · Go deep on one thing",
+    description: "Atlas locks onto the topic you raise and explores it thoroughly — trade-offs, edge cases, implications.",
+  },
+];
+
 function ContextChip({
   icon, label, onClick, dim,
 }: { icon: React.ReactNode; label: string; onClick: () => void; dim?: boolean }) {
@@ -470,12 +491,13 @@ function ContextChip({
 }
 
 function HomeContextBar({
-  focusLabel, model, onFocusClick, onModelClick,
+  focusLabel, model, mode, onFocusClick, onModelClick, onModeClick,
 }: {
-  focusLabel: string; model: string;
-  onFocusClick: () => void; onModelClick: () => void;
+  focusLabel: string; model: string; mode: string;
+  onFocusClick: () => void; onModelClick: () => void; onModeClick: () => void;
 }) {
   const modelLabel = MODELS.find(m => m.id === model)?.label ?? "Claude";
+  const modeLabel = MODES.find(m => m.id === mode)?.label ?? "Strategic";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
       <ContextChip
@@ -486,6 +508,16 @@ function HomeContextBar({
           </svg>
         }
         label={focusLabel}
+      />
+      <div style={{ width: 1, height: 14, background: "rgba(37,34,32,0.9)", flexShrink: 0 }} />
+      <ContextChip
+        onClick={onModeClick}
+        icon={
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 4h12M4 8h8M6 12h4"/>
+          </svg>
+        }
+        label={modeLabel}
       />
       <div style={{ width: 1, height: 14, background: "rgba(37,34,32,0.9)", flexShrink: 0 }} />
       <ContextChip
@@ -701,6 +733,87 @@ function BranchPickerSheet({
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── ModePickerSheet ──────────────────────────────────────────────────────────
+function ModePickerSheet({ current, onSelect, onClose }: {
+  current: string; onSelect: (m: string) => void; onClose: () => void;
+}) {
+  const modeIcons: Record<string, React.ReactNode> = {
+    "strategic": (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/>
+      </svg>
+    ),
+    "audit": (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 2v4M8 10v4M2 8h4M10 8h4"/><circle cx="8" cy="8" r="2"/>
+      </svg>
+    ),
+    "deep-dive": (
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 4h12M4 8h8M6 12h4"/>
+      </svg>
+    ),
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div style={{
+        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
+        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
+        borderTop: "1px solid rgba(201,162,76,0.18)",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
+        paddingBottom: 32,
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+            Mode
+          </span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        <div style={{ padding: "0 14px" }}>
+          {MODES.map(m => (
+            <button
+              key={m.id}
+              onClick={() => { onSelect(m.id); onClose(); }}
+              style={{
+                width: "100%", textAlign: "left", padding: "12px 12px", borderRadius: 8,
+                background: current === m.id ? "rgba(201,162,76,0.06)" : "transparent",
+                border: `1px solid ${current === m.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
+                cursor: "pointer",
+                display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 2,
+                transition: "all 140ms ease",
+              }}
+            >
+              <div style={{
+                width: 32, height: 32, borderRadius: 8, flexShrink: 0, marginTop: 1,
+                background: "rgba(201,162,76,0.08)",
+                border: "1px solid rgba(201,162,76,0.2)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "rgba(201,162,76,0.75)",
+              }}>
+                {modeIcons[m.id]}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", marginBottom: 2 }}>
+                  {m.label}
+                </div>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", opacity: 0.7 }}>{m.sub}</div>
+                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 11, color: "var(--atlas-muted)", marginTop: 4, lineHeight: 1.5, opacity: 0.6 }}>{m.description}</div>
+              </div>
+              {current === m.id && (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginTop: 4, flexShrink: 0 }}>
+                  <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -991,11 +1104,15 @@ export default function Home() {
     try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).model ?? "claude") : "claude"; } catch { return "claude"; }
   });
   const [showModelSheet, setShowModelSheet] = useState(false);
+  const [homeMode, setHomeMode] = useState<string>(() => {
+    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).mode ?? "strategic") : "strategic"; } catch { return "strategic"; }
+  });
+  const [showModeSheet, setShowModeSheet] = useState(false);
 
   // Persist context to localStorage whenever it changes
   useEffect(() => {
-    try { localStorage.setItem("atlas-home-context", JSON.stringify({ focusId: homeFocus, model: homeModel })); } catch {}
-  }, [homeFocus, homeModel]);
+    try { localStorage.setItem("atlas-home-context", JSON.stringify({ focusId: homeFocus, model: homeModel, mode: homeMode })); } catch {}
+  }, [homeFocus, homeModel, homeMode]);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1135,7 +1252,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: text, model: homeModel, focusProjectId: homeFocus }),
+        body: JSON.stringify({ message: text, model: homeModel, focusProjectId: homeFocus, mode: homeMode }),
       });
       if (!res.ok) throw new Error("No response");
       const data = await res.json() as { reply?: string; message?: string };
@@ -1805,7 +1922,9 @@ export default function Home() {
           <HomeContextBar
             focusLabel={homeFocus ? (projects?.find(p => p.id === homeFocus)?.name ?? "Project") : "All Projects"}
             model={homeModel}
+            mode={homeMode}
             onFocusClick={() => setShowFocusSheet(true)}
+            onModeClick={() => setShowModeSheet(true)}
             onModelClick={() => setShowModelSheet(true)}
           />
 
@@ -1866,6 +1985,13 @@ export default function Home() {
           projects={(projects ?? []).map(p => ({ id: p.id, name: p.name }))}
           onSelect={setHomeFocus}
           onClose={() => setShowFocusSheet(false)}
+        />
+      )}
+      {showModeSheet && (
+        <ModePickerSheet
+          current={homeMode}
+          onSelect={setHomeMode}
+          onClose={() => setShowModeSheet(false)}
         />
       )}
       {showModelSheet && (
