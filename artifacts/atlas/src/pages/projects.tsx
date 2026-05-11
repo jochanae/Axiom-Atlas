@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { useListProjects, useCreateProject, getListProjectsQueryKey } from "@workspace/api-client-react";
@@ -15,6 +15,9 @@ export default function Projects() {
   const [, setLocation] = useLocation();
   const [createError, setCreateError] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const handleNew = () => {
     setCreateError(null);
@@ -31,6 +34,31 @@ export default function Projects() {
       }
     );
   };
+
+  const handleDelete = useCallback(async (id: number) => {
+    setDeletingId(id);
+    try {
+      await fetch(`/api/projects/${id}`, { method: "DELETE", credentials: "include" });
+      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+    } catch {}
+    setDeletingId(null);
+    setConfirmDeleteId(null);
+  }, [queryClient]);
+
+  const handleArchive = useCallback(async (id: number, archive: boolean) => {
+    try {
+      await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: archive ? "archived" : "active" }),
+      });
+      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+    } catch {}
+  }, [queryClient]);
+
+  const activeProjects = projects?.filter(p => (p.status ?? "active") !== "archived") ?? [];
+  const archivedProjects = projects?.filter(p => p.status === "archived") ?? [];
 
   return (
     <div style={{
@@ -69,7 +97,7 @@ export default function Projects() {
           </span>
           <span style={{ color: "var(--atlas-border)", fontSize: 14 }}>·</span>
           <span style={{ ...sMono, fontSize: 10, letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.5 }}>
-            {projects?.length ?? 0}
+            {activeProjects.length}
           </span>
         </div>
 
@@ -110,7 +138,7 @@ export default function Projects() {
           <div style={{ display: "flex", justifyContent: "center", paddingTop: 60 }}>
             <LoadingSpinner size="lg" color="atlas" />
           </div>
-        ) : projects?.length === 0 ? (
+        ) : activeProjects.length === 0 && archivedProjects.length === 0 ? (
           <div style={{
             marginTop: 60,
             border: "1px dashed var(--atlas-border)",
@@ -143,18 +171,76 @@ export default function Projects() {
             </button>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {projects?.map((p, idx) => (
-              <ProjectRow
-                key={p.id}
-                project={p}
-                index={idx}
-                hovered={hoveredId === p.id}
-                onMouseEnter={() => setHoveredId(p.id)}
-                onMouseLeave={() => setHoveredId(null)}
-              />
-            ))}
-          </div>
+          <>
+            {/* Active projects */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {activeProjects.map((p, idx) => (
+                <ProjectRow
+                  key={p.id}
+                  project={p}
+                  index={idx}
+                  hovered={hoveredId === p.id}
+                  onMouseEnter={() => setHoveredId(p.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  confirmDelete={confirmDeleteId === p.id}
+                  deleting={deletingId === p.id}
+                  onRequestDelete={() => setConfirmDeleteId(p.id)}
+                  onCancelDelete={() => setConfirmDeleteId(null)}
+                  onConfirmDelete={() => handleDelete(p.id)}
+                  onArchive={() => handleArchive(p.id, true)}
+                />
+              ))}
+            </div>
+
+            {/* Archived section */}
+            {archivedProjects.length > 0 && (
+              <div style={{ marginTop: 32 }}>
+                <button
+                  onClick={() => setShowArchived(v => !v)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    background: "transparent", border: "none", cursor: "pointer",
+                    padding: "6px 0", marginBottom: showArchived ? 12 : 0,
+                    width: "100%",
+                  }}
+                >
+                  <span style={{ ...sMono, fontSize: 9, letterSpacing: "0.14em", color: "var(--atlas-muted)", textTransform: "uppercase", opacity: 0.55 }}>
+                    Archived
+                  </span>
+                  <span style={{ ...sMono, fontSize: 9, color: "var(--atlas-muted)", opacity: 0.4 }}>
+                    ({archivedProjects.length})
+                  </span>
+                  <svg
+                    width="10" height="10" viewBox="0 0 10 10" fill="none"
+                    style={{ marginLeft: 2, opacity: 0.35, transition: "transform 160ms ease", transform: showArchived ? "rotate(180deg)" : "rotate(0deg)" }}
+                  >
+                    <path d="M2 3.5l3 3 3-3" stroke="var(--atlas-muted)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {showArchived && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 1, opacity: 0.7 }}>
+                    {archivedProjects.map((p, idx) => (
+                      <ProjectRow
+                        key={p.id}
+                        project={p}
+                        index={idx}
+                        hovered={hoveredId === p.id}
+                        onMouseEnter={() => setHoveredId(p.id)}
+                        onMouseLeave={() => setHoveredId(null)}
+                        confirmDelete={confirmDeleteId === p.id}
+                        deleting={deletingId === p.id}
+                        onRequestDelete={() => setConfirmDeleteId(p.id)}
+                        onCancelDelete={() => setConfirmDeleteId(null)}
+                        onConfirmDelete={() => handleDelete(p.id)}
+                        onArchive={() => handleArchive(p.id, false)}
+                        isArchived
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>
@@ -176,32 +262,51 @@ function ProjectRow({
   hovered,
   onMouseEnter,
   onMouseLeave,
+  confirmDelete,
+  deleting,
+  onRequestDelete,
+  onCancelDelete,
+  onConfirmDelete,
+  onArchive,
+  isArchived = false,
 }: {
   project: ProjectItem;
   index: number;
   hovered: boolean;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
+  confirmDelete: boolean;
+  deleting: boolean;
+  onRequestDelete: () => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: () => void;
+  onArchive: () => void;
+  isArchived?: boolean;
 }) {
   const date = new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const status = (p.status ?? "active").toLowerCase();
 
   return (
-    <Link href={`/project/${p.id}`} style={{ textDecoration: "none", display: "block" }}>
-      <div
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          padding: "14px 16px",
-          borderRadius: index === 0 ? "8px 8px 2px 2px" : "2px",
-          background: hovered ? "var(--atlas-surface)" : "transparent",
-          border: `1px solid ${hovered ? "rgba(201,162,76,0.18)" : "var(--atlas-border)"}`,
-          transition: "all 180ms ease",
-          marginBottom: 2,
-        }}
+    <div
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "12px 14px",
+        borderRadius: index === 0 ? "8px 8px 2px 2px" : "2px",
+        background: hovered ? "var(--atlas-surface)" : "transparent",
+        border: `1px solid ${hovered ? "rgba(201,162,76,0.18)" : "var(--atlas-border)"}`,
+        transition: "all 180ms ease",
+        marginBottom: 2,
+        position: "relative",
+      }}
+    >
+      {/* Clickable link area */}
+      <Link
+        href={`/project/${p.id}`}
+        style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}
+        onClick={(e) => { if (confirmDelete) e.preventDefault(); }}
       >
         {/* Index dot */}
         <span style={{
@@ -302,32 +407,89 @@ function ProjectRow({
           {date}
         </span>
 
-        {/* Status pill */}
-        <span style={{
-          fontFamily: "'IBM Plex Mono', var(--app-font-mono)",
-          fontSize: 9,
-          letterSpacing: "0.12em",
-          textTransform: "uppercase",
-          fontWeight: 600,
-          padding: "3px 8px",
-          borderRadius: 4,
-          flexShrink: 0,
-          background: status === "active"
-            ? "rgba(201,162,76,0.10)"
-            : "rgba(120,113,108,0.12)",
-          color: status === "active"
-            ? "rgba(201,162,76,0.75)"
-            : "var(--atlas-muted)",
-          border: `1px solid ${status === "active" ? "rgba(201,162,76,0.2)" : "var(--atlas-border)"}`,
-        }}>
-          {status}
-        </span>
-
         {/* Arrow */}
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: hovered ? 0.7 : 0.2, transition: "opacity 180ms ease" }}>
-          <path d="M2 6h8M7 3l3 3-3 3" stroke="var(--atlas-gold)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-    </Link>
+        {!confirmDelete && (
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: hovered ? 0.7 : 0.2, transition: "opacity 180ms ease" }}>
+            <path d="M2 6h8M7 3l3 3-3 3" stroke="var(--atlas-gold)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </Link>
+
+      {/* Action buttons — visible on hover or confirm state */}
+      {confirmDelete ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "rgba(252,165,165,0.7)", whiteSpace: "nowrap" }}>
+            Delete?
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onConfirmDelete(); }}
+            disabled={deleting}
+            style={{
+              fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em",
+              padding: "4px 9px", borderRadius: 4, border: "1px solid rgba(239,68,68,0.4)",
+              background: "rgba(239,68,68,0.12)", color: "rgba(252,165,165,0.9)",
+              cursor: deleting ? "not-allowed" : "pointer", textTransform: "uppercase", fontWeight: 600,
+            }}
+          >
+            {deleting ? "…" : "Yes"}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onCancelDelete(); }}
+            style={{
+              fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em",
+              padding: "4px 9px", borderRadius: 4, border: "1px solid var(--atlas-border)",
+              background: "transparent", color: "var(--atlas-muted)",
+              cursor: "pointer", textTransform: "uppercase",
+            }}
+          >
+            No
+          </button>
+        </div>
+      ) : hovered ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+          {/* Archive / Restore */}
+          <button
+            title={isArchived ? "Restore project" : "Archive project"}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onArchive(); }}
+            style={{
+              background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4,
+              padding: "4px 7px", cursor: "pointer", lineHeight: 1,
+              color: "var(--atlas-muted)", transition: "all 140ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)"; e.currentTarget.style.color = "var(--atlas-gold)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+          >
+            {isArchived ? (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 12V4M4 8l4-4 4 4" />
+                <path d="M2 14h12" />
+              </svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="12" height="3" rx="1" />
+                <path d="M3 6v7a1 1 0 001 1h8a1 1 0 001-1V6" />
+                <path d="M6 10h4" />
+              </svg>
+            )}
+          </button>
+          {/* Delete */}
+          <button
+            title="Delete project"
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onRequestDelete(); }}
+            style={{
+              background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4,
+              padding: "4px 7px", cursor: "pointer", lineHeight: 1,
+              color: "var(--atlas-muted)", transition: "all 140ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(239,68,68,0.4)"; e.currentTarget.style.color = "rgba(252,165,165,0.8)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 4h10M6 4V2h4v2M13 4l-.867 9.143A2 2 0 0110.138 15H5.862a2 2 0 01-1.995-1.857L3 4" />
+            </svg>
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
