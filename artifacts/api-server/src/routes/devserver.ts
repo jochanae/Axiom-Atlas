@@ -91,8 +91,7 @@ const router = Router();
 
 router.post("/devserver/start", (req, res): void => {
   const { repoFullName, branch = "main" } = req.body as { repoFullName: string; branch?: string };
-  const rawToken = req.headers["x-github-token"] as string | undefined;
-  const token = (rawToken && rawToken !== "__server__") ? rawToken : (process.env.GITHUB_TOKEN ?? undefined);
+  const token = req.headers["x-github-token"] as string | undefined;
 
   if (!repoFullName || !token) {
     res.status(400).json({ error: "Missing repoFullName or x-github-token" });

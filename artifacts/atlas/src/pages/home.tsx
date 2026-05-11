@@ -972,8 +972,6 @@ export default function Home() {
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
-  const [headingExiting, setHeadingExiting] = useState(false);
-  const [briefingVisible, setBriefingVisible] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isFree } = useSubscription();
 
@@ -1036,13 +1034,8 @@ export default function Home() {
     })
       .then(r => r.ok ? r.json() : { briefing: null })
       .then((data: any) => {
-        const b = data.briefing ?? null;
-        setBriefing(b);
+        setBriefing(data.briefing ?? null);
         setBriefingLoading(false);
-        if (b) {
-          setHeadingExiting(true);
-          setTimeout(() => setBriefingVisible(true), 480);
-        }
       })
       .catch(() => setBriefingLoading(false));
   }, []);
@@ -1335,7 +1328,16 @@ export default function Home() {
 
           {/* Greeting */}
           <div style={{ textAlign: "center", marginBottom: 24, marginTop: 32, position: "relative", zIndex: 1, minHeight: 80 }}>
-            {homeMessages.length > 0 ? null : (briefingVisible && briefing) ? (
+            {homeMessages.length > 0 ? null : briefingLoading ? (
+              <>
+                <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
+                  Where were we.
+                </h1>
+                <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
+                  I'm here. What's on your mind?
+                </p>
+              </>
+            ) : briefing ? (
               <div style={{
                 animation: "briefingReveal 800ms cubic-bezier(0.4,0,0.2,1) forwards",
                 opacity: 0,
@@ -1378,25 +1380,21 @@ export default function Home() {
                 })()}
               </div>
             ) : (
-              <div style={{
-                animation: headingExiting
-                  ? "headingExit 480ms cubic-bezier(0.4,0,1,1) forwards"
-                  : "whereWereWe 600ms cubic-bezier(0.16,1,0.3,1) forwards",
-              }}>
+              <>
                 <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
                   Where were we.
                 </h1>
                 <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
                   I'm here. What's on your mind?
                 </p>
-              </div>
+              </>
             )}
           </div>
 
           {/* Ambient bloom spinner */}
           <div style={{ margin: "18px 0 26px", minHeight: 60 }}>
             {homeMessages.length === 0 && !isAtlasStreaming ? (
-              <div className={briefingLoading ? "atlas-thinking" : undefined} style={{ display: "flex", justifyContent: "center" }}>
+              <div style={{ display: "flex", justifyContent: "center" }}>
                 <LoadingSpinner size="sm" color="atlas" />
               </div>
             ) : (
@@ -1714,20 +1712,10 @@ export default function Home() {
           50%       { opacity: 1; }
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes whereWereWe {
-          from { opacity: 0; filter: blur(12px); transform: translateY(16px); }
-          to   { opacity: 1; filter: blur(0px);  transform: translateY(0); }
-        }
-        @keyframes headingExit {
-          from { opacity: 1; filter: blur(0px);  transform: translateY(0)   scale(1);    }
-          to   { opacity: 0; filter: blur(6px);  transform: translateY(-8px) scale(0.97); }
-        }
         @keyframes briefingReveal {
-          from { opacity: 0; filter: blur(10px); transform: translateY(12px); }
-          to   { opacity: 1; filter: blur(0px);  transform: translateY(0); }
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        .atlas-thinking .atlas-bloom-circle { animation-duration: 700ms !important; }
-        .atlas-thinking .atlas-bloom-blur   { animation-duration: 700ms !important; }
         @keyframes homeAxiomPulse {
           0%, 100% {
             box-shadow:
