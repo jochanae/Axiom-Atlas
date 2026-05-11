@@ -6447,15 +6447,6 @@ export default function Workspace() {
             </button>
 
             {/* Readiness ring — blended arch + decisions score; clicks to open Map panel */}
-            <ReadinessRing
-              archScore={mapReadiness}
-              decisionsScore={healthPct}
-              mode={readinessMode}
-              onModeChange={handleReadinessModeChange}
-              onClick={focusSystemMap}
-              trend={readinessTrend}
-            />
-
             {/* Drift pill — flow has changed since the last Atlas handover.
                 Lives next to the project name so it's visible from any tab,
                 not just the Map tab. */}
@@ -6574,6 +6565,14 @@ export default function Workspace() {
 
           {/* Right: % score + mode + P + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <ReadinessRing
+              archScore={mapReadiness}
+              decisionsScore={healthPct}
+              mode={readinessMode}
+              onModeChange={handleReadinessModeChange}
+              onClick={focusSystemMap}
+              trend={readinessTrend}
+            />
 
             {/* Readiness score pill — only shown in mobile map mode (replaces the ring hidden in center) */}
             {isMobile && mobileTab === "map" && (
