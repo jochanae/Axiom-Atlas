@@ -974,6 +974,9 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string}>>([]);
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
+  const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [threadLoading, setThreadLoading] = useState(true);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1051,6 +1054,19 @@ export default function Home() {
       container.scrollTop = container.scrollHeight;
     }
   }, [homeMessages]);
+
+  // Load Living Thread from DB on mount
+  useEffect(() => {
+    fetch("/api/nexus/thread", { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then((msgs: Array<{ role: string; content: string }>) => {
+        if (msgs.length > 0) {
+          setHomeMessages(msgs.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setThreadLoading(false));
+  }, []);
 
   // Pull-to-refresh
   const { pulling, distance, refreshing, threshold } = usePullToRefresh(
@@ -1138,6 +1154,27 @@ export default function Home() {
     }
   }, [input, isLoading, homeModel, homeFocus, projects, setLocation, handleNewProject]);
 
+
+  const handleClearThread = useCallback(async () => {
+    await fetch("/api/nexus/thread", { method: "DELETE", credentials: "include" }).catch(() => {});
+    setHomeMessages([]);
+    setShowClearConfirm(false);
+    toast("Conversation cleared");
+  }, []);
+
+  const handleDownloadThread = useCallback(() => {
+    if (homeMessages.length === 0) return;
+    const lines = homeMessages
+      .map(m => `## ${m.role === 'user' ? 'You' : 'Atlas'}\n${m.content}`)
+      .join("\n\n---\n\n");
+    const blob = new Blob([`# Atlas Conversation\n${new Date().toLocaleDateString()}\n\n---\n\n${lines}`], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `atlas-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [homeMessages]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1395,33 +1432,108 @@ export default function Home() {
             )}
           </div>
 
-          {/* Ambient bloom spinner */}
+          {/* Chat thread */}
           <div style={{ margin: "18px 0 26px", minHeight: 60 }}>
-            {homeMessages.length === 0 && !isAtlasStreaming ? (
+            {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? null : homeMessages.length === 0 && !isAtlasStreaming ? (
               <div style={{ display: "flex", justifyContent: "center" }}>
                 <LoadingSpinner size="sm" color="atlas" />
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: "min(50vh, 300px)", overflowY: "auto", paddingRight: 4 }}>
-                {homeMessages.map((msg, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: msg.role === 'user' ? "flex-end" : "flex-start", animation: "fadeIn 250ms ease forwards" }}>
-                    <div style={{
-                      maxWidth: "82%", padding: "9px 13px", borderRadius: msg.role === 'user' ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
-                      background: msg.role === 'user' ? "rgba(201,162,76,0.12)" : "rgba(28,25,23,0.8)",
-                      border: `0.5px solid ${msg.role === 'user' ? "rgba(201,162,76,0.3)" : "rgba(37,34,32,0.9)"}`,
-                      fontSize: 13, lineHeight: 1.55, color: "var(--atlas-fg)",
-                      fontFamily: "var(--app-font-sans)",
-                    }}>
-                      {msg.role === 'assistant' && msg.content === "" && isAtlasStreaming ? (
-                        <span style={{ opacity: 0.4, fontStyle: "italic", fontSize: 11 }}>Atlas is thinking…</span>
-                      ) : msg.role === 'assistant' ? (
-                        <span dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>') }} />
-                      ) : msg.content}
+              <>
+                {/* Chat action bar */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, marginBottom: 8, minHeight: 22 }}>
+                  {showClearConfirm ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(239,68,68,0.65)", letterSpacing: "0.04em" }}>Clear conversation?</span>
+                      <button
+                        onClick={handleClearThread}
+                        style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 9px", fontSize: 10, color: "rgba(252,165,165,0.9)", cursor: "pointer", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}
+                      >
+                        Clear
+                      </button>
+                      <button
+                        onClick={() => setShowClearConfirm(false)}
+                        style={{ background: "transparent", border: "none", padding: "3px 6px", fontSize: 11, color: "var(--atlas-muted)", cursor: "pointer" }}
+                      >
+                        Cancel
+                      </button>
                     </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
+                  ) : (
+                    <>
+                      <button
+                        title="Download conversation"
+                        onClick={handleDownloadThread}
+                        style={{ background: "transparent", border: "none", padding: "3px 5px", cursor: "pointer", opacity: 0.35, color: "var(--atlas-muted)", lineHeight: 1, transition: "opacity 140ms" }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.35")}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 14h12"/>
+                        </svg>
+                      </button>
+                      <button
+                        title="Clear conversation"
+                        onClick={() => setShowClearConfirm(true)}
+                        style={{ background: "transparent", border: "none", padding: "3px 5px", cursor: "pointer", opacity: 0.35, color: "var(--atlas-muted)", lineHeight: 1, transition: "opacity 140ms" }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.35")}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 4h10M6 4V2h4v2M13 4l-.867 9.143A2 2 0 0110.138 15H5.862a2 2 0 01-1.995-1.857L3 4"/>
+                        </svg>
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Messages */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: "min(50vh, 300px)", overflowY: "auto", paddingRight: 4 }}>
+                  {homeMessages.map((msg, i) => (
+                    <div key={i} style={{ display: "flex", flexDirection: msg.role === 'user' ? "row-reverse" : "row", alignItems: "flex-end", gap: 5, animation: "fadeIn 250ms ease forwards" }}>
+                      <div style={{
+                        maxWidth: "82%", padding: "9px 13px", borderRadius: msg.role === 'user' ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                        background: msg.role === 'user' ? "rgba(201,162,76,0.12)" : "rgba(28,25,23,0.8)",
+                        border: `0.5px solid ${msg.role === 'user' ? "rgba(201,162,76,0.3)" : "rgba(37,34,32,0.9)"}`,
+                        fontSize: 13, lineHeight: 1.55, color: "var(--atlas-fg)",
+                        fontFamily: "var(--app-font-sans)",
+                      }}>
+                        {msg.role === 'assistant' && msg.content === "" && isAtlasStreaming ? (
+                          <span style={{ opacity: 0.4, fontStyle: "italic", fontSize: 11 }}>Atlas is thinking…</span>
+                        ) : msg.role === 'assistant' ? (
+                          <span dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>') }} />
+                        ) : msg.content}
+                      </div>
+                      {/* Copy button — Atlas bubbles only */}
+                      {msg.role === 'assistant' && msg.content && (
+                        <button
+                          title={copiedMsgIdx === i ? "Copied!" : "Copy"}
+                          onClick={() => {
+                            navigator.clipboard.writeText(msg.content).catch(() => {});
+                            setCopiedMsgIdx(i);
+                            setTimeout(() => setCopiedMsgIdx(prev => prev === i ? null : prev), 1800);
+                          }}
+                          style={{
+                            background: "transparent", border: "none", padding: "3px", cursor: "pointer",
+                            opacity: copiedMsgIdx === i ? 0.9 : 0.28,
+                            color: copiedMsgIdx === i ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                            lineHeight: 1, flexShrink: 0, transition: "opacity 140ms, color 140ms",
+                            marginBottom: 3,
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.opacity = "0.65")}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = copiedMsgIdx === i ? "0.9" : "0.28")}
+                        >
+                          {copiedMsgIdx === i ? (
+                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8l4 4 6-7"/></svg>
+                          ) : (
+                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="1" width="10" height="13" rx="1.5"/><path d="M3 3H2a1 1 0 00-1 1v11a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              </>
             )}
           </div>
 
