@@ -1567,6 +1567,8 @@ export default function Home() {
                   </svg>
                 </button>
                 {showDeepDiveMenu && (
+                  <>
+                  <div onClick={() => setShowDeepDiveMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 59 }} />
                   <div
                     className="atlas-popover"
                     style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, zIndex: 60, minWidth: 210 }}
@@ -1612,6 +1614,7 @@ export default function Home() {
                       </button>
                     ))}
                   </div>
+                  </>
                 )}
               </div>
 
