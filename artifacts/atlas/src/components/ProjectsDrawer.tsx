@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, Feather, Hammer, Compass, Archive, LayoutDashboard, Globe } from "lucide-react";
+import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, Feather, Hammer, Compass, Archive, LayoutDashboard, Globe, Wand2, KeyRound } from "lucide-react";
 import { CompactReadinessRing } from "./ReadinessRing";
 
 export type DrawerProject = {
@@ -19,10 +19,11 @@ type Props = {
   onNewProject: () => void;
   onOpenLedger?: (id: number) => void;
   onOpenParking?: () => void;
+  onOpenQuickPrompt?: () => void;
   userLabel?: string | null;
 };
 
-export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, userLabel }: Props) {
+export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpenProject, onNewProject, onOpenLedger, onOpenParking, onOpenQuickPrompt, userLabel }: Props) {
   const [, setLocation] = useLocation();
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(false);
@@ -255,9 +256,13 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
           <div style={{ height: 1, background: "var(--atlas-gold-border)", margin: "8px 6px" }} />
 
           <SectionLabel>Tools</SectionLabel>
+          {onOpenQuickPrompt && (
+            <NavRow icon={<Wand2 size={14} strokeWidth={1.6} />} label="Quick Prompt" onClick={() => { onOpenQuickPrompt(); onClose(); }} />
+          )}
           <NavRow icon={<Hammer size={14} strokeWidth={1.6} />} label="Workshop" onClick={() => navigate("/workshop")} />
           <NavRow icon={<Compass size={14} strokeWidth={1.6} />} label="Project Compass" onClick={() => navigate("/compass")} />
           <NavRow icon={<Archive size={14} strokeWidth={1.6} />} label="The Vault" onClick={() => navigate("/vault")} />
+          <NavRow icon={<KeyRound size={14} strokeWidth={1.6} />} label="Secrets" onClick={() => navigate("/secrets")} />
         </div>
 
         {/* User footer */}

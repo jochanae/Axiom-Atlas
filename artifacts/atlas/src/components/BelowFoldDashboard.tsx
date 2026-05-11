@@ -15,6 +15,7 @@ type Props = {
   onOpenProject: (id: number) => void;
   onOpenLedger?: () => void;
   onOpenParking?: () => void;
+  onOpenQuickPrompt?: () => void;
   committedCount?: number;
   parkedCount?: number;
 };
@@ -63,7 +64,7 @@ const MODE_COLORS: Record<number, string> = {
   3: "#10B981",
 };
 
-export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOpenParking, committedCount = 0, parkedCount }: Props) {
+export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOpenParking, onOpenQuickPrompt, committedCount = 0, parkedCount }: Props) {
   if (projects.length === 0) return null;
 
   const recent = projects.slice(0, 5);
@@ -162,6 +163,32 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
           </div>
         </div>
       </RevealOnScroll>
+
+      {/* QUICK PROMPT */}
+      {onOpenQuickPrompt && (
+        <RevealOnScroll delayMs={200}>
+          <div className="atlas-discovery-card" style={{ cursor: "pointer" }} onClick={onOpenQuickPrompt}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
+                Quick Prompt
+              </h3>
+              <span style={{ fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em", opacity: 0.75 }}>
+                Open →
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--atlas-muted)", lineHeight: 1.55, opacity: 0.75 }}>
+              Describe what you want to build. Pick your platform. Get a ready-to-paste prompt — no filler.
+            </p>
+            <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+              {["Cursor", "Replit", "Lovable", "Bolt"].map(p => (
+                <span key={p} style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.6)", border: "1px solid rgba(201,162,76,0.15)", borderRadius: 20, padding: "3px 10px" }}>
+                  {p}
+                </span>
+              ))}
+            </div>
+          </div>
+        </RevealOnScroll>
+      )}
 
       {/* 4. UNFINISHED THOUGHTS */}
       <RevealOnScroll delayMs={240}>
