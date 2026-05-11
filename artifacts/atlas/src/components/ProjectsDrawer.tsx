@@ -144,7 +144,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
                 letterSpacing: "0.18em", color: "var(--atlas-gold)", textTransform: "uppercase",
                 display: "inline-flex",
               }}>
-                {"NEXUS".split("").map((ch, i) => (
+                {"ATLAS".split("").map((ch, i) => (
                   <span key={i} style={{
                     display: "inline-block",
                     animation: "nx-letter-in 0.4s cubic-bezier(0.22,1,0.36,1) both",
@@ -157,7 +157,7 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
                 fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
                 textTransform: "uppercase", marginTop: 1,
               }}>
-                Cross-project intelligence
+                Global View · All Projects
               </div>
             </div>
 
