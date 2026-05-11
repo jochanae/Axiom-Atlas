@@ -1557,8 +1557,8 @@ export default function Home() {
               </div>
             ) : (
               <>
-                {/* Chat action bar — matches workspace secondary bar height */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 2, borderBottom: "1px solid var(--atlas-border)", background: "rgba(0,0,0,0.15)", paddingRight: 6, height: 36, flexShrink: 0, marginBottom: 8 }}>
+                {/* Chat action bar */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 2, borderBottom: "1px solid var(--atlas-border)", background: "rgba(0,0,0,0.15)", paddingRight: 6, height: 26, flexShrink: 0, marginBottom: 6 }}>
                   {showClearConfirm ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(239,68,68,0.65)", letterSpacing: "0.04em" }}>Clear conversation?</span>
