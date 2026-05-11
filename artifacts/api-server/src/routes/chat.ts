@@ -953,7 +953,7 @@ router.post("/quick-prompt", async (req, res) => {
 
   try {
     const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-4-6",
       max_tokens: 2048,
       system: `You are Axiom, a specification engine. Generate a perfectly structured, ready-to-paste prompt for ${builder}.
 
