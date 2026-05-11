@@ -20,7 +20,7 @@ async function initStripe() {
     if (!databaseUrl) throw new Error('DATABASE_URL required for Stripe');
 
     logger.info('Initializing Stripe schema...');
-    await runMigrations({ databaseUrl, schema: 'stripe' });
+    await runMigrations({ databaseUrl } as Parameters<typeof runMigrations>[0]);
     logger.info('Stripe schema ready');
 
     const { getStripeSync } = await import('./stripeClient');
