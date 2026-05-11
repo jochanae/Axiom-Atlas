@@ -1485,7 +1485,7 @@ export default function Home() {
           }} />
 
           {/* Greeting */}
-          <div style={{ textAlign: "center", marginBottom: 24, marginTop: 32, position: "relative", zIndex: 1, minHeight: 80 }}>
+          <div style={{ textAlign: "center", marginBottom: homeMessages.length > 0 ? 0 : 24, marginTop: homeMessages.length > 0 ? 0 : 32, position: "relative", zIndex: 1, minHeight: homeMessages.length > 0 ? 0 : 80, overflow: "hidden" }}>
             {homeMessages.length > 0 ? null : briefingLoading ? (
               <>
                 <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
