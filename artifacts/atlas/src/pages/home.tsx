@@ -1698,7 +1698,7 @@ export default function Home() {
                 animation: "homeAxiomPulse 2.5s ease-in-out infinite",
                 flexShrink: 0,
               }}
-              onClick={() => setLocation("/nexus")}
+              onClick={() => setLocation(projects && projects.length > 0 ? `/project/${projects[0]?.id}` : "/projects")}
             >
               <svg viewBox="0 0 512 512" width="40" height="40">
                 <defs>
