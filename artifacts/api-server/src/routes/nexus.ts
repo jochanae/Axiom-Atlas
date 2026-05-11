@@ -150,6 +150,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     userProfile?: string;
     focusProjectId?: number | null;
+    mode?: string;
   };
 
   if (!body.message?.trim()) {
@@ -160,7 +161,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { message, userProfile = "", focusProjectId = null } = body;
+  const { message, userProfile = "", focusProjectId = null, mode = "strategic" } = body;
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -248,6 +249,13 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       if (focusMemory) systemPrompt += `\nProject memory:\n${focusMemory}`;
       systemPrompt += `\n--- END FOCUSED PROJECT ---`;
     }
+  }
+
+  // Inject mode-specific instructions
+  if (mode === "audit") {
+    systemPrompt += `\n\n--- AUDIT MODE ACTIVE ---\nBe direct and critical. Your job right now is to stress-test, not validate. Look for what's fragile, inconsistent, or at risk across the portfolio. Ask hard questions. Flag gaps, weak assumptions, and contradictions without softening. If something looks shaky, say so plainly.\n--- END AUDIT MODE ---`;
+  } else if (mode === "deep-dive") {
+    systemPrompt += `\n\n--- DEEP DIVE MODE ACTIVE ---\nThe user wants depth, not breadth. Lock onto the specific topic they raise and explore it thoroughly — underlying assumptions, trade-offs, edge cases, second-order implications, what could go wrong, what could go right. Stay focused. Don't jump to other projects unless directly relevant.\n--- END DEEP DIVE MODE ---`;
   }
 
   // Build messages array for Claude
