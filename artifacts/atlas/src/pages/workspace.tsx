@@ -5668,7 +5668,7 @@ export default function Workspace() {
   const { playSend, playCatch, playCommit, playPark, playNavigate } = useSound();
   const [memoryChips, setMemoryChips] = useState<MemoryChip[]>([]);
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
-  const [leftTab, setLeftTab] = useState<"chat" | "diff">("chat");
+  const [leftTab, setLeftTab] = useState<"chat" | "diff" | "terminal">("chat");
   const [sessionPrUrl, setSessionPrUrl] = useState<string | null>(null);
   const [rightOpen, setRightOpen] = useState(() =>
     new URLSearchParams(window.location.search).get("view") === "flow"
@@ -6466,13 +6466,8 @@ export default function Workspace() {
   const [pendingTerminalCommand, setPendingTerminalCommand] = useState<string | null>(null);
   const handleRunCommand = useCallback((command: string) => {
     setPendingTerminalCommand(command);
-    if (isMobile) {
-      setRightOpen(true);
-    } else {
-      setDesktopForceTab("terminal");
-      setTimeout(() => setDesktopForceTab(undefined), 200);
-    }
-  }, [isMobile]);
+    setLeftTab("terminal");
+  }, []);
 
   const messagesRef = useRef<ChatMessage[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
@@ -7230,11 +7225,11 @@ export default function Workspace() {
             overflow: "hidden",
           }}
         >
-          {/* ── Chat / Diff tab strip ── */}
+          {/* ── Chat / Diff / Terminal tab strip ── */}
           <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, paddingLeft: 4, background: "rgba(0,0,0,0.15)" }}>
-            {(["chat", "diff"] as const).map((tab) => {
+            {(["chat", "diff", "terminal"] as const).map((tab) => {
               const active = leftTab === tab;
-              const label = tab === "chat" ? "Chat" : "Diff";
+              const label = tab === "chat" ? "Chat" : tab === "diff" ? "Diff" : "Terminal";
               const badge = tab === "diff" && pushHistory.length > 0 ? pushHistory.length : undefined;
               return (
                 <button
@@ -7285,8 +7280,16 @@ export default function Workspace() {
             )}
           </div>
 
-          {/* ── Session Diff view (when leftTab === "diff") ── */}
-          {leftTab === "diff" ? (
+          {/* ── Terminal view (when leftTab === "terminal") ── */}
+          {leftTab === "terminal" ? (
+            <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+              <TerminalPanel
+                pendingCommand={pendingTerminalCommand}
+                onCommandConsumed={() => setPendingTerminalCommand(null)}
+                onCommandComplete={handleTerminalComplete}
+              />
+            </div>
+          ) : leftTab === "diff" ? (
             <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }} className="scrollbar-none">
               {pushHistory.length === 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8, paddingBottom: 40 }}>
