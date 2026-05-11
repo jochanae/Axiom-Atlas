@@ -359,10 +359,10 @@ export default function NexusPage() {
 
   // ── Starter prompts ───────────────────────────────────────────────────────
   const STARTERS = [
-    { label: "Which of my projects needs the most clarity right now?", sub: "Cross-project audit, honest answer" },
-    { label: "Pressure-test an idea I'm sitting on", sub: "I'll push back before it becomes a commitment" },
-    { label: "What am I avoiding?", sub: "Surface the thing I keep not doing" },
-    { label: "Help me think through a decision that spans projects", sub: "Commit it where it belongs when we land" },
+    { label: "Which of my projects needs the most clarity right now?", sub: "Cross-project audit, honest answer", iconD: "M12 2L2 7l10 5 10-5-10-5zM2 12l10 5 10-5M2 17l10 5 10-5" },
+    { label: "Pressure-test an idea I'm sitting on", sub: "I'll push back before it becomes a commitment", iconD: "M13 10V3L4 14h7v7l9-11h-7z" },
+    { label: "What am I avoiding?", sub: "Surface the thing I keep not doing", iconD: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9v3m0 4h.01" },
+    { label: "Help me think through a decision that spans projects", sub: "Commit it where it belongs when we land", iconD: "M6 3v12M18 9a3 3 0 00-3-3H9a3 3 0 000 6h6a3 3 0 010 6H6" },
   ];
 
   return (
@@ -550,35 +550,101 @@ export default function NexusPage() {
           {/* Chat scroll area */}
           <div style={{ flex: 1, overflowY: "auto", padding: "24px 0 12px", position: "relative" }} className="scrollbar-none">
 
-            {/* Empty state */}
+            {/* Empty state — cinematic */}
             {messages.length === 0 && !pending && !threadLoading && (
-              <div style={{ padding: "52px 24px 32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
-                    <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-                  </svg>
-                  <div style={{ fontSize: 22, fontWeight: 300, color: "var(--atlas-gold)", letterSpacing: "-0.01em", opacity: 0.85 }}>
-                    Nexus
+              <div style={{ padding: "48px 20px 32px", display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+
+                {/* Atmospheric glow — behind everything */}
+                <div style={{
+                  position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)",
+                  width: "70%", height: 220,
+                  background: "radial-gradient(ellipse at 50% 30%, rgba(91,33,182,0.09) 0%, transparent 70%)",
+                  pointerEvents: "none", filter: "blur(12px)",
+                }} />
+
+                {/* Header */}
+                <div style={{ textAlign: "center", marginBottom: 32, position: "relative" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 10 }}>
+                    <div style={{
+                      width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                      background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.18)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      boxShadow: "0 0 24px rgba(201,162,76,0.08)",
+                    }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+                      </svg>
+                    </div>
+                    <div style={{
+                      fontSize: 30, fontWeight: 300, letterSpacing: "0.14em",
+                      color: "var(--atlas-gold)", display: "inline-flex",
+                    }}>
+                      {"NEXUS".split("").map((ch, i) => (
+                        <span key={i} style={{
+                          display: "inline-block",
+                          animation: "nexus-letter-in 0.5s cubic-bezier(0.22,1,0.36,1) both",
+                          animationDelay: `${0.08 + i * 0.07}s`,
+                        }}>{ch}</span>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div style={{ fontSize: 12.5, color: "var(--atlas-muted)", marginBottom: 28, textAlign: "center", maxWidth: 340, lineHeight: 1.6, opacity: 0.7 }}>
-                  Your cross-project thinking space. No scope, no constraints. What are we working through?
+
+                  <div style={{
+                    fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)",
+                    opacity: 0.45, letterSpacing: "0.28em", textTransform: "uppercase", marginBottom: 14,
+                  }}>
+                    Operational Oversight
+                  </div>
+
+                  <div style={{
+                    width: 48, height: 1, margin: "0 auto",
+                    background: "linear-gradient(90deg, transparent, rgba(201,162,76,0.35), transparent)",
+                  }} />
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 440 }}>
+                {/* Module cards — 2-col grid */}
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, 1fr)",
+                  gap: 8,
+                  width: "100%",
+                  maxWidth: 500,
+                }}>
                   {STARTERS.map((s, i) => (
-                    <button key={i} onClick={() => { setInput(s.label); setTimeout(() => textareaRef.current?.focus(), 0); }}
+                    <button key={i}
+                      onClick={() => { setInput(s.label); setTimeout(() => textareaRef.current?.focus(), 0); }}
                       style={{
                         display: "flex", flexDirection: "column", alignItems: "flex-start",
-                        padding: "11px 14px", borderRadius: 9, cursor: "pointer",
-                        background: "rgba(201,162,76,0.03)", border: "1px solid rgba(201,162,76,0.08)",
-                        textAlign: "left", transition: "all 160ms ease",
+                        padding: "13px 13px", borderRadius: 12, cursor: "pointer",
+                        background: "rgba(201,162,76,0.02)", border: "1px solid rgba(201,162,76,0.09)",
+                        textAlign: "left", transition: "all 180ms ease", gap: 9,
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.07)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.18)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(201,162,76,0.03)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.08)"; }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = "rgba(201,162,76,0.06)";
+                        e.currentTarget.style.borderColor = "rgba(201,162,76,0.22)";
+                        e.currentTarget.style.boxShadow = "0 0 20px rgba(201,162,76,0.06)";
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = "rgba(201,162,76,0.02)";
+                        e.currentTarget.style.borderColor = "rgba(201,162,76,0.09)";
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
                     >
-                      <span style={{ fontSize: 12.5, color: "var(--atlas-fg)", opacity: 0.8, fontWeight: 500, lineHeight: 1.3 }}>{s.label}</span>
-                      <span style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.5, marginTop: 2 }}>{s.sub}</span>
+                      {/* Card icon */}
+                      <div style={{
+                        width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                        background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.15)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+                          <path d={s.iconD} />
+                        </svg>
+                      </div>
+                      {/* Card text */}
+                      <div>
+                        <div style={{ fontSize: 11.5, color: "var(--atlas-fg)", opacity: 0.82, fontWeight: 500, lineHeight: 1.45, marginBottom: 4 }}>{s.label}</div>
+                        <div style={{ fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>{s.sub}</div>
+                      </div>
                     </button>
                   ))}
                 </div>

@@ -96,28 +96,75 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
         {/* Body */}
         <div style={{ flex: 1, minHeight: 0, overflowY: "scroll", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y", padding: "10px 8px 16px" }}>
 
-          {/* Nexus — subtle top link */}
+          {/* Nexus — gateway button */}
+          <style>{`
+            @keyframes nx-letter-in {
+              from { opacity: 0; transform: translateY(5px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+          `}</style>
           <button
             type="button"
             onClick={() => navigate("/nexus")}
             style={{
-              display: "flex", alignItems: "center", gap: 5,
-              width: "100%", padding: "5px 10px", marginBottom: 8,
-              borderRadius: 6, border: "none",
-              background: "transparent",
+              display: "flex", alignItems: "center", gap: 10,
+              width: "100%", padding: "10px 12px", marginBottom: 10,
+              borderRadius: 11,
+              border: "1px solid rgba(201,162,76,0.15)",
+              background: "rgba(201,162,76,0.025)",
               cursor: "pointer", textAlign: "left",
-              transition: "opacity 130ms ease",
-              opacity: 0.55,
+              transition: "background 200ms ease, border-color 200ms ease, box-shadow 200ms ease",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.55"; }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(201,162,76,0.07)";
+              e.currentTarget.style.borderColor = "rgba(201,162,76,0.3)";
+              e.currentTarget.style.boxShadow = "0 0 28px rgba(201,162,76,0.08), inset 0 1px 0 rgba(201,162,76,0.1)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(201,162,76,0.025)";
+              e.currentTarget.style.borderColor = "rgba(201,162,76,0.15)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
           >
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            {/* Icon */}
+            <div style={{
+              width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+              background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.18)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+              </svg>
+            </div>
+
+            {/* Labels */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700,
+                letterSpacing: "0.18em", color: "var(--atlas-gold)", textTransform: "uppercase",
+                display: "inline-flex",
+              }}>
+                {"NEXUS".split("").map((ch, i) => (
+                  <span key={i} style={{
+                    display: "inline-block",
+                    animation: "nx-letter-in 0.4s cubic-bezier(0.22,1,0.36,1) both",
+                    animationDelay: `${i * 0.06}s`,
+                  }}>{ch}</span>
+                ))}
+              </div>
+              <div style={{
+                fontSize: 9, color: "var(--atlas-muted)", opacity: 0.5,
+                fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                textTransform: "uppercase", marginTop: 1,
+              }}>
+                Cross-project intelligence
+              </div>
+            </div>
+
+            {/* Chevron */}
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.8" strokeLinecap="round" style={{ opacity: 0.35, flexShrink: 0 }}>
+              <path d="M4.5 2l3 4-3 4" />
             </svg>
-            <span style={{ fontSize: 10.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>
-              ↑ Nexus
-            </span>
           </button>
 
           {/* PROJECTS section */}
