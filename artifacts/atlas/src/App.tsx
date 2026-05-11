@@ -24,7 +24,6 @@ import Admin from "./pages/admin";
 import Dashboard from "./pages/dashboard";
 import ResetPassword from "./pages/reset-password";
 import MasterMap from "./pages/master-map";
-import NexusPage from "./pages/nexus";
 
 // ── Global 401 interceptor ────────────────────────────────────────────────────
 const _originalFetch = window.fetch.bind(window);
@@ -121,7 +120,7 @@ function Router() {
       <Route path="/admin" component={Admin} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/map" component={MasterMap} />
-      <Route path="/nexus" component={NexusPage} />
+      <Route path="/nexus" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/home", { replace: true }), []); return null; }} />
       <Route component={NotFound} />
     </Switch>
   );
