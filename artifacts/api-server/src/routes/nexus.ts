@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, nexusMessagesTable, projectsTable, entriesTable } from "@workspace/db";
+import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable } from "@workspace/db";
 import { eq, asc, and, inArray, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -333,6 +333,122 @@ router.post("/nexus/briefing", async (req, res): Promise<void> => {
     req.log?.error({ err }, "Briefing error");
     res.json({ briefing: null });
   }
+});
+
+// GET /api/nexus/activity — unified activity feed (commits + decisions + sessions)
+router.get("/nexus/activity", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+
+  const projects = await db
+    .select({ id: projectsTable.id, name: projectsTable.name, linkedRepo: projectsTable.linkedRepo })
+    .from(projectsTable)
+    .where(eq(projectsTable.userId, userId));
+
+  const projectIds = projects.map(p => p.id);
+  if (projectIds.length === 0) { res.json({ items: [] }); return; }
+
+  const projectNameById = new Map(projects.map(p => [p.id, p.name]));
+
+  function parseRepo(raw: string | null): string | null {
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return typeof parsed === "string" ? parsed : ((parsed as any).fullName ?? null);
+    } catch {
+      return raw.includes("/") ? raw : null;
+    }
+  }
+
+  type ActivityItem = {
+    type: "commit" | "decision" | "session";
+    projectId: number;
+    projectName: string;
+    title: string;
+    subtitle?: string;
+    url?: string;
+    sha?: string;
+    timestamp: string;
+  };
+
+  const items: ActivityItem[] = [];
+  const ghToken = process.env.GITHUB_TOKEN ?? null;
+  const linkedProjects = projects.filter(p => p.linkedRepo);
+
+  // Fetch commits for all linked repos in parallel (with timeout)
+  if (ghToken && linkedProjects.length > 0) {
+    const commitResults = await Promise.allSettled(
+      linkedProjects.map(async (p) => {
+        const repoFull = parseRepo(p.linkedRepo ?? null);
+        if (!repoFull) return [];
+        const r = await fetch(
+          `https://api.github.com/repos/${repoFull}/commits?per_page=6`,
+          {
+            headers: {
+              Authorization: `Bearer ${ghToken}`,
+              Accept: "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "Atlas-Activity/1.0",
+            },
+            signal: AbortSignal.timeout(7000),
+          }
+        );
+        if (!r.ok) return [];
+        const data = await r.json() as any[];
+        return data.map((c: any): ActivityItem => ({
+          type: "commit",
+          projectId: p.id,
+          projectName: p.name,
+          title: ((c.commit?.message ?? "") as string).split("\n")[0].slice(0, 120),
+          sha: (c.sha as string)?.slice(0, 7),
+          url: c.html_url as string,
+          timestamp: c.commit?.author?.date ?? new Date().toISOString(),
+        }));
+      })
+    );
+    for (const r of commitResults) {
+      if (r.status === "fulfilled") items.push(...r.value);
+    }
+  }
+
+  // Fetch decisions + sessions from DB in parallel
+  const [dbEntries, dbSessions] = await Promise.all([
+    db
+      .select({ id: entriesTable.id, projectId: entriesTable.projectId, title: entriesTable.title, summary: entriesTable.summary, createdAt: entriesTable.createdAt })
+      .from(entriesTable)
+      .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.status, "committed")))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(30),
+    db
+      .select({ id: sessionsTable.id, projectId: sessionsTable.projectId, title: sessionsTable.title, messageCount: sessionsTable.messageCount, createdAt: sessionsTable.createdAt })
+      .from(sessionsTable)
+      .where(inArray(sessionsTable.projectId, projectIds))
+      .orderBy(desc(sessionsTable.createdAt))
+      .limit(20),
+  ]);
+
+  for (const e of dbEntries) {
+    items.push({
+      type: "decision",
+      projectId: e.projectId,
+      projectName: projectNameById.get(e.projectId) ?? "Unknown",
+      title: e.title,
+      subtitle: e.summary ?? undefined,
+      timestamp: e.createdAt.toISOString(),
+    });
+  }
+  for (const s of dbSessions) {
+    items.push({
+      type: "session",
+      projectId: s.projectId,
+      projectName: projectNameById.get(s.projectId) ?? "Unknown",
+      title: s.title,
+      subtitle: s.messageCount > 0 ? `${s.messageCount} msg` : undefined,
+      timestamp: s.createdAt.toISOString(),
+    });
+  }
+
+  items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  res.json({ items: items.slice(0, 40) });
 });
 
 export default router;
