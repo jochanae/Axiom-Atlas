@@ -287,18 +287,17 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
 router.post("/nexus/briefing", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
 
-  const [projects, recentEntries] = await Promise.all([
-    db.select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory })
-      .from(projectsTable)
-      .where(eq(projectsTable.userId, userId)),
-    db.select({ projectId: entriesTable.projectId, title: entriesTable.title, status: entriesTable.status, createdAt: entriesTable.createdAt })
-      .from(entriesTable)
-      .where(inArray(entriesTable.projectId,
-        db.select({ id: projectsTable.id }).from(projectsTable).where(eq(projectsTable.userId, userId))
-      ))
-      .orderBy(desc(entriesTable.createdAt))
-      .limit(10),
-  ]);
+  const projects = await db.select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory })
+    .from(projectsTable)
+    .where(eq(projectsTable.userId, userId));
+
+  const projectIds = projects.map(p => p.id);
+  const recentEntries = projectIds.length > 0 ? await db
+    .select({ projectId: entriesTable.projectId, title: entriesTable.title, status: entriesTable.status })
+    .from(entriesTable)
+    .where(inArray(entriesTable.projectId, projectIds))
+    .orderBy(desc(entriesTable.createdAt))
+    .limit(10) : [];
 
   if (projects.length === 0) {
     res.json({ briefing: null });
