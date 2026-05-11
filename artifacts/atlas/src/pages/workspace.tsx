@@ -4976,6 +4976,7 @@ function RightPanel({
   onSandboxConsumed,
   pendingTerminalCommand,
   onTerminalCommandConsumed,
+  onCommandComplete,
 }: {
   projectId: number;
   entries: Entry[];
@@ -5007,6 +5008,7 @@ function RightPanel({
   onSandboxConsumed?: () => void;
   pendingTerminalCommand?: string | null;
   onTerminalCommandConsumed?: () => void;
+  onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -5262,7 +5264,7 @@ function RightPanel({
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
-      {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} />}
+      {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} />}
     </div>
   );
 }
@@ -5273,9 +5275,11 @@ type TerminalLine = { text: string; kind: "input" | "output" | "stderr" | "syste
 function TerminalPanel({
   pendingCommand,
   onCommandConsumed,
+  onCommandComplete,
 }: {
   pendingCommand?: string | null;
   onCommandConsumed?: () => void;
+  onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
 }) {
   const [input, setInput] = useState("");
   const [lines, setLines] = useState<TerminalLine[]>([
@@ -5287,6 +5291,7 @@ function TerminalPanel({
   const [histIdx, setHistIdx] = useState(-1);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fromAtlasRef = useRef(false);
 
   const addLine = useCallback((text: string, kind: TerminalLine["kind"]) => {
     const parts = text.split("\n");
@@ -5303,6 +5308,9 @@ function TerminalPanel({
     setCmdHistory((h) => [trimmed, ...h.slice(0, 49)]);
     setHistIdx(-1);
     addLine(`$ ${trimmed}`, "input");
+
+    const outputChunks: string[] = [];
+    let finalExitCode: number | null = null;
 
     try {
       const res = await fetch("/api/terminal/exec", {
@@ -5338,11 +5346,12 @@ function TerminalPanel({
           if (!evtData) continue;
           try {
             const payload = JSON.parse(evtData) as string;
-            if (evtName === "output") addLine(payload, "output");
-            else if (evtName === "stderr") addLine(payload, "stderr");
-            else if (evtName === "error") addLine(payload, "error");
+            if (evtName === "output") { outputChunks.push(payload); addLine(payload, "output"); }
+            else if (evtName === "stderr") { outputChunks.push(payload); addLine(payload, "stderr"); }
+            else if (evtName === "error") { outputChunks.push(payload); addLine(payload, "error"); }
             else if (evtName === "done") {
               const meta = JSON.parse(payload) as { exitCode: number | null; durationMs: number };
+              finalExitCode = meta.exitCode;
               addLine(`[exit ${meta.exitCode ?? "?"} · ${meta.durationMs}ms]`, "system");
             }
           } catch {}
@@ -5351,11 +5360,21 @@ function TerminalPanel({
     } catch (err) {
       addLine(`Error: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
+
     setRunning(false);
-  }, [running, addLine]);
+
+    if (fromAtlasRef.current && onCommandComplete) {
+      const fullOutput = outputChunks.join("\n").trim();
+      if (fullOutput) {
+        onCommandComplete(trimmed, fullOutput.slice(0, 4000), finalExitCode);
+      }
+    }
+    fromAtlasRef.current = false;
+  }, [running, addLine, onCommandComplete]);
 
   useEffect(() => {
     if (pendingCommand) {
+      fromAtlasRef.current = true;
       setInput("");
       runCommand(pendingCommand);
       onCommandConsumed?.();
@@ -6454,6 +6473,17 @@ export default function Workspace() {
       setTimeout(() => setDesktopForceTab(undefined), 200);
     }
   }, [isMobile]);
+
+  const messagesRef = useRef<ChatMessage[]>([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+
+  const handleTerminalComplete = useCallback((command: string, output: string, exitCode: number | null) => {
+    if (!sessionId) return;
+    const truncated = output.length > 3500 ? output.slice(0, 3500) + "\n[...output truncated]" : output;
+    const formattedText = `Terminal output for \`${command}\`:\n\`\`\`\n${truncated}\n\`\`\`\nExit code: ${exitCode ?? "unknown"}`;
+    doSend(formattedText, sessionId, messagesRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   // ── Readiness Snapshots ───────────────────────────────────────────────────
   const { data: readinessSnapshots } = useListReadinessSnapshots(
@@ -7893,6 +7923,7 @@ export default function Workspace() {
                 onSandboxConsumed={() => setSandboxCode(null)}
                 pendingTerminalCommand={pendingTerminalCommand}
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
+                onCommandComplete={handleTerminalComplete}
               />
             </div>
           </>
@@ -7962,6 +7993,7 @@ export default function Workspace() {
                 onSandboxConsumed={() => setSandboxCode(null)}
                 pendingTerminalCommand={pendingTerminalCommand}
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
+                onCommandComplete={handleTerminalComplete}
               />
             </div>
           </div>
