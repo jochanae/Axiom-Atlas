@@ -5625,21 +5625,31 @@ export default function Workspace() {
   }, [project?.pushHistory]);
 
   // Auto-load key repo files into AI context on session start.
-  // Fires once per project whenever a linked repo + token exist — regardless
+  // Fires once per project whenever a linked repo exists — regardless
   // of which tab the user has open.  The user never has to manually open files.
   const repoCtxLoadedFor = useRef<number | null>(null);
   useEffect(() => {
-    if (!project?.linkedRepo || !project?.githubToken) return;
+    if (!project?.linkedRepo) return;
     if (repoCtxLoadedFor.current === id) return;
+
+    // Token resolution: DB record → localStorage → server-side GITHUB_TOKEN
+    const token =
+      project?.githubToken ??
+      (() => { try { return localStorage.getItem("atlas-github-token"); } catch { return null; } })() ??
+      "__server__";
 
     let cancelled = false;
     const parsedRepo = (() => {
-      try { return JSON.parse(project.linkedRepo) as { fullName: string; defaultBranch: string }; }
+      try {
+        const r = JSON.parse(project.linkedRepo);
+        // Handle both plain-string "owner/repo" and JSON { fullName, defaultBranch } formats
+        if (typeof r === "string") return { fullName: r, defaultBranch: "main" };
+        return r as { fullName: string; defaultBranch: string };
+      }
       catch { return null; }
     })();
     if (!parsedRepo) return;
 
-    const token = project.githubToken;
     const branch = parsedRepo.defaultBranch ?? "main";
 
     // Priority-ordered key files — first ones win when we cap at 5
