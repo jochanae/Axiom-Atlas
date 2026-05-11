@@ -1319,7 +1319,7 @@ export default function Home() {
           }} />
 
           {/* Greeting */}
-          <div style={{ textAlign: "center", marginBottom: 24, position: "relative", zIndex: 1 }}>
+          <div style={{ textAlign: "center", marginBottom: 24, marginTop: 32, position: "relative", zIndex: 1 }}>
             <h1
               style={{
                 fontSize: 30,
