@@ -99,7 +99,17 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Landing} />
+      <Route path="/" component={() => {
+        const [, nav] = useLocation();
+        useEffect(() => {
+          fetch("/api/auth/me", { credentials: "include" })
+            .then(r => r.ok ? r.json() : null)
+            .then(user => nav(user?.id ? "/home" : "/landing", { replace: true }))
+            .catch(() => nav("/landing", { replace: true }));
+        }, []);
+        return null;
+      }} />
+      <Route path="/landing" component={Landing} />
       <Route path="/login" component={Login} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/home" component={Home} />
