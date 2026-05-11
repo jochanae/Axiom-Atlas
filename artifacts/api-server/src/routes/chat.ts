@@ -912,10 +912,13 @@ You are now in THINK mode. This changes how you respond:
 
 // ── Quick Prompt generation ───────────────────────────────────────────────────
 router.post("/quick-prompt", async (req, res) => {
-  const { description, builder, images } = req.body as {
+  const { description, builder, images, fileContent, filePath, projectMap } = req.body as {
     description: string;
     builder: string;
     images?: Array<{ base64: string; mediaType: string }>;
+    fileContent?: string;
+    filePath?: string;
+    projectMap?: string;
   };
   if (!description || !builder) {
     res.status(400).json({ error: "description and builder are required" });
@@ -945,28 +948,57 @@ router.post("/quick-prompt", async (req, res) => {
     }
   }
 
-  userContent.push({
-    type: "text",
-    text: `Generate an optimized prompt for ${builder}.\n\nTask: ${description}`,
-  });
+  const contextBlocks: string[] = [];
+  if (projectMap) contextBlocks.push(`CODEBASE MAP:\n${projectMap.slice(0, 3000)}`);
+  if (filePath) contextBlocks.push(`TARGET FILE PATH: ${filePath}`);
+  if (fileContent) contextBlocks.push(`FILE CONTENT:\n\`\`\`\n${fileContent.slice(0, 6000)}\n\`\`\``);
+
+  const userText = [
+    contextBlocks.length > 0 ? contextBlocks.join("\n\n") : null,
+    `INTENT: ${description}`,
+    `PLATFORM: ${builder}`,
+  ].filter(Boolean).join("\n\n");
+
+  userContent.push({ type: "text", text: userText });
+
+  const isCursorPlatform = builder === "Cursor";
+
+  const systemPrompt = isCursorPlatform
+    ? `You are Atlas — the strategic intelligence inside Axiom, built for a solo founder who builds production SaaS entirely on her phone using Cursor Agent.
+
+Your sole job: read her intent and the file she provides, then write ONE surgical, ready-to-paste Cursor Agent prompt.
+
+OUTPUT FORMAT — write the prompt in this exact order, no markdown headers, no bullet points, plain prose instructions:
+
+1. Package install (ONLY if new packages are required): "Run \`pnpm add [package] --filter @workspace/[artifact]\` first."
+2. File location: "In [exact/file/path.tsx]:"
+3. The change — when file content is provided, quote the EXACT text (function name, line content, or surrounding lines) so Cursor can locate the spot with zero ambiguity. Describe the change in direct imperative language.
+4. Scope guard: "Do not change anything else."
+5. Verification: "Run typecheck, push to main."
+
+RULES:
+- Output ONLY the prompt. No preamble, no "Here is your prompt:", no explanation after.
+- Quote actual lines from the provided file content — never write placeholder text like "[find X]"
+- One file per prompt. If multiple files are affected, focus on the primary one and mention the others briefly.
+- Keep it under 250 words. Cursor reads code, not essays.
+- If no file content is provided, write the prompt using reasonable file path conventions for a React+Vite+Express pnpm monorepo, but note that exact line references are not available.
+- Never reference "Atlas" or "Axiom" in the output — Cursor doesn't know what that is.`
+    : `You are Atlas — the strategic intelligence inside Axiom. Generate a precise, ready-to-paste prompt for ${builder}.
+
+RULES:
+- Write in clear, direct language the ${builder} AI understands
+- Be specific: exact file paths, component names, precise changes
+- Include all necessary context and constraints
+- When file content is provided, reference specific parts of it
+- No preamble, no explanation — ONLY the prompt itself
+- Keep it focused and under 300 words`;
 
   try {
     const msg = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2048,
-      system: `You are Axiom, a specification engine. Generate a perfectly structured, ready-to-paste prompt for ${builder}.
-
-Rules:
-- Write in clear, direct language the builder's AI will understand
-- Include all necessary context, constraints, and expected behavior  
-- Be specific: file paths, component names, exact changes
-- No preamble, no explanation, no markdown headers — ONLY the prompt text itself`,
-      messages: [
-        {
-          role: "user",
-          content: userContent,
-        },
-      ],
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
     });
     const text = msg.content.find((b) => b.type === "text")?.text ?? "";
     res.send(text);

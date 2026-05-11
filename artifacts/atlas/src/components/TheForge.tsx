@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { haptics } from "@/lib/haptics";
 import { sounds } from "@/lib/sounds";
 import type { ArchNode } from "./AxiomFlow";
@@ -45,10 +45,29 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   // Quick Prompt state
   const [selectedPlatform, setSelectedPlatform] = useState(PLATFORMS[0].id);
   const [promptDesc, setPromptDesc] = useState("");
+  const [filePath, setFilePath] = useState("");
+  const [fileContent, setFileContent] = useState("");
+  const [showFilePane, setShowFilePane] = useState(false);
+  const [projectMap, setProjectMap] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [promptError, setPromptError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Load project map from localStorage when projectId is available
+  useEffect(() => {
+    if (!projectId) return;
+    try {
+      const raw = localStorage.getItem(`atlas-scan-${projectId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const lines = typeof parsed === "string"
+          ? parsed
+          : (parsed?.summary ?? parsed?.routes ?? JSON.stringify(parsed, null, 2));
+        if (typeof lines === "string" && lines.trim()) setProjectMap(lines);
+      }
+    } catch { /* silent */ }
+  }, [projectId]);
 
   // ── Forge logic ────────────────────────────────────────────────────────────
   const canForge = transcript.trim().length > 10 && !isForging;
@@ -118,10 +137,17 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     setGeneratedPrompt("");
     setCopied(false);
     try {
+      const body: Record<string, unknown> = {
+        description: promptDesc.trim(),
+        builder: selectedPlatform,
+      };
+      if (filePath.trim()) body.filePath = filePath.trim();
+      if (fileContent.trim()) body.fileContent = fileContent.trim();
+      if (projectMap) body.projectMap = projectMap;
       const res = await fetch("/api/quick-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: promptDesc.trim(), builder: selectedPlatform }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Generation failed");
       const text = await res.text();
@@ -269,13 +295,17 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   );
 
   // ── Tab: Quick Prompt ──────────────────────────────────────────────────────
+  const isCursor = selectedPlatform === "Cursor";
+
   const quickPromptContent = (
     <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 12px", display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ borderRadius: 10, background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.12)", padding: "12px 14px" }}>
-        <p style={{ fontSize: 12, color: "rgba(212,175,55,0.75)", lineHeight: 1.6, margin: 0 }}>
-          Describe what you want to build. Pick your platform. Get a structured, ready-to-paste prompt — no preamble, no filler.
-        </p>
-      </div>
+
+      {/* Context badge — shows when project map loaded */}
+      {projectMap && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 7, background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.14)" }}>
+          <span style={{ fontSize: 9, color: "rgba(212,175,55,0.6)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase" }}>⬡ Codebase context loaded</span>
+        </div>
+      )}
 
       {/* Platform picker */}
       <div>
@@ -302,7 +332,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         </div>
       </div>
 
-      {/* Description */}
+      {/* Intent */}
       <div>
         <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", color: "rgba(120,113,108,0.75)", textTransform: "uppercase", marginBottom: 8, fontFamily: "var(--app-font-mono)" }}>
           What do you want to build?
@@ -310,8 +340,10 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         <textarea
           value={promptDesc}
           onChange={e => setPromptDesc(e.target.value)}
-          placeholder={`e.g. Add a settings panel to the workspace that lets users update their name and avatar. It should slide in from the right and auto-save on blur.`}
-          rows={isMobile ? 5 : 6}
+          placeholder={isCursor
+            ? "e.g. Add a dismiss button to the catch card that clears it without logging a decision. It should appear in the top-right corner."
+            : "e.g. Add a settings panel to the workspace that lets users update their name and avatar. It should slide in from the right and auto-save on blur."}
+          rows={isMobile ? 4 : 5}
           style={{
             width: "100%", borderRadius: 12,
             border: `1px solid ${promptDesc.length > 5 ? "rgba(212,175,55,0.35)" : "rgba(212,175,55,0.18)"}`,
@@ -325,9 +357,88 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           onBlur={e => { e.currentTarget.style.borderColor = promptDesc.length > 5 ? "rgba(212,175,55,0.35)" : "rgba(212,175,55,0.18)"; }}
           onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleGenerate(); }}
         />
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-          <span style={{ fontSize: 10, color: "rgba(120,113,108,0.4)", fontFamily: "var(--app-font-mono)" }}>⌘↵ to generate</span>
-        </div>
+      </div>
+
+      {/* File context — collapsible, especially useful for Cursor */}
+      <div>
+        <button
+          onClick={() => setShowFilePane(v => !v)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: "none", border: "none", cursor: "pointer",
+            color: showFilePane ? "rgba(212,175,55,0.8)" : "rgba(120,113,108,0.55)",
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.12em",
+            fontFamily: "var(--app-font-mono)", textTransform: "uppercase",
+            padding: 0, transition: "color 180ms",
+          }}
+        >
+          <span style={{ fontSize: 12, lineHeight: 1 }}>{showFilePane ? "▾" : "▸"}</span>
+          {isCursor ? "Add file — makes prompt surgical (recommended)" : "Add file context (optional)"}
+        </button>
+
+        {showFilePane && (
+          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* File path */}
+            <div>
+              <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.6)", textTransform: "uppercase", marginBottom: 6, fontFamily: "var(--app-font-mono)" }}>
+                File path
+              </p>
+              <input
+                type="text"
+                value={filePath}
+                onChange={e => setFilePath(e.target.value)}
+                placeholder="e.g. artifacts/atlas/src/components/CatchCard.tsx"
+                style={{
+                  width: "100%", borderRadius: 8,
+                  border: "1px solid rgba(212,175,55,0.18)",
+                  background: "oklch(0.13 0.01 60)",
+                  padding: "8px 12px",
+                  color: "rgba(231,229,228,0.8)", fontSize: 12, lineHeight: 1.5,
+                  outline: "none", fontFamily: "var(--app-font-mono)",
+                  boxSizing: "border-box" as const,
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.4)"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.18)"; }}
+              />
+            </div>
+
+            {/* File content paste */}
+            <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.6)", textTransform: "uppercase", margin: 0, fontFamily: "var(--app-font-mono)" }}>
+                  Paste file content
+                </p>
+                {fileContent && (
+                  <span style={{ fontSize: 9, color: "rgba(212,175,55,0.5)", fontFamily: "var(--app-font-mono)" }}>
+                    {fileContent.length.toLocaleString()} chars
+                  </span>
+                )}
+              </div>
+              <textarea
+                value={fileContent}
+                onChange={e => setFileContent(e.target.value)}
+                placeholder={"Paste the full file here. Atlas will quote exact lines so Cursor knows precisely where to edit."}
+                rows={isMobile ? 6 : 8}
+                style={{
+                  width: "100%", borderRadius: 10,
+                  border: `1px solid ${fileContent ? "rgba(212,175,55,0.28)" : "rgba(212,175,55,0.15)"}`,
+                  background: "oklch(0.12 0.01 60)",
+                  padding: "10px 12px",
+                  color: "rgba(231,229,228,0.75)", fontSize: 11, lineHeight: 1.6,
+                  outline: "none", resize: "none", transition: "border-color 180ms",
+                  boxSizing: "border-box" as const, fontFamily: "var(--app-font-mono)",
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = fileContent ? "rgba(212,175,55,0.28)" : "rgba(212,175,55,0.15)"; }}
+              />
+              {isCursor && (
+                <p style={{ fontSize: 9.5, color: "rgba(120,113,108,0.45)", fontFamily: "var(--app-font-mono)", marginTop: 5, lineHeight: 1.5 }}>
+                  With this, Atlas quotes exact lines — Cursor needs zero clarification.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Generate button */}
@@ -348,7 +459,9 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         {isGenerating ? (
           <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
             <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#D4AF37", animation: "forge-pulse 1.4s ease-in-out infinite" }} />
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}>Generating for {selectedPlatform}...</span>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}>
+              {isCursor && fileContent ? "Reading file & writing prompt…" : `Generating for ${selectedPlatform}…`}
+            </span>
           </span>
         ) : `Generate ${selectedPlatform} Prompt →`}
       </button>
@@ -384,11 +497,11 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
             style={{
               margin: 0, padding: "14px", borderRadius: 10,
               background: "oklch(0.12 0.01 60)",
-              border: "1px solid rgba(212,175,55,0.18)",
-              color: "rgba(231,229,228,0.82)", fontSize: 12, lineHeight: 1.7,
+              border: "1px solid rgba(212,175,55,0.22)",
+              color: "rgba(231,229,228,0.87)", fontSize: 12, lineHeight: 1.75,
               whiteSpace: "pre-wrap", wordBreak: "break-word",
               fontFamily: "var(--app-font-mono)",
-              maxHeight: 280, overflowY: "auto",
+              maxHeight: 320, overflowY: "auto",
             }}
           >
             {generatedPrompt}
