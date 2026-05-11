@@ -1338,18 +1338,40 @@ export default function Home() {
                 </p>
               </>
             ) : briefing ? (
-              <div style={{ animation: "fadeIn 400ms ease forwards" }}>
+              <div style={{
+                animation: "briefingReveal 800ms cubic-bezier(0.4,0,0.2,1) forwards",
+                opacity: 0,
+              }}>
                 {(() => {
                   const sentences = briefing.split(/(?<=[.!?])\s+/);
                   const status = sentences[0] ?? "";
-                  const nextMove = sentences[1] ?? "";
+                  const nextMove = sentences.slice(1).join(" ");
                   return (
                     <>
-                      <p style={{ fontSize: 15, fontWeight: 400, color: "var(--atlas-fg)", opacity: 0.9, margin: "0 0 8px", lineHeight: 1.5, fontFamily: "var(--app-font-sans)" }}>
+                      <p style={{
+                        fontSize: 17,
+                        fontWeight: 300,
+                        color: "var(--atlas-fg)",
+                        opacity: 0.9,
+                        margin: "0 0 16px",
+                        lineHeight: 1.6,
+                        fontFamily: "var(--app-font-sans)",
+                        letterSpacing: "-0.01em",
+                      }}>
                         {status}
                       </p>
                       {nextMove && (
-                        <p style={{ fontSize: 13, color: "var(--atlas-gold)", opacity: 0.75, margin: 0, fontStyle: "italic", fontFamily: "var(--app-font-sans)" }}>
+                        <p style={{
+                          fontSize: 13,
+                          color: "var(--atlas-gold)",
+                          filter: "opacity(0.65)",
+                          margin: 0,
+                          fontStyle: "italic",
+                          fontFamily: "var(--app-font-sans)",
+                          lineHeight: 1.5,
+                          animation: "briefingReveal 800ms cubic-bezier(0.4,0,0.2,1) 400ms forwards",
+                          opacity: 0,
+                        }}>
                           {nextMove}
                         </p>
                       )}
@@ -1690,6 +1712,10 @@ export default function Home() {
           50%       { opacity: 1; }
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes briefingReveal {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
         @keyframes homeAxiomPulse {
           0%, 100% {
             box-shadow:
