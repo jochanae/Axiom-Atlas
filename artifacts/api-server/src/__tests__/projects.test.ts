@@ -71,7 +71,7 @@ const AUTH_COOKIE = "atlas-session=fake-test-token";
 
 /** Prime the DB mock to return mockUser for the session lookup, and return the
  *  cookie header string to send with the request. */
-function withAuth(user = mockUser) {
+function withAuth(user: Omit<typeof mockUser, "subscriptionTier"> & { subscriptionTier: string } = mockUser) {
   mockDbState.selectResults.unshift([{ user }]);
   return AUTH_COOKIE;
 }

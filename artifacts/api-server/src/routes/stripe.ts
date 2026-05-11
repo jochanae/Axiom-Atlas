@@ -18,11 +18,11 @@ router.get('/stripe/products', async (req, res) => {
 });
 
 // Authenticated: get current user's subscription status
-router.get('/stripe/subscription', requireAuth, async (req: any, res) => {
+router.get('/stripe/subscription', requireAuth, async (req: any, res): Promise<void> => {
   try {
     const user = await stripeStorage.getUser(req.authUser.id);
     if (!user?.stripeSubscriptionId) {
-      return res.json({ subscription: null, tier: user?.subscriptionTier ?? 'free' });
+      res.json({ subscription: null, tier: user?.subscriptionTier ?? 'free' }); return;
     }
     const subscription = await stripeStorage.getSubscription(user.stripeSubscriptionId);
     res.json({ subscription, tier: user.subscriptionTier });
@@ -33,13 +33,13 @@ router.get('/stripe/subscription', requireAuth, async (req: any, res) => {
 });
 
 // Authenticated: create checkout session
-router.post('/stripe/checkout', requireAuth, async (req: any, res) => {
+router.post('/stripe/checkout', requireAuth, async (req: any, res): Promise<void> => {
   try {
     const { priceId } = req.body as { priceId: string };
-    if (!priceId) return res.status(400).json({ error: 'priceId required' });
+    if (!priceId) { res.status(400).json({ error: 'priceId required' }); return; }
 
     let user = await stripeStorage.getUser(req.authUser.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -64,10 +64,10 @@ router.post('/stripe/checkout', requireAuth, async (req: any, res) => {
 });
 
 // Authenticated: open customer billing portal
-router.post('/stripe/portal', requireAuth, async (req: any, res) => {
+router.post('/stripe/portal', requireAuth, async (req: any, res): Promise<void> => {
   try {
     let user = await stripeStorage.getUser(req.authUser.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
 
     let customerId = user.stripeCustomerId;
     if (!customerId) {

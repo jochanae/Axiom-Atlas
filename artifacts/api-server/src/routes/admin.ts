@@ -57,7 +57,7 @@ router.get("/admin/users", requireSuperAdmin, async (_req, res): Promise<void> =
 });
 
 router.patch("/admin/users/:id", requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid user id" }); return; }
 
   const { subscriptionTier, role, name } = req.body as {
@@ -80,7 +80,7 @@ router.patch("/admin/users/:id", requireSuperAdmin, async (req, res): Promise<vo
 });
 
 router.delete("/admin/users/:id", requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid user id" }); return; }
   await db.delete(userSessionsTable).where(eq(userSessionsTable.userId, id));
   await db.delete(usersTable).where(eq(usersTable.id, id));
@@ -101,7 +101,7 @@ router.post("/admin/notes", requireSuperAdmin, async (req, res): Promise<void> =
 });
 
 router.delete("/admin/notes/:id", requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid note id" }); return; }
   await db.delete(adminNotesTable).where(eq(adminNotesTable.id, id));
   res.json({ ok: true });
@@ -150,7 +150,7 @@ router.get("/admin/errors", requireSuperAdmin, async (_req, res): Promise<void> 
 });
 
 router.patch("/admin/errors/:id", requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { resolved, adminResponse } = req.body as { resolved?: boolean; adminResponse?: string };
   const updates: Record<string, unknown> = {};
@@ -161,7 +161,7 @@ router.patch("/admin/errors/:id", requireSuperAdmin, async (req, res): Promise<v
 });
 
 router.delete("/admin/errors/:id", requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(errorLogsTable).where(eq(errorLogsTable.id, id));
   res.json({ ok: true });

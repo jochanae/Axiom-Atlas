@@ -64,7 +64,7 @@ router.post("/admin/invites", requireSuperAdmin, async (req, res): Promise<void>
 
 // DELETE /api/admin/invites/:id — cancel invite
 router.delete("/admin/invites/:id", requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(invitesTable).where(eq(invitesTable.id, id));
   res.json({ ok: true });

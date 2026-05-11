@@ -160,9 +160,10 @@ router.post("/forge", async (req, res) => {
 
     const nodes: ForgeNode[] = rawNodes.map((n, idx) => {
       const type = (VALID_TYPES.includes(n.type) ? n.type : "requirement") as NodeType;
-      const meta = (type === "priority" && VALID_META.includes(n.meta ?? ""))
-        ? n.meta as NodeMeta
-        : type === "priority" ? "must" : undefined;
+      const rawMeta = (n.meta ?? "") as NodeMeta;
+      const meta = (type === "priority" && VALID_META.includes(rawMeta))
+        ? rawMeta
+        : type === "priority" ? "must" as NodeMeta : undefined;
 
       // Use AI coordinates if reasonable, else fall back to radial
       const aiX = Number(n.x);
