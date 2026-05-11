@@ -932,6 +932,9 @@ export default function Home() {
   const [showProjectsSheet, setShowProjectsSheet] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string}>>([]);
+  const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isFree } = useSubscription();
 
   // ── Home context: repo / branch / model ────────────────────────────────────
@@ -996,6 +999,10 @@ export default function Home() {
     }
   }, [authUser]);
 
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [homeMessages]);
+
   // Pull-to-refresh
   const { pulling, distance, refreshing, threshold } = usePullToRefresh(
     useCallback(async () => {
@@ -1052,37 +1059,57 @@ export default function Home() {
     [input, setLocation]
   );
 
-  const handleSubmit = useCallback(() => {
-    // Wait for projects to finish loading before navigating
-    if (isLoading) return;
-
-    // Default: most recently updated project (API sorts ascending, last = newest)
-    let target = projects?.at(-1);
-
-    // If a repo is selected on the home context bar, prefer the project linked to it
-    if (homeRepo && projects?.length) {
-      const linked = projects.find(p => {
-        if (!p.linkedRepo) return false;
-        try {
-          const r = JSON.parse(p.linkedRepo) as { fullName?: string } | string;
-          // Handle both old plain-string format ("owner/repo") and new JSON object format
-          const fullName = typeof r === "string" ? r : (r.fullName ?? "");
-          return fullName.toLowerCase() === homeRepo.fullName.toLowerCase();
-        } catch { return false; }
+  const handleSubmit = useCallback(async () => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+    setInput("");
+    setHomeMessages(prev => [...prev, { role: 'user', content: text }]);
+    setIsAtlasStreaming(true);
+    try {
+      const res = await fetch("/api/nexus/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: text, model: homeModel }),
       });
-      if (linked) target = linked;
-    }
-
-    if (target) {
-      if (input.trim()) {
-        try { sessionStorage.setItem(`atlas-initial-${target.id}`, input.trim()); } catch {}
+      if (!res.ok || !res.body) throw new Error("No response");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let assistantText = "";
+      setHomeMessages(prev => [...prev, { role: 'assistant', content: "" }]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const json = JSON.parse(line.slice(6));
+              if (json.text) {
+                assistantText += json.text;
+                setHomeMessages(prev => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: 'assistant', content: assistantText };
+                  return updated;
+                });
+              }
+            } catch {}
+          }
+        }
       }
-      setLocation(`/project/${target.id}`);
-    } else if (projects !== undefined) {
-      // No projects yet — create the first one
-      handleNewProject();
+    } catch {
+      const target = projects?.at(-1);
+      if (target) {
+        try { sessionStorage.setItem(`atlas-initial-${target.id}`, text); } catch {}
+        setLocation(`/project/${target.id}`);
+      } else {
+        handleNewProject();
+      }
+    } finally {
+      setIsAtlasStreaming(false);
     }
-  }, [input, projects, isLoading, homeRepo, setLocation, handleNewProject]);
+  }, [input, isLoading, homeModel, projects, setLocation, handleNewProject]);
 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1305,14 +1332,31 @@ export default function Home() {
           </div>
 
           {/* Ambient bloom spinner */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              margin: "18px 0 26px",
-            }}
-          >
-            <LoadingSpinner size="sm" color="atlas" />
+          <div style={{ margin: "18px 0 26px", minHeight: 60 }}>
+            {homeMessages.length === 0 && !isAtlasStreaming ? (
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <LoadingSpinner size="sm" color="atlas" />
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: "min(50vh, 300px)", overflowY: "auto", paddingRight: 4 }}>
+                {homeMessages.map((msg, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: msg.role === 'user' ? "flex-end" : "flex-start" }}>
+                    <div style={{
+                      maxWidth: "82%", padding: "9px 13px", borderRadius: msg.role === 'user' ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                      background: msg.role === 'user' ? "rgba(201,162,76,0.12)" : "rgba(28,25,23,0.8)",
+                      border: `0.5px solid ${msg.role === 'user' ? "rgba(201,162,76,0.3)" : "rgba(37,34,32,0.9)"}`,
+                      fontSize: 13, lineHeight: 1.55, color: "var(--atlas-fg)",
+                      fontFamily: "var(--app-font-sans)",
+                    }}>
+                      {msg.role === 'assistant' && msg.content === "" && isAtlasStreaming ? (
+                        <span style={{ opacity: 0.4, fontStyle: "italic", fontSize: 11 }}>Atlas is thinking…</span>
+                      ) : msg.content}
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
           </div>
 
           {/* Input shell */}
