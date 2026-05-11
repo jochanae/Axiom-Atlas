@@ -968,6 +968,8 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string}>>([]);
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
+  const [briefing, setBriefing] = useState<string | null>(null);
+  const [briefingLoading, setBriefingLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isFree } = useSubscription();
 
@@ -1031,6 +1033,22 @@ export default function Home() {
       }
     }
   }, [authUser]);
+
+  useEffect(() => {
+    setBriefingLoading(true);
+    fetch("/api/nexus/briefing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({}),
+    })
+      .then(r => r.ok ? r.json() : { briefing: null })
+      .then((data: any) => {
+        setBriefing(data.briefing ?? null);
+        setBriefingLoading(false);
+      })
+      .catch(() => setBriefingLoading(false));
+  }, []);
 
   useEffect(() => {
     if (homeMessages.length === 0) return;
@@ -1319,31 +1337,46 @@ export default function Home() {
           }} />
 
           {/* Greeting */}
-          <div style={{ textAlign: "center", marginBottom: 24, marginTop: 32, position: "relative", zIndex: 1 }}>
-            <h1
-              style={{
-                fontSize: 30,
-                fontWeight: 300,
-                color: "var(--atlas-fg)",
-                letterSpacing: "-0.025em",
-                lineHeight: 1.2,
-                opacity: 0.85,
-                margin: "0 0 10px",
-              }}
-            >
-              Where were we.
-            </h1>
-            <p
-              style={{
-                fontSize: 13,
-                color: "var(--atlas-muted)",
-                opacity: 0.55,
-                margin: 0,
-                fontStyle: "italic",
-              }}
-            >
-              I'm here. What's on your mind?
-            </p>
+          <div style={{ textAlign: "center", marginBottom: 24, marginTop: 32, position: "relative", zIndex: 1, minHeight: 80 }}>
+            {homeMessages.length > 0 ? null : briefingLoading ? (
+              <>
+                <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
+                  Where were we.
+                </h1>
+                <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
+                  I'm here. What's on your mind?
+                </p>
+              </>
+            ) : briefing ? (
+              <div style={{ animation: "fadeIn 400ms ease forwards" }}>
+                {(() => {
+                  const sentences = briefing.split(/(?<=[.!?])\s+/);
+                  const status = sentences[0] ?? "";
+                  const nextMove = sentences[1] ?? "";
+                  return (
+                    <>
+                      <p style={{ fontSize: 15, fontWeight: 400, color: "var(--atlas-fg)", opacity: 0.9, margin: "0 0 8px", lineHeight: 1.5, fontFamily: "var(--app-font-sans)" }}>
+                        {status}
+                      </p>
+                      {nextMove && (
+                        <p style={{ fontSize: 13, color: "var(--atlas-gold)", opacity: 0.75, margin: 0, fontStyle: "italic", fontFamily: "var(--app-font-sans)" }}>
+                          {nextMove}
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : (
+              <>
+                <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
+                  Where were we.
+                </h1>
+                <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
+                  I'm here. What's on your mind?
+                </p>
+              </>
+            )}
           </div>
 
           {/* Ambient bloom spinner */}

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, nexusMessagesTable, projectsTable, entriesTable } from "@workspace/db";
-import { eq, asc, and, inArray } from "drizzle-orm";
+import { eq, asc, and, inArray, desc } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -282,6 +282,62 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     response: visibleContent,
     memoryUpdated,
   });
+});
+
+router.post("/nexus/briefing", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+
+  const [projects, recentEntries] = await Promise.all([
+    db.select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory })
+      .from(projectsTable)
+      .where(eq(projectsTable.userId, userId)),
+    db.select({ projectId: entriesTable.projectId, title: entriesTable.title, status: entriesTable.status, createdAt: entriesTable.createdAt })
+      .from(entriesTable)
+      .where(inArray(entriesTable.projectId,
+        db.select({ id: projectsTable.id }).from(projectsTable).where(eq(projectsTable.userId, userId))
+      ))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(10),
+  ]);
+
+  if (projects.length === 0) {
+    res.json({ briefing: null });
+    return;
+  }
+
+  const projectNameById = new Map(projects.map(p => [p.id, p.name]));
+  const recentActivity = recentEntries.map(e =>
+    `${projectNameById.get(e.projectId) ?? "Unknown"}: ${e.title} (${e.status})`
+  ).join("\n");
+
+  const projectList = projects.map(p => `• ${p.name}`).join("\n");
+
+  const briefingPrompt = `You are Atlas, a strategic AI partner. The user has just opened their dashboard.
+
+Portfolio:
+${projectList}
+
+Recent activity:
+${recentActivity || "No recent activity"}
+
+Generate an executive briefing in exactly this format — two sentences only, no labels, no greeting:
+Sentence 1: Current state observation (what's actually happening across the portfolio right now)
+Sentence 2: A specific suggested next move
+
+Be direct. Reference actual project names. Maximum 20 words per sentence. No fluff.`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 120,
+      messages: [{ role: "user", content: briefingPrompt }],
+    });
+
+    const text = response.content[0]?.type === "text" ? response.content[0].text.trim() : null;
+    res.json({ briefing: text });
+  } catch {
+    res.json({ briefing: null });
+  }
 });
 
 export default router;

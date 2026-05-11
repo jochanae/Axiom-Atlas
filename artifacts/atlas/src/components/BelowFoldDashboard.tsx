@@ -140,20 +140,6 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
         </div>
       </RevealOnScroll>
 
-      {/* 2. ATLAS NOTICED */}
-      {lastProject && (
-        <RevealOnScroll delayMs={80}>
-          <div className="atlas-discovery-card">
-            <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)", marginBottom: 10, opacity: 0.8 }}>
-              Atlas noticed
-            </div>
-            <p style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.75, margin: 0, lineHeight: 1.6, fontStyle: "italic" }}>
-              You've been returning to "{lastProject.name}." Every session gets you closer — what's the next move?
-            </p>
-          </div>
-        </RevealOnScroll>
-      )}
-
       {/* 3. YOUR MOMENTUM */}
       <RevealOnScroll delayMs={160}>
         <div className="atlas-discovery-card">
