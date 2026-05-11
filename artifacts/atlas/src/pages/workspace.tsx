@@ -7456,7 +7456,7 @@ export default function Workspace() {
                 </div>
 
                 <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.06em", color: "var(--atlas-muted)", opacity: 0.3 }}>
-                  {isMobile ? (projectMode === "PLAN" ? "What should we structure…" : projectMode === "BUILD" ? "What needs to be built or fixed…" : "Say it plainly…") : "Enter · Shift+Enter for newline"}
+                  {isMobile ? "type / for shortcuts" : "Enter · Shift+Enter for newline"}
                 </span>
 
                 {/* Right: model chip + mic + send */}
