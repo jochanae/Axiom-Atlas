@@ -469,46 +469,29 @@ function ContextChip({
 }
 
 function HomeContextBar({
-  repo, branch, model,
-  onRepoClick, onBranchClick, onModelClick,
+  focusLabel, model, onFocusClick, onModelClick,
 }: {
-  repo: HomeRepo | null; branch: string; model: string;
-  onRepoClick: () => void; onBranchClick: () => void; onModelClick: () => void;
+  focusLabel: string; model: string;
+  onFocusClick: () => void; onModelClick: () => void;
 }) {
   const modelLabel = MODELS.find(m => m.id === model)?.label ?? "Claude";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-      {/* Repo chip */}
       <ContextChip
-        onClick={onRepoClick}
+        onClick={onFocusClick}
         icon={
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/>
           </svg>
         }
-        label={repo ? repo.name : "Link repo"}
-        dim={!repo}
+        label={focusLabel}
       />
-      {/* Branch chip */}
-      <ContextChip
-        onClick={onBranchClick}
-        icon={
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M11.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm-2.25.75a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM4.25 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z" />
-          </svg>
-        }
-        label={branch}
-        dim={!repo}
-      />
-      {/* Divider */}
       <div style={{ width: 1, height: 14, background: "rgba(37,34,32,0.9)", flexShrink: 0 }} />
-      {/* Model chip */}
       <ContextChip
         onClick={onModelClick}
         icon={
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="8" cy="8" r="6" />
-            <path d="M5.5 8.5L7 10l3-4" />
+            <circle cx="8" cy="8" r="6"/><path d="M5.5 8.5L7 10l3-4"/>
           </svg>
         }
         label={modelLabel}
@@ -796,6 +779,57 @@ function ModelPickerSheet({ current, onSelect, onClose }: {
   );
 }
 
+function FocusPickerSheet({ current, projects, onSelect, onClose }: {
+  current: number | null;
+  projects: Array<{ id: number; name: string }>;
+  onSelect: (id: number | null) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+      <div style={{
+        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
+        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
+        borderTop: "1px solid rgba(201,162,76,0.18)",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)", paddingBottom: 32,
+      }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Focus</span>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+        </div>
+        <div style={{ padding: "0 14px" }}>
+          {[{ id: null, name: "All Projects", sub: "Global view across everything" }, ...projects.map(p => ({ id: p.id as number | null, name: p.name, sub: "Zoom in on this project" }))].map(item => (
+            <button
+              key={item.id ?? "all"}
+              onClick={() => { onSelect(item.id); onClose(); }}
+              style={{
+                width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 8,
+                background: current === item.id ? "rgba(201,162,76,0.06)" : "transparent",
+                border: `1px solid ${current === item.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
+                transition: "all 140ms ease",
+              }}
+            >
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.id === null ? "rgba(201,162,76,0.5)" : "rgba(120,113,108,0.4)", flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>{item.name}</div>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.7, marginTop: 1 }}>{item.sub}</div>
+              </div>
+              {current === item.id && (
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // ── First-run overlay ────────────────────────────────────────────────────────
 function FirstRunOverlay({
@@ -938,23 +972,19 @@ export default function Home() {
   const { isFree } = useSubscription();
 
   // ── Home context: repo / branch / model ────────────────────────────────────
-  const [homeRepo, setHomeRepo] = useState<HomeRepo | null>(() => {
-    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).repo ?? null) : null; } catch { return null; }
+  const [homeFocus, setHomeFocus] = useState<number | null>(() => {
+    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).focusId ?? null) : null; } catch { return null; }
   });
-  const [homeBranch, setHomeBranch] = useState<string>(() => {
-    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).branch ?? "main") : "main"; } catch { return "main"; }
-  });
+  const [showFocusSheet, setShowFocusSheet] = useState(false);
   const [homeModel, setHomeModel] = useState<string>(() => {
     try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).model ?? "claude") : "claude"; } catch { return "claude"; }
   });
-  const [showRepoSheet, setShowRepoSheet] = useState(false);
-  const [showBranchSheet, setShowBranchSheet] = useState(false);
   const [showModelSheet, setShowModelSheet] = useState(false);
 
   // Persist context to localStorage whenever it changes
   useEffect(() => {
-    try { localStorage.setItem("atlas-home-context", JSON.stringify({ repo: homeRepo, branch: homeBranch, model: homeModel })); } catch {}
-  }, [homeRepo, homeBranch, homeModel]);
+    try { localStorage.setItem("atlas-home-context", JSON.stringify({ focusId: homeFocus, model: homeModel })); } catch {}
+  }, [homeFocus, homeModel]);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1077,7 +1107,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: text, model: homeModel }),
+        body: JSON.stringify({ message: text, model: homeModel, focusProjectId: homeFocus }),
       });
       if (!res.ok) throw new Error("No response");
       const data = await res.json() as { reply?: string; message?: string };
@@ -1094,7 +1124,7 @@ export default function Home() {
     } finally {
       setIsAtlasStreaming(false);
     }
-  }, [input, isLoading, homeModel, projects, setLocation, handleNewProject]);
+  }, [input, isLoading, homeModel, homeFocus, projects, setLocation, handleNewProject]);
 
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1534,11 +1564,9 @@ export default function Home() {
 
           {/* Repo / Branch / Model context bar */}
           <HomeContextBar
-            repo={homeRepo}
-            branch={homeBranch}
+            focusLabel={homeFocus ? (projects?.find(p => p.id === homeFocus)?.name ?? "Project") : "All Projects"}
             model={homeModel}
-            onRepoClick={() => setShowRepoSheet(true)}
-            onBranchClick={() => setShowBranchSheet(true)}
+            onFocusClick={() => setShowFocusSheet(true)}
             onModelClick={() => setShowModelSheet(true)}
           />
 
@@ -1592,22 +1620,12 @@ export default function Home() {
       {showProfile && <AccountHubPanel onClose={() => setShowProfile(false)} />}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} reason="project_limit" />}
 
-      {showRepoSheet && (
-        <RepoSearchSheet
-          current={homeRepo}
-          onSelect={(r) => {
-            setHomeRepo(r);
-            setHomeBranch(r.defaultBranch ?? "main");
-          }}
-          onClose={() => setShowRepoSheet(false)}
-        />
-      )}
-      {showBranchSheet && (
-        <BranchPickerSheet
-          repo={homeRepo}
-          current={homeBranch}
-          onSelect={setHomeBranch}
-          onClose={() => setShowBranchSheet(false)}
+      {showFocusSheet && (
+        <FocusPickerSheet
+          current={homeFocus}
+          projects={(projects ?? []).map(p => ({ id: p.id, name: p.name }))}
+          onSelect={setHomeFocus}
+          onClose={() => setShowFocusSheet(false)}
         />
       )}
       {showModelSheet && (
