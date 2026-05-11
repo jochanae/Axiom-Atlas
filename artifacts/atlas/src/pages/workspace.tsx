@@ -5459,6 +5459,7 @@ export default function Workspace() {
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
   const [showDrawer, setShowDrawer] = useState(false);
+  const [showForgeExternal, setShowForgeExternal] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -7715,6 +7716,10 @@ export default function Workspace() {
         />
       )}
 
+      {showForgeExternal && (
+        <TheForge onClose={() => setShowForgeExternal(false)} />
+      )}
+
       {/* Projects Drawer */}
       <ProjectsDrawer
         open={showDrawer}
@@ -7733,6 +7738,7 @@ export default function Workspace() {
         }}
         onOpenLedger={(projectId) => { setLocation(`/ledger/${projectId}`); setShowDrawer(false); }}
         onOpenParking={() => { setLocation(`/parking?project=${id}`); setShowDrawer(false); }}
+        onOpenQuickPrompt={() => { setShowDrawer(false); setShowForgeExternal(true); }}
         userLabel={loadProfile().name || null}
       />
 

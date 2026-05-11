@@ -13,6 +13,7 @@ import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { AccountHubPanel } from "../components/AccountHubPanel";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
+import { TheForge } from "../components/TheForge";
 import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
 import { useAuth, useRequireAuth, isSuperAdmin } from "../hooks/useAuth";
@@ -962,6 +963,7 @@ export default function Home() {
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
+  const [showQuickPrompt, setShowQuickPrompt] = useState(false);
   const { user: authUser } = useAuth();
   useRequireAuth();
   const [showProfile, setShowProfile] = useState(false);
@@ -1736,6 +1738,7 @@ export default function Home() {
             if (p) setLocation(`/ledger/${p.id}`);
           }}
           onOpenParking={() => setLocation("/parking")}
+          onOpenQuickPrompt={() => setShowQuickPrompt(true)}
           parkedCount={0}
           committedCount={0}
         />
@@ -1782,8 +1785,15 @@ export default function Home() {
         onNewProject={() => { setShowDrawer(false); handleNewProject("New Project"); }}
         onOpenLedger={(id) => setLocation(`/ledger/${id}`)}
         onOpenParking={() => setLocation("/parking")}
+        onOpenQuickPrompt={() => { setShowDrawer(false); setShowQuickPrompt(true); }}
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
       />
+
+      {showQuickPrompt && (
+        <TheForge
+          onClose={() => setShowQuickPrompt(false)}
+        />
+      )}
 
       {/* Fixed 5-item bottom nav — true flex row, even spacing */}
       <style>{`

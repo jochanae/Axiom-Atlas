@@ -20,6 +20,7 @@ import Terms from "./pages/terms";
 import Privacy from "./pages/privacy";
 import Help from "./pages/help";
 import Vault from "./pages/vault";
+import Secrets from "./pages/secrets";
 import Admin from "./pages/admin";
 import Dashboard from "./pages/dashboard";
 import ResetPassword from "./pages/reset-password";
@@ -127,6 +128,7 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/help" component={Help} />
       <Route path="/vault" component={Vault} />
+      <Route path="/secrets" component={Secrets} />
       <Route path="/admin" component={Admin} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/map" component={MasterMap} />
