@@ -152,6 +152,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     message: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     userProfile?: string;
+    focusProjectId?: number | null;
   };
 
   if (!body.message?.trim()) {
@@ -162,7 +163,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { message, userProfile = "" } = body;
+  const { message, userProfile = "", focusProjectId = null } = body;
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -233,6 +234,23 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
   if (aggregatedMemory) {
     systemPrompt += `\n\n--- AGGREGATED PROJECT MEMORY (Atlas knows this across all projects) ---\n${aggregatedMemory}\n--- END AGGREGATED MEMORY ---`;
+  }
+  if (focusProjectId) {
+    const focusProject = projects.find(p => p.id === focusProjectId);
+    if (focusProject) {
+      const focusEntries = committedEntries
+        .filter(e => e.projectId === focusProjectId)
+        .map(e => `  • ${e.title}${e.summary ? ` — ${e.summary.slice(0, 120)}` : ""}`)
+        .join("\n");
+      const focusMemory = (() => {
+        const store = parseMemoryStore(focusProject.memory ?? null);
+        return buildMemoryText(store);
+      })();
+      systemPrompt += `\n\n--- FOCUSED PROJECT: ${focusProject.name.toUpperCase()} ---\nThe user has zoomed in on "${focusProject.name}" for this conversation. Prioritize this project's context. When answering, lead with what you know about this project specifically before broadening to portfolio-level insights.`;
+      if (focusEntries) systemPrompt += `\nCommitted decisions:\n${focusEntries}`;
+      if (focusMemory) systemPrompt += `\nProject memory:\n${focusMemory}`;
+      systemPrompt += `\n--- END FOCUSED PROJECT ---`;
+    }
   }
 
   // Build messages array for Claude
