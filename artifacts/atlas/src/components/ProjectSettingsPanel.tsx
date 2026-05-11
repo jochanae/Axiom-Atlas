@@ -150,7 +150,12 @@ export function ProjectSettingsPanel({ project, onClose, onSaved }: Props) {
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                   <span style={{ fontSize: 11, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", flexShrink: 0 }}>Repo</span>
                   <span style={{ fontSize: 11, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {project.linkedRepo}
+                    {(() => {
+                      try {
+                        const r = JSON.parse(project.linkedRepo);
+                        return typeof r === "string" ? r : (r.fullName ?? project.linkedRepo);
+                      } catch { return project.linkedRepo; }
+                    })()}
                   </span>
                 </div>
               )}
