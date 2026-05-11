@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
@@ -7399,7 +7400,11 @@ export default function Workspace() {
                                 navigator.clipboard.writeText(ctx).catch(() => {});
                                 setDeepDiveCopied(true);
                                 setTimeout(() => setDeepDiveCopied(false), 3000);
-                                window.open("https://gemini.google.com", "_blank");
+                                toast("Opening Gemini", {
+                                  description: "Your context is copied — just paste it when you arrive.",
+                                  duration: 4000,
+                                });
+                                setTimeout(() => window.open("https://gemini.google.com", "_blank"), 600);
                               }
                             }}
                             style={{

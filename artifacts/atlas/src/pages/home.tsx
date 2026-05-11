@@ -1597,7 +1597,11 @@ export default function Home() {
                             navigator.clipboard.writeText(ctx).catch(() => {});
                             setDeepDiveCopied(true);
                             setTimeout(() => setDeepDiveCopied(false), 3000);
-                            window.open("https://gemini.google.com", "_blank");
+                            toast("Opening Gemini", {
+                              description: "Your context is copied — just paste it when you arrive.",
+                              duration: 4000,
+                            });
+                            setTimeout(() => window.open("https://gemini.google.com", "_blank"), 600);
                           }
                         }}
                         style={{
