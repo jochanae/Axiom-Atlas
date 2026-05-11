@@ -28,7 +28,7 @@ async function getCredentials() {
     },
   });
 
-  const data = await response.json();
+  const data = await response.json() as Record<string, any>;
   const connectionSettings = data.items?.[0];
 
   if (!connectionSettings || !connectionSettings.settings.publishable || !connectionSettings.settings.secret) {
