@@ -960,6 +960,8 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
+  const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const { user: authUser } = useAuth();
   useRequireAuth();
   const [showProfile, setShowProfile] = useState(false);
@@ -1541,6 +1543,77 @@ export default function Home() {
                   <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </button>
+
+              {/* Deep Dive button */}
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <button
+                  onClick={() => setShowDeepDiveMenu(v => !v)}
+                  title="Deep Dive — send this conversation to ChatGPT, Perplexity or Gemini"
+                  style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: showDeepDiveMenu ? "rgba(201,162,76,0.1)" : "transparent",
+                    border: showDeepDiveMenu ? "1px solid rgba(201,162,76,0.25)" : "none",
+                    color: showDeepDiveMenu ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)",
+                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "color 160ms ease, background 160ms ease",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--atlas-fg)")}
+                  onMouseLeave={e => { if (!showDeepDiveMenu) e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8" cy="6" r="4" />
+                    <path d="M8 10v5M5 13h6" />
+                    <path d="M5.5 4.5L3 2M10.5 4.5L13 2" />
+                  </svg>
+                </button>
+                {showDeepDiveMenu && (
+                  <div
+                    className="atlas-popover"
+                    style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, zIndex: 60, minWidth: 210 }}
+                  >
+                    <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(201,162,76,0.5)", padding: "4px 10px 6px", borderBottom: "1px solid rgba(201,162,76,0.08)", marginBottom: 4 }}>
+                      Deep Dive
+                    </div>
+                    {([
+                      { id: "chatgpt",    label: "ChatGPT",    sub: "Context auto-fills" },
+                      { id: "perplexity", label: "Perplexity", sub: "Context auto-fills" },
+                      { id: "gemini",     label: "Gemini",     sub: deepDiveCopied ? "Copied — paste when it opens" : "Copies context, paste once" },
+                    ] as const).map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          const recentMsgs = homeMessages.slice(-5).map((m: {role: string; content: string}) => `${m.role === "user" ? "Me" : "Atlas"}: ${m.content}`).join("\n\n");
+                          const current = input.trim();
+                          const ctx = [current ? `My question: ${current}` : "", recentMsgs].filter(Boolean).join("\n\n---\n\n").slice(0, 2000);
+                          const encoded = encodeURIComponent(ctx);
+                          setShowDeepDiveMenu(false);
+                          if (p.id === "chatgpt") {
+                            window.open(`https://chatgpt.com/?q=${encoded}`, "_blank");
+                          } else if (p.id === "perplexity") {
+                            window.open(`https://www.perplexity.ai/search?q=${encoded}`, "_blank");
+                          } else {
+                            navigator.clipboard.writeText(ctx).catch(() => {});
+                            setDeepDiveCopied(true);
+                            setTimeout(() => setDeepDiveCopied(false), 3000);
+                            window.open("https://gemini.google.com", "_blank");
+                          }
+                        }}
+                        style={{
+                          display: "block", width: "100%", textAlign: "left",
+                          background: "transparent", border: "none",
+                          padding: "7px 10px", borderRadius: 5, cursor: "pointer",
+                          transition: "background 120ms ease",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(201,162,76,0.07)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <div style={{ fontSize: 12, color: "var(--atlas-fg)", fontWeight: 500 }}>{p.label}</div>
+                        <div style={{ fontSize: 10, color: "var(--atlas-muted)", marginTop: 1, fontFamily: "var(--app-font-mono)" }}>{p.sub}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Center hint */}
               <div style={{ flex: 1, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
