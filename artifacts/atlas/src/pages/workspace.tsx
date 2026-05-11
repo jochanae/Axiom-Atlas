@@ -101,7 +101,7 @@ interface LinkedRepo {
   name: string;
 }
 
-type RightTab = "ledger" | "files" | "preview" | "memory" | "map";
+type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal";
 
 interface ProjectScan {
   projectName: string;
@@ -1226,6 +1226,7 @@ function AssistantBubble({
   onPushSuccess,
   onPreviewCode,
   onPrCreated,
+  onRunCommand,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -1240,6 +1241,7 @@ function AssistantBubble({
   onPushSuccess: (records: PushRecord[]) => void;
   onPreviewCode?: (code: string) => void;
   onPrCreated?: (prUrl: string) => void;
+  onRunCommand?: (command: string) => void;
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
@@ -1249,6 +1251,23 @@ function AssistantBubble({
   const [selfApplyStatus, setSelfApplyStatus] = useState<"idle" | "applying" | "done" | "error">("idle");
   const [selfApplyMsg, setSelfApplyMsg] = useState("");
   const activeEdits = message.fileEdits ?? (message.fileEdit ? [message.fileEdit] : []);
+
+  // Parse CMD_EXEC block from Atlas response
+  const { cmdExec, cleanContent } = useMemo(() => {
+    const m = message.content.match(/CMD_EXEC:(\{[^}]*\})/);
+    if (m) {
+      try {
+        const parsed = JSON.parse(m[1]) as { command: string; description?: string };
+        if (typeof parsed.command === "string") {
+          return {
+            cmdExec: parsed,
+            cleanContent: message.content.replace(/\n?CMD_EXEC:\{[^}]*\}/g, "").trim(),
+          };
+        }
+      } catch {}
+    }
+    return { cmdExec: null, cleanContent: message.content };
+  }, [message.content]);
 
   // Detect previewable code block (html, jsx, tsx, css, or untagged with HTML tags)
   const previewableCode = useMemo(() => {
@@ -1422,7 +1441,7 @@ function AssistantBubble({
         )}
 
         <ChunkedBubbles
-          text={message.content}
+          text={cleanContent}
           isNew={isNew}
           textStyle={{ fontSize: 14, lineHeight: 1.78, color: "var(--atlas-fg)", opacity: 0.9, whiteSpace: "pre-wrap" }}
         />
@@ -1569,6 +1588,48 @@ function AssistantBubble({
                 : selfEdits.length === 1
                   ? `Apply ${selfEdits[0].path.split("/").pop()} to Atlas`
                   : `Apply ${selfEdits.length} files to Atlas`}
+            </button>
+          </div>
+        )}
+
+        {/* CMD_EXEC — runnable command card suggested by Atlas */}
+        {cmdExec && (
+          <div
+            style={{
+              marginTop: 12, padding: "10px 14px",
+              borderRadius: 8,
+              background: "rgba(12,10,9,0.7)",
+              border: "1px solid rgba(201,162,76,0.22)",
+              display: "flex", alignItems: "center", gap: 10,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.65 }}>
+              <path d="M2 4l5 4-5 4" stroke="rgba(201,162,76,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M9 12h5" stroke="rgba(201,162,76,0.9)" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 12.5, color: "rgba(201,162,76,0.92)", letterSpacing: "0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {cmdExec.command}
+              </div>
+              {cmdExec.description && (
+                <div style={{ fontSize: 11, color: "var(--atlas-muted)", marginTop: 2, opacity: 0.8 }}>{cmdExec.description}</div>
+              )}
+            </div>
+            <button
+              onClick={() => onRunCommand?.(cmdExec.command)}
+              style={{
+                flexShrink: 0, padding: "5px 12px", borderRadius: 5,
+                background: "rgba(146,64,14,0.25)",
+                border: "1px solid rgba(146,64,14,0.55)",
+                color: "rgba(230,150,90,0.95)",
+                fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.08em", cursor: "pointer",
+                transition: "all 140ms ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(146,64,14,0.4)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(146,64,14,0.25)")}
+            >
+              Run →
             </button>
           </div>
         )}
@@ -4913,6 +4974,8 @@ function RightPanel({
   onHandoverOpenChange,
   sandboxCode,
   onSandboxConsumed,
+  pendingTerminalCommand,
+  onTerminalCommandConsumed,
 }: {
   projectId: number;
   entries: Entry[];
@@ -4942,6 +5005,8 @@ function RightPanel({
   onHandoverOpenChange?: (open: boolean) => void;
   sandboxCode?: string | null;
   onSandboxConsumed?: () => void;
+  pendingTerminalCommand?: string | null;
+  onTerminalCommandConsumed?: () => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -5015,6 +5080,17 @@ function RightPanel({
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
           <path d="M1 3.5l4-1.5 5 2 4-1.5v9.5l-4 1.5-5-2-4 1.5V3.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
           <path d="M5 2v9.5M10 4v9.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      id: "terminal" as RightTab,
+      label: "Terminal",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M4 6l3 2.5L4 11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M9 11h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
         </svg>
       ),
     },
@@ -5186,6 +5262,199 @@ function RightPanel({
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
+      {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} />}
+    </div>
+  );
+}
+
+// ── TerminalPanel ─────────────────────────────────────────────────────────────
+type TerminalLine = { text: string; kind: "input" | "output" | "stderr" | "system" | "error" };
+
+function TerminalPanel({
+  pendingCommand,
+  onCommandConsumed,
+}: {
+  pendingCommand?: string | null;
+  onCommandConsumed?: () => void;
+}) {
+  const [input, setInput] = useState("");
+  const [lines, setLines] = useState<TerminalLine[]>([
+    { text: "Atlas Terminal  —  /home/runner/workspace", kind: "system" },
+    { text: "Type a command or tap Run on an Atlas suggestion.", kind: "system" },
+  ]);
+  const [running, setRunning] = useState(false);
+  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
+  const [histIdx, setHistIdx] = useState(-1);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addLine = useCallback((text: string, kind: TerminalLine["kind"]) => {
+    const parts = text.split("\n");
+    setLines((prev) => [
+      ...prev,
+      ...parts.filter((p) => p !== "").map((p) => ({ text: p, kind })),
+    ]);
+  }, []);
+
+  const runCommand = useCallback(async (cmd: string) => {
+    const trimmed = cmd.trim();
+    if (!trimmed || running) return;
+    setRunning(true);
+    setCmdHistory((h) => [trimmed, ...h.slice(0, 49)]);
+    setHistIdx(-1);
+    addLine(`$ ${trimmed}`, "input");
+
+    try {
+      const res = await fetch("/api/terminal/exec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: trimmed }),
+        credentials: "include",
+      });
+
+      if (!res.ok || !res.body) {
+        addLine(`HTTP error: ${res.status}`, "error");
+        setRunning(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const blocks = buf.split("\n\n");
+        buf = blocks.pop() ?? "";
+        for (const block of blocks) {
+          let evtName = "output";
+          let evtData = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event: ")) evtName = line.slice(7).trim();
+            else if (line.startsWith("data: ")) evtData = line.slice(6);
+          }
+          if (!evtData) continue;
+          try {
+            const payload = JSON.parse(evtData) as string;
+            if (evtName === "output") addLine(payload, "output");
+            else if (evtName === "stderr") addLine(payload, "stderr");
+            else if (evtName === "error") addLine(payload, "error");
+            else if (evtName === "done") {
+              const meta = JSON.parse(payload) as { exitCode: number | null; durationMs: number };
+              addLine(`[exit ${meta.exitCode ?? "?"} · ${meta.durationMs}ms]`, "system");
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      addLine(`Error: ${err instanceof Error ? err.message : String(err)}`, "error");
+    }
+    setRunning(false);
+  }, [running, addLine]);
+
+  useEffect(() => {
+    if (pendingCommand) {
+      setInput("");
+      runCommand(pendingCommand);
+      onCommandConsumed?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCommand]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [lines]);
+
+  const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      const cmd = input;
+      setInput("");
+      runCommand(cmd);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = Math.min(histIdx + 1, cmdHistory.length - 1);
+      setHistIdx(next);
+      setInput(cmdHistory[next] ?? "");
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = Math.max(histIdx - 1, -1);
+      setHistIdx(next);
+      setInput(next === -1 ? "" : cmdHistory[next] ?? "");
+    }
+  };
+
+  const colorFor = (kind: TerminalLine["kind"]) => {
+    if (kind === "input") return "rgba(201,162,76,0.92)";
+    if (kind === "stderr") return "rgba(252,165,100,0.88)";
+    if (kind === "system") return "rgba(120,113,108,0.65)";
+    if (kind === "error") return "rgba(252,100,100,0.88)";
+    return "rgba(231,229,228,0.82)";
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0A0908", overflow: "hidden" }}>
+      {/* Output log */}
+      <div
+        onClick={() => inputRef.current?.focus()}
+        style={{
+          flex: 1, overflowY: "auto", padding: "12px 14px",
+          fontFamily: "var(--app-font-mono)", fontSize: 12, lineHeight: 1.7,
+          cursor: "text",
+        }}
+      >
+        {lines.map((ln, i) => (
+          <div key={i} style={{ color: colorFor(ln.kind), whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+            {ln.text}
+          </div>
+        ))}
+        {running && (
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3, color: "rgba(120,113,108,0.6)" }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "rgba(201,162,76,0.55)", display: "inline-block", animation: "atlas-pulse 1.2s ease-in-out infinite" }} />
+            running…
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+      {/* Input row */}
+      <div style={{
+        borderTop: "1px solid rgba(37,34,32,0.9)", padding: "9px 13px",
+        display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
+        background: "#0C0A09",
+      }}>
+        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 13, color: "rgba(201,162,76,0.75)", flexShrink: 0 }}>$</span>
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          disabled={running}
+          placeholder={running ? "running…" : "enter command"}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          style={{
+            flex: 1, background: "transparent", border: "none", outline: "none",
+            fontFamily: "var(--app-font-mono)", fontSize: 12,
+            color: "rgba(231,229,228,0.9)",
+            caretColor: "rgba(201,162,76,0.9)",
+          }}
+        />
+        {input.trim() && !running && (
+          <button
+            onClick={() => { const cmd = input; setInput(""); runCommand(cmd); }}
+            style={{
+              flexShrink: 0, padding: "3px 10px", borderRadius: 4,
+              background: "rgba(146,64,14,0.22)", border: "1px solid rgba(146,64,14,0.4)",
+              color: "rgba(230,150,90,0.88)", fontSize: 10.5, fontFamily: "var(--app-font-mono)",
+              fontWeight: 600, letterSpacing: "0.08em", cursor: "pointer",
+            }}
+          >
+            run
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -6175,6 +6444,17 @@ export default function Workspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile]);
 
+  const [pendingTerminalCommand, setPendingTerminalCommand] = useState<string | null>(null);
+  const handleRunCommand = useCallback((command: string) => {
+    setPendingTerminalCommand(command);
+    if (isMobile) {
+      setRightOpen(true);
+    } else {
+      setDesktopForceTab("terminal");
+      setTimeout(() => setDesktopForceTab(undefined), 200);
+    }
+  }, [isMobile]);
+
   // ── Readiness Snapshots ───────────────────────────────────────────────────
   const { data: readinessSnapshots } = useListReadinessSnapshots(
     id ? Number(id) : 0,
@@ -7076,6 +7356,7 @@ export default function Workspace() {
                   onCommit={handleCommit}
                   onRegenerate={() => handleRegenerate(i)}
                   onPreviewCode={handlePreviewCode}
+                  onRunCommand={handleRunCommand}
                   onPrCreated={(url) => { setSessionPrUrl(url); setLeftTab("diff"); }}
                   onPushSuccess={(records) => {
                     setPushHistory((prev) => {
@@ -7610,6 +7891,8 @@ export default function Workspace() {
                 onHandoverOpenChange={setHandoverOpen}
                 sandboxCode={sandboxCode}
                 onSandboxConsumed={() => setSandboxCode(null)}
+                pendingTerminalCommand={pendingTerminalCommand}
+                onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
               />
             </div>
           </>
@@ -7677,6 +7960,8 @@ export default function Workspace() {
                 onHandoverOpenChange={setHandoverOpen}
                 sandboxCode={sandboxCode}
                 onSandboxConsumed={() => setSandboxCode(null)}
+                pendingTerminalCommand={pendingTerminalCommand}
+                onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
               />
             </div>
           </div>

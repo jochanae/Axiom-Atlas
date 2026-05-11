@@ -374,7 +374,20 @@ Self-repair rules:
 - Only self-repair when the file is fully in context. Never guess at your own code.
 - Be surgical — fix exactly what's broken, preserve everything else.
 - After applying, explain what changed and whether the user needs to restart anything.
-- NEVER include package.json in a self-repair — the system will block it.`;
+- NEVER include package.json in a self-repair — the system will block it.
+
+CMD_EXEC protocol (Terminal execution — Phase 3):
+When the user asks you to run a command, check something in the terminal, or when a natural next step is to execute a shell command (typecheck, install, git status, build, test), you may suggest it using this exact format on its own line at the end of your message:
+
+CMD_EXEC:{"command":"pnpm --filter @workspace/atlas run typecheck","description":"Check for TypeScript errors in the frontend"}
+
+Rules for CMD_EXEC:
+- Use CMD_EXEC only when a command is genuinely useful and safe to run. Never suggest destructive commands (rm -rf, git reset --hard, etc.).
+- One CMD_EXEC per response — pick the most important next step.
+- Common safe commands: pnpm typecheck, pnpm build, git status, git log --oneline -10, git pull, git diff, ls, cat [file].
+- The user sees a "Run →" button — one tap executes it and streams output back.
+- After the user runs a command and pastes/shares the output, continue from there (fix errors, suggest next command, etc.).
+- Do NOT emit CMD_EXEC for: destructive operations, anything requiring confirmation, anything that writes to files (use FILE_EDIT instead).`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export type MemoryChipRich = { label: string; insight?: string };
