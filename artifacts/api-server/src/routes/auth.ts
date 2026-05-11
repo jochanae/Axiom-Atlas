@@ -4,6 +4,9 @@ import { promisify } from "util";
 import { db } from "@workspace/db";
 import { usersTable, userSessionsTable } from "@workspace/db/schema";
 import { eq, and, gt } from "drizzle-orm";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const router: IRouter = Router();
 const scryptAsync = promisify(scrypt);
@@ -152,7 +155,12 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
     const token = randomBytes(32).toString("hex");
     resetTokens.set(token, { email: user.email, expiresAt: Date.now() + RESET_TOKEN_TTL_MS });
     if (process.env.NODE_ENV !== "production") {
-      req.log?.info({ token }, "password-reset-token");
+      await resend.emails.send({
+        from: "Axiom <onboarding@resend.dev>",
+        to: email,
+        subject: "Reset your Axiom password",
+        html: `<p>You requested a password reset for your Axiom account.</p><p><a href="${process.env.APP_URL ?? "https://axiomsystem.app"}/reset-password?token=${token}">Click here to reset your password</a></p><p>This link expires in 1 hour. If you didn't request this, ignore this email.</p>`,
+      });
     }
   }
 
