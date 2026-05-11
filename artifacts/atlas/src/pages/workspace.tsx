@@ -5728,6 +5728,50 @@ export default function Workspace() {
     return () => { cancelled = true; };
   }, [id, project?.linkedRepo, project?.githubToken]);
 
+  // Auto-run analyze scan at workspace level so Atlas knows the full codebase
+  // structure the moment a project opens — no FILES tab visit required.
+  // Skips if a fresh scan (< 24h) already exists in localStorage.
+  useEffect(() => {
+    if (!project?.linkedRepo) return;
+    const parsedRepo = (() => {
+      try {
+        const r = JSON.parse(project.linkedRepo);
+        if (typeof r === "string") return { fullName: r, defaultBranch: "main" };
+        return r as { fullName: string; defaultBranch: string };
+      } catch { return null; }
+    })();
+    if (!parsedRepo?.fullName) return;
+
+    const scanKey = `atlas-scan-${id}`;
+    try {
+      const cached = localStorage.getItem(scanKey);
+      if (cached) {
+        const parsed = JSON.parse(cached) as { scannedAt?: string };
+        if (parsed.scannedAt) {
+          const ageMs = Date.now() - new Date(parsed.scannedAt).getTime();
+          if (ageMs < 24 * 60 * 60 * 1000) return; // fresh — skip
+        }
+      }
+    } catch { /* no cache or parse error — proceed */ }
+
+    const token =
+      project?.githubToken ??
+      (() => { try { return localStorage.getItem("atlas-github-token"); } catch { return null; } })() ??
+      "__server__";
+
+    fetch("/api/github/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-github-token": token },
+      body: JSON.stringify({ repo: parsedRepo.fullName, branch: parsedRepo.defaultBranch ?? "main" }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        try { localStorage.setItem(scanKey, JSON.stringify(data)); } catch {}
+      })
+      .catch(() => { /* silent — never break the workspace */ });
+  }, [id, project?.linkedRepo, project?.githubToken]);
+
   // Persist last visited project for footer LEDGER shortcut
   useEffect(() => {
     if (id) { try { localStorage.setItem("atlas-last-project", String(id)); } catch {} }
