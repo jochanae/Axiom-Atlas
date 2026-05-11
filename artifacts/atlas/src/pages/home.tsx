@@ -1074,7 +1074,7 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("No response");
       const data = await res.json() as { reply?: string; message?: string };
-      const replyText = data.reply ?? data.message ?? "";
+      const replyText = (data as any).response ?? (data as any).reply ?? (data as any).message ?? "";
       setHomeMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
     } catch {
       const target = projects?.at(-1);
