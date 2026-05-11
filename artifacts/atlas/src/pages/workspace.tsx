@@ -5372,6 +5372,14 @@ export default function Workspace() {
   const isMobile = useIsMobile();
   useRequireAuth();
 
+  // Read the repo selected on the home context bar so we can show it in the header
+  const [homeRepo] = useState<{ name: string; fullName: string } | null>(() => {
+    try {
+      const r = localStorage.getItem("atlas-home-context");
+      return r ? (JSON.parse(r).repo ?? null) : null;
+    } catch { return null; }
+  });
+
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -6437,6 +6445,18 @@ export default function Workspace() {
                       {project?.name ?? "…"}
                     </span>
                   </span>
+                  {/* Repo context — persisted from home page dropdown */}
+                  {homeRepo && (
+                    <span style={{
+                      fontSize: 9, fontFamily: "var(--app-font-mono)",
+                      color: "var(--atlas-gold)", opacity: 0.45,
+                      letterSpacing: "0.06em", overflow: "hidden",
+                      textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      maxWidth: "100%",
+                    }}>
+                      {homeRepo.fullName}
+                    </span>
+                  )}
                   {/* Chevron on its own line, centered below */}
                   <svg width="10" height="6" viewBox="0 0 12 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "rgba(120,113,108,0.45)", flexShrink: 0 }}>
                     <path d="M1 1l5 5 5-5" />
