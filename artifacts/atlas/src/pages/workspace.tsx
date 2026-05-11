@@ -6456,7 +6456,7 @@ export default function Workspace() {
                     </span>
                   </span>
                   {/* Repo context — persisted from home page dropdown */}
-                  {homeRepo && (
+                  {!project?.linkedRepo && homeRepo && (
                     <span style={{
                       fontSize: 9, fontFamily: "var(--app-font-mono)",
                       color: "var(--atlas-gold)", opacity: 0.45,
