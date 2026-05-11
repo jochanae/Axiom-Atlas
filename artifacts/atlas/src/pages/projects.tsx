@@ -260,7 +260,15 @@ function ProjectRow({
                 overflow: "hidden",
                 textOverflow: "ellipsis",
               }}>
-                {p.linkedRepo.includes("/") ? p.linkedRepo.split("/")[1] : p.linkedRepo}
+                {(() => {
+                  try {
+                    const r = JSON.parse(p.linkedRepo);
+                    const full = typeof r === "string" ? r : (r.fullName ?? p.linkedRepo);
+                    return full.includes("/") ? full.split("/")[1] : full;
+                  } catch {
+                    return p.linkedRepo.includes("/") ? p.linkedRepo.split("/")[1] : p.linkedRepo;
+                  }
+                })()}
               </span>
             </div>
           ) : (

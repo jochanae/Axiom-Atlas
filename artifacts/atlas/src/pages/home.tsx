@@ -367,7 +367,15 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
               textOverflow: "ellipsis",
               maxWidth: 140,
             }}>
-              {project.linkedRepo.includes("/") ? project.linkedRepo.split("/")[1] : project.linkedRepo}
+              {(() => {
+                try {
+                  const r = JSON.parse(project.linkedRepo);
+                  const full = typeof r === "string" ? r : (r.fullName ?? project.linkedRepo);
+                  return full.includes("/") ? full.split("/")[1] : full;
+                } catch {
+                  return project.linkedRepo.includes("/") ? project.linkedRepo.split("/")[1] : project.linkedRepo;
+                }
+              })()}
             </span>
           </div>
         ) : (
@@ -1056,8 +1064,10 @@ export default function Home() {
       const linked = projects.find(p => {
         if (!p.linkedRepo) return false;
         try {
-          const r = JSON.parse(p.linkedRepo) as { fullName?: string };
-          return r.fullName === homeRepo.fullName;
+          const r = JSON.parse(p.linkedRepo) as { fullName?: string } | string;
+          // Handle both old plain-string format ("owner/repo") and new JSON object format
+          const fullName = typeof r === "string" ? r : (r.fullName ?? "");
+          return fullName.toLowerCase() === homeRepo.fullName.toLowerCase();
         } catch { return false; }
       });
       if (linked) target = linked;
