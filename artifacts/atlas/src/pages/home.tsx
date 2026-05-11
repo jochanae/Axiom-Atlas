@@ -1003,7 +1003,11 @@ export default function Home() {
   }, [authUser]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (homeMessages.length === 0) return;
+    const container = messagesEndRef.current?.parentElement;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [homeMessages]);
 
   // Pull-to-refresh
@@ -1321,7 +1325,7 @@ export default function Home() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: "min(50vh, 300px)", overflowY: "auto", paddingRight: 4 }}>
                 {homeMessages.map((msg, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: msg.role === 'user' ? "flex-end" : "flex-start" }}>
+                  <div key={i} style={{ display: "flex", justifyContent: msg.role === 'user' ? "flex-end" : "flex-start", animation: "fadeIn 250ms ease forwards" }}>
                     <div style={{
                       maxWidth: "82%", padding: "9px 13px", borderRadius: msg.role === 'user' ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
                       background: msg.role === 'user' ? "rgba(201,162,76,0.12)" : "rgba(28,25,23,0.8)",
@@ -1331,6 +1335,8 @@ export default function Home() {
                     }}>
                       {msg.role === 'assistant' && msg.content === "" && isAtlasStreaming ? (
                         <span style={{ opacity: 0.4, fontStyle: "italic", fontSize: 11 }}>Atlas is thinking…</span>
+                      ) : msg.role === 'assistant' ? (
+                        <span dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>') }} />
                       ) : msg.content}
                     </div>
                   </div>
@@ -1642,6 +1648,7 @@ export default function Home() {
           0%, 100% { opacity: 0.45; }
           50%       { opacity: 1; }
         }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes homeAxiomPulse {
           0%, 100% {
             box-shadow:
