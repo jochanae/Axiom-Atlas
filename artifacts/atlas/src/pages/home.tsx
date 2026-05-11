@@ -1024,18 +1024,6 @@ export default function Home() {
   const { data: projects, isLoading } = useListProjects();
   const createProject = useCreateProject();
 
-  // Welcome toast — shown once after login/signup redirect
-  useEffect(() => {
-    if (sessionStorage.getItem("atlas-just-authed") === "1") {
-      sessionStorage.removeItem("atlas-just-authed");
-      if (sessionStorage.getItem("atlas-welcome-toast-shown") !== "1") {
-        sessionStorage.setItem("atlas-welcome-toast-shown", "1");
-        const first = authUser?.name ? ` ${authUser.name.split(" ")[0]}` : "";
-        toast.success(`Welcome back${first}`, { description: "Session restored.", duration: 3000 });
-      }
-    }
-  }, [authUser]);
-
   useEffect(() => {
     setBriefingLoading(true);
     fetch("/api/nexus/briefing", {
