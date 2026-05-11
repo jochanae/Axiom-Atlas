@@ -1,4 +1,4 @@
-name: Sync atlas-v2 branch
+Name: Sync atlas-v2 branch
 
 on:
   push:
@@ -12,21 +12,21 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Force-push main to atlas-v2 on jochanae/atlas
+      - name: Force-push main to atlas-v2 on jochanae/Axiom-Atlas
         id: push
         run: |
-          git clone --mirror "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/atlas.git" repo.git
+          git clone --mirror "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/Axiom-Atlas.git" repo.git
           cd repo.git
           # Capture the SHA we're about to push (the tip of the mirrored main)
           PUSHED_SHA=$(git rev-parse refs/heads/main)
           echo "pushed_sha=$PUSHED_SHA" >> "$GITHUB_OUTPUT"
-          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/atlas.git" refs/heads/main:refs/heads/atlas-v2
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/Axiom-Atlas.git" refs/heads/main:refs/heads/atlas-v2
 
       - name: Verify atlas-v2 SHA matches pushed SHA
         env:
           PUSHED_SHA: ${{ steps.push.outputs.pushed_sha }}
         run: |
-          REMOTE_SHA=$(git ls-remote "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/atlas.git" refs/heads/atlas-v2 | awk '{print $1}')
+          REMOTE_SHA=$(git ls-remote "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/jochanae/Axiom-Atlas.git" refs/heads/atlas-v2 | awk '{print $1}')
           echo "Pushed SHA : $PUSHED_SHA"
           echo "Remote SHA : $REMOTE_SHA"
           if [ "$REMOTE_SHA" != "$PUSHED_SHA" ]; then
