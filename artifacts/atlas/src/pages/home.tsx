@@ -799,31 +799,33 @@ function FocusPickerSheet({ current, projects, onSelect, onClose }: {
           <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Focus</span>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
         </div>
-        <div style={{ padding: "0 14px" }}>
-          {[{ id: null, name: "All Projects", sub: "Global view across everything" }, ...projects.map(p => ({ id: p.id as number | null, name: p.name, sub: "Zoom in on this project" }))].map(item => (
-            <button
-              key={item.id ?? "all"}
-              onClick={() => { onSelect(item.id); onClose(); }}
-              style={{
-                width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 8,
-                background: current === item.id ? "rgba(201,162,76,0.06)" : "transparent",
-                border: `1px solid ${current === item.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
-                cursor: "pointer", display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
-                transition: "all 140ms ease",
-              }}
-            >
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.id === null ? "rgba(201,162,76,0.5)" : "rgba(120,113,108,0.4)", flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>{item.name}</div>
-                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.7, marginTop: 1 }}>{item.sub}</div>
-              </div>
-              {current === item.id && (
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </button>
-          ))}
+        <div style={{ paddingTop: 4 }}>
+          <div style={{ padding: "0 14px 16px", overflowY: "auto", maxHeight: "60dvh" }}>
+            {[{ id: null, name: "All Projects", sub: "Global view across everything" }, ...projects.map(p => ({ id: p.id as number | null, name: p.name, sub: "Zoom in on this project" }))].map(item => (
+              <button
+                key={item.id ?? "all"}
+                onClick={() => { onSelect(item.id); onClose(); }}
+                style={{
+                  width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 8,
+                  background: current === item.id ? "rgba(201,162,76,0.06)" : "transparent",
+                  border: `1px solid ${current === item.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
+                  cursor: "pointer", display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
+                  transition: "all 140ms ease",
+                }}
+              >
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.id === null ? "rgba(201,162,76,0.5)" : "rgba(120,113,108,0.4)", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>{item.name}</div>
+                  <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.7, marginTop: 1 }}>{item.sub}</div>
+                </div>
+                {current === item.id && (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
