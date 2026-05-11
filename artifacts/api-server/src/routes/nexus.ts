@@ -6,8 +6,7 @@ import { eq, asc, and, inArray, desc } from "drizzle-orm";
 const router: IRouter = Router();
 
 const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 const NEXUS_SYSTEM_PROMPT = `You are Atlas — the strategic AI persona powering the Nexus.
