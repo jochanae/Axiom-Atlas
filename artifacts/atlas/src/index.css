@@ -253,6 +253,69 @@
   background: rgba(201, 162, 76, 0.4);
 }
 
+/* ── Sonner welcome toast: obsidian glass, mobile-safe lift ───────────────── */
+.atlas-sonner-toaster {
+  z-index: 2147483647 !important;
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast {
+  min-height: 58px;
+  padding: 14px 16px !important;
+  border-radius: 14px !important;
+  overflow: hidden;
+  transform-origin: bottom center;
+  transition: transform 360ms var(--ease-cinematic), opacity 240ms ease !important;
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.08), transparent 38%),
+    radial-gradient(circle at 18% 0%, rgba(212,175,55,0.14), transparent 38%);
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast [data-title] {
+  font-family: var(--app-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--atlas-fg);
+}
+
+.atlas-sonner-toaster .atlas-luxury-toast-description {
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+  color: rgba(231,229,228,0.58) !important;
+  letter-spacing: 0.01em;
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast[data-mounted="true"] {
+  animation: atlas-toast-slide-up 360ms var(--ease-cinematic) both;
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast[data-removed="true"] {
+  animation: atlas-toast-fade-out 220ms ease both;
+}
+
+@keyframes atlas-toast-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes atlas-toast-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 /* ── Atlas glass input shell ── */
 .atlas-input-shell {
   background: var(--atlas-glass-bg);

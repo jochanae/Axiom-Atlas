@@ -994,8 +994,11 @@ export default function Home() {
   useEffect(() => {
     if (sessionStorage.getItem("atlas-just-authed") === "1") {
       sessionStorage.removeItem("atlas-just-authed");
-      const first = authUser?.name ? ` ${authUser.name.split(" ")[0]}` : "";
-      toast.success(`Welcome back${first}`, { description: "Picking up where you left off.", duration: 3000 });
+      if (sessionStorage.getItem("atlas-welcome-toast-shown") !== "1") {
+        sessionStorage.setItem("atlas-welcome-toast-shown", "1");
+        const first = authUser?.name ? ` ${authUser.name.split(" ")[0]}` : "";
+        toast.success(`Welcome back${first}`, { description: "Session restored.", duration: 3000 });
+      }
     }
   }, [authUser]);
 

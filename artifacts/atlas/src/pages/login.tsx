@@ -40,8 +40,11 @@ export default function Login() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      const first = user.name ? ` ${user.name.split(" ")[0]}` : "";
-      toast.success(`Welcome back${first}`, { description: "Session restored.", duration: 3000 });
+      if (sessionStorage.getItem("atlas-just-authed") !== "1" && sessionStorage.getItem("atlas-welcome-toast-shown") !== "1") {
+        sessionStorage.setItem("atlas-welcome-toast-shown", "1");
+        const first = user.name ? ` ${user.name.split(" ")[0]}` : "";
+        toast.success(`Welcome back${first}`, { description: "Session restored.", duration: 3000 });
+      }
       navigate("/home");
     }
   }, [user, isLoading, navigate]);
