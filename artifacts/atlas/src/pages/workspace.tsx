@@ -7404,7 +7404,7 @@ export default function Workspace() {
                                   description: "Your context is copied — just paste it when you arrive.",
                                   duration: 4000,
                                 });
-                                setTimeout(() => window.open("https://gemini.google.com", "_blank"), 600);
+                                setTimeout(() => window.open("https://gemini.google.com", "_blank"), 2500);
                               }
                             }}
                             style={{
