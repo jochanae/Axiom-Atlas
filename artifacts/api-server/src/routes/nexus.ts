@@ -372,6 +372,90 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   });
 });
 
+router.post("/nexus/handoff", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+    const { messages, projectId } = req.body as {
+      messages: { role: string; content: string }[];
+      projectId?: number;
+    };
+
+    if (!messages?.length) {
+      res.status(400).json({ error: "No messages provided" });
+      return;
+    }
+
+    const briefResponse = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1024,
+      system: `You are extracting a project brief from a conversation between a founder and Atlas.
+
+Extract and return ONLY a JSON object with this exact shape — no markdown, no explanation:
+{
+  "projectName": "short name for the project (max 4 words)",
+  "description": "one sentence describing what this project does",
+  "blueprint": "2-3 sentences covering what was decided: what to build, key components identified, approach agreed on",
+  "firstStep": "the single most important first thing to do in the workspace"
+}
+
+If no clear project name was discussed, use "New Project".`,
+      messages: [
+        {
+          role: "user",
+          content: `Here is the conversation:\n\n${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")}\n\nExtract the project brief.`,
+        },
+      ],
+    });
+
+    const rawText = briefResponse.content[0]?.type === "text" ? briefResponse.content[0].text : "{}";
+    let brief: { projectName: string; description: string; blueprint: string; firstStep: string };
+    try {
+      brief = JSON.parse(rawText.replace(/```json|```/g, "").trim());
+    } catch {
+      brief = { projectName: "New Project", description: "", blueprint: rawText, firstStep: "" };
+    }
+
+    let targetProjectId = projectId;
+    if (!targetProjectId) {
+      const [newProject] = await db
+        .insert(projectsTable)
+        .values({ name: brief.projectName, description: brief.description, userId })
+        .returning();
+      targetProjectId = newProject.id;
+    }
+
+    const memoryEntry = {
+      v: 2,
+      entries: [
+        {
+          tier: 1,
+          text: `Project brief from home conversation: ${brief.blueprint}`,
+          createdAt: new Date().toISOString(),
+          retrievalCount: 0,
+          lastRetrievedAt: null,
+        },
+        ...(brief.firstStep ? [{
+          tier: 4,
+          text: `First step: ${brief.firstStep}`,
+          createdAt: new Date().toISOString(),
+          retrievalCount: 0,
+          lastRetrievedAt: null,
+        }] : []),
+      ],
+    };
+
+    await db
+      .update(projectsTable)
+      .set({ memory: JSON.stringify(memoryEntry) })
+      .where(and(eq(projectsTable.id, targetProjectId), eq(projectsTable.userId, userId)));
+
+    res.json({ projectId: targetProjectId, projectName: brief.projectName, brief });
+  } catch (err) {
+    req.log?.error({ err }, "Handoff error");
+    res.status(500).json({ error: "Handoff failed" });
+  }
+});
+
 router.post("/nexus/briefing", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
