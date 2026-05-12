@@ -203,10 +203,10 @@ AI returns `FILE_EDIT_START / FILE_EDIT_CONTENT / FILE_EDIT_END` blocks. Fronten
 
 ---
 
-## Needs a Live End-to-End Test
+## Requirements for Key Features
 
-- **Google OAuth** — route is wired but not tested with a real Google account
-- **FILE_EDIT / GitHub write-back** — built and wired, needs test with real linked repo
+- **Google OAuth** — confirmed working in production
+- **FILE_EDIT / GitHub write-back** — fully built. Requires: (1) a repo linked to the workspace, and (2) a personal GitHub token entered in the Files tab. Token is saved to the project in DB and sent as `x-github-token` on every write. Server's own `GITHUB_TOKEN` only covers reads — writes always use the user's token.
 
 ---
 
