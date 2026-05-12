@@ -6995,7 +6995,7 @@ export default function Workspace() {
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 14px", borderBottom: "1px solid rgba(212,175,55,0.12)", boxShadow: "0 1px 28px rgba(0,0,0,0.45)" }}>
 
-          {/* Left: drawer button + Atlas logo → home */}
+          {/* Left: drawer button + Atlas logo + Trust Mode */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button
               title="Menu"
@@ -7022,7 +7022,43 @@ export default function Workspace() {
             >
               <AtlasLogo small />
             </button>
-            {/* Exit to Nexus */}
+            {/* Trust Mode — moved to left; icon-only on mobile */}
+            <button
+              onClick={() => {
+                if (trustMode === "review") {
+                  const confirmed = window.confirm("AUTO mode: Atlas will push file changes without showing you the diff first. Continue?");
+                  if (!confirmed) return;
+                  setTrustMode("auto");
+                } else {
+                  setTrustMode("review");
+                }
+              }}
+              title={trustMode === "auto" ? "AUTO: changes push without review — tap to switch to REVIEW" : "REVIEW: you approve every diff — tap to switch to AUTO"}
+              style={{
+                display: "flex", alignItems: "center", gap: isMobile ? 0 : 5,
+                padding: isMobile ? "5px 7px" : "4px 10px",
+                borderRadius: 6, fontSize: 10, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.08em", cursor: "pointer",
+                background: trustMode === "auto" ? "rgba(239,100,68,0.12)" : "rgba(37,34,32,0.06)",
+                border: trustMode === "auto" ? "1px solid rgba(239,100,68,0.35)" : "1px solid var(--atlas-border)",
+                color: trustMode === "auto" ? "rgba(239,100,68,0.9)" : "var(--atlas-muted)",
+                transition: "all 300ms ease", flexShrink: 0,
+              }}
+            >
+              {trustMode === "auto" ? (
+                /* Lightning bolt — AUTO */
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+              ) : (
+                /* Eye — REVIEW */
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              )}
+              {!isMobile && <span>{trustMode === "auto" ? "AUTO" : "REVIEW"}</span>}
+            </button>
           </div>
 
           {/* Center: project name + readiness ring + dropdown — hidden in mobile map mode */}
@@ -7196,31 +7232,8 @@ export default function Workspace() {
             )}
           </div>
 
-          {/* Right: % score + mode + P + avatar */}
+          {/* Right: % score + mode + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <button
-              onClick={() => {
-                if (trustMode === "review") {
-                  const confirmed = window.confirm("AUTO mode: Atlas will push file changes without showing you the diff first. Continue?");
-                  if (!confirmed) return;
-                  setTrustMode("auto");
-                } else {
-                  setTrustMode("review");
-                }
-              }}
-              style={{
-                display: "flex", alignItems: "center", gap: 5, padding: "4px 10px",
-                borderRadius: 6, fontSize: 10, fontFamily: "var(--app-font-mono)",
-                letterSpacing: "0.08em", cursor: "pointer",
-                background: trustMode === "auto" ? "rgba(239,100,68,0.12)" : "rgba(37,34,32,0.06)",
-                border: trustMode === "auto" ? "1px solid rgba(239,100,68,0.35)" : "1px solid var(--atlas-border)",
-                color: trustMode === "auto" ? "rgba(239,100,68,0.9)" : "var(--atlas-muted)",
-                transition: "all 300ms ease",
-              }}
-            >
-              <span style={{ fontSize: 7 }}>{trustMode === "auto" ? "●" : "○"}</span>
-              {trustMode === "auto" ? "AUTO" : "REVIEW"}
-            </button>
             <ReadinessRing
               archScore={mapReadiness}
               decisionsScore={healthPct}
