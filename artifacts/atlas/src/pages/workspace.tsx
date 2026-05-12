@@ -202,13 +202,13 @@ function useVoiceInput(onTranscript: (text: string) => void) {
 }
 
 // ── MenuBtn — reusable dropdown menu item ─────────────────────────────────────
-function MenuBtn({ icon, label, onClick, badge, disabled }: { icon: React.ReactNode; label: string; onClick?: () => void; badge?: string; disabled?: boolean }) {
+function MenuBtn({ icon, label, onClick, badge, disabled, style }: { icon: React.ReactNode; label: string; onClick?: () => void; badge?: string; disabled?: boolean; style?: React.CSSProperties }) {
   return (
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
       title={disabled ? "Coming soon" : undefined}
-      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "transparent", border: "none", padding: "9px 12px", borderRadius: 7, cursor: disabled ? "not-allowed" : "pointer", color: "var(--atlas-fg)", opacity: disabled ? 0.45 : 1, fontSize: 13, textAlign: "left" }}
+      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "transparent", border: "none", padding: "9px 12px", borderRadius: 7, cursor: disabled ? "not-allowed" : "pointer", color: "var(--atlas-fg)", opacity: disabled ? 0.45 : 1, fontSize: 13, textAlign: "left", ...style }}
       onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = "color-mix(in oklab, var(--atlas-fg) 8%, transparent)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
     >
@@ -7160,6 +7160,22 @@ export default function Workspace() {
                         <div style={{ padding: "6px 12px 2px", fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.45 }}>
                           Switch to
                         </div>
+                        {/* New idea — creates blank project + opens its workspace */}
+                        <MenuBtn
+                          icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="8" y1="2" x2="8" y2="14" /><line x1="2" y1="8" x2="14" y2="8" /></svg>}
+                          label={createProjectMutation.isPending ? "Creating…" : "New idea"}
+                          onClick={() => {
+                            if (createProjectMutation.isPending) return;
+                            setShowProjectMenu(false);
+                            createProjectMutation.mutate({ data: { name: "New Project" } }, {
+                              onSuccess: (created) => {
+                                queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                                setLocation(`/project/${created.id}`);
+                              },
+                            });
+                          }}
+                          style={{ color: "rgba(201,162,76,0.75)", borderBottom: "1px solid rgba(201,162,76,0.08)" }}
+                        />
                         {others.map(p => (
                           <MenuBtn
                             key={p.id}
