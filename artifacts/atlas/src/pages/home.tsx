@@ -2200,7 +2200,7 @@ export default function Home() {
       </div>
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "0 24px", paddingBottom: 120 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 24px 120px" }}>
         <BelowFoldDashboard
           projects={(projects ?? []).map((p: Project) => ({
             id: p.id,

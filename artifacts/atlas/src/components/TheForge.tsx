@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { haptics } from "@/lib/haptics";
 import { sounds } from "@/lib/sounds";
 import type { ArchNode } from "./AxiomFlow";
@@ -55,6 +55,28 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   const [promptError, setPromptError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // ── File source state ───────────────────────────────────────────────────────
+  type FileSource = "github" | "zip" | "manual";
+  const [fileSource, setFileSource] = useState<FileSource>("manual");
+
+  // GitHub mode
+  type GhProject = { name: string; githubRepo: string; defaultBranch: string };
+  const [ghProjects, setGhProjects] = useState<GhProject[]>([]);
+  const [ghRepo, setGhRepo] = useState("");
+  const [ghBranch, setGhBranch] = useState("main");
+  const [ghTree, setGhTree] = useState<string[]>([]);
+  const [ghSelectedFile, setGhSelectedFile] = useState("");
+  const [ghStatus, setGhStatus] = useState<"idle" | "loading-tree" | "loading-file" | "done" | "error">("idle");
+  const [ghError, setGhError] = useState<string | null>(null);
+
+  // ZIP mode
+  const ZIP_LS_KEY = "atlas-forge-zip";
+  const [zipName, setZipName] = useState("");
+  const [zipFiles, setZipFiles] = useState<Record<string, string>>({});
+  const [zipSelectedFile, setZipSelectedFile] = useState("");
+  const [zipLoading, setZipLoading] = useState(false);
+  const zipInputRef = useRef<HTMLInputElement>(null);
+
   // Load project map from localStorage when projectId is available
   useEffect(() => {
     if (!projectId) return;
@@ -69,6 +91,123 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
       }
     } catch { /* silent */ }
   }, [projectId]);
+
+  // Load stored ZIP on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ZIP_LS_KEY);
+      if (raw) {
+        const stored = JSON.parse(raw) as { name: string; files: Record<string, string> };
+        setZipName(stored.name ?? "");
+        setZipFiles(stored.files ?? {});
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  // Load projects with linked repos for GitHub mode (lazy — only when tab opened)
+  const loadGhProjects = useCallback(() => {
+    if (ghProjects.length > 0) return;
+    fetch("/api/projects", { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then((data: Array<{ name: string; githubRepo?: string; defaultBranch?: string }>) => {
+        const linked = data
+          .filter(p => p.githubRepo)
+          .map(p => ({ name: p.name, githubRepo: p.githubRepo!, defaultBranch: p.defaultBranch ?? "main" }));
+        setGhProjects(linked);
+      })
+      .catch(() => {});
+  }, [ghProjects.length]);
+
+  // ── GitHub handlers ─────────────────────────────────────────────────────────
+  const handleGhRepoSelect = async (repo: string, branch: string) => {
+    setGhRepo(repo);
+    setGhBranch(branch);
+    setGhTree([]);
+    setGhSelectedFile("");
+    setFilePath("");
+    setFileContent("");
+    setGhStatus("loading-tree");
+    setGhError(null);
+    try {
+      const res = await fetch(`/api/github/tree?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`, { credentials: "include" });
+      if (!res.ok) throw new Error("tree-fail");
+      const data = await res.json() as { tree: Array<{ path: string; type: string }> };
+      const files = data.tree
+        .filter(f => f.type === "blob" && !f.path.includes("node_modules") && !f.path.startsWith("."))
+        .map(f => f.path)
+        .sort();
+      setGhTree(files);
+      setGhStatus("idle");
+    } catch {
+      setGhStatus("error");
+      setGhError("Could not load repo. Make sure GitHub is connected.");
+    }
+  };
+
+  const handleGhFileSelect = async (path: string) => {
+    setGhSelectedFile(path);
+    setGhStatus("loading-file");
+    setGhError(null);
+    try {
+      const res = await fetch(`/api/github/file?repo=${encodeURIComponent(ghRepo)}&path=${encodeURIComponent(path)}&branch=${encodeURIComponent(ghBranch)}`, { credentials: "include" });
+      if (!res.ok) throw new Error("file-fail");
+      const data = await res.json() as { content: string; path: string; lines?: number };
+      setFilePath(data.path);
+      setFileContent(data.content);
+      setGhStatus("done");
+    } catch {
+      setGhStatus("error");
+      setGhError("Could not load file content.");
+    }
+  };
+
+  // ── ZIP handlers ────────────────────────────────────────────────────────────
+  const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setZipLoading(true);
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = await JSZip.loadAsync(file);
+      const CODE_EXTS = [".ts", ".tsx", ".js", ".jsx", ".css", ".json", ".md", ".html", ".py", ".swift", ".kt", ".go", ".rb", ".sql"];
+      const extracted: Record<string, string> = {};
+      const entries = Object.entries(zip.files).filter(([p, f]) =>
+        !f.dir &&
+        !p.includes("node_modules") &&
+        !p.startsWith("__MACOSX") &&
+        !p.startsWith(".") &&
+        CODE_EXTS.some(ext => p.endsWith(ext))
+      );
+      for (const [path, entry] of entries.slice(0, 300)) {
+        try { extracted[path] = await entry.async("text"); } catch { /* skip binary */ }
+      }
+      const stored = { name: file.name, files: extracted };
+      localStorage.setItem(ZIP_LS_KEY, JSON.stringify(stored));
+      setZipName(file.name);
+      setZipFiles(extracted);
+      setZipSelectedFile("");
+      setFilePath("");
+      setFileContent("");
+    } catch { /* silent */ } finally {
+      setZipLoading(false);
+      if (zipInputRef.current) zipInputRef.current.value = "";
+    }
+  };
+
+  const handleZipFileSelect = (path: string) => {
+    setZipSelectedFile(path);
+    setFilePath(path);
+    setFileContent(zipFiles[path] ?? "");
+  };
+
+  const clearZip = () => {
+    localStorage.removeItem(ZIP_LS_KEY);
+    setZipName("");
+    setZipFiles({});
+    setZipSelectedFile("");
+    setFilePath("");
+    setFileContent("");
+  };
 
   // ── Forge logic ────────────────────────────────────────────────────────────
   const canForge = transcript.trim().length > 10 && !isForging;
@@ -360,10 +499,14 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         />
       </div>
 
-      {/* File context — collapsible, especially useful for Cursor */}
+      {/* File source — three modes */}
       <div>
+        {/* Section header + toggle */}
         <button
-          onClick={() => setShowFilePane(v => !v)}
+          onClick={() => {
+            setShowFilePane(v => !v);
+            if (!showFilePane && fileSource === "github") loadGhProjects();
+          }}
           style={{
             display: "flex", alignItems: "center", gap: 6,
             background: "none", border: "none", cursor: "pointer",
@@ -374,70 +517,262 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           }}
         >
           <span style={{ fontSize: 12, lineHeight: 1 }}>{showFilePane ? "▾" : "▸"}</span>
-          {isCursor ? "Add file — makes prompt surgical (recommended)" : "Add file context (optional)"}
+          {filePath
+            ? `File: ${filePath.split("/").pop()}`
+            : isCursor ? "Add file — makes prompt surgical (recommended)" : "Add file context (optional)"}
         </button>
 
         {showFilePane && (
-          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-            {/* File path */}
-            <div>
-              <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.6)", textTransform: "uppercase", marginBottom: 6, fontFamily: "var(--app-font-mono)" }}>
-                File path
-              </p>
-              <input
-                type="text"
-                value={filePath}
-                onChange={e => setFilePath(e.target.value)}
-                placeholder="e.g. artifacts/atlas/src/components/CatchCard.tsx"
-                style={{
-                  width: "100%", borderRadius: 8,
-                  border: "1px solid rgba(212,175,55,0.18)",
-                  background: "oklch(0.13 0.01 60)",
-                  padding: "8px 12px",
-                  color: "rgba(231,229,228,0.8)", fontSize: 12, lineHeight: 1.5,
-                  outline: "none", fontFamily: "var(--app-font-mono)",
-                  boxSizing: "border-box" as const,
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.4)"; }}
-                onBlur={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.18)"; }}
-              />
+          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* Source mode tabs */}
+            <div style={{ display: "flex", gap: 5, padding: "3px", background: "oklch(0.13 0.01 60)", borderRadius: 9, border: "1px solid rgba(212,175,55,0.12)" }}>
+              {(["github", "zip", "manual"] as FileSource[]).map(src => {
+                const labels = { github: "GitHub", zip: "ZIP", manual: "File name" };
+                const active = fileSource === src;
+                return (
+                  <button
+                    key={src}
+                    onClick={() => {
+                      setFileSource(src);
+                      setFilePath(""); setFileContent("");
+                      if (src === "github") loadGhProjects();
+                    }}
+                    style={{
+                      flex: 1, padding: "6px 4px", borderRadius: 6,
+                      border: "none", cursor: "pointer",
+                      background: active ? "rgba(212,175,55,0.16)" : "transparent",
+                      color: active ? "#D4AF37" : "rgba(120,113,108,0.55)",
+                      fontSize: 10, fontWeight: 700, fontFamily: "var(--app-font-mono)",
+                      letterSpacing: "0.08em", transition: "all 150ms",
+                    }}
+                  >
+                    {labels[src]}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* File content paste */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.6)", textTransform: "uppercase", margin: 0, fontFamily: "var(--app-font-mono)" }}>
-                  Paste file content
-                </p>
-                {fileContent && (
-                  <span style={{ fontSize: 9, color: "rgba(212,175,55,0.5)", fontFamily: "var(--app-font-mono)" }}>
-                    {fileContent.length.toLocaleString()} chars
-                  </span>
+            {/* ── GITHUB MODE ── */}
+            {fileSource === "github" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                {ghProjects.length === 0 ? (
+                  <p style={{ fontSize: 11, color: "rgba(120,113,108,0.55)", fontFamily: "var(--app-font-mono)", lineHeight: 1.5 }}>
+                    No linked repos found. Link a GitHub repo inside a project workspace first.
+                  </p>
+                ) : (
+                  <>
+                    {/* Repo picker */}
+                    <div>
+                      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.55)", textTransform: "uppercase", marginBottom: 5, fontFamily: "var(--app-font-mono)" }}>Repository</p>
+                      <select
+                        value={ghRepo}
+                        onChange={e => {
+                          const proj = ghProjects.find(p => p.githubRepo === e.target.value);
+                          if (proj) handleGhRepoSelect(proj.githubRepo, proj.defaultBranch);
+                        }}
+                        style={{
+                          width: "100%", borderRadius: 8, padding: "8px 10px",
+                          border: "1px solid rgba(212,175,55,0.2)", background: "oklch(0.13 0.01 60)",
+                          color: ghRepo ? "rgba(231,229,228,0.85)" : "rgba(120,113,108,0.5)",
+                          fontSize: 12, fontFamily: "var(--app-font-mono)", outline: "none",
+                        }}
+                      >
+                        <option value="">Pick a project repo…</option>
+                        {ghProjects.map(p => (
+                          <option key={p.githubRepo} value={p.githubRepo}>{p.name} · {p.githubRepo}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* File picker — shown once tree is loaded */}
+                    {ghTree.length > 0 && (
+                      <div>
+                        <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.55)", textTransform: "uppercase", marginBottom: 5, fontFamily: "var(--app-font-mono)" }}>
+                          File ({ghTree.length} files)
+                        </p>
+                        <select
+                          value={ghSelectedFile}
+                          onChange={e => { if (e.target.value) handleGhFileSelect(e.target.value); }}
+                          style={{
+                            width: "100%", borderRadius: 8, padding: "8px 10px",
+                            border: "1px solid rgba(212,175,55,0.2)", background: "oklch(0.13 0.01 60)",
+                            color: ghSelectedFile ? "rgba(231,229,228,0.85)" : "rgba(120,113,108,0.5)",
+                            fontSize: 11, fontFamily: "var(--app-font-mono)", outline: "none",
+                          }}
+                        >
+                          <option value="">Pick a file…</option>
+                          {ghTree.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Status / error */}
+                    {ghStatus === "loading-tree" && (
+                      <p style={{ fontSize: 10, color: "rgba(212,175,55,0.5)", fontFamily: "var(--app-font-mono)" }}>Loading file tree…</p>
+                    )}
+                    {ghStatus === "loading-file" && (
+                      <p style={{ fontSize: 10, color: "rgba(212,175,55,0.5)", fontFamily: "var(--app-font-mono)" }}>Fetching file content…</p>
+                    )}
+                    {ghStatus === "done" && filePath && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 7, background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.18)" }}>
+                        <span style={{ fontSize: 9, color: "rgba(134,239,172,0.8)", fontFamily: "var(--app-font-mono)" }}>✓ {filePath.split("/").pop()} loaded · {fileContent.split("\n").length} lines</span>
+                      </div>
+                    )}
+                    {ghStatus === "error" && ghError && (
+                      <p style={{ fontSize: 10, color: "rgba(239,100,100,0.8)", fontFamily: "var(--app-font-mono)" }}>{ghError}</p>
+                    )}
+                  </>
                 )}
               </div>
-              <textarea
-                value={fileContent}
-                onChange={e => setFileContent(e.target.value)}
-                placeholder={"Paste the full file here. Atlas will quote exact lines so Cursor knows precisely where to edit."}
-                rows={isMobile ? 6 : 8}
-                style={{
-                  width: "100%", borderRadius: 10,
-                  border: `1px solid ${fileContent ? "rgba(212,175,55,0.28)" : "rgba(212,175,55,0.15)"}`,
-                  background: "oklch(0.12 0.01 60)",
-                  padding: "10px 12px",
-                  color: "rgba(231,229,228,0.75)", fontSize: 11, lineHeight: 1.6,
-                  outline: "none", resize: "none", transition: "border-color 180ms",
-                  boxSizing: "border-box" as const, fontFamily: "var(--app-font-mono)",
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; }}
-                onBlur={e => { e.currentTarget.style.borderColor = fileContent ? "rgba(212,175,55,0.28)" : "rgba(212,175,55,0.15)"; }}
-              />
-              {isCursor && (
-                <p style={{ fontSize: 9.5, color: "rgba(120,113,108,0.45)", fontFamily: "var(--app-font-mono)", marginTop: 5, lineHeight: 1.5 }}>
-                  With this, Atlas quotes exact lines — Cursor needs zero clarification.
+            )}
+
+            {/* ── ZIP MODE ── */}
+            {fileSource === "zip" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                {/* Hidden file input */}
+                <input
+                  ref={zipInputRef}
+                  type="file"
+                  accept=".zip"
+                  style={{ display: "none" }}
+                  onChange={handleZipUpload}
+                />
+
+                {/* ZIP status bar */}
+                {zipName ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.18)" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <span style={{ fontSize: 11, color: "rgba(212,175,55,0.85)", fontFamily: "var(--app-font-mono)", fontWeight: 600 }}>{zipName}</span>
+                      <span style={{ fontSize: 9, color: "rgba(120,113,108,0.55)", fontFamily: "var(--app-font-mono)" }}>{Object.keys(zipFiles).length} files stored · tap Update to replace</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        onClick={() => zipInputRef.current?.click()}
+                        style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(212,175,55,0.3)", background: "transparent", color: "rgba(212,175,55,0.7)", fontSize: 9, fontFamily: "var(--app-font-mono)", cursor: "pointer" }}
+                      >
+                        Update
+                      </button>
+                      <button
+                        onClick={clearZip}
+                        style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(120,113,108,0.25)", background: "transparent", color: "rgba(120,113,108,0.55)", fontSize: 9, fontFamily: "var(--app-font-mono)", cursor: "pointer" }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => zipInputRef.current?.click()}
+                    disabled={zipLoading}
+                    style={{
+                      padding: "12px", borderRadius: 10, cursor: "pointer",
+                      border: "1px dashed rgba(212,175,55,0.28)", background: "oklch(0.13 0.01 60)",
+                      color: "rgba(212,175,55,0.65)", fontSize: 12, fontFamily: "var(--app-font-mono)", fontWeight: 600,
+                    }}
+                  >
+                    {zipLoading ? "Extracting…" : "Upload ZIP of your project →"}
+                  </button>
+                )}
+
+                {/* File picker from ZIP */}
+                {Object.keys(zipFiles).length > 0 && (
+                  <div>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.55)", textTransform: "uppercase", marginBottom: 5, fontFamily: "var(--app-font-mono)" }}>
+                      Pick file from ZIP
+                    </p>
+                    <select
+                      value={zipSelectedFile}
+                      onChange={e => { if (e.target.value) handleZipFileSelect(e.target.value); }}
+                      style={{
+                        width: "100%", borderRadius: 8, padding: "8px 10px",
+                        border: "1px solid rgba(212,175,55,0.2)", background: "oklch(0.13 0.01 60)",
+                        color: zipSelectedFile ? "rgba(231,229,228,0.85)" : "rgba(120,113,108,0.5)",
+                        fontSize: 11, fontFamily: "var(--app-font-mono)", outline: "none",
+                      }}
+                    >
+                      <option value="">Pick a file…</option>
+                      {Object.keys(zipFiles).sort().map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                    {zipSelectedFile && fileContent && (
+                      <p style={{ fontSize: 9, color: "rgba(134,239,172,0.7)", fontFamily: "var(--app-font-mono)", marginTop: 5 }}>
+                        ✓ {zipSelectedFile.split("/").pop()} · {fileContent.split("\n").length} lines
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <p style={{ fontSize: 9.5, color: "rgba(120,113,108,0.4)", fontFamily: "var(--app-font-mono)", lineHeight: 1.55 }}>
+                  ZIP is stored until you clear it — upload once, reuse across prompts.
                 </p>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* ── MANUAL MODE ── */}
+            {fileSource === "manual" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* File path */}
+                <div>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.55)", textTransform: "uppercase", marginBottom: 5, fontFamily: "var(--app-font-mono)" }}>
+                    File path
+                  </p>
+                  <input
+                    type="text"
+                    value={filePath}
+                    onChange={e => setFilePath(e.target.value)}
+                    placeholder="e.g. artifacts/atlas/src/components/CatchCard.tsx"
+                    style={{
+                      width: "100%", borderRadius: 8,
+                      border: "1px solid rgba(212,175,55,0.18)",
+                      background: "oklch(0.13 0.01 60)",
+                      padding: "8px 12px",
+                      color: "rgba(231,229,228,0.8)", fontSize: 12, lineHeight: 1.5,
+                      outline: "none", fontFamily: "var(--app-font-mono)",
+                      boxSizing: "border-box" as const,
+                    }}
+                    onFocus={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.4)"; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.18)"; }}
+                  />
+                </div>
+
+                {/* File content paste */}
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+                    <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "rgba(120,113,108,0.55)", textTransform: "uppercase", margin: 0, fontFamily: "var(--app-font-mono)" }}>
+                      Paste file content (optional)
+                    </p>
+                    {fileContent && (
+                      <span style={{ fontSize: 9, color: "rgba(212,175,55,0.5)", fontFamily: "var(--app-font-mono)" }}>
+                        {fileContent.length.toLocaleString()} chars
+                      </span>
+                    )}
+                  </div>
+                  <textarea
+                    value={fileContent}
+                    onChange={e => setFileContent(e.target.value)}
+                    placeholder="Paste the full file here. Atlas will quote exact lines so Cursor knows precisely where to edit."
+                    rows={isMobile ? 5 : 7}
+                    style={{
+                      width: "100%", borderRadius: 10,
+                      border: `1px solid ${fileContent ? "rgba(212,175,55,0.28)" : "rgba(212,175,55,0.15)"}`,
+                      background: "oklch(0.12 0.01 60)",
+                      padding: "10px 12px",
+                      color: "rgba(231,229,228,0.75)", fontSize: 11, lineHeight: 1.6,
+                      outline: "none", resize: "none", transition: "border-color 180ms",
+                      boxSizing: "border-box" as const, fontFamily: "var(--app-font-mono)",
+                    }}
+                    onFocus={e => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)"; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = fileContent ? "rgba(212,175,55,0.28)" : "rgba(212,175,55,0.15)"; }}
+                  />
+                  {isCursor && (
+                    <p style={{ fontSize: 9.5, color: "rgba(120,113,108,0.45)", fontFamily: "var(--app-font-mono)", marginTop: 5, lineHeight: 1.5 }}>
+                      With content, Atlas quotes exact lines — Cursor needs zero clarification.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
       </div>
