@@ -476,7 +476,7 @@
   box-shadow: var(--atlas-home-header-shadow) !important;
 }
 .atlas-home-center-btn {
-  background: #0A0A0A !important;
+  background: var(--atlas-bg) !important;
 }
 
 /* ── Decision catch card (parchment-aware) ── */

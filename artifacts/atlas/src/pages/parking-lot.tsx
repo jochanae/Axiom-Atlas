@@ -124,7 +124,7 @@ export default function ParkingLot() {
     <div style={{
       height: "100dvh",
       overflowY: "auto",
-      background: "var(--atlas-bg)",
+      background: "transparent",
       display: "flex",
       flexDirection: "column",
     }}>

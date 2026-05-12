@@ -653,7 +653,7 @@ export default function MasterMap() {
   const isMobile = window.innerWidth < 768;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#090806", fontFamily: "var(--app-font-sans)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "var(--atlas-bg)", fontFamily: "var(--app-font-sans)" }}>
       <style>{STYLES}</style>
 
       <canvas
