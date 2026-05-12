@@ -101,7 +101,7 @@ export default function Dashboard() {
   return (
     <div style={{
       height: "100dvh", overflowY: "auto",
-      background: "var(--atlas-bg)", color: "var(--atlas-fg)",
+      background: "transparent", color: "var(--atlas-fg)",
       fontFamily: "var(--app-font-sans)", paddingBottom: 60,
     }}>
       {/* Header */}

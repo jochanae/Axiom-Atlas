@@ -240,7 +240,7 @@ export default function ThinkFreely() {
   const hasThoughts = (thoughts ?? []).length > 0;
 
   return (
-    <div style={{ height: "100dvh", background: "var(--atlas-bg)", color: "var(--atlas-fg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div style={{ height: "100dvh", background: "transparent", color: "var(--atlas-fg)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
       {/* ── Header ── */}
       <header style={{

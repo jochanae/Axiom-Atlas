@@ -209,7 +209,7 @@ export default function Ledger() {
   const committedCount = entries.filter((e: Entry) => e.status === "committed").length;
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--background)", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
+    <div style={{ minHeight: "100vh", background: "transparent", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
       <FooterAuditLine />
 
       {/* ─── Header ─── */}

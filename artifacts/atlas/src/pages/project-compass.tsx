@@ -10,7 +10,7 @@ export default function ProjectCompass() {
   return (
     <div style={{
       height: "100dvh", overflowY: "auto",
-      background: "var(--atlas-bg)", color: "var(--atlas-fg)",
+      background: "transparent", color: "var(--atlas-fg)",
       display: "flex", flexDirection: "column", paddingBottom: 80,
     }}>
       {/* Header */}

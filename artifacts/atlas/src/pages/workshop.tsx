@@ -62,7 +62,7 @@ export default function Workshop() {
   if (activeTool === "bulk-import") return <BulkImport projects={projects} onBack={() => setActiveTool(null)} />;
 
   return (
-    <div style={{ height: "100dvh", overflowY: "auto", background: "var(--atlas-bg)", color: "var(--atlas-fg)", display: "flex", flexDirection: "column", paddingBottom: 80 }}>
+    <div style={{ height: "100dvh", overflowY: "auto", background: "transparent", color: "var(--atlas-fg)", display: "flex", flexDirection: "column", paddingBottom: 80 }}>
       <header style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--atlas-bg)", borderBottom: "1px solid var(--atlas-border)", backdropFilter: "blur(12px)", flexShrink: 0 }}>
         <div style={{ padding: "10px 16px 10px", display: "flex", alignItems: "center", gap: 8 }}>
           <button type="button" onClick={() => setLocation("/home")} style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", background: "transparent", border: "none", padding: 0, cursor: "pointer", opacity: 0.7 }}>
@@ -112,7 +112,7 @@ export default function Workshop() {
 
 function ToolShell({ title, desc, onBack, children }: { title: string; desc: string; onBack: () => void; children: React.ReactNode }) {
   return (
-    <div style={{ height: "100dvh", overflowY: "auto", background: "var(--atlas-bg)", color: "var(--atlas-fg)", display: "flex", flexDirection: "column", paddingBottom: 80 }}>
+    <div style={{ height: "100dvh", overflowY: "auto", background: "transparent", color: "var(--atlas-fg)", display: "flex", flexDirection: "column", paddingBottom: 80 }}>
       <header style={{ position: "sticky", top: 0, zIndex: 20, background: "var(--atlas-bg)", borderBottom: "1px solid var(--atlas-border)", backdropFilter: "blur(12px)" }}>
         <div style={{ padding: "10px 16px" }}>
           <button type="button" onClick={onBack} style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", background: "transparent", border: "none", padding: 0, cursor: "pointer", opacity: 0.7 }}>
