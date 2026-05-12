@@ -4074,9 +4074,9 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
             ) : (
               <button
                 onClick={startDev}
-                disabled={!linkedRepo || !token}
-                title={!linkedRepo || !token ? "Link a GitHub repo in the Files tab first" : `Start dev server for ${linkedRepo?.fullName}`}
-                style={{ padding: "4px 11px", borderRadius: 4, background: linkedRepo && token ? "rgba(201,162,76,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${linkedRepo && token ? "rgba(201,162,76,0.3)" : "var(--atlas-border)"}`, color: linkedRepo && token ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", cursor: linkedRepo && token ? "pointer" : "not-allowed", flexShrink: 0, opacity: linkedRepo && token ? 1 : 0.4 }}
+                disabled={!linkedRepo}
+                title={!linkedRepo ? "Link a GitHub repo in the Files tab first" : `Start dev server for ${linkedRepo?.fullName}`}
+                style={{ padding: "4px 11px", borderRadius: 4, background: linkedRepo ? "rgba(201,162,76,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${linkedRepo ? "rgba(201,162,76,0.3)" : "var(--atlas-border)"}`, color: linkedRepo ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", cursor: linkedRepo ? "pointer" : "not-allowed", flexShrink: 0, opacity: linkedRepo ? 1 : 0.4 }}
               >
                 {devStatus === "error" ? "Retry" : "Start"}
               </button>
@@ -4084,7 +4084,7 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
           </div>
 
           {/* No repo warning */}
-          {(!linkedRepo || !token) && devStatus === "idle" && (
+          {!linkedRepo && devStatus === "idle" && (
             <div style={{ padding: "10px 12px", flexShrink: 0, borderBottom: "1px solid var(--atlas-border)" }}>
               <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5, lineHeight: 1.6 }}>
                 Link a GitHub repo in the <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Files</strong> tab to start a local dev server.

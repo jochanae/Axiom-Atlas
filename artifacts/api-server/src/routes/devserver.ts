@@ -91,10 +91,14 @@ const router = Router();
 
 router.post("/devserver/start", (req, res): void => {
   const { repoFullName, branch = "main" } = req.body as { repoFullName: string; branch?: string };
-  const token = req.headers["x-github-token"] as string | undefined;
+  const token = (req.headers["x-github-token"] as string | undefined) || process.env.GITHUB_TOKEN;
 
-  if (!repoFullName || !token) {
-    res.status(400).json({ error: "Missing repoFullName or x-github-token" });
+  if (!repoFullName) {
+    res.status(400).json({ error: "Missing repoFullName" });
+    return;
+  }
+  if (!token) {
+    res.status(400).json({ error: "No GitHub token available. Add one in the Files tab or set GITHUB_TOKEN." });
     return;
   }
 
