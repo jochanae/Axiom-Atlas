@@ -255,7 +255,7 @@ export default function Projects() {
       )}
 
       {/* ── Content ── */}
-      <main style={{ flex: 1, padding: "20px 16px 40px", maxWidth: 760, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
+      <main style={{ flex: 1, padding: "20px 16px 120px", maxWidth: 760, width: "100%", margin: "0 auto", boxSizing: "border-box" }}>
         {isLoading ? (
           <div style={{ display: "flex", justifyContent: "center", paddingTop: 60 }}>
             <LoadingSpinner size="lg" color="atlas" />
@@ -808,13 +808,13 @@ function ProjectRow({
           onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(true); }}
           title="Project actions"
           style={{
-            background: "transparent", border: "none", borderRadius: 4,
-            padding: "4px 6px", cursor: "pointer", lineHeight: 1,
-            color: "var(--atlas-muted)", opacity: 0.4, transition: "opacity 140ms ease",
+            background: "transparent", border: "1px solid rgba(120,113,108,0.3)", borderRadius: 6,
+            padding: "5px 10px", cursor: "pointer", lineHeight: 1,
+            color: "var(--atlas-muted)", opacity: 0.8, transition: "all 140ms ease",
             flexShrink: 0, fontSize: 15, letterSpacing: "0.05em",
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.4")}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)"; e.currentTarget.style.color = "var(--atlas-gold)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.8"; e.currentTarget.style.borderColor = "rgba(120,113,108,0.3)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
         >
           ···
         </button>
