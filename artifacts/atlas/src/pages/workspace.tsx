@@ -6286,6 +6286,28 @@ export default function Workspace() {
     }, 200);
   }, [sessionId, messages.length, project?.memory, doSend]);
 
+  // Home-to-workspace handoff — fires when arriving via "Take to workspace" on home page
+  const homeHandoffPrimed = useRef(false);
+  useEffect(() => {
+    if (!sessionId || homeHandoffPrimed.current || initialSent.current) return;
+    const fromHome = (() => { try { return new URLSearchParams(window.location.search).get("from") === "home"; } catch { return false; } })();
+    if (!fromHome) return;
+    if (messages.length > 0) { homeHandoffPrimed.current = true; return; }
+    if (!project?.memory) return;
+    try {
+      const mem = JSON.parse(project.memory);
+      const briefEntry = mem?.entries?.find((e: any) =>
+        e.tier === 1 && typeof e.text === "string" && e.text.startsWith("Project brief from home conversation:")
+      );
+      if (!briefEntry) { homeHandoffPrimed.current = true; return; }
+      homeHandoffPrimed.current = true;
+      const briefText = (briefEntry.text as string).replace("Project brief from home conversation: ", "");
+      setTimeout(() => {
+        doSend(`I've just arrived from our home conversation. You have my project brief in memory: "${briefText}". Acknowledge what we discussed and where we're starting — then ask what's first.`, sessionId, []);
+      }, 300);
+    } catch { homeHandoffPrimed.current = true; }
+  }, [sessionId, messages.length, project?.memory, doSend]);
+
   const sendFromIntentCapture = useCallback((text: string) => {
     if (!text.trim() || !sessionId || chatPending) return;
     doSend(text.trim(), sessionId, messages);

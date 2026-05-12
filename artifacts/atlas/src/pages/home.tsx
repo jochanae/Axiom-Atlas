@@ -1194,6 +1194,8 @@ export default function Home() {
   const [showModeSheet, setShowModeSheet] = useState(false);
   const [atlasDetectedMode, setAtlasDetectedMode] = useState<string>("strategic");
   const [focusSuggestion, setFocusSuggestion] = useState<{ projectId: number; projectName: string } | null>(null);
+  const [showHandoff, setShowHandoff] = useState(false);
+  const [handoffLoading, setHandoffLoading] = useState(false);
 
   // Persist context to localStorage whenever it changes
   useEffect(() => {
@@ -1374,6 +1376,9 @@ export default function Home() {
       setHomeMessages(prev => [...prev, { role: 'assistant', content: replyText, model: homeModel, intentType, isNew: true }]);
       if ((data as any).detectedMode) setAtlasDetectedMode((data as any).detectedMode);
       if ((data as any).focusSuggestion) setFocusSuggestion((data as any).focusSuggestion);
+      if ((data as any).detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) {
+        setShowHandoff(true);
+      }
     } catch {
       const target = projects?.at(-1);
       if (target) {
@@ -1387,6 +1392,28 @@ export default function Home() {
     }
   }, [input, isLoading, homeModel, homeFocus, projects, setLocation, handleNewProject]);
 
+
+  const handleHandoff = useCallback(async () => {
+    if (!homeMessages.length) return;
+    setHandoffLoading(true);
+    try {
+      const res = await fetch("/api/nexus/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ messages: homeMessages, projectId: homeFocus ?? undefined }),
+      });
+      const data = await res.json();
+      if (data.projectId) {
+        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+        setLocation(`/project/${data.projectId}?from=home`);
+      }
+    } catch {
+      toast("Handoff failed — try again");
+    } finally {
+      setHandoffLoading(false);
+    }
+  }, [homeMessages, homeFocus, queryClient, setLocation]);
 
   const handleClearThread = useCallback(async () => {
     await fetch("/api/nexus/thread", { method: "DELETE", credentials: "include" }).catch(() => {});
@@ -1822,6 +1849,30 @@ export default function Home() {
                       <button
                         onClick={() => setFocusSuggestion(null)}
                         style={{ background: "transparent", border: "none", fontSize: 13, color: "var(--atlas-muted)", cursor: "pointer", padding: "0 4px" }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+
+                  {showHandoff && homeMessages.length >= 2 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(201,162,76,0.06)", border: "1px solid rgba(201,162,76,0.22)", marginTop: 4, animation: "fadeIn 300ms ease forwards" }}>
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="rgba(201,162,76,0.75)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M3 8h10M9 4l4 4-4 4"/>
+                      </svg>
+                      <span style={{ fontSize: 12, color: "rgba(201,162,76,0.75)", fontFamily: "var(--app-font-mono)", flex: 1, letterSpacing: "0.02em" }}>
+                        Ready to build? Take this to the workspace.
+                      </span>
+                      <button
+                        onClick={handleHandoff}
+                        disabled={handoffLoading}
+                        style={{ background: "rgba(201,162,76,0.13)", border: "1px solid rgba(201,162,76,0.28)", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "rgba(201,162,76,0.9)", cursor: handoffLoading ? "not-allowed" : "pointer", fontFamily: "var(--app-font-mono)", opacity: handoffLoading ? 0.5 : 1, flexShrink: 0, whiteSpace: "nowrap" as const }}
+                      >
+                        {handoffLoading ? "Preparing…" : "Take to workspace →"}
+                      </button>
+                      <button
+                        onClick={() => setShowHandoff(false)}
+                        style={{ background: "transparent", border: "none", fontSize: 14, color: "var(--atlas-muted)", cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 }}
                       >
                         ×
                       </button>
