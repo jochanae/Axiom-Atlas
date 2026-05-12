@@ -5819,22 +5819,20 @@ export default function Workspace() {
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const projectBtnRef = useRef<HTMLButtonElement>(null);
-  const modeBtnRef = useRef<HTMLButtonElement>(null);
-  const lensBtnRef = useRef<HTMLButtonElement>(null);
+  const styleBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
-  const [showModeMenu, setShowModeMenu] = useState(false);
-  const [showLensMenu, setShowLensMenu] = useState(false);
+  const [showStyleMenu, setShowStyleMenu] = useState(false);
   // Close portaled header dropdowns on scroll/resize so they don't float off their anchors.
   useEffect(() => {
-    if (!showProjectMenu && !showModeMenu && !showLensMenu) return;
-    const close = () => { setShowProjectMenu(false); setShowModeMenu(false); setShowLensMenu(false); };
+    if (!showProjectMenu && !showStyleMenu) return;
+    const close = () => { setShowProjectMenu(false); setShowStyleMenu(false); };
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [showProjectMenu, showModeMenu, showLensMenu]);
+  }, [showProjectMenu, showStyleMenu]);
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
   });
@@ -5881,13 +5879,13 @@ export default function Workspace() {
         // Pre-select all PLAN messages
         setHandoffSelected(new Set(planMsgs.map((_, i) => i)));
         setShowHandoffModal(true);
-        setShowModeMenu(false);
+        setShowStyleMenu(false);
         return;
       }
     }
     setProjectMode(m);
     try { localStorage.setItem(`atlas-mode-${id}`, m); } catch {}
-    setShowModeMenu(false);
+    setShowStyleMenu(false);
   };
 
   // Auto-set BUILD mode when arriving via external handoff (Axiom, Compani, etc.)
@@ -7177,74 +7175,14 @@ export default function Workspace() {
               </button>
             )}
 
-            {/* Lens pill — hidden in mobile map mode */}
+            {/* Combined Workflow + Atlas Style pill — hidden in mobile map mode */}
             {!(isMobile && mobileTab === "map") && (() => {
               const lensConfig = {
-                builder:    { color: "rgba(231,229,228,0.6)", bg: "rgba(28,25,23,0.6)",       border: "rgba(37,34,32,0.9)",        label: "Builder",    desc: "Direct · Code-first · Ship it" },
-                strategist: { color: "rgba(201,162,76,0.85)", bg: "rgba(201,162,76,0.08)",    border: "rgba(201,162,76,0.32)",     label: "Strategist", desc: "Big picture · Priorities · Risk" },
-                reviewer:   { color: "rgba(239,100,68,0.85)", bg: "rgba(239,100,68,0.08)",    border: "rgba(239,100,68,0.32)",     label: "Reviewer",   desc: "Critical · Find gaps · Stress-test" },
-                teacher:    { color: "rgba(99,200,150,0.85)", bg: "rgba(99,200,150,0.08)",    border: "rgba(99,200,150,0.32)",     label: "Teacher",    desc: "Explain everything · No jargon" },
+                builder:    { color: "rgba(231,229,228,0.6)",  dot: "rgba(231,229,228,0.55)", label: "Builder",    desc: "Direct · Code-first · Ship it" },
+                strategist: { color: "rgba(201,162,76,0.85)",  dot: "rgba(201,162,76,0.85)",  label: "Strategist", desc: "Big picture · Priorities · Risk" },
+                reviewer:   { color: "rgba(239,100,68,0.85)",  dot: "rgba(239,100,68,0.85)",  label: "Reviewer",   desc: "Critical · Find gaps · Stress-test" },
+                teacher:    { color: "rgba(99,200,150,0.85)",  dot: "rgba(99,200,150,0.85)",  label: "Teacher",    desc: "Explain everything · No jargon" },
               };
-              const lc = lensConfig[projectLens];
-              return (
-                <div style={{ position: "relative" }}>
-                  <button
-                    ref={lensBtnRef}
-                    onClick={() => { setShowLensMenu(v => !v); setShowModeMenu(false); setShowProjectMenu(false); setShowViewMenu(false); }}
-                    title={`Lens: ${lc.label} — ${lc.desc}`}
-                    style={{ display: "flex", alignItems: "center", gap: 5, background: lc.bg, border: `1px solid ${lc.border}`, borderRadius: 7, padding: "5px 8px", cursor: "pointer", color: lc.color, flexShrink: 0, transition: "all 180ms ease", fontSize: 9.5, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.1em" }}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><circle cx="11" cy="11" r="3"/>
-                    </svg>
-                    {!isMobile && lc.label}
-                  </button>
-                  {showLensMenu && createPortal(
-                    <>
-                      <div onClick={() => setShowLensMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
-                      <div
-                        className="atlas-popover"
-                        style={{
-                          position: "fixed",
-                          top: (lensBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
-                          right: Math.max(8, window.innerWidth - (lensBtnRef.current?.getBoundingClientRect().right ?? 0)),
-                          zIndex: 9999, minWidth: 220,
-                        }}
-                      >
-                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.7, padding: "4px 12px 6px" }}>Atlas lens for this project</div>
-                        {(["builder", "strategist", "reviewer", "teacher"] as const).map((l) => {
-                          const lcc = lensConfig[l];
-                          const active = projectLens === l;
-                          return (
-                            <button key={l}
-                              onClick={() => {
-                                setProjectLens(l);
-                                try { localStorage.setItem(`atlas-lens-${id}`, l); } catch {}
-                                setShowLensMenu(false);
-                              }}
-                              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active ? lcc.bg : "transparent", border: "none", padding: "8px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
-                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-                              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = active ? lcc.bg : "transparent"; }}
-                            >
-                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: lcc.color, flexShrink: 0 }} />
-                              <span style={{ flex: 1, textAlign: "left" }}>
-                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? lcc.color : "var(--atlas-fg)" }}>{lcc.label.toUpperCase()}</span>
-                                <span style={{ display: "block", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.75, marginTop: 1 }}>{lcc.desc}</span>
-                              </span>
-                              {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={lcc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>,
-                    document.body
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Mode pill — hidden in mobile map mode */}
-            {!(isMobile && mobileTab === "map") && (() => {
               const modeConfig = {
                 THINK: { color: "#93c5fd", bg: "rgba(96,165,250,0.1)", border: "rgba(96,165,250,0.35)", desc: "Strategy & advice — no code",
                   icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.6-1.4 4.9-3.5 6.2V17a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-1.8C6.4 13.9 5 11.6 5 9a7 7 0 0 1 7-7z" /></svg> },
@@ -7253,50 +7191,82 @@ export default function Workspace() {
                 BUILD: { color: "#4ade80", bg: "rgba(74,222,128,0.1)", border: "rgba(74,222,128,0.35)", desc: "Writes code → push to GitHub",
                   icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> },
               };
-              const cfg = modeConfig[projectMode];
+              const mc = modeConfig[projectMode];
+              const lc = lensConfig[projectLens];
               return (
                 <div style={{ position: "relative" }}>
                   <button
-                    ref={modeBtnRef}
-                    onClick={() => { setShowModeMenu(v => !v); setShowProjectMenu(false); setShowViewMenu(false); }}
-                    title={`Mode: ${projectMode} — ${cfg.desc}`}
-                    style={{ display: "flex", alignItems: "center", gap: 5, background: cfg.bg, border: `1px solid ${cfg.border}`, borderRadius: 7, padding: "5px 8px", cursor: "pointer", color: cfg.color, flexShrink: 0, transition: "all 180ms ease" }}
+                    ref={styleBtnRef}
+                    onClick={() => { setShowStyleMenu(v => !v); setShowProjectMenu(false); setShowViewMenu(false); }}
+                    title={`${projectMode} · ${lc.label} — tap to change`}
+                    style={{ display: "flex", alignItems: "center", gap: 4, background: mc.bg, border: `1px solid ${mc.border}`, borderRadius: 7, padding: "5px 8px", cursor: "pointer", color: mc.color, flexShrink: 0, transition: "all 180ms ease" }}
                   >
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: cfg.color, flexShrink: 0, display: "inline-block" }} />
-                    {cfg.icon}
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: mc.color, flexShrink: 0, display: "inline-block" }} />
+                    {mc.icon}
+                    {!isMobile && <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.1em" }}>{projectMode}</span>}
+                    <span style={{ width: 4, height: 4, borderRadius: "50%", background: lc.dot, flexShrink: 0, display: "inline-block", opacity: 0.75, marginLeft: 1 }} />
                   </button>
-                  {showModeMenu && createPortal(
+                  {showStyleMenu && createPortal(
                     <>
-                      <div onClick={() => setShowModeMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
+                      <div onClick={() => setShowStyleMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
                       <div
                         className="atlas-popover"
                         style={{
                           position: "fixed",
-                          top: (modeBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
-                          right: Math.max(8, window.innerWidth - (modeBtnRef.current?.getBoundingClientRect().right ?? 0)),
-                          zIndex: 9999, minWidth: 210,
+                          top: (styleBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
+                          right: Math.max(8, window.innerWidth - (styleBtnRef.current?.getBoundingClientRect().right ?? 0)),
+                          zIndex: 9999, minWidth: 232,
                         }}
                       >
-                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.7, padding: "4px 12px 6px" }}>Select mode</div>
+                        {/* Section: Workflow */}
+                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.6, padding: "6px 12px 5px" }}>Workflow</div>
                         {(["THINK", "PLAN", "BUILD"] as const).map((m) => {
-                          const mc = modeConfig[m];
+                          const mcc = modeConfig[m];
                           const active = projectMode === m;
                           return (
                             <button key={m}
                               onClick={() => handleModeSelect(m)}
-                              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active ? mc.bg : "transparent", border: "none", padding: "8px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
+                              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active ? mcc.bg : "transparent", border: "none", padding: "7px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
                               onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-                              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = "transparent"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = active ? mcc.bg : "transparent"; }}
                             >
-                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: mc.color, flexShrink: 0 }} />
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: mcc.color, flexShrink: 0 }} />
                               <span style={{ flex: 1, textAlign: "left" }}>
-                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? mc.color : "var(--atlas-fg)" }}>{m}</span>
-                                <span style={{ display: "block", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.75, marginTop: 1 }}>{mc.desc}</span>
+                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? mcc.color : "var(--atlas-fg)" }}>{m}</span>
+                                <span style={{ display: "block", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.75, marginTop: 1 }}>{mcc.desc}</span>
                               </span>
-                              {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={mc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
+                              {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={mcc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
                             </button>
                           );
                         })}
+                        {/* Divider */}
+                        <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "5px 12px" }} />
+                        {/* Section: Atlas Style */}
+                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.6, padding: "5px 12px 5px" }}>Atlas Style</div>
+                        {(["builder", "strategist", "reviewer", "teacher"] as const).map((l) => {
+                          const lcc = lensConfig[l];
+                          const active = projectLens === l;
+                          return (
+                            <button key={l}
+                              onClick={() => {
+                                setProjectLens(l);
+                                try { localStorage.setItem(`atlas-lens-${id}`, l); } catch {}
+                                setShowStyleMenu(false);
+                              }}
+                              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "transparent", border: "none", padding: "7px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
+                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                            >
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: lcc.dot, flexShrink: 0 }} />
+                              <span style={{ flex: 1, textAlign: "left" }}>
+                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? lcc.color : "var(--atlas-fg)" }}>{lcc.label.toUpperCase()}</span>
+                                <span style={{ display: "block", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.75, marginTop: 1 }}>{lcc.desc}</span>
+                              </span>
+                              {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={lcc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
+                            </button>
+                          );
+                        })}
+                        <div style={{ height: 5 }} />
                       </div>
                     </>,
                     document.body

@@ -769,6 +769,19 @@ export default function MasterMap() {
           allProjects={projects}
           onRecenter={() => recenterFnRef.current?.()}
           onDive={(id) => warpFnRef.current?.(id)}
+          onNewIdea={async () => {
+            try {
+              const res = await fetch(`${BASE_URL}/api/projects`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ name: "New Idea" }),
+              });
+              if (!res.ok) return;
+              const proj = await res.json() as { id: number };
+              setLocation(`/project/${proj.id}?view=flow`);
+            } catch { /* silent */ }
+          }}
         />
       )}
 
@@ -786,10 +799,11 @@ export default function MasterMap() {
 
 // ── ViewKey HUD ───────────────────────────────────────────────────────────────
 
-function ViewKey({ allProjects, onRecenter, onDive }: {
+function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
   allProjects: Project[];
   onRecenter: () => void;
   onDive: (id: number) => void;
+  onNewIdea: () => void;
 }) {
   const [flowOpen, setFlowOpen] = useState(false);
   const allNodes = [...allProjects];
@@ -867,6 +881,23 @@ function ViewKey({ allProjects, onRecenter, onDive }: {
           <div style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.4)", letterSpacing: "0.12em", padding: "5px 12px 7px", textTransform: "uppercase" }}>
             Select Flow
           </div>
+          {/* New idea entry — creates a blank project and opens its Flow */}
+          <button onClick={() => { setFlowOpen(false); onNewIdea(); }} style={{
+            width: "100%", padding: "8px 12px", background: "transparent", border: "none",
+            borderBottom: "1px solid rgba(201,162,76,0.1)",
+            cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
+            color: "rgba(201,162,76,0.65)", fontSize: 12.5,
+            fontFamily: "var(--app-font-sans)", transition: "background 120ms ease",
+            marginBottom: 2,
+          }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.07)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ flexShrink: 0, opacity: 0.8 }}>
+              <line x1="8" y1="2" x2="8" y2="14" /><line x1="2" y1="8" x2="14" y2="8" />
+            </svg>
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>New idea</span>
+          </button>
           {allNodes.map(p => {
             const hue = nodeHue(p.name);
             return (
