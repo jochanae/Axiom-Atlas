@@ -152,7 +152,7 @@ export default function Projects() {
 
   return (
     <div style={{
-      minHeight: "100svh",
+      height: "100svh",
       background: "var(--atlas-bg)",
       color: "var(--atlas-fg)",
       display: "flex",
