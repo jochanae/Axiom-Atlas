@@ -4004,59 +4004,62 @@ ${t}
       {previewMode === "local" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {linkedRepo ? (
-            <>
-              {/* Controls bar */}
-              <div style={{ padding: "6px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {linkedRepo.fullName}
-                </span>
-                {/* View toggle */}
-                <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-                  {(["preview", "editor"] as const).map(v => (
-                    <button
-                      key={v}
-                      onClick={() => setSbView(v)}
-                      style={{
-                        padding: "3px 9px", borderRadius: 4, fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
-                        background: sbView === v ? "rgba(201,162,76,0.12)" : "transparent",
-                        border: `1px solid ${sbView === v ? "rgba(201,162,76,0.3)" : "var(--atlas-border)"}`,
-                        color: sbView === v ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                        cursor: "pointer", transition: "all 140ms ease",
-                      }}
-                    >
-                      {v === "preview" ? "Preview" : "Editor"}
-                    </button>
-                  ))}
-                </div>
-                <a
-                  href={`https://stackblitz.com/github/${linkedRepo.fullName}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Open in StackBlitz"
-                  style={{ padding: "3px 7px", borderRadius: 4, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", fontSize: 10, lineHeight: 1, opacity: 0.5, textDecoration: "none", flexShrink: 0, transition: "opacity 140ms ease" }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
-                >↗</a>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px", gap: 20 }}>
+              {/* Repo pill */}
+              <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.18)", borderRadius: 20, padding: "5px 12px" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", letterSpacing: "0.05em" }}>{linkedRepo.fullName}</span>
               </div>
 
-              {/* StackBlitz iframe */}
-              <div style={{ flex: 1, position: "relative" }}>
-                <iframe
-                  key={`sb-${linkedRepo.fullName}-${sbView}`}
-                  src={`https://stackblitz.com/github/${linkedRepo.fullName}?embed=1&view=${sbView}&theme=dark&hideNavigation=1`}
-                  title="StackBlitz"
-                  style={{ border: "none", width: "100%", height: "100%", display: "block" }}
-                  allow="cross-origin-isolated"
-                />
-              </div>
-
-              {/* Private repo note */}
-              <div style={{ flexShrink: 0, padding: "5px 10px", borderTop: "1px solid var(--atlas-border)" }}>
-                <p style={{ margin: 0, fontSize: 8.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.32, lineHeight: 1.5 }}>
-                  Private repos require being logged into StackBlitz in this browser. Works best for web apps (React, Vite, Next.js).
+              {/* Explanation */}
+              <div style={{ textAlign: "center", maxWidth: 260 }}>
+                <p style={{ margin: "0 0 6px", fontSize: 13, color: "var(--atlas-fg)", fontWeight: 500, lineHeight: 1.5 }}>
+                  Open in StackBlitz
+                </p>
+                <p style={{ margin: 0, fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.7 }}>
+                  Embedded preview is blocked by Chrome for private repos — your login can't reach inside an iframe. Open in a new tab and it works instantly.
                 </p>
               </div>
-            </>
+
+              {/* Launch buttons */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 240 }}>
+                <a
+                  href={`https://stackblitz.com/github/${linkedRepo.fullName}?view=preview`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    padding: "11px 16px", borderRadius: 10, textDecoration: "none",
+                    background: "linear-gradient(135deg, rgba(201,162,76,0.18) 0%, rgba(201,162,76,0.08) 100%)",
+                    border: "1px solid rgba(201,162,76,0.35)",
+                    color: "var(--atlas-gold)", fontSize: 12, fontWeight: 600, letterSpacing: "0.04em",
+                    transition: "all 160ms ease",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.2)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(201,162,76,0.18) 0%, rgba(201,162,76,0.08) 100%)"; }}
+                >
+                  ↗ Open Preview
+                </a>
+                <a
+                  href={`https://stackblitz.com/github/${linkedRepo.fullName}?view=editor`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    padding: "11px 16px", borderRadius: 10, textDecoration: "none",
+                    background: "transparent", border: "1px solid var(--atlas-border)",
+                    color: "var(--atlas-muted)", fontSize: 12, letterSpacing: "0.04em",
+                    transition: "all 160ms ease",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.25)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+                >
+                  ↗ Open Editor
+                </a>
+              </div>
+            </div>
           ) : (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" opacity={0.12}>
