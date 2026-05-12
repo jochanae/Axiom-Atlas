@@ -1186,12 +1186,22 @@ export default function Home() {
   const [threadLoading, setThreadLoading] = useState(true);
   const [activeConversationId, setActiveConversationId] = useState<string>(() => {
     try {
-      const stored = localStorage.getItem("atlas-home-conversation-id");
-      if (stored) return stored;
+      const stored = localStorage.getItem("atlas-home-conversation-id")
+        || sessionStorage.getItem("atlas-home-conversation-id");
+      if (stored) {
+        try { localStorage.setItem("atlas-home-conversation-id", stored); } catch {}
+        try { sessionStorage.setItem("atlas-home-conversation-id", stored); } catch {}
+        return stored;
+      }
       const newId = crypto.randomUUID();
-      localStorage.setItem("atlas-home-conversation-id", newId);
+      try { localStorage.setItem("atlas-home-conversation-id", newId); } catch {}
+      try { sessionStorage.setItem("atlas-home-conversation-id", newId); } catch {}
       return newId;
-    } catch { return crypto.randomUUID(); }
+    } catch {
+      const newId = crypto.randomUUID();
+      try { sessionStorage.setItem("atlas-home-conversation-id", newId); } catch {}
+      return newId;
+    }
   });
   const [showHistorySheet, setShowHistorySheet] = useState(false);
   const [historyConversations, setHistoryConversations] = useState<Array<{
@@ -1296,15 +1306,38 @@ export default function Home() {
   }, [homeMessages]);
 
   // Load the active conversation from DB (re-runs when conversationId changes)
+  // If the stored ID returns no messages, auto-recover from the most recent conversation
   useEffect(() => {
     setHomeMessages([]);
     setThreadLoading(true);
     fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(activeConversationId)}`, { credentials: "include" })
       .then(r => r.ok ? r.json() : [])
-      .then((msgs: Array<{ role: string; content: string }>) => {
+      .then(async (msgs: Array<{ role: string; content: string }>) => {
         if (msgs.length > 0) {
           setHomeMessages(msgs.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
+          return;
         }
+        // Thread came back empty — try to recover the most recent conversation from DB
+        try {
+          const convResp = await fetch("/api/nexus/conversations", { credentials: "include" });
+          if (!convResp.ok) return;
+          const convList: Array<{ conversationId: string | null; preview: string; messageCount: number }> = await convResp.json();
+          if (convList.length === 0) return;
+          const mostRecent = convList[0];
+          const recoverId = mostRecent.conversationId ?? "__legacy__";
+          // Only auto-recover if it has real content (more than 1 message)
+          if (mostRecent.messageCount < 2) return;
+          const recoverResp = await fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(recoverId)}`, { credentials: "include" });
+          if (!recoverResp.ok) return;
+          const recoveredMsgs: Array<{ role: string; content: string }> = await recoverResp.json();
+          if (recoveredMsgs.length > 0) {
+            // Restore the recovered conversation ID so subsequent messages continue in it
+            try { localStorage.setItem("atlas-home-conversation-id", recoverId); } catch {}
+            try { sessionStorage.setItem("atlas-home-conversation-id", recoverId); } catch {}
+            setActiveConversationId(recoverId);
+            setHomeMessages(recoveredMsgs.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
+          }
+        } catch {}
       })
       .catch(() => {})
       .finally(() => setThreadLoading(false));
@@ -1457,6 +1490,7 @@ export default function Home() {
   const handleNewConversation = useCallback(() => {
     const newId = crypto.randomUUID();
     try { localStorage.setItem("atlas-home-conversation-id", newId); } catch {}
+    try { sessionStorage.setItem("atlas-home-conversation-id", newId); } catch {}
     setActiveConversationId(newId);
     setHomeMessages([]);
     setShowHistorySheet(false);
