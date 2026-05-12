@@ -1709,16 +1709,12 @@ export default function Home() {
           {/* Chat thread */}
           <div style={{ margin: "18px 0 26px", minHeight: 60 }}>
             {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? (
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 7, marginTop: 18, opacity: 0.55, animation: "fadeIn 600ms ease forwards" }}>
-                {[0, 280, 560].map((delay) => (
-                  <span key={delay} className="atlas-pulse-dot" style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#C9A24C", animationDelay: `${delay}ms` }} />
-                ))}
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 10, opacity: 0.7, animation: "fadeIn 600ms ease forwards" }}>
+                <LoadingSpinner size="sm" color="atlas" />
               </div>
             ) : homeMessages.length === 0 && !isAtlasStreaming ? (
-              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 7, marginTop: 18, opacity: 0.55 }}>
-                {[0, 280, 560].map((delay) => (
-                  <span key={delay} className="atlas-pulse-dot" style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "#C9A24C", animationDelay: `${delay}ms` }} />
-                ))}
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <LoadingSpinner size="sm" color="atlas" />
               </div>
             ) : (
               <>

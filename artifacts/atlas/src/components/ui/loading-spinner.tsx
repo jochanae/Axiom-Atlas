@@ -1,90 +1,101 @@
-interface LoadingSpinnerProps {
-  size?: "sm" | "md" | "lg";
-  color?: "atlas" | "ember" | "phosphor";
-  className?: string;
-  text?: string;
-}
+type BloomSize = "sm" | "md" | "lg";
+type BloomColor = "atlas" | "ember" | "phosphor";
 
-const sizeMap = {
-  sm: { circle: 18, glow: 40 },
-  md: { circle: 48, glow: 110 },
-  lg: { circle: 72, glow: 160 },
-};
+const SIZE_MAP: Record<BloomSize, number> = { sm: 32, md: 48, lg: 64 };
+const CIRCLE_SIZE: Record<BloomSize, number> = { sm: 5, md: 7, lg: 9 };
 
-const GRADIENT = "linear-gradient(135deg, #D4AF37 0%, #B8860B 25%, #805AD5 60%, #D4AF37 100%)";
-const GLOW     = "rgba(212,175,55,0.4)";
-const BLUR_BG  = "radial-gradient(circle, rgba(128,90,213,0.45) 0%, rgba(212,175,55,0.25) 55%, transparent 70%)";
+// Center + 4 petals (top, right, bottom, left) as % of container
+const POSITIONS = [
+  { x: 50, y: 50 },
+  { x: 50, y: 16 },
+  { x: 84, y: 50 },
+  { x: 50, y: 84 },
+  { x: 16, y: 50 },
+];
+
+// Signature Axiom-Atlas palette: gold center, petals alternate purple/gold
+const ATLAS_PETAL_COLORS = [
+  "#C9A24C", // center — gold
+  "#7C3AED", // top — deep violet
+  "#C9A24C", // right — gold
+  "#6D28D9", // bottom — purple
+  "#9333EA", // left — violet
+];
 
 export function LoadingSpinner({
-  size = "lg",
-  className,
-  text,
-}: LoadingSpinnerProps) {
-  const config = sizeMap[size];
-  const staggerDelay = 0.3;
+  size = "md",
+  color = "atlas",
+}: {
+  size?: BloomSize;
+  color?: BloomColor;
+}) {
+  const containerSize = SIZE_MAP[size];
+  const circleSize = CIRCLE_SIZE[size];
+  const blurPx = circleSize * 0.65;
+
+  const getColor = (index: number) => {
+    if (color === "atlas") return ATLAS_PETAL_COLORS[index];
+    if (color === "ember") return "var(--atlas-ember)";
+    return "var(--atlas-phosphor)";
+  };
 
   return (
     <div
-      className={`flex flex-col items-center justify-center gap-3 ${className || ""}`}
+      role="status"
+      aria-label="Loading"
+      style={{
+        position: "relative",
+        width: containerSize,
+        height: containerSize,
+        flexShrink: 0,
+      }}
     >
-      <div
-        className="relative flex items-center justify-center"
-        style={{ width: config.glow, height: config.glow }}
-        role="status"
-        aria-label="Loading"
-      >
-        {/* Blurred background orbs */}
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div
-            key={`blur-${i}`}
-            className="absolute rounded-full"
-            style={{
-              width: config.circle * 0.8,
-              height: config.circle * 0.8,
-              background: BLUR_BG,
-              filter: "blur(16px)",
-              animation: `axiom-bloom-blur 2.5s ease-in-out ${i * staggerDelay}s infinite`,
-            }}
-          />
-        ))}
-
-        {/* 5 overlapping circles with staggered bloom */}
-        {Array.from({ length: 5 }).map((_, i) => (
+      {POSITIONS.map((pos, i) => {
+        const c = getColor(i);
+        return (
           <div
             key={i}
-            className="absolute rounded-full"
             style={{
-              width: config.circle,
-              height: config.circle,
-              background: GRADIENT,
-              boxShadow: `0 0 30px ${GLOW}`,
-              animation: `axiom-bloom-circle 2.5s ease-out ${i * staggerDelay}s infinite`,
+              position: "absolute",
+              left: `${pos.x}%`,
+              top: `${pos.y}%`,
+              width: circleSize,
+              height: circleSize,
+              marginLeft: -circleSize / 2,
+              marginTop: -circleSize / 2,
             }}
-          />
-        ))}
-      </div>
-
-      {text && (
-        <p className="text-sm" style={{ color: "rgba(212,175,55,0.7)" }}>
-          {text}
-        </p>
-      )}
-
-      <style>{`
-        @keyframes axiom-bloom-circle {
-          0%   { transform: scale(0.2) rotate(0deg);   opacity: 0; }
-          25%  { transform: scale(0.7) rotate(90deg);  opacity: 0.7; }
-          35%  { transform: scale(1)   rotate(180deg); opacity: 1; }
-          65%  { transform: scale(1)   rotate(270deg); opacity: 1; }
-          75%  { transform: scale(1.1) rotate(320deg); opacity: 0.7; }
-          100% { transform: scale(1.3) rotate(360deg); opacity: 0; }
-        }
-        @keyframes axiom-bloom-blur {
-          0%   { transform: scale(0.3); opacity: 0; }
-          50%  { transform: scale(1.5); opacity: 0.5; }
-          100% { transform: scale(2);   opacity: 0; }
-        }
-      `}</style>
+          >
+            {/* Glow blur layer behind */}
+            <div
+              aria-hidden
+              className="atlas-bloom-blur"
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                background: c,
+                filter: `blur(${blurPx}px)`,
+                opacity: 0,
+                transform: "scale(0.15)",
+                animationDelay: `${i * 140}ms`,
+              }}
+            />
+            {/* Main circle */}
+            <div
+              className="atlas-bloom-circle"
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                background: c,
+                opacity: 0,
+                transform: "scale(0.25)",
+                animationDelay: `${i * 140}ms`,
+              }}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
