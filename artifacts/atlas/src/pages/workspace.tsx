@@ -285,17 +285,14 @@ function DecisionCatchCard({
 }) {
   const createEntry = useCreateEntry();
   const queryClient = useQueryClient();
-  const [reason, setReason] = useState("");
-  const [showReason, setShowReason] = useState(false);
 
-  const handleProceed = () => {
-    if (!showReason) { setShowReason(true); return; }
+  const handleLog = () => {
     createEntry.mutate(
       {
         projectId,
         data: {
           title: `Override: ${payload.against.title}`,
-          summary: reason || payload.leadSentence,
+          summary: payload.leadSentence,
           status: "committed",
           severity: "committed",
           mode: "decide",
@@ -316,133 +313,111 @@ function DecisionCatchCard({
       role="alert"
       aria-label="Decision Catch"
       className="atlas-catch-card atlas-bubble-in"
-      style={{ padding: "12px 14px", marginTop: 10 }}
+      style={{ padding: "10px 12px", marginTop: 8 }}
     >
-      {/* Header label */}
-      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
-        <span
-          aria-hidden
+      {/* Header row — label + dismiss */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span
+            aria-hidden
+            style={{
+              width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
+              background: "var(--atlas-ember)",
+              boxShadow: "0 0 6px color-mix(in oklab, var(--atlas-ember) 55%, transparent)",
+            }}
+          />
+          <span
+            style={{
+              fontFamily: "var(--app-font-mono)", fontSize: 9,
+              letterSpacing: "0.14em", textTransform: "uppercase" as const,
+              color: "var(--atlas-ember)", opacity: 0.85,
+            }}
+          >
+            Heads up
+          </span>
+        </div>
+        {/* Silent dismiss */}
+        <button
+          onClick={onProceed}
+          title="Dismiss"
           style={{
-            width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-            background: "var(--atlas-ember)",
-            boxShadow: "0 0 8px color-mix(in oklab, var(--atlas-ember) 60%, transparent)",
+            background: "transparent", border: "none", cursor: "pointer",
+            color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1,
+            padding: "2px 4px", opacity: 0.45, transition: "opacity 160ms",
           }}
-        />
-        <span
-          style={{
-            fontFamily: "var(--app-font-mono)", fontSize: 9.5,
-            letterSpacing: "0.14em", textTransform: "uppercase" as const,
-            color: "var(--atlas-ember)",
-          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.45")}
         >
-          Before you do
+          ×
+        </button>
+      </div>
+
+      {/* Against chip */}
+      <div
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 5,
+          marginBottom: 7, padding: "3px 8px", borderRadius: 4,
+          background: "color-mix(in oklab, var(--atlas-ember) 6%, transparent)",
+          border: "0.5px solid color-mix(in oklab, var(--atlas-ember) 20%, transparent)",
+        }}
+      >
+        <span style={{
+          fontFamily: "var(--app-font-mono)", fontSize: 8.5, letterSpacing: "0.1em",
+          textTransform: "uppercase" as const, color: "var(--atlas-ember)", opacity: 0.6,
+        }}>
+          tensions with:
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 500, color: "var(--atlas-fg)", opacity: 0.85 }}>
+          {payload.against.title}
         </span>
       </div>
 
-      {/* Linked decision — the committed entry this catch is against */}
-      <div
-        style={{
-          marginBottom: 10, padding: "7px 10px", borderRadius: 6,
-          background: "color-mix(in oklab, var(--atlas-ember) 6%, transparent)",
-          border: "0.5px solid color-mix(in oklab, var(--atlas-ember) 22%, transparent)",
-        }}
-      >
-        <div
-          style={{
-            fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em",
-            textTransform: "uppercase" as const, color: "var(--atlas-ember)",
-            opacity: 0.65, marginBottom: 3,
-          }}
-        >
-          Against
-        </div>
-        <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--atlas-fg)", lineHeight: 1.35 }}>
-          {payload.against.title}
-        </div>
-      </div>
-
       {/* Lead sentence */}
-      <p style={{ margin: "0 0 12px", fontSize: 13, lineHeight: 1.65, color: "var(--atlas-fg)", opacity: 0.85 }}>
+      <p style={{ margin: "0 0 10px", fontSize: 12, lineHeight: 1.6, color: "var(--atlas-fg)", opacity: 0.75 }}>
         {payload.leadSentence}
       </p>
 
-      {/* Optional reason textarea */}
-      {showReason && (
-        <textarea
-          autoFocus
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="One line on why — optional, but it helps later."
-          rows={2}
-          style={{
-            marginBottom: 12, width: "100%",
-            background: "var(--atlas-surface-alt)",
-            border: "1px solid var(--atlas-border)",
-            borderRadius: 6, padding: "8px 10px",
-            fontSize: 12, color: "var(--atlas-fg)",
-            fontFamily: "var(--app-font-sans)", outline: "none", resize: "none",
-            transition: "border-color 160ms ease",
-          }}
-          onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.35)")}
-          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")}
-        />
-      )}
-
       {/* Actions */}
-      <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-        {/* Ghost: Proceed anyway */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {/* Log the override to the ledger — single tap */}
         <button
           disabled={createEntry.isPending}
-          onClick={handleProceed}
+          onClick={handleLog}
           style={{
-            padding: "5px 12px", fontSize: 10, fontWeight: 600,
+            padding: "4px 11px", fontSize: 9.5, fontWeight: 600,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
             textTransform: "uppercase" as const,
             background: "transparent",
-            color: "color-mix(in oklab, var(--atlas-ember) 90%, var(--atlas-fg))",
-            border: "0.5px solid color-mix(in oklab, var(--atlas-ember) 55%, transparent)",
+            color: "color-mix(in oklab, var(--atlas-ember) 85%, var(--atlas-fg))",
+            border: "0.5px solid color-mix(in oklab, var(--atlas-ember) 45%, transparent)",
             borderRadius: 4,
             cursor: createEntry.isPending ? "not-allowed" : "pointer",
             opacity: createEntry.isPending ? 0.5 : 1,
             transition: "all 160ms ease",
           }}
         >
-          {createEntry.isPending ? "Logging…" : showReason ? "Confirm" : "Proceed anyway"}
+          {createEntry.isPending ? "Logging…" : "Log it"}
         </button>
 
-        {/* Primary: Adjust */}
+        {/* Adjust — refocus the conversation */}
         <button
           disabled={createEntry.isPending}
-          onClick={() => { setShowReason(false); setReason(""); onAdjust(); }}
+          onClick={onAdjust}
           style={{
-            padding: "6px 13px", fontSize: 10, fontWeight: 600,
+            padding: "5px 12px", fontSize: 9.5, fontWeight: 600,
             fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
             textTransform: "uppercase" as const,
             background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)",
             color: "var(--atlas-bg)",
             border: "0.5px solid color-mix(in oklab, var(--atlas-gold) 75%, transparent)",
             borderRadius: 4,
-            boxShadow: "0 0 12px -4px color-mix(in oklab, var(--atlas-gold) 50%, transparent), inset 0 1px 0 rgba(255,255,255,0.15)",
+            boxShadow: "0 0 10px -4px color-mix(in oklab, var(--atlas-gold) 45%, transparent)",
             cursor: createEntry.isPending ? "not-allowed" : "pointer",
             transition: "opacity 160ms ease",
           }}
         >
           Adjust
         </button>
-
-        {showReason && (
-          <button
-            onClick={() => { setShowReason(false); setReason(""); }}
-            style={{
-              marginLeft: "auto", fontSize: 10,
-              fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-              background: "transparent", color: "var(--atlas-muted)",
-              border: "none", cursor: "pointer", opacity: 0.6,
-            }}
-          >
-            cancel
-          </button>
-        )}
       </div>
     </div>
   );
@@ -6411,6 +6386,13 @@ export default function Workspace() {
   const handleSend = () => {
     const text = input.trim();
     if (!text || !sessionId || chatPending) return;
+    // Auto-dismiss any active catch — user chose to keep moving
+    if (activeCatch) {
+      setMessages((prev) => prev.map((m) =>
+        m.catchPayload && !m.catchResolved ? { ...m, catchResolved: true } : m
+      ));
+      setActiveCatch(null);
+    }
     playSend();
     const current = messages;
     const file = attachedFile;
