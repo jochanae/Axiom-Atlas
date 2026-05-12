@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import {
@@ -80,10 +80,14 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showSpinner, setShowSpinner] = useState(true);
+  const spinnerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setShowSpinner(true);
+    if (spinnerTimer.current) clearTimeout(spinnerTimer.current);
     setError(null);
     try {
       const res = await fetch("/api/stats/dashboard", { credentials: "include" });
@@ -93,6 +97,7 @@ export default function Dashboard() {
       setError("Could not load stats.");
     } finally {
       setLoading(false);
+      spinnerTimer.current = setTimeout(() => setShowSpinner(false), 800);
     }
   }, []);
 
@@ -161,7 +166,7 @@ export default function Dashboard() {
       </motion.header>
 
       {/* Body */}
-      {loading && !stats ? (
+      {showSpinner && !stats ? (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "50vh" }}>
           <LoadingSpinner size="lg" color="atlas" />
         </div>

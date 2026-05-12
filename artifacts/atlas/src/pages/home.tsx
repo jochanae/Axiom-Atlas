@@ -1238,6 +1238,7 @@ export default function Home() {
     return () => clearInterval(t);
   }, [isAtlasStreaming]);
   const [, setLocation] = useLocation();
+  const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -1316,6 +1317,8 @@ export default function Home() {
     useCallback(async () => {
       await queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
     }, [queryClient]),
+    true,
+    containerRef,
   );
 
 
@@ -1520,6 +1523,7 @@ export default function Home() {
 
   return (
     <div
+      ref={containerRef}
       className="atlas-home-bg"
       style={{
         height: "100vh",

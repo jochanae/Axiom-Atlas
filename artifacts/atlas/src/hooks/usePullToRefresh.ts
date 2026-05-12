@@ -3,7 +3,11 @@ import { useEffect, useRef, useState, useCallback } from "react";
 const THRESHOLD = 72;
 const MAX_PULL = 110;
 
-export function usePullToRefresh(onRefresh: () => Promise<void> | void, enabled = true) {
+export function usePullToRefresh(
+  onRefresh: () => Promise<void> | void,
+  enabled = true,
+  containerRef?: React.RefObject<HTMLElement | null>,
+) {
   const [distance, setDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const startY = useRef<number | null>(null);
@@ -19,17 +23,23 @@ export function usePullToRefresh(onRefresh: () => Promise<void> | void, enabled 
       setTimeout(() => {
         refreshingRef.current = false;
         setRefreshing(false);
-      }, 600);
+        distanceRef.current = 0;
+        setDistance(0);
+      }, 700);
     }
   }, [onRefresh]);
 
   useEffect(() => {
     if (!enabled) return;
 
+    const getScrollTop = () => {
+      if (containerRef?.current) return containerRef.current.scrollTop;
+      return document.documentElement.scrollTop || document.body.scrollTop;
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       if (refreshingRef.current) return;
-      const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
-      if (scrollTop <= 0 && e.touches[0].clientY < 200) {
+      if (getScrollTop() <= 2) {
         startY.current = e.touches[0].clientY;
       }
     };
@@ -41,6 +51,10 @@ export function usePullToRefresh(onRefresh: () => Promise<void> | void, enabled 
         const d = Math.min(dy * 0.55, MAX_PULL);
         distanceRef.current = d;
         setDistance(d);
+      } else {
+        startY.current = null;
+        distanceRef.current = 0;
+        setDistance(0);
       }
     };
 
@@ -52,20 +66,22 @@ export function usePullToRefresh(onRefresh: () => Promise<void> | void, enabled 
         setDistance(THRESHOLD * 0.7);
         distanceRef.current = THRESHOLD * 0.7;
         await handleRefresh();
+      } else {
+        distanceRef.current = 0;
+        setDistance(0);
       }
-      distanceRef.current = 0;
-      setDistance(0);
     };
 
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
-    window.addEventListener("touchend", onTouchEnd);
+    const target = containerRef?.current ?? window;
+    target.addEventListener("touchstart", onTouchStart as EventListener, { passive: true });
+    target.addEventListener("touchmove", onTouchMove as EventListener, { passive: true });
+    target.addEventListener("touchend", onTouchEnd as EventListener);
     return () => {
-      window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("touchend", onTouchEnd);
+      target.removeEventListener("touchstart", onTouchStart as EventListener);
+      target.removeEventListener("touchmove", onTouchMove as EventListener);
+      target.removeEventListener("touchend", onTouchEnd as EventListener);
     };
-  }, [enabled, handleRefresh]);
+  }, [enabled, handleRefresh, containerRef]);
 
   return { pulling, distance, refreshing, threshold: THRESHOLD };
 }
