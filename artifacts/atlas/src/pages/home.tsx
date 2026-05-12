@@ -1168,7 +1168,7 @@ export default function Home() {
   // After briefing loads, wait 2s then mark intro complete
   useEffect(() => {
     if (briefingLoading) return;
-    const t = setTimeout(() => setBriefingIntroComplete(true), 2000);
+    const t = setTimeout(() => setBriefingIntroComplete(true), 3000);
     return () => clearTimeout(t);
   }, [briefingLoading]);
 
