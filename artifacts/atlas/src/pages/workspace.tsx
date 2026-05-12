@@ -4469,7 +4469,7 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
@@ -5058,6 +5058,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
           projectId={projectId}
           onClose={() => setShowQuickPrompt(false)}
           onNodesReady={(nodes) => { setPendingNodes(nodes); setShowQuickPrompt(false); }}
+          onFillChatInput={onFillIntent}
         />
       )}
 
@@ -5131,6 +5132,7 @@ function RightPanel({
   onHomeNav,
   forceTab,
   onSendIntent,
+  onFillIntent,
   onBackToChat,
   isMobile,
   onMapReadinessChange,
@@ -5163,6 +5165,7 @@ function RightPanel({
   onHomeNav: () => void;
   forceTab?: RightTab;
   onSendIntent?: (text: string) => void;
+  onFillIntent?: (text: string) => void;
   onBackToChat?: () => void;
   isMobile?: boolean;
   onMapReadinessChange?: (score: number) => void;
@@ -5435,7 +5438,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
       {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} />}
     </div>
   );
@@ -8241,6 +8244,7 @@ export default function Workspace() {
                 onHomeNav={() => setLocation("/home")}
                 forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : desktopForceTab}
                 onSendIntent={sendFromIntentCapture}
+                onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
                 onMapReadinessChange={setMapReadiness}
                 onSystemNodeMessage={pushSystemNodeMessage}
                 onHandover={handleHandover}
@@ -8310,6 +8314,7 @@ export default function Workspace() {
                 onHomeNav={() => setLocation("/home")}
                 forceTab={mobileTab === "map" ? "map" : mobileTab === "files" ? "files" : mobileTab === "preview" ? "preview" : undefined}
                 onSendIntent={sendFromIntentCapture}
+                onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
                 onMapReadinessChange={setMapReadiness}
                 onSystemNodeMessage={pushSystemNodeMessage}

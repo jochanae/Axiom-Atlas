@@ -38,9 +38,10 @@ interface Props {
   defaultTab?: "forge" | "prompt";
   onClose: () => void;
   onNodesReady?: (nodes: ArchNode[]) => void;
+  onFillChatInput?: (text: string) => void;
 }
 
-export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, defaultTab = "forge", onClose, onNodesReady }: Props) {
+export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, defaultTab = "forge", onClose, onNodesReady, onFillChatInput }: Props) {
   const [isMobile] = useState(() => window.innerWidth < 768);
   const [tab, setTab] = useState<"forge" | "prompt">(defaultTab);
 
@@ -295,6 +296,8 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   // ── Quick Prompt logic ─────────────────────────────────────────────────────
   const canGenerate = promptDesc.trim().length > 5 && !isGenerating;
 
+  const isAxiom = selectedPlatform === "Axiom";
+
   const handleGenerate = async () => {
     if (!canGenerate) return;
     setIsGenerating(true);
@@ -316,7 +319,12 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
       });
       if (!res.ok) throw new Error("Generation failed");
       const text = await res.text();
-      setGeneratedPrompt(text);
+      if (isAxiom && onFillChatInput) {
+        onFillChatInput(text);
+        onClose();
+      } else {
+        setGeneratedPrompt(text);
+      }
     } catch {
       setPromptError("Generation failed — try again.");
     } finally {
@@ -843,10 +851,10 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
             <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#D4AF37", animation: "forge-pulse 1.4s ease-in-out infinite" }} />
             <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}>
-              {isCursor && fileContent ? "Reading file & writing prompt…" : `Generating for ${selectedPlatform}…`}
+              {isAxiom ? "Generating & sending to chat…" : isCursor && fileContent ? "Reading file & writing prompt…" : `Generating for ${selectedPlatform}…`}
             </span>
           </span>
-        ) : `Generate ${selectedPlatform} Prompt →`}
+        ) : isAxiom && onFillChatInput ? "Generate & Send to Workspace Chat →" : `Generate ${selectedPlatform} Prompt →`}
       </button>
 
       {promptError && (
