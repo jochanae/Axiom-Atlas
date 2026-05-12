@@ -4101,15 +4101,15 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
             </div>
           )}
 
-          {/* Log output */}
-          {devLogs.length > 0 && devStatus !== "running" && (
+          {/* Log output — always visible, collapsible when running */}
+          {devLogs.length > 0 && (
             <div
               ref={devLogRef}
-              style={{ flexShrink: 0, maxHeight: 160, overflowY: "auto", padding: "6px 10px", borderBottom: "1px solid var(--atlas-border)", background: "rgba(0,0,0,0.25)" }}
+              style={{ flexShrink: 0, maxHeight: devStatus === "running" ? 90 : 160, overflowY: "auto", padding: "6px 10px", borderBottom: "1px solid var(--atlas-border)", background: "rgba(0,0,0,0.25)" }}
               className="scrollbar-none"
             >
               {devLogs.map((line, i) => (
-                <div key={i} style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.65, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                <div key={i} style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: line.toLowerCase().includes("error") || line.toLowerCase().includes("failed") ? "rgba(252,165,165,0.7)" : "var(--atlas-muted)", opacity: 0.75, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
                   {line}
                 </div>
               ))}
@@ -4126,7 +4126,7 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
                 style={{ border: "none", width: "100%", height: "100%", display: "block", background: "#fff" }}
               />
             </div>
-          ) : devStatus === "idle" && linkedRepo && token ? (
+          ) : devStatus === "idle" && linkedRepo ? (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 10 }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" opacity={0.12}><rect x="3" y="3" width="18" height="18" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" /><path d="M9 9l6 3-6 3V9z" fill="var(--atlas-fg)" /></svg>
               <div style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.7 }}>
