@@ -31,6 +31,88 @@ const PLACEHOLDERS = [
   "What would have to be true for this to work…",
 ];
 
+const HOME_PENDING_PHRASES = [
+  "Loading context…",
+  "Thinking…",
+  "Reviewing your portfolio…",
+  "Composing a response…",
+];
+
+function renderMarkdown(text: string): string {
+  return text
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_: string, _lang: string, code: string) =>
+      `<pre style="background:rgba(28,25,23,0.9);border:1px solid rgba(37,34,32,0.9);border-radius:6px;padding:9px 11px;overflow-x:auto;margin:6px 0"><code style="font-family:var(--app-font-mono);font-size:11px;color:rgba(231,229,228,0.85);white-space:pre">${code.trim().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</code></pre>`)
+    .replace(/^### (.+)$/gm, '<div style="font-size:11px;font-weight:700;color:var(--atlas-gold);letter-spacing:0.07em;text-transform:uppercase;margin:10px 0 3px">$1</div>')
+    .replace(/^## (.+)$/gm, '<div style="font-size:13px;font-weight:700;color:var(--atlas-fg);margin:8px 0 3px">$1</div>')
+    .replace(/^# (.+)$/gm, '<div style="font-size:14px;font-weight:700;color:var(--atlas-fg);margin:8px 0 4px">$1</div>')
+    .replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.*?)\*/g, "<em>$1</em>")
+    .replace(/`([^`\n]+)`/g, '<code style="font-family:var(--app-font-mono);font-size:11px;background:rgba(37,34,32,0.9);padding:1px 5px;border-radius:3px;color:rgba(201,162,76,0.9)">$1</code>')
+    .replace(/^[-•*] (.+)$/gm, '<div style="display:flex;gap:7px;margin:2px 0"><span style="color:var(--atlas-gold);opacity:0.6;flex-shrink:0;margin-top:2px;font-size:10px">▸</span><span>$1</span></div>')
+    .replace(/^(\d+)\. (.+)$/gm, '<div style="display:flex;gap:7px;margin:2px 0"><span style="color:var(--atlas-muted);font-family:var(--app-font-mono);font-size:10px;flex-shrink:0;min-width:14px;margin-top:1px">$1.</span><span>$2</span></div>')
+    .replace(/\n\n/g, "<br/><br/>")
+    .replace(/\n/g, "<br/>");
+}
+
+function HomeStreamingText({ text, animate, style }: { text: string; animate: boolean; style?: React.CSSProperties }) {
+  const [visibleCount, setVisibleCount] = useState(animate ? 0 : Infinity);
+  const words = useRef<string[]>([]);
+
+  useEffect(() => {
+    words.current = text.match(/\S+|\n/g) ?? [];
+    setVisibleCount(animate ? 0 : Infinity);
+  }, [text, animate]);
+
+  useEffect(() => {
+    if (!animate) return;
+    const total = words.current.length;
+    if (visibleCount >= total) return;
+    const last = words.current[visibleCount - 1] ?? "";
+    const pause = /[.!?]$/.test(last) ? 140 : 28 + Math.random() * 24;
+    const t = setTimeout(() => setVisibleCount(c => Math.min(c + (Math.random() > 0.7 ? 2 : 1), total)), pause);
+    return () => clearTimeout(t);
+  }, [visibleCount, animate]);
+
+  const done = !animate || visibleCount >= (words.current.length || Infinity);
+  if (done) return <div style={style} dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} />;
+  const visible = words.current.slice(0, visibleCount).join(" ");
+  return <div style={style}>{visible}<span className="atlas-cursor" /></div>;
+}
+
+function splitHomeChunks(text: string): string[] {
+  if (text.length < 200) return [text];
+  return text.split(/\n{2,}/).reduce((acc: string[], chunk) => {
+    if (chunk.trim()) acc.push(chunk);
+    return acc;
+  }, []);
+}
+
+function HomeChunkedBubbles({ text, isNew }: { text: string; isNew: boolean }) {
+  const chunks = splitHomeChunks(text);
+  const [revealed, setRevealed] = useState(isNew ? 0 : chunks.length);
+
+  useEffect(() => {
+    if (!isNew || revealed >= chunks.length) return;
+    const t = setTimeout(() => setRevealed(r => r + 1), revealed === 0 ? 80 : 500 + Math.random() * 300);
+    return () => clearTimeout(t);
+  }, [revealed, chunks.length, isNew]);
+
+  const visible = chunks.slice(0, isNew ? Math.min(revealed + 1, chunks.length) : chunks.length);
+  return (
+    <>
+      {visible.map((chunk, i) => (
+        <HomeStreamingText
+          key={i}
+          text={chunk}
+          animate={isNew && i === revealed && revealed < chunks.length}
+          style={i < visible.length - 1 ? { marginBottom: 10 } : undefined}
+        />
+      ))}
+    </>
+  );
+}
+
 // ── Typewriter hook ──────────────────────────────────────────────────────────
 function useTypewriter(phrases: string[]) {
   const [display, setDisplay] = useState("");
@@ -1085,8 +1167,9 @@ export default function Home() {
   const [showProjectsSheet, setShowProjectsSheet] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string}>>([]);
+  const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; model?: string; intentType?: string | null; isNew?: boolean}>>([]);
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
+  const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [threadLoading, setThreadLoading] = useState(true);
@@ -1116,6 +1199,13 @@ export default function Home() {
   useEffect(() => {
     try { localStorage.setItem("atlas-home-context", JSON.stringify({ focusId: homeFocus, model: homeModel, mode: homeMode })); } catch {}
   }, [homeFocus, homeModel, homeMode]);
+
+  // Cycle pending phrases while Atlas is generating
+  useEffect(() => {
+    if (!isAtlasStreaming) { setPendingPhraseIdx(0); return; }
+    const t = setInterval(() => setPendingPhraseIdx(i => (i + 1) % HOME_PENDING_PHRASES.length), 2400);
+    return () => clearInterval(t);
+  }, [isAtlasStreaming]);
   const [, setLocation] = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1273,7 +1363,15 @@ export default function Home() {
       if (!res.ok) throw new Error("No response");
       const data = await res.json() as { reply?: string; message?: string };
       const replyText = (data as any).response ?? (data as any).reply ?? (data as any).message ?? "";
-      setHomeMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
+      const intentType = (() => {
+        const lower = replyText.toLowerCase();
+        const buildSignals = ["let me build", "here's the code", "here is the code", "i'll implement", "i'll create", "i'll write", "here's a component", "here is a component"];
+        const planSignals = ["here's a plan", "here is a plan", "let's structure", "roadmap", "framework", "here's an outline", "here is an outline", "breakdown"];
+        if (buildSignals.some(s => lower.includes(s))) return "BUILD";
+        if (planSignals.some(s => lower.includes(s))) return "PLAN";
+        return null;
+      })();
+      setHomeMessages(prev => [...prev, { role: 'assistant', content: replyText, model: homeModel, intentType, isNew: true }]);
       if ((data as any).detectedMode) setAtlasDetectedMode((data as any).detectedMode);
       if ((data as any).focusSuggestion) setFocusSuggestion((data as any).focusSuggestion);
     } catch {
@@ -1622,50 +1720,95 @@ export default function Home() {
                 </div>
 
                 {/* Messages */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: "min(50vh, 300px)", overflowY: "auto", paddingRight: 4 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: "min(55vh, 360px)", overflowY: "auto", paddingRight: 4 }}>
                   {homeMessages.map((msg, i) => (
-                    <div key={i} style={{ display: "flex", flexDirection: msg.role === 'user' ? "row-reverse" : "row", alignItems: "flex-end", gap: 5, animation: "fadeIn 250ms ease forwards" }}>
-                      <div style={{
-                        maxWidth: "82%", padding: "9px 13px", borderRadius: msg.role === 'user' ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
-                        background: msg.role === 'user' ? "rgba(201,162,76,0.12)" : "rgba(28,25,23,0.8)",
-                        border: `0.5px solid ${msg.role === 'user' ? "rgba(201,162,76,0.3)" : "rgba(37,34,32,0.9)"}`,
-                        fontSize: 13, lineHeight: 1.55, color: "var(--atlas-fg)",
-                        fontFamily: "var(--app-font-sans)",
-                      }}>
-                        {msg.role === 'assistant' && msg.content === "" && isAtlasStreaming ? (
-                          <span style={{ opacity: 0.4, fontStyle: "italic", fontSize: 11 }}>Atlas is thinking…</span>
-                        ) : msg.role === 'assistant' ? (
-                          <span dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>') }} />
-                        ) : msg.content}
-                      </div>
-                      {/* Copy button — Atlas bubbles only */}
-                      {msg.role === 'assistant' && msg.content && (
-                        <button
-                          title={copiedMsgIdx === i ? "Copied!" : "Copy"}
-                          onClick={() => {
-                            navigator.clipboard.writeText(msg.content).catch(() => {});
-                            setCopiedMsgIdx(i);
-                            setTimeout(() => setCopiedMsgIdx(prev => prev === i ? null : prev), 1800);
-                          }}
-                          style={{
-                            background: "transparent", border: "none", padding: "3px", cursor: "pointer",
-                            opacity: copiedMsgIdx === i ? 0.9 : 0.28,
-                            color: copiedMsgIdx === i ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                            lineHeight: 1, flexShrink: 0, transition: "opacity 140ms, color 140ms",
-                            marginBottom: 3,
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.opacity = "0.65")}
-                          onMouseLeave={e => (e.currentTarget.style.opacity = copiedMsgIdx === i ? "0.9" : "0.28")}
-                        >
-                          {copiedMsgIdx === i ? (
-                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8l4 4 6-7"/></svg>
-                          ) : (
-                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="1" width="10" height="13" rx="1.5"/><path d="M3 3H2a1 1 0 00-1 1v11a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>
+                    <div key={i} style={{ display: "flex", flexDirection: msg.role === 'user' ? "row-reverse" : "row", alignItems: "flex-start", gap: 6, animation: "fadeIn 250ms ease forwards" }}>
+                      {msg.role === 'assistant' ? (
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          {/* Model label + intent badge */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                            <span style={{
+                              fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+                              textTransform: "uppercase", opacity: 0.45,
+                              color: msg.model === "gpt4o" ? "#10a37f" : msg.model === "gemini" ? "#4285f4" : "var(--atlas-gold)",
+                            }}>Atlas</span>
+                            {msg.intentType && (
+                              <span style={{
+                                fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                                padding: "1px 6px", borderRadius: 3,
+                                background: msg.intentType === "BUILD" ? "rgba(74,222,128,0.1)" : "rgba(201,162,76,0.1)",
+                                border: `1px solid ${msg.intentType === "BUILD" ? "rgba(74,222,128,0.25)" : "rgba(201,162,76,0.25)"}`,
+                                color: msg.intentType === "BUILD" ? "#4ade80" : "var(--atlas-gold)",
+                              }}>{msg.intentType}</span>
+                            )}
+                          </div>
+                          {/* Bubble */}
+                          <div style={{
+                            padding: "10px 13px", borderRadius: "4px 12px 12px 12px",
+                            background: "rgba(28,25,23,0.8)",
+                            border: "0.5px solid rgba(37,34,32,0.9)",
+                            fontSize: 13, lineHeight: 1.65, color: "var(--atlas-fg)",
+                            fontFamily: "var(--app-font-sans)",
+                          }}>
+                            <HomeChunkedBubbles text={msg.content} isNew={!!msg.isNew} />
+                          </div>
+                          {/* Copy button */}
+                          {msg.content && (
+                            <button
+                              title={copiedMsgIdx === i ? "Copied!" : "Copy"}
+                              onClick={() => {
+                                navigator.clipboard.writeText(msg.content).catch(() => {});
+                                setCopiedMsgIdx(i);
+                                setTimeout(() => setCopiedMsgIdx(prev => prev === i ? null : prev), 1800);
+                              }}
+                              style={{
+                                background: "transparent", border: "none", padding: "3px 2px", cursor: "pointer",
+                                opacity: copiedMsgIdx === i ? 0.9 : 0.28,
+                                color: copiedMsgIdx === i ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                                lineHeight: 1, transition: "opacity 140ms, color 140ms", marginTop: 3,
+                              }}
+                              onMouseEnter={e => (e.currentTarget.style.opacity = "0.65")}
+                              onMouseLeave={e => (e.currentTarget.style.opacity = copiedMsgIdx === i ? "0.9" : "0.28")}
+                            >
+                              {copiedMsgIdx === i ? (
+                                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8l4 4 6-7"/></svg>
+                              ) : (
+                                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="1" width="10" height="13" rx="1.5"/><path d="M3 3H2a1 1 0 00-1 1v11a1 1 0 001 1h10a1 1 0 001-1v-1"/></svg>
+                              )}
+                            </button>
                           )}
-                        </button>
+                        </div>
+                      ) : (
+                        <div style={{
+                          maxWidth: "80%", padding: "9px 13px", borderRadius: "12px 12px 4px 12px",
+                          background: "rgba(201,162,76,0.12)",
+                          border: "0.5px solid rgba(201,162,76,0.3)",
+                          fontSize: 13, lineHeight: 1.55, color: "var(--atlas-fg)",
+                          fontFamily: "var(--app-font-sans)",
+                        }}>
+                          {msg.content}
+                        </div>
                       )}
                     </div>
                   ))}
+
+                  {/* Thinking indicator */}
+                  {isAtlasStreaming && (
+                    <div style={{ display: "flex", flexDirection: "row", alignItems: "flex-start", gap: 6, animation: "fadeIn 200ms ease forwards" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.4, marginBottom: 6 }}>
+                          Atlas
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <LoadingSpinner size="sm" color="atlas" />
+                          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", letterSpacing: "0.07em", opacity: 0.7, transition: "opacity 400ms ease" }}>
+                            {HOME_PENDING_PHRASES[pendingPhraseIdx]}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div ref={messagesEndRef} />
                   {focusSuggestion && !homeFocus && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "rgba(99,130,239,0.08)", border: "1px solid rgba(99,130,239,0.2)", fontSize: 12, color: "rgba(180,190,255,0.85)", fontFamily: "var(--app-font-mono)", marginTop: 4 }}>
