@@ -97,7 +97,7 @@ function runCommand(cmd: string, args: string[], cwd?: string): Promise<void> {
 const router = Router();
 
 router.post("/devserver/start", (req, res): void => {
-  const { repoFullName, branch = "main" } = req.body as { repoFullName: string; branch?: string };
+  const { repoFullName, branch = "main", envVars = {} } = req.body as { repoFullName: string; branch?: string; envVars?: Record<string, string> };
   const token = (req.headers["x-github-token"] as string | undefined) || process.env.GITHUB_TOKEN;
 
   if (!repoFullName) {
@@ -151,7 +151,7 @@ router.post("/devserver/start", (req, res): void => {
       const proc = spawn(cmd, args, {
         cwd: repoDir,
         shell: true,
-        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", PORT: "5173" },
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", PORT: "5173", ...envVars },
       });
       state.proc = proc;
 

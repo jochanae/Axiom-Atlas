@@ -3498,6 +3498,8 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
   const [devLogs, setDevLogs] = useState<string[]>([]);
   const [devError, setDevError] = useState<string | null>(null);
   const [devReloadKey, setDevReloadKey] = useState(0);
+  const [devEnvVars, setDevEnvVars] = useState("");
+  const [showEnvPanel, setShowEnvPanel] = useState(false);
   const devLogRef = useRef<HTMLDivElement>(null);
 
   const { data: previewProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
@@ -3549,10 +3551,19 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["x-github-token"] = token;
+      const envVars: Record<string, string> = {};
+      for (const line of devEnvVars.split("\n")) {
+        const eq = line.indexOf("=");
+        if (eq > 0) {
+          const k = line.slice(0, eq).trim();
+          const v = line.slice(eq + 1).trim();
+          if (k) envVars[k] = v;
+        }
+      }
       const r = await fetch("/api/devserver/start", {
         method: "POST",
         headers,
-        body: JSON.stringify({ repoFullName: linkedRepo.fullName, branch: linkedRepo.defaultBranch ?? "main" }),
+        body: JSON.stringify({ repoFullName: linkedRepo.fullName, branch: linkedRepo.defaultBranch ?? "main", envVars }),
       });
       if (r.ok) {
         const d = await r.json() as { status: DevStatus };
@@ -4091,6 +4102,31 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
               <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5, lineHeight: 1.6 }}>
                 Link a GitHub repo in the <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Files</strong> tab to start a local dev server.
               </div>
+            </div>
+          )}
+
+          {/* Env vars panel */}
+          {linkedRepo && (devStatus === "idle" || devStatus === "error") && (
+            <div style={{ flexShrink: 0, borderBottom: "1px solid var(--atlas-border)" }}>
+              <button
+                onClick={() => setShowEnvPanel((v) => !v)}
+                style={{ width: "100%", padding: "5px 10px", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", opacity: 0.6 }}
+              >
+                <span>ENV VARS {devEnvVars.trim() ? `(${devEnvVars.trim().split("\n").filter(l => l.includes("=")).length} set)` : "(optional)"}</span>
+                <span style={{ fontSize: 8 }}>{showEnvPanel ? "▲" : "▼"}</span>
+              </button>
+              {showEnvPanel && (
+                <div style={{ padding: "0 10px 8px" }}>
+                  <textarea
+                    value={devEnvVars}
+                    onChange={(e) => setDevEnvVars(e.target.value)}
+                    placeholder={"VITE_SUPABASE_URL=https://...\nVITE_SUPABASE_ANON_KEY=eyJ..."}
+                    rows={4}
+                    style={{ width: "100%", boxSizing: "border-box", background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)", borderRadius: 4, color: "var(--atlas-fg)", fontSize: 9, fontFamily: "var(--app-font-mono)", lineHeight: 1.7, padding: "6px 8px", resize: "vertical", outline: "none" }}
+                  />
+                  <div style={{ fontSize: 8.5, color: "var(--atlas-muted)", opacity: 0.45, marginTop: 3 }}>One KEY=value per line. Not stored — only used for this session.</div>
+                </div>
+              )}
             </div>
           )}
 
