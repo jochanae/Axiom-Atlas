@@ -4486,6 +4486,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
 
   const [flowChatTab, setFlowChatTab] = useState<"flow" | "intent">("flow");
   const [flowMessages, setFlowMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [flowAttachedFiles, setFlowAttachedFiles] = useState<File[]>([]);
+  const flowFileInputRef = useRef<HTMLInputElement>(null);
+  const [chatFullscreen, setChatFullscreen] = useState(false);
   const [flowLoading, setFlowLoading] = useState(false);
   const [flowInput, setFlowInput] = useState("");
   const flowScrollRef = useRef<HTMLDivElement>(null);
@@ -4500,7 +4503,13 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
 
   const sendFlowMessage = useCallback(async (text: string) => {
     if (!text.trim() || flowLoading) return;
-    setFlowMessages(prev => [...prev, { role: "user", content: text }]);
+    const files = flowAttachedFiles;
+    setFlowAttachedFiles([]);
+    const imageFile = files.find(f => f.type.startsWith("image/"));
+    const otherFiles = files.filter(f => f !== imageFile);
+    const suffix = otherFiles.length > 0 ? `\n[Attached: ${otherFiles.map(f => f.name).join(", ")}]` : "";
+    const fullText = text + suffix;
+    setFlowMessages(prev => [...prev, { role: "user", content: fullText }]);
     setFlowInput("");
     setFlowLoading(true);
     try {
@@ -4513,12 +4522,18 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         credentials: "include",
         body: JSON.stringify({
           projectId,
-          message: text,
+          message: fullText,
           flowMode: true,
           flowNodes: nodes,
           history: flowMessages.map(m => ({ role: m.role, content: m.content })),
           projectMap: nodeContext,
           mode: "plan",
+          ...(imageFile ? await new Promise<{ imageBase64: string; imageMediaType: string }>(resolve => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ imageBase64: (reader.result as string).split(",")[1], imageMediaType: imageFile.type });
+            reader.onerror = () => resolve({ imageBase64: "", imageMediaType: "" });
+            reader.readAsDataURL(imageFile);
+          }) : {}),
         }),
       }).then(r => r.ok ? r.json() : Promise.reject(r.status));
       const incoming = (res.flowNodes ?? []) as ArchNode[];
@@ -4529,7 +4544,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
     } finally {
       setFlowLoading(false);
     }
-  }, [flowMessages, flowLoading, nodes, projectId]);
+  }, [flowMessages, flowAttachedFiles, flowLoading, nodes, projectId]);
 
   const handleSend = useCallback(() => {
     if (!intent.trim()) return;
@@ -4606,7 +4621,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
       {/* Map area — Axiom Flow (strategic) + System Map (architecture readiness)
           When intent capture is visible, cap at 54% so the input section always
           has enough room on every phone size. */}
-      <div style={{ position: "relative", flex: showChat ? "0 0 auto" : 1, height: showChat ? "min(54%, calc(100% - 316px))" : undefined, minHeight: showChat ? 200 : 0, overflow: "hidden", display: "flex", flexDirection: "column", transition: "flex 350ms ease" }}>
+      <div style={{ position: "relative", flex: chatFullscreen ? "0 0 0" : showChat ? "0 0 auto" : 1, height: chatFullscreen ? 0 : showChat ? "min(54%, calc(100% - 316px))" : undefined, minHeight: chatFullscreen ? 0 : showChat ? 200 : 0, overflow: "hidden", display: "flex", flexDirection: "column", transition: "flex 350ms ease" }}>
         {/* Axiom Flow canvas */}
         <div style={{ flex: 1, minHeight: 0, position: "relative", overflow: "hidden" }}>
           <AxiomFlow
@@ -4651,7 +4666,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         )}
       </div>
 
-      {/* Toggle bar — thin seam between map and intent capture */}
+      {/* Toggle bar — map / chat fullscreen controls */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "4px 12px",
@@ -4659,24 +4674,40 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         borderTop: "1px solid rgba(212,175,55,0.08)",
         flexShrink: 0,
       }}>
-        {/* Static label — tells the user what the panel below is */}
         <span style={{
           color: "rgba(212,175,55,0.35)", fontSize: 10,
           fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           userSelect: "none",
         }}>
-          {showChat ? "intent capture" : "map fullscreen"}
+          {chatFullscreen ? "flow chat" : showChat ? "intent capture" : "map fullscreen"}
         </span>
-        <button
-          onClick={() => setShowChat(v => !v)}
-          style={{
-            background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.28)",
-            borderRadius: 5, padding: "2px 9px", cursor: "pointer",
-            color: "rgba(212,175,55,0.78)", fontSize: 9,
-            fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
-          }}>
-          {showChat ? "⛶ Map only" : "⊠ Show input"}
-        </button>
+        <div style={{ display: "flex", gap: 4 }}>
+          {/* Map fullscreen button */}
+          <button
+            onClick={() => { setChatFullscreen(false); setShowChat(v => !v); }}
+            style={{
+              background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.28)",
+              borderRadius: 5, padding: "2px 9px", cursor: "pointer",
+              color: "rgba(212,175,55,0.78)", fontSize: 9,
+              fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+            }}>
+            {showChat ? "⛶ Map full" : "⊠ Show both"}
+          </button>
+          {/* Chat fullscreen button — only when chat is visible */}
+          {showChat && (
+            <button
+              onClick={() => setChatFullscreen(v => !v)}
+              style={{
+                background: chatFullscreen ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.07)",
+                border: `1px solid ${chatFullscreen ? "rgba(212,175,55,0.5)" : "rgba(212,175,55,0.28)"}`,
+                borderRadius: 5, padding: "2px 9px", cursor: "pointer",
+                color: "rgba(212,175,55,0.78)", fontSize: 9,
+                fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+              }}>
+              {chatFullscreen ? "⊠ Show map" : "⛶ Chat full"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* INTENT CAPTURE */}
@@ -4775,12 +4806,61 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
                 )}
               </div>
 
+              {/* Hidden file input for Flow Chat */}
+              <input
+                ref={flowFileInputRef}
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.txt,.md,.csv,.json,.js,.ts,.tsx,.jsx"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const incoming = Array.from(e.target.files ?? []).slice(0, 10);
+                  setFlowAttachedFiles(prev => [...prev, ...incoming].slice(0, 10));
+                  e.target.value = "";
+                }}
+              />
+
+              {/* Flow Chat attachment preview strip */}
+              {flowAttachedFiles.length > 0 && (
+                <div style={{ display: "flex", gap: 5, marginBottom: 6, overflowX: "auto", paddingBottom: 2, flexShrink: 0 }}>
+                  {flowAttachedFiles.map((file, idx) => (
+                    <div key={idx} style={{ position: "relative", flexShrink: 0 }}>
+                      {file.type.startsWith("image/") ? (
+                        <img src={URL.createObjectURL(file)} alt={file.name} style={{ width: 46, height: 46, borderRadius: 6, objectFit: "cover", border: "1px solid rgba(212,175,55,0.25)", display: "block" }} />
+                      ) : (
+                        <div style={{ width: 46, height: 46, borderRadius: 6, background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.2)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, overflow: "hidden" }}>
+                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(212,175,55,0.6)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          <span style={{ fontSize: 7, color: "rgba(212,175,55,0.55)", maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-mono)" }}>{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
+                        </div>
+                      )}
+                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(212,175,55,0.3)", cursor: "pointer", color: "rgba(231,229,228,0.85)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Input row */}
               <div style={{
                 display: "flex", gap: 6, alignItems: "flex-end",
                 paddingTop: 6, borderTop: "1px solid rgba(212,175,55,0.07)",
                 flexShrink: 0,
               }}>
+                {/* Paperclip button */}
+                <button
+                  onClick={() => flowFileInputRef.current?.click()}
+                  title="Attach file"
+                  style={{
+                    width: 28, height: 28, flexShrink: 0, borderRadius: 7,
+                    background: "transparent", border: "none",
+                    color: flowAttachedFiles.length > 0 ? "#D4AF37" : "rgba(120,113,108,0.4)",
+                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "color 160ms ease",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "#D4AF37")}
+                  onMouseLeave={e => { if (!flowAttachedFiles.length) e.currentTarget.style.color = "rgba(120,113,108,0.4)"; }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </button>
                 <textarea
                   value={flowInput}
                   onChange={e => setFlowInput(e.target.value)}
@@ -5807,7 +5887,7 @@ export default function Workspace() {
     };
   }, [doResize, endResize]);
 
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [wsModel, setWsModel] = useState<string>(() => {
     try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).model ?? "claude") : "claude"; } catch { return "claude"; }
   });
@@ -6538,23 +6618,27 @@ export default function Workspace() {
     }
     playSend();
     const current = messages;
-    const file = attachedFile;
+    const files = attachedFiles;
     setInput("");
-    setAttachedFile(null);
+    setAttachedFiles([]);
     if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
 
-    if (file && file.type.startsWith("image/")) {
+    const imageFile = files.find(f => f.type.startsWith("image/"));
+    const otherFiles = files.filter(f => f !== imageFile);
+    const suffix = otherFiles.length > 0 ? `\n[Attached: ${otherFiles.map(f => f.name).join(", ")}]` : "";
+    const fullText = text + suffix;
+
+    if (imageFile) {
       const reader = new FileReader();
       reader.onload = () => {
         const result = reader.result as string;
         const base64 = result.split(",")[1];
-        doSend(text, sessionId, current, undefined, { base64, mediaType: file.type });
+        doSend(fullText, sessionId, current, undefined, { base64, mediaType: imageFile.type });
       };
-      reader.onerror = () => doSend(text, sessionId, current);
-      reader.readAsDataURL(file);
+      reader.onerror = () => doSend(fullText, sessionId, current);
+      reader.readAsDataURL(imageFile);
     } else {
-      const messageText = file ? `${text}\n[Attached: ${file.name}]` : text;
-      doSend(messageText, sessionId, current);
+      doSend(fullText, sessionId, current);
     }
   };
 
@@ -7720,9 +7804,10 @@ export default function Workspace() {
               type="file"
               accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.txt,.md,.csv,.json,.js,.ts,.tsx,.jsx"
               style={{ display: "none" }}
+              multiple
               onChange={(e) => {
-                const file = e.target.files?.[0] ?? null;
-                setAttachedFile(file);
+                const incoming = Array.from(e.target.files ?? []).slice(0, 10);
+                setAttachedFiles(prev => [...prev, ...incoming].slice(0, 10));
                 e.target.value = "";
               }}
             />
@@ -7752,28 +7837,29 @@ export default function Workspace() {
               />
             )}
 
-            {/* Attachment pill */}
-            {attachedFile && (
-              <div
-                style={{
-                  display: "flex", alignItems: "center", gap: 6, marginBottom: 6,
-                  padding: "4px 10px", borderRadius: 6, width: "fit-content",
-                  background: "rgba(201,162,76,0.07)",
-                  border: "1px solid rgba(201,162,76,0.2)",
-                }}
-              >
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                  <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(201,162,76,0.8)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.7)", letterSpacing: "0.05em", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {attachedFile.name}
-                </span>
-                <button
-                  onClick={() => setAttachedFile(null)}
-                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 13, lineHeight: 1, padding: "0 0 0 2px" }}
-                >
-                  ×
-                </button>
+            {/* Attachment preview strip */}
+            {attachedFiles.length > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 8, overflowX: "auto", paddingBottom: 2, flexShrink: 0 }}>
+                {attachedFiles.map((file, idx) => (
+                  <div key={idx} style={{ position: "relative", flexShrink: 0 }}>
+                    {file.type.startsWith("image/") ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        style={{ width: 54, height: 54, borderRadius: 7, objectFit: "cover", border: "1px solid rgba(201,162,76,0.25)", display: "block" }}
+                      />
+                    ) : (
+                      <div style={{ width: 54, height: 54, borderRadius: 7, background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.2)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, overflow: "hidden" }}>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(201,162,76,0.6)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        <span style={{ fontSize: 8, color: "rgba(201,162,76,0.55)", maxWidth: 46, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}>{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
+                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "rgba(231,229,228,0.85)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
+                    >×</button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -7817,13 +7903,13 @@ export default function Workspace() {
                     style={{
                       width: 30, height: 30, borderRadius: 7,
                       background: "transparent", border: "none",
-                      color: attachedFile ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                      color: attachedFiles.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                      opacity: attachedFile ? 1 : 0.4, transition: "opacity 160ms ease",
+                      opacity: attachedFiles.length > 0 ? 1 : 0.4, transition: "opacity 160ms ease",
                       flexShrink: 0,
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                    onMouseLeave={(e) => { if (!attachedFile) e.currentTarget.style.opacity = "0.4"; }}
+                    onMouseLeave={(e) => { if (!attachedFiles.length) e.currentTarget.style.opacity = "0.4"; }}
                   >
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                       <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
