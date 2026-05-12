@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { db, chatMessagesTable, sessionsTable, projectsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { decryptToken } from "../lib/tokenCrypto";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 
@@ -746,8 +747,10 @@ router.post("/chat", async (req, res): Promise<void> => {
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
   const resolvedGithubToken = (() => {
     const t = project?.githubToken;
-    if (!t) return null;
-    const plain = t.startsWith("enc:v1:") ? (() => { try { const { decryptToken } = require("../lib/tokenCrypto"); return decryptToken(t) as string; } catch { return t; } })() : t;
+    // No personal token stored — fall back to server env token directly
+    if (!t) return process.env.GITHUB_TOKEN ?? null;
+    const plain = t.startsWith("enc:v1:") ? decryptToken(t) : t;
+    // Explicit __server__ sentinel or any unrecognized value → server env token
     return plain === "__server__" ? (process.env.GITHUB_TOKEN ?? null) : plain;
   })();
 
