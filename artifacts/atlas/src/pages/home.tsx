@@ -540,9 +540,18 @@ const MODES = [
 ];
 
 function ContextChip({
-  icon, label, onClick, dim,
-}: { icon: React.ReactNode; label: string; onClick: () => void; dim?: boolean }) {
+  icon, label, onClick, dim, accent,
+}: { icon: React.ReactNode; label: string; onClick: () => void; dim?: boolean; accent?: string }) {
   const [hov, setHov] = useState(false);
+  const borderColor = accent
+    ? hov ? accent.replace("0.15", "0.5") : accent.replace("0.15", "0.3")
+    : hov ? "rgba(201,162,76,0.32)" : "rgba(37,34,32,0.9)";
+  const bg = accent
+    ? hov ? accent.replace("0.15", "0.2") : accent
+    : hov ? "rgba(201,162,76,0.07)" : "rgba(28,25,23,0.6)";
+  const textColor = accent
+    ? hov ? accent.replace("0.15", "0.95") : accent.replace("0.15", "0.85")
+    : hov ? "rgba(201,162,76,0.9)" : "rgba(231,229,228,0.65)";
   return (
     <button
       onClick={onClick}
@@ -551,16 +560,15 @@ function ContextChip({
       style={{
         display: "inline-flex", alignItems: "center", gap: 5,
         padding: "5px 9px", borderRadius: 20,
-        background: hov ? "rgba(201,162,76,0.07)" : "rgba(28,25,23,0.6)",
-        border: `1px solid ${hov ? "rgba(201,162,76,0.32)" : "rgba(37,34,32,0.9)"}`,
+        background: bg, border: `1px solid ${borderColor}`,
         cursor: "pointer", transition: "all 160ms ease",
         opacity: dim ? 0.45 : 1,
       }}
     >
-      <span style={{ color: "rgba(120,113,108,0.7)", lineHeight: 0, flexShrink: 0 }}>{icon}</span>
+      <span style={{ color: accent ? accent.replace("0.15", "0.7") : "rgba(120,113,108,0.7)", lineHeight: 0, flexShrink: 0 }}>{icon}</span>
       <span style={{
         fontFamily: "var(--app-font-mono)", fontSize: 10.5,
-        color: hov ? "rgba(201,162,76,0.9)" : "rgba(231,229,228,0.65)",
+        color: textColor,
         letterSpacing: "0.03em", whiteSpace: "nowrap",
         maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis",
         transition: "color 160ms ease",
@@ -572,6 +580,11 @@ function ContextChip({
   );
 }
 
+const MODE_ACCENT: Record<string, string | undefined> = {
+  audit: "rgba(239,100,68,0.15)",
+  "deep-dive": "rgba(99,130,239,0.15)",
+};
+
 function HomeContextBar({
   focusLabel, model, mode, onFocusClick, onModelClick, onModeClick,
 }: {
@@ -580,6 +593,7 @@ function HomeContextBar({
 }) {
   const modelLabel = MODELS.find(m => m.id === model)?.label ?? "Claude";
   const modeLabel = MODES.find(m => m.id === mode)?.label ?? "Strategic";
+  const modeAccent = MODE_ACCENT[mode];
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
       <ContextChip
@@ -594,6 +608,7 @@ function HomeContextBar({
       <div style={{ width: 1, height: 14, background: "rgba(37,34,32,0.9)", flexShrink: 0 }} />
       <ContextChip
         onClick={onModeClick}
+        accent={modeAccent}
         icon={
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 4h12M4 8h8M6 12h4"/>

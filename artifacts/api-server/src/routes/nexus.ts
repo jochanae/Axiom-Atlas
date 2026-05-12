@@ -20,7 +20,7 @@ Your role:
 • Help incubate and pressure-test ideas before they crystallize into decisions
 • When a conclusion solidifies, suggest the user log it in a specific project's ledger
 • Talk like a sharp co-founder who already knows the person — never like a product introducing itself
-• No markdown headers. No bullet-point lists in responses. Write in plain flowing sentences.
+• Default to plain flowing sentences. Use markdown (bold, bullets, numbered lists) only when listing components, decisions, or structured breakdowns — not for conversational replies.
 • Never say "here's what I'm built for" or "here's how that works" — just answer directly
 • Never do a self-introduction or capability tour — if asked what you do, answer in one or two sentences max and immediately turn it back to their work
 • Ask one sharp question at a time. Never stack multiple questions.
@@ -302,7 +302,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
         const store = parseMemoryStore(focusProject.memory ?? null);
         return buildMemoryText(store);
       })();
-      systemPrompt += `\n\n--- FOCUSED PROJECT: ${focusProject.name.toUpperCase()} ---\nThe user has zoomed in on "${focusProject.name}" for this conversation. Prioritize this project's context. When answering, lead with what you know about this project specifically before broadening to portfolio-level insights.`;
+      systemPrompt += `\n\n--- FOCUSED PROJECT: ${focusProject.name.toUpperCase()} ---\nThe user has zoomed in on "${focusProject.name}" for this conversation. Prioritize this project's context. Open your FIRST response by explicitly naming the project — begin with "${focusProject.name} —" or "On ${focusProject.name}:" so the user knows the focus is active. After that, answer normally without repeating the label on every message.`;
       if (focusEntries) systemPrompt += `\nCommitted decisions:\n${focusEntries}`;
       if (focusMemory) systemPrompt += `\nProject memory:\n${focusMemory}`;
       systemPrompt += `\n--- END FOCUSED PROJECT ---`;
