@@ -11,6 +11,7 @@ const FORGE_STAGES = [
 ];
 
 const PLATFORMS = [
+  { id: "Axiom", label: "Axiom" },
   { id: "Replit", label: "Replit" },
   { id: "Cursor", label: "Cursor" },
   { id: "Lovable", label: "Lovable" },
@@ -18,6 +19,16 @@ const PLATFORMS = [
   { id: "v0", label: "v0" },
   { id: "Claude", label: "Claude" },
 ];
+
+function detectPlatformId(): string {
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  if (host.includes("lovable") || host.includes("lovableproject")) return "Lovable";
+  if (host.includes("replit") || host.includes("repl.co") || host.includes("replit.app")) return "Replit";
+  if (host.includes("cursor")) return "Cursor";
+  if (host.includes("bolt")) return "Bolt";
+  if (host.includes("v0.dev")) return "v0";
+  return "Axiom";
+}
 
 interface Props {
   platform?: string;
@@ -43,8 +54,15 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   const stageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Quick Prompt state
-  const [selectedPlatform, setSelectedPlatform] = useState(PLATFORMS[0].id);
+  // Quick Prompt state — auto-detect platform from hostname; respect prop override
+  const detectedPlatform = detectPlatformId();
+  const [selectedPlatform, setSelectedPlatform] = useState(() => {
+    if (platform) {
+      const match = PLATFORMS.find(p => p.id.toLowerCase() === platform.toLowerCase());
+      if (match) return match.id;
+    }
+    return detectedPlatform;
+  });
   const [promptDesc, setPromptDesc] = useState("");
   const [filePath, setFilePath] = useState("");
   const [fileContent, setFileContent] = useState("");
@@ -460,22 +478,37 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           Platform
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-          {PLATFORMS.map(p => (
-            <button
-              key={p.id}
-              onClick={() => setSelectedPlatform(p.id)}
-              style={{
-                padding: "6px 14px", borderRadius: 20,
-                border: `1px solid ${selectedPlatform === p.id ? "rgba(212,175,55,0.55)" : "rgba(212,175,55,0.18)"}`,
-                background: selectedPlatform === p.id ? "rgba(212,175,55,0.14)" : "transparent",
-                color: selectedPlatform === p.id ? "#D4AF37" : "rgba(120,113,108,0.65)",
-                fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)",
-                cursor: "pointer", transition: "all 150ms",
-              }}
-            >
-              {p.label}
-            </button>
-          ))}
+          {PLATFORMS.map(p => {
+            const isSelected = selectedPlatform === p.id;
+            const isDetected = p.id === detectedPlatform;
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedPlatform(p.id)}
+                style={{
+                  padding: "6px 14px", borderRadius: 20,
+                  border: `1px solid ${isSelected ? "rgba(212,175,55,0.65)" : isDetected ? "rgba(212,175,55,0.32)" : "rgba(212,175,55,0.18)"}`,
+                  background: isSelected ? "rgba(212,175,55,0.14)" : "transparent",
+                  color: isSelected ? "#D4AF37" : isDetected ? "rgba(212,175,55,0.55)" : "rgba(120,113,108,0.65)",
+                  fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)",
+                  cursor: "pointer", transition: "all 150ms",
+                  boxShadow: isDetected && isSelected ? "0 0 10px rgba(212,175,55,0.25)" : isDetected ? "0 0 6px rgba(212,175,55,0.12)" : "none",
+                  display: "flex", alignItems: "center", gap: 5,
+                }}
+              >
+                {p.label}
+                {isDetected && (
+                  <span style={{
+                    fontSize: 7, fontWeight: 700, letterSpacing: "0.1em",
+                    padding: "1px 4px", borderRadius: 3,
+                    background: isSelected ? "rgba(212,175,55,0.25)" : "rgba(212,175,55,0.12)",
+                    color: isSelected ? "#D4AF37" : "rgba(212,175,55,0.6)",
+                    textTransform: "uppercase",
+                  }}>AUTO</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
