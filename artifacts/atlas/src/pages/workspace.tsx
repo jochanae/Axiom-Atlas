@@ -2629,7 +2629,8 @@ function FilesTab({
       setTokenState(t);
       setGlobalToken(t);
       // Back-fill this project if it only had the token in localStorage
-      if (!dbToken) updateProject.mutate({ id: projectId, data: { githubToken: t } });
+      // Never write the __server__ sentinel to the DB — it's not a real token
+      if (!dbToken && t !== "__server__") updateProject.mutate({ id: projectId, data: { githubToken: t } });
       return;
     }
 
@@ -2642,7 +2643,7 @@ function FilesTab({
       const t = sibling.githubToken;
       setTokenState(t);
       setGlobalToken(t);
-      updateProject.mutate({ id: projectId, data: { githubToken: t } });
+      if (t !== "__server__") updateProject.mutate({ id: projectId, data: { githubToken: t } });
     }
   }, [filesProject, allProjects]);
   const [tokenInput, setTokenInput] = useState("");

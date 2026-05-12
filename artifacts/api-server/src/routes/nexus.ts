@@ -178,6 +178,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     userProfile?: string;
     focusProjectId?: number | null;
     mode?: string;
+    model?: string;
   };
 
   if (!body.message?.trim()) {

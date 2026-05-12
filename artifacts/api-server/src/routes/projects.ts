@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, and, isNotNull, inArray } from "drizzle-orm";
 import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable } from "@workspace/db";
+import { encryptToken, decryptToken } from "../lib/tokenCrypto";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -19,10 +20,11 @@ const router: IRouter = Router();
 // The token is returned in single-project GET only (owner-scoped via tenant isolation).
 function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = false) {
   const { githubToken, ...rest } = p;
+  const plainToken = githubToken ? decryptToken(githubToken) : null;
   return {
     ...rest,
     hasGithubToken: !!githubToken,
-    ...(includeToken ? { githubToken } : {}),
+    ...(includeToken ? { githubToken: plainToken } : {}),
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
   };
@@ -160,11 +162,14 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
     return;
   }
   const userId = (req as any).authUser.id as number;
-  const { lastHandoverAt, ...rest } = parsed.data;
+  const { lastHandoverAt, githubToken: rawToken, ...rest } = parsed.data;
   const updateValues = {
     ...rest,
     ...(lastHandoverAt !== undefined
       ? { lastHandoverAt: lastHandoverAt === null ? null : new Date(lastHandoverAt) }
+      : {}),
+    ...(rawToken !== undefined
+      ? { githubToken: rawToken === null ? null : encryptToken(rawToken) }
       : {}),
   };
   const [project] = await db

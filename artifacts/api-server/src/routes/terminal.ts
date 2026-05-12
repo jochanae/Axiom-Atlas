@@ -1,11 +1,13 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { spawn } from "child_process";
 import { logger } from "../lib/logger";
+import { requireAuth } from "./auth";
 
 const router: IRouter = Router();
 
 const WORK_DIR = "/home/runner/workspace";
 const MAX_HISTORY = 60;
+const MAX_CMD_LENGTH = 2000;
 
 type HistoryEntry = {
   id: string;
@@ -23,11 +25,43 @@ function addHistory(entry: HistoryEntry) {
   if (history.length > MAX_HISTORY) history.shift();
 }
 
+// Commands that could destroy the server environment
+const BLOCKED_PATTERNS: RegExp[] = [
+  /rm\s+-[a-z]*r[a-z]*f?\s+\/(?:\s|$)/i,        // rm -rf /
+  /rm\s+-[a-z]*f[a-z]*r?\s+\/(?:\s|$)/i,        // rm -fr /
+  /:\s*\(\s*\)\s*\{.*\|.*&.*\}/,                 // fork bomb
+  /\|\s*bash\b/i,                                // curl | bash, wget | bash
+  /\|\s*sh\b/i,                                  // pipe into sh
+  /mkfs\b/i,                                     // format filesystem
+  /dd\s+.*of=\/dev\//i,                          // dd to device
+  />\s*\/dev\/sd/i,                              // redirect to block device
+  /chmod\s+-[a-z]*R[a-z]*\s+777\s+\//i,         // chmod -R 777 /
+  /shutdown\b/i,                                  // shutdown
+  /reboot\b/i,                                    // reboot
+  /halt\b/i,                                      // halt
+  /kill\s+-9\s+1\b/,                             // kill init
+  /pkill\s+-9\s+node/i,                          // kill all node processes
+];
+
+function isDangerous(cmd: string): string | null {
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(cmd)) return `Command blocked: matches dangerous pattern (${pattern.source.slice(0, 40)})`;
+  }
+  if (cmd.length > MAX_CMD_LENGTH) return `Command too long (max ${MAX_CMD_LENGTH} chars)`;
+  return null;
+}
+
 // POST /api/terminal/exec — execute a command, stream output as SSE
-router.post("/terminal/exec", (req: Request, res: Response): void => {
+router.post("/terminal/exec", requireAuth, (req: Request, res: Response): void => {
   const { command } = req.body as { command?: string };
   if (!command?.trim()) {
     res.status(400).json({ error: "Missing command" });
+    return;
+  }
+
+  const danger = isDangerous(command);
+  if (danger) {
+    res.status(403).json({ error: danger });
     return;
   }
 
@@ -91,7 +125,7 @@ router.post("/terminal/exec", (req: Request, res: Response): void => {
 });
 
 // GET /api/terminal/history — last N commands with their output
-router.get("/terminal/history", (_req, res): void => {
+router.get("/terminal/history", requireAuth, (_req, res): void => {
   res.json({ history: [...history].reverse() });
 });
 

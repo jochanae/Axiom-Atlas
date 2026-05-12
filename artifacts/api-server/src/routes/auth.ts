@@ -26,8 +26,6 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// ── In-memory password reset tokens ──────────────────────────────────────────
-const resetTokens = new Map<string, { email: string; expiresAt: number }>();
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 // Super-admin email from env only — no hardcoded fallback
@@ -151,7 +149,8 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
 
   if (user) {
     const token = randomBytes(32).toString("hex");
-    resetTokens.set(token, { email: user.email, expiresAt: Date.now() + RESET_TOKEN_TTL_MS });
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+    await db.update(usersTable).set({ resetToken: token, resetTokenExpiresAt: expiresAt }).where(eq(usersTable.id, user.id));
     if (process.env.NODE_ENV !== "production") {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
@@ -172,22 +171,24 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
   if (!token || !password) { res.status(400).json({ error: "Token and password are required" }); return; }
   if (password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters" }); return; }
 
-  const entry = resetTokens.get(token);
-  if (!entry || Date.now() > entry.expiresAt) {
+  const [userByToken] = await db
+    .select({ id: usersTable.id, email: usersTable.email, resetTokenExpiresAt: usersTable.resetTokenExpiresAt })
+    .from(usersTable)
+    .where(eq(usersTable.resetToken, token))
+    .limit(1);
+
+  if (!userByToken || !userByToken.resetTokenExpiresAt || Date.now() > userByToken.resetTokenExpiresAt.getTime()) {
     res.status(400).json({ error: "Reset link is invalid or has expired" }); return;
   }
 
-  const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, entry.email)).limit(1);
-
   const passwordHash = await hashPassword(password);
-  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.email, entry.email));
+  await db.update(usersTable)
+    .set({ passwordHash, resetToken: null, resetTokenExpiresAt: null })
+    .where(eq(usersTable.id, userByToken.id));
 
   // Invalidate ALL existing sessions so stolen sessions can't be reused after a password reset
-  if (user) {
-    await db.delete(userSessionsTable).where(eq(userSessionsTable.userId, user.id));
-  }
+  await db.delete(userSessionsTable).where(eq(userSessionsTable.userId, userByToken.id));
 
-  resetTokens.delete(token);
   res.json({ ok: true });
 });
 
