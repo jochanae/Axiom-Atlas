@@ -29,17 +29,19 @@ Jochanae — founder of Into Innovations. Builds production SaaS entirely from h
 - **Frontend:** React + Vite (`artifacts/atlas/`) — served at `/`
 - **Backend:** Express 5 (`artifacts/api-server/`) — served at `/api`
 - **Database:** Replit PostgreSQL via Drizzle ORM (`lib/db/`)
-- **AI:** Anthropic Claude `claude-sonnet-4-6` via `ANTHROPIC_API_KEY`
+- **AI:** Anthropic Claude `claude-sonnet-4-6` + Google Gemini `gemini-2.5-pro`
 - **Monorepo:** pnpm workspaces
 
 ### Two Separate Chat Experiences
 
-**1. Home Chat (Global / Nexus layer)**
+**1. Home Chat (Global / Atlas layer)**
 - Lives permanently on the home page (`/home`) — does NOT navigate away
 - Backend: `POST /api/nexus/chat`
-- Focus picker: "All Projects" (default) or zoom into one project
-- Model picker: Claude / GPT-4o / Gemini
+- Focus chip: "All Projects" (default) or zoom into one project
+- Mode chip: Strategic / Audit / Deep Dive
+- Model picker: Claude (Nuance & Strategy) / Gemini (Long Context & Speed) — both fully wired
 - Briefing: auto-generated portfolio intelligence on page load (`/api/nexus/briefing`)
+- Briefing shortcut on "Where were we" card in below-fold section
 - This is the wide-lens strategic layer — cross-portfolio visibility
 
 **2. Workspace Chat (Project-specific / deep lens)**
@@ -48,6 +50,7 @@ Jochanae — founder of Into Innovations. Builds production SaaS entirely from h
 - Scope: one project, one linked GitHub repo
 - Auto-indexes linked repo on workspace open (file tree + key files + analyze scan)
 - Decision Catch Engine, FILE_EDIT protocol, GitHub write-back
+- StackBlitz tab embeds the linked repo for live preview/edit
 
 ---
 
@@ -69,9 +72,9 @@ Center A button → navigates to most recent project workspace
 
 ```
 artifacts/atlas/src/pages/
-  home.tsx          — Home chat, briefing animation, focus/model chips
-  workspace.tsx     — Two-pane: left chat + right Decision Ledger canvas
-  projects.tsx      — Project list
+  home.tsx          — Home chat, briefing animation, focus/mode/model chips
+  workspace.tsx     — Two-pane: left chat + right Decision Ledger canvas + StackBlitz tab
+  projects.tsx      — Project list with archive/active sections
   ledger.tsx        — Full ledger; filter pills (ALL/STRUCTURE/AESTHETIC/LOGIC/GENERAL)
   parking-lot.tsx   — Parked ideas per project
   master-map.tsx    — Master Map / AxiomFlow canvas
@@ -82,6 +85,7 @@ artifacts/atlas/src/pages/
   nexus.tsx         — Redirects to /home (legacy)
   login.tsx         — Auth with Google OAuth, email/password, Apple
   vault.tsx         — Secrets Vault
+  help.tsx          — Help & FAQ (updated — no Nexus branding)
 ```
 
 ## Key Components
@@ -90,10 +94,10 @@ artifacts/atlas/src/pages/
 artifacts/atlas/src/components/
   ProjectsDrawer.tsx    — Left slide-in drawer: Atlas card, projects, nav, tools
   UserMenuDropdown.tsx  — Avatar dropdown
-  BelowFoldDashboard.tsx — Below-fold section on home
+  BelowFoldDashboard.tsx — Below-fold section on home (includes briefing shortcut)
   AxiomFlow.tsx         — Flow canvas / Master Map
-  TheForge.tsx          — Prompt Forge (needs rethink — currently underused)
-  AccountHubPanel.tsx   — In-app account management
+  TheForge.tsx          — Prompt Forge — strategic extraction engine, solid system prompt
+  AccountHubPanel.tsx   — In-app account management (password change wired)
   CockpitBar.tsx        — Mobile bottom navigation
   ReadinessRing.tsx     — Project readiness indicator
   SystemMap.tsx         — System map component
@@ -103,17 +107,18 @@ artifacts/atlas/src/components/
 
 ```
 artifacts/api-server/src/routes/
-  nexus.ts      — Home chat (/api/nexus/chat) + briefing (/api/nexus/briefing)
-  chat.ts       — Workspace AI chat with Decision Catch Engine + FILE_EDIT
-  github.ts     — GitHub read/write/analyze/auto-link pipeline
-  projects.ts   — CRUD + summary stats
-  sessions.ts   — Session management + message history
-  entries.ts    — Decision Ledger entries
-  auth.ts       — Auth + Resend password reset
-  forge.ts      — Prompt Forge (needs rethink)
-  devserver.ts  — Dev server clone/preview (built, untested)
-  vault.ts      — Secrets Vault
-  thoughts.ts   — Thoughts/parking lot
+  nexus.ts        — Home chat (/api/nexus/chat, model-aware) + briefing + activity
+  chat.ts         — Workspace AI chat with Decision Catch Engine + FILE_EDIT
+  github.ts       — GitHub read/write/analyze/auto-link pipeline
+  google-auth.ts  — Google OAuth (registered, wired end-to-end)
+  projects.ts     — CRUD + summary stats + archive/restore
+  sessions.ts     — Session management + message history
+  entries.ts      — Decision Ledger entries
+  auth.ts         — Auth + Resend password reset + in-app password change
+  forge.ts        — Strategic extraction engine (solid prompt, produces structured nodes)
+  vault.ts        — Secrets Vault
+  thoughts.ts     — Thoughts/parking lot
+  stripe.ts       — Stripe webhook + subscription sync
 ```
 
 ---
@@ -128,7 +133,7 @@ Three-layer persistent memory:
 
 ---
 
-## Auto-Indexing (Workspace — THE GAP CLOSED)
+## Auto-Indexing (Workspace)
 
 When a workspace opens with a linked GitHub repo:
 1. File tree + up to 5 key files are fetched and set as `fileContext` (immediate)
@@ -175,42 +180,43 @@ AI returns `FILE_EDIT_START / FILE_EDIT_CONTENT / FILE_EDIT_END` blocks. Fronten
 
 ---
 
-## What's Working
+## What's Working (Verified in Code)
 
-- Home page Atlas chat with message bubbles (stays on home page)
-- Briefing — real AI portfolio summary on page load
-- Focus chip (All Projects / specific project) + Model chip
+- Home chat with Claude and Gemini — both wired, model switching real
+- Briefing — AI portfolio summary on load with cinematic reveal animation
+- Focus chip (All Projects / specific project)
+- Mode chip (Strategic / Audit / Deep Dive) — wired to system prompt
+- Briefing shortcut on "Where were we" card — expands inline
 - Password reset via Resend email
+- In-app password change — wired in AccountHubPanel + backend
+- Copy button on chat bubbles — home page
+- Clear conversation — with confirmation step
 - Session persistence — authenticated users skip landing
+- Google OAuth — route registered and wired (needs live end-to-end test)
+- Project archive/restore — active/archived sections in project list
 - Workspace: Decision Ledger, catch engine, FILE_EDIT, GitHub read/write
-- Auto-indexing on workspace open (no FILES tab required)
-- Dev server feature (built — untested)
-- `/deep` research in workspace (built — not surfaced visibly)
+- Auto-indexing on workspace open
+- StackBlitz tab in workspace — embeds linked repo (public free; private needs StackBlitz login)
+- Forge — strategic extraction engine with structured node output
+- Stripe webhook auto-configures on server start; free plan capped at 1 project
+- `/deep` research in workspace
 
 ---
 
-## What Needs Verification
+## Needs a Live End-to-End Test
 
-- Briefing animation — two-beat cinematic reveal
-- In-app password change (AccountHubPanel)
-- Google OAuth
-- FILE_EDIT / GitHub write-back with real linked repo
-- Focus chip — All Projects may be cut off at top of sheet
+- **Google OAuth** — route is wired but not tested with a real Google account
+- **FILE_EDIT / GitHub write-back** — built and wired, needs test with real linked repo
 
 ---
 
 ## Deferred — Do Not Lose
 
-1. **Prompt Forge (HIGH)** — describe intent in plain language, Atlas reads the file, writes exact surgical Cursor prompt. Currently Forge has a weak system prompt and is unused.
-2. **Secrets Vault** — per-project API key management
-3. **Archive flag** — `archived` boolean on projects to hide test/old projects
-4. **Copy button** on chat bubbles (home page)
-5. **Clear conversation** on home page
-6. **Focus chip Atlas acknowledgment** — Atlas leads with focused project when one is selected
-7. **Mode chip on home page** — Strategic / Audit / Deep Dive
-8. **Lens per project** — changes Atlas response style per workspace
-9. **Unified activity feed** — commits, decisions, sessions in one timeline
-10. **Nexus system prompt rewrite** — still references "Nexus" and "Nexium"
+1. **Forge UI surfacing** — the backend is solid; the frontend needs better entry points and result integration into the workspace flow
+2. **Secrets Vault** — per-project API key management (built, needs UX polish)
+3. **Focus chip Atlas acknowledgment** — Atlas should open with the focused project named when a focus is active
+4. **Lens per project** — changes Atlas response style per workspace
+5. **Unified activity feed** — commits, decisions, sessions in one timeline
 
 ---
 
@@ -220,7 +226,7 @@ AI returns `FILE_EDIT_START / FILE_EDIT_CONTENT / FILE_EDIT_END` blocks. Fronten
 - Home page IS the global intelligence layer — lives there, never navigates away
 - Two modes: wide lens (home, all projects), deep lens (workspace, one project)
 - Think Freely, Master Map, AxiomFlow, Parking Lot all stay
-- Forge needs a full rethink — not a quick patch
+- Model picker: Claude + Gemini only — GPT-4o, Perplexity, DeepSeek removed
 
 ---
 
@@ -242,8 +248,8 @@ After every push: Replit Git tab → Pull (manual pull required).
 ## Environment Variables
 
 - `DATABASE_URL` — PostgreSQL (auto-provisioned)
-- `ANTHROPIC_API_KEY` — Claude sonnet-4-6
-- `GOOGLE_GEMINI_API_KEY` — Gemini
+- `ANTHROPIC_API_KEY` — Claude sonnet-4-6 (via Replit AI integration proxy)
+- `GOOGLE_GEMINI_API_KEY` — Gemini 2.5 Pro
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth
 - `SESSION_SECRET` — Express sessions
 - `STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`
