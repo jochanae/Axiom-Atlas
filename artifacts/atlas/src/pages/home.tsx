@@ -499,7 +499,7 @@ function HomeContextBar({
   const modelLabel = MODELS.find(m => m.id === model)?.label ?? "Claude";
   const modeLabel = MODES.find(m => m.id === mode)?.label ?? "Strategic";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
       <ContextChip
         onClick={onFocusClick}
         icon={
@@ -1978,7 +1978,7 @@ export default function Home() {
           )}
 
           {/* Scroll cue — pinned to bottom of hero */}
-          <div aria-hidden style={{ position: "absolute", bottom: 20, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
+          <div aria-hidden style={{ position: "absolute", bottom: 6, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
             <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.28 }}>
               ↓ scroll for your workspace
             </div>
