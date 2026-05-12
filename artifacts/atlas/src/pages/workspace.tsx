@@ -7002,25 +7002,6 @@ export default function Workspace() {
           {/* Left: drawer button + Atlas logo + Trust Mode */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button
-              title="Menu"
-              onClick={() => setShowDrawer(true)}
-              style={{ width: 28, height: 28, borderRadius: 7, background: "transparent", border: "none", color: "rgba(120,113,108,0.45)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "color 160ms ease", flexShrink: 0 }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
-            >
-              <div style={{ position: "relative", width: 17, height: 17 }}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
-                </svg>
-                <span style={{
-                  position: "absolute", bottom: -1, right: -1,
-                  width: 5, height: 5, borderRadius: "50%",
-                  background: projectMode === "BUILD" ? "#4ade80" : projectMode === "PLAN" ? "#D4AF37" : "#93c5fd",
-                  border: "1px solid #0C0A09",
-                }} />
-              </div>
-            </button>
-            <button
               onClick={() => setLocation("/home")}
               style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, flexShrink: 0 }}
             >
