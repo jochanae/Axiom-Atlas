@@ -44,7 +44,23 @@ app.use(
     },
   }),
 );
-app.use(cors({ origin: true, credentials: true }));
+const ALLOWED_ORIGINS: Set<string> = new Set([
+  "https://axiomsystem.app",
+  ...(process.env.REPLIT_DOMAINS?.split(",").map((d) => `https://${d.trim()}`) ?? []),
+]);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (ALLOWED_ORIGINS.has(origin)) return callback(null, true);
+      if (/^https:\/\/[^.]+\.replit\.(dev|app)$/.test(origin)) return callback(null, true);
+      if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin not allowed — ${origin}`));
+    },
+    credentials: true,
+  }),
+);
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

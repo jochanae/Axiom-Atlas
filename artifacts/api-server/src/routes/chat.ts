@@ -744,11 +744,18 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Auto-fetch repo file tree (Phase 1 — always injected when a repo is linked)
   let repoTreeContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
-  if (project?.linkedRepo && project?.githubToken) {
+  const resolvedGithubToken = (() => {
+    const t = project?.githubToken;
+    if (!t) return null;
+    const plain = t.startsWith("enc:v1:") ? (() => { try { const { decryptToken } = require("../lib/tokenCrypto"); return decryptToken(t) as string; } catch { return t; } })() : t;
+    return plain === "__server__" ? (process.env.GITHUB_TOKEN ?? null) : plain;
+  })();
+
+  if (project?.linkedRepo && resolvedGithubToken) {
     try {
       repoData = JSON.parse(project.linkedRepo) as { fullName?: string; defaultBranch?: string };
       if (repoData.fullName) {
-        repoTreeContext = await fetchRepoTree(repoData.fullName, project.githubToken, repoData.defaultBranch ?? "main");
+        repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
       }
     } catch {
       // Non-fatal: continue without tree context
@@ -760,7 +767,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   let autoFetchedFiles: string[] = [];
   let autoFetchedContext = "";
 
-  if (BUILD_INTENT_RE.test(message) && repoData?.fullName && project?.githubToken && repoTreeContext) {
+  if (BUILD_INTENT_RE.test(message) && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
     try {
       // Fast selector call: ask Claude which files it needs to read (small, cheap)
       const selectorResp = await anthropic.messages.create({
@@ -783,7 +790,7 @@ router.post("/chat", async (req, res): Promise<void> => {
             try {
               const r = await fetch(
                 `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
-                { headers: ghHeaders(project.githubToken!) }
+                { headers: ghHeaders(resolvedGithubToken) }
               );
               if (!r.ok) return null;
               const d = await r.json() as { encoding?: string; content?: string };
