@@ -1996,25 +1996,7 @@ export default function Home() {
 
             {/* Bottom action bar */}
             <div style={{ display: "flex", alignItems: "center", marginTop: 12, gap: 2 }}>
-              {/* + button — opens file picker */}
-              <button
-                title="Add file"
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none",
-                  color: "rgba(120,113,108,0.45)", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "color 160ms ease", flexShrink: 0,
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-fg)")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                  <path d="M8 2v12M2 8h12" />
-                </svg>
-              </button>
-
-              {/* Paperclip */}
+              {/* Paperclip — attach files; turns gold when files are loaded */}
               <button
                 title="Attach file"
                 onClick={() => fileInputRef.current?.click()}
