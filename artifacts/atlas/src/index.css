@@ -60,6 +60,11 @@
   --animate-node-resolve: node-resolve-pop 0.4s ease-out;
 }
 
+html, body {
+  overscroll-behavior-y: none;
+  touch-action: pan-x pan-y;
+}
+
 @keyframes amber-pulse {
   0%, 100% { box-shadow: 0 0 8px oklch(0.70 0.15 70 / 40%); }
   50%       { box-shadow: 0 0 20px oklch(0.70 0.15 70 / 70%); }

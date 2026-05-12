@@ -18,7 +18,6 @@ import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
 import { useAuth, useRequireAuth, isSuperAdmin } from "../hooks/useAuth";
 import { useSubscription } from "../hooks/useSubscription";
-import { usePullToRefresh } from "../hooks/usePullToRefresh";
 import { toast } from "sonner";
 import { UpgradeModal } from "../components/UpgradeModal";
 import { CompactReadinessRing, computeScoreFromNodeState } from "../components/ReadinessRing";
@@ -1238,7 +1237,6 @@ export default function Home() {
     return () => clearInterval(t);
   }, [isAtlasStreaming]);
   const [, setLocation] = useLocation();
-  const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -1311,15 +1309,6 @@ export default function Home() {
       .catch(() => {})
       .finally(() => setThreadLoading(false));
   }, [activeConversationId]);
-
-  // Pull-to-refresh
-  const { pulling, distance, refreshing, threshold } = usePullToRefresh(
-    useCallback(async () => {
-      await queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-    }, [queryClient]),
-    true,
-    containerRef,
-  );
 
 
   const handleNewProject = useCallback((name = "New Project") => {
@@ -1523,7 +1512,6 @@ export default function Home() {
 
   return (
     <div
-      ref={containerRef}
       className="atlas-home-bg"
       style={{
         height: "100vh",
@@ -1532,37 +1520,8 @@ export default function Home() {
         flexDirection: "column",
         overflowY: "auto",
         overflowX: "hidden",
-        overscrollBehavior: "none",
       }}
     >
-      {/* Pull-to-refresh indicator */}
-      <div style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 9000,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        height: 48, pointerEvents: "none",
-        transform: `translateY(${Math.min(distance - 48, 0)}px)`,
-        transition: pulling ? "none" : "transform 320ms ease, opacity 320ms ease",
-        opacity: refreshing ? 1 : Math.min(distance / threshold, 1),
-      }}>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 8,
-          background: "rgba(28,25,23,0.92)", border: "1px solid rgba(201,162,76,0.25)",
-          borderRadius: 20, padding: "5px 12px",
-          backdropFilter: "blur(12px)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-        }}>
-          <div style={{
-            width: 14, height: 14, borderRadius: "50%",
-            border: "1.5px solid rgba(201,162,76,0.2)",
-            borderTopColor: "rgba(201,162,76,0.8)",
-            animation: refreshing ? "spin 0.8s linear infinite" : "none",
-            transform: refreshing ? undefined : `rotate(${(distance / threshold) * 270}deg)`,
-          }} />
-          <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.7)", letterSpacing: "0.1em" }}>
-            {refreshing ? "Refreshing…" : distance >= threshold ? "Release" : "Pull to refresh"}
-          </span>
-        </div>
-      </div>
-
       {/* Header */}
       <div
         className="atlas-home-header"
