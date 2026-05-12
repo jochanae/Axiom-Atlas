@@ -1424,42 +1424,86 @@ export default function Home() {
     [input, setLocation]
   );
 
+  // Compress + base64-encode an image file — resizes to max 1200px, JPEG 0.75 quality
+  const compressImage = useCallback((file: File): Promise<{ base64: string; mimeType: string }> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX = 1200;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+        resolve({ base64: dataUrl.split(",")[1], mimeType: "image/jpeg" });
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }, []);
+
   const handleSubmit = useCallback(async () => {
     const text = input.trim();
     if (!text || isLoading) return;
     const files = attachedFiles;
     setInput("");
     setAttachedFiles([]);
-    const imageFile = files.find(f => f.type.startsWith("image/"));
+
+    const imageFiles = files.filter(f => f.type.startsWith("image/"));
     const otherFiles = files.filter(f => !f.type.startsWith("image/"));
     const suffix = otherFiles.length > 0 ? `\n[Attached: ${otherFiles.map(f => f.name).join(", ")}]` : "";
     const fullText = text + suffix;
 
-    // Convert image for display + API
+    // Use first image for display preview, compress all for API (Claude handles one at a time — send first)
     let imageUrl: string | undefined;
     let imageBase64: string | undefined;
     let imageMimeType: string | undefined;
-    if (imageFile) {
-      imageUrl = URL.createObjectURL(imageFile);
-      imageMimeType = imageFile.type;
-      imageBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(imageFile);
-      });
+    if (imageFiles.length > 0) {
+      imageUrl = URL.createObjectURL(imageFiles[0]);
+      try {
+        const compressed = await compressImage(imageFiles[0]);
+        imageBase64 = compressed.base64;
+        imageMimeType = compressed.mimeType;
+      } catch {
+        // Fallback to raw read if canvas fails
+        imageBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(imageFiles[0]);
+        });
+        imageMimeType = imageFiles[0].type;
+      }
     }
 
-    setHomeMessages(prev => [...prev, { role: 'user', content: fullText, imageUrl }]);
+    // Append image count note if multiple were attached
+    const imageNote = imageFiles.length > 1 ? ` [${imageFiles.length} images attached — showing first]` : "";
+    const messageText = fullText + imageNote;
+
+    setHomeMessages(prev => [...prev, { role: 'user', content: messageText, imageUrl }]);
     setIsAtlasStreaming(true);
     try {
       const res = await fetch("/api/nexus/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: fullText, model: homeModel, focusProjectId: homeFocus, mode: homeMode, imageBase64, imageMimeType, conversationId: activeConversationId }),
+        body: JSON.stringify({ message: messageText, model: homeModel, focusProjectId: homeFocus, mode: homeMode, imageBase64, imageMimeType, conversationId: activeConversationId }),
       });
-      if (!res.ok) throw new Error("No response");
+      if (!res.ok) {
+        const errText = res.status === 413 ? "Images are too large to send. Try fewer or smaller images." : "Something went wrong. Try again.";
+        toast(errText);
+        // Restore the input so she doesn't lose her message
+        setInput(text);
+        setAttachedFiles(files);
+        return;
+      }
       const data = await res.json() as { reply?: string; message?: string };
       const replyText = (data as any).response ?? (data as any).reply ?? (data as any).message ?? "";
       const intentType = (() => {
@@ -1477,17 +1521,13 @@ export default function Home() {
         setShowHandoff(true);
       }
     } catch {
-      const target = projects?.at(-1);
-      if (target) {
-        try { sessionStorage.setItem(`atlas-initial-${target.id}`, text); } catch {}
-        setLocation(`/project/${target.id}`);
-      } else {
-        handleNewProject();
-      }
+      toast("Connection error. Your message was not lost — tap send again.");
+      setInput(text);
+      setAttachedFiles(files);
     } finally {
       setIsAtlasStreaming(false);
     }
-  }, [input, attachedFiles, isLoading, homeModel, homeFocus, projects, setLocation, handleNewProject]);
+  }, [input, attachedFiles, isLoading, homeModel, homeFocus, projects, activeConversationId, compressImage, homeMessages.length]);
 
 
   const handleHandoff = useCallback(async () => {
