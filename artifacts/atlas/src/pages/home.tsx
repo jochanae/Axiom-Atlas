@@ -1528,6 +1528,7 @@ export default function Home() {
         flexDirection: "column",
         overflowY: "auto",
         overflowX: "hidden",
+        overscrollBehavior: "none",
       }}
     >
       {/* Pull-to-refresh indicator */}
