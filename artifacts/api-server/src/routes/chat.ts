@@ -675,6 +675,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     message: string;
     model?: string;
     mode?: string;
+    lens?: string;
     history?: Array<{ role: string; content: string }>;
     entries?: Array<{ id: number; title: string; status: string }>;
     fileContext?: string;
@@ -826,6 +827,18 @@ You are now in THINK mode. This changes how you respond:
 • No FILE_EDIT blocks.`,
   };
   systemPrompt += modeInstructions[activeMode] ?? modeInstructions.think;
+
+  // Lens-specific instructions — shape Atlas's response style for this project
+  const activeLens = (body.lens ?? "builder").toLowerCase();
+  const lensInstructions: Record<string, string> = {
+    builder: `\n\n--- LENS: BUILDER ---\nDefault lens. Be direct, action-oriented, and code-first. Prioritize shipping over theorizing. When something can be built, build it. When something can be fixed, fix it. Keep explanations tight — show don't tell.`,
+    strategist: `\n\n--- LENS: STRATEGIST ---\nZoom out. Your job is to help the user think about the big picture for this project — positioning, priorities, sequencing, risks. Before answering any tactical question, check if there's a strategic implication worth surfacing. Think like a co-founder who's read the whole roadmap, not a developer looking at the next ticket.`,
+    reviewer: `\n\n--- LENS: REVIEWER ---\nBe critical. Your job is to stress-test this project — find gaps, weak assumptions, inconsistencies, and risks. Lead with what's fragile or missing before validating what's working. Ask hard questions. Don't soften the assessment. Think like a rigorous technical co-founder doing due diligence.`,
+    teacher: `\n\n--- LENS: TEACHER ---\nExplain everything. Your job is to help the user deeply understand their own codebase and decisions — not just fix things, but understand why. No jargon without definition. Name concepts, explain patterns, give context before code. The user should finish every exchange knowing more than they did before.`,
+  };
+  if (activeLens !== "builder") {
+    systemPrompt += lensInstructions[activeLens] ?? "";
+  }
 
   // ── Deep Dive shortcut — /deep <topic> ───────────────────────────────────────
   const { isDive, topic: diveTopic } = isDeepDive(message);

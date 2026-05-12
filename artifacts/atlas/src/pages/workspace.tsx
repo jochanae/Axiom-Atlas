@@ -5770,21 +5770,26 @@ export default function Workspace() {
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const projectBtnRef = useRef<HTMLButtonElement>(null);
   const modeBtnRef = useRef<HTMLButtonElement>(null);
+  const lensBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
   const [showModeMenu, setShowModeMenu] = useState(false);
+  const [showLensMenu, setShowLensMenu] = useState(false);
   // Close portaled header dropdowns on scroll/resize so they don't float off their anchors.
   useEffect(() => {
-    if (!showProjectMenu && !showModeMenu) return;
-    const close = () => { setShowProjectMenu(false); setShowModeMenu(false); };
+    if (!showProjectMenu && !showModeMenu && !showLensMenu) return;
+    const close = () => { setShowProjectMenu(false); setShowModeMenu(false); setShowLensMenu(false); };
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [showProjectMenu, showModeMenu]);
+  }, [showProjectMenu, showModeMenu, showLensMenu]);
   const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
     try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
+  });
+  const [projectLens, setProjectLens] = useState<"builder" | "strategist" | "reviewer" | "teacher">(() => {
+    try { return (localStorage.getItem(`atlas-lens-${id}`) as "builder" | "strategist" | "reviewer" | "teacher") || "builder"; } catch { return "builder"; }
   });
   const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
@@ -6169,6 +6174,7 @@ export default function Workspace() {
         message: text,
         model: wsModel,
         mode: projectMode.toLowerCase(),
+        lens: projectLens,
         history,
         entries: ledgerEntries,
         ...(activeCtx ? { fileContext: activeCtx } : {}),
@@ -7020,6 +7026,72 @@ export default function Workspace() {
                 }} />
               </button>
             )}
+
+            {/* Lens pill — hidden in mobile map mode */}
+            {!(isMobile && mobileTab === "map") && (() => {
+              const lensConfig = {
+                builder:    { color: "rgba(231,229,228,0.6)", bg: "rgba(28,25,23,0.6)",       border: "rgba(37,34,32,0.9)",        label: "Builder",    desc: "Direct · Code-first · Ship it" },
+                strategist: { color: "rgba(201,162,76,0.85)", bg: "rgba(201,162,76,0.08)",    border: "rgba(201,162,76,0.32)",     label: "Strategist", desc: "Big picture · Priorities · Risk" },
+                reviewer:   { color: "rgba(239,100,68,0.85)", bg: "rgba(239,100,68,0.08)",    border: "rgba(239,100,68,0.32)",     label: "Reviewer",   desc: "Critical · Find gaps · Stress-test" },
+                teacher:    { color: "rgba(99,200,150,0.85)", bg: "rgba(99,200,150,0.08)",    border: "rgba(99,200,150,0.32)",     label: "Teacher",    desc: "Explain everything · No jargon" },
+              };
+              const lc = lensConfig[projectLens];
+              return (
+                <div style={{ position: "relative" }}>
+                  <button
+                    ref={lensBtnRef}
+                    onClick={() => { setShowLensMenu(v => !v); setShowModeMenu(false); setShowProjectMenu(false); setShowViewMenu(false); }}
+                    title={`Lens: ${lc.label} — ${lc.desc}`}
+                    style={{ display: "flex", alignItems: "center", gap: 5, background: lc.bg, border: `1px solid ${lc.border}`, borderRadius: 7, padding: "5px 8px", cursor: "pointer", color: lc.color, flexShrink: 0, transition: "all 180ms ease", fontSize: 9.5, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.1em" }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><circle cx="11" cy="11" r="3"/>
+                    </svg>
+                    {!isMobile && lc.label}
+                  </button>
+                  {showLensMenu && createPortal(
+                    <>
+                      <div onClick={() => setShowLensMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
+                      <div
+                        className="atlas-popover"
+                        style={{
+                          position: "fixed",
+                          top: (lensBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
+                          right: Math.max(8, window.innerWidth - (lensBtnRef.current?.getBoundingClientRect().right ?? 0)),
+                          zIndex: 9999, minWidth: 220,
+                        }}
+                      >
+                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.7, padding: "4px 12px 6px" }}>Atlas lens for this project</div>
+                        {(["builder", "strategist", "reviewer", "teacher"] as const).map((l) => {
+                          const lcc = lensConfig[l];
+                          const active = projectLens === l;
+                          return (
+                            <button key={l}
+                              onClick={() => {
+                                setProjectLens(l);
+                                try { localStorage.setItem(`atlas-lens-${id}`, l); } catch {}
+                                setShowLensMenu(false);
+                              }}
+                              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active ? lcc.bg : "transparent", border: "none", padding: "8px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
+                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                              onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = active ? lcc.bg : "transparent"; }}
+                            >
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: lcc.color, flexShrink: 0 }} />
+                              <span style={{ flex: 1, textAlign: "left" }}>
+                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? lcc.color : "var(--atlas-fg)" }}>{lcc.label.toUpperCase()}</span>
+                                <span style={{ display: "block", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.75, marginTop: 1 }}>{lcc.desc}</span>
+                              </span>
+                              {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={lcc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>,
+                    document.body
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Mode pill — hidden in mobile map mode */}
             {!(isMobile && mobileTab === "map") && (() => {
