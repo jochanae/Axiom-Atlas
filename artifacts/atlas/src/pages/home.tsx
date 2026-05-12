@@ -1430,28 +1430,35 @@ export default function Home() {
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
-        URL.revokeObjectURL(url);
-        const MAX = 1200;
-        let { width, height } = img;
-        if (width > MAX || height > MAX) {
-          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
-          else { width = Math.round((width * MAX) / height); height = MAX; }
+        try {
+          URL.revokeObjectURL(url);
+          const MAX = 1200;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+            else { width = Math.round((width * MAX) / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { reject(new Error("canvas unavailable")); return; }
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+          resolve({ base64: dataUrl.split(",")[1], mimeType: "image/jpeg" });
+        } catch (err) {
+          reject(err);
         }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
-        resolve({ base64: dataUrl.split(",")[1], mimeType: "image/jpeg" });
       };
-      img.onerror = reject;
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image load failed")); };
       img.src = url;
     });
   }, []);
 
   const handleSubmit = useCallback(async () => {
     const text = input.trim();
-    if (!text || isLoading) return;
+    const hasImages = attachedFiles.some(f => f.type.startsWith("image/"));
+    if ((!text && !hasImages) || isLoading) return;
     const files = attachedFiles;
     setInput("");
     setAttachedFiles([]);
