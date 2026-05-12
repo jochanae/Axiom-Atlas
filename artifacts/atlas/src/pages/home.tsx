@@ -1205,9 +1205,6 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
-  const [briefingIntroComplete, setBriefingIntroComplete] = useState(false);
-  const [briefingVisible, setBriefingVisible] = useState(true);
-  const briefingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isFree } = useSubscription();
 
@@ -1290,27 +1287,6 @@ export default function Home() {
       })
       .catch(() => setBriefingLoading(false));
   }, []);
-
-  // After briefing loads, wait 2s then mark intro complete
-  useEffect(() => {
-    if (briefingLoading) return;
-    const t = setTimeout(() => setBriefingIntroComplete(true), 4500);
-    return () => clearTimeout(t);
-  }, [briefingLoading]);
-
-  // Hard ceiling: 1.5s fallback shown + 2s wait = 3.5s max
-  useEffect(() => {
-    const t = setTimeout(() => setBriefingIntroComplete(true), 3500);
-    return () => clearTimeout(t);
-  }, []);
-
-  // After briefing intro completes, start 8-second visibility timer
-  useEffect(() => {
-    if (!briefingIntroComplete) return;
-    if (briefingTimerRef.current) clearTimeout(briefingTimerRef.current);
-    briefingTimerRef.current = setTimeout(() => setBriefingVisible(false), 8000);
-    return () => { if (briefingTimerRef.current) clearTimeout(briefingTimerRef.current); };
-  }, [briefingIntroComplete]);
 
   useEffect(() => {
     if (homeMessages.length === 0) return;
@@ -1718,111 +1694,21 @@ export default function Home() {
           }} />
 
           {/* Greeting */}
-          <div style={{ textAlign: "center", marginBottom: (!briefingIntroComplete || homeMessages.length === 0) ? 24 : 0, marginTop: (!briefingIntroComplete || homeMessages.length === 0) ? 32 : 0, position: "relative", zIndex: 1, minHeight: (!briefingIntroComplete || homeMessages.length === 0) ? 80 : 0, overflow: "hidden" }}>
-            {(!briefingIntroComplete || homeMessages.length === 0) ? briefingLoading ? (
-              <>
-                <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
-                  Where were we.
-                </h1>
-                <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: "0 0 14px", fontStyle: "italic" }}>
-                  I'm here. What's on your mind?
-                </p>
-                <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
-                  {[0, 320, 640].map((delay) => (
-                    <span
-                      key={delay}
-                      className="atlas-pulse-dot"
-                      style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", opacity: 0.5, animationDelay: `${delay}ms` }}
-                    />
-                  ))}
-                </div>
-                <button
-                  onClick={handleOpenHistory}
-                  style={{ marginTop: 14, background: "transparent", border: "none", cursor: "pointer", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.5, padding: "2px 6px" }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
-                >
-                  ↺ History
-                </button>
-              </>
-            ) : (
-              <div style={{ position: "relative", minHeight: 80 }}>
-                {/* Briefing text — fades out after 8 s */}
-                {briefing && (
-                  <div style={{
-                    opacity: briefingVisible ? 1 : 0,
-                    transition: "opacity 1200ms ease",
-                    pointerEvents: briefingVisible ? "auto" : "none",
-                    animation: "briefingReveal 800ms cubic-bezier(0.4,0,0.2,1) forwards",
-                  }}>
-                    {(() => {
-                      const sentences = briefing.split(/(?<=[.!?])\s+/);
-                      const status = sentences[0] ?? "";
-                      const nextMove = sentences.slice(1).join(" ");
-                      return (
-                        <>
-                          <p style={{
-                            fontSize: 17,
-                            fontWeight: 300,
-                            color: "var(--atlas-fg)",
-                            opacity: 0.9,
-                            margin: "0 0 16px",
-                            lineHeight: 1.6,
-                            fontFamily: "var(--app-font-sans)",
-                            letterSpacing: "-0.01em",
-                          }}>
-                            {status}
-                          </p>
-                          {nextMove && (
-                            <p style={{
-                              fontSize: 13,
-                              color: "var(--atlas-gold)",
-                              filter: "opacity(0.65)",
-                              margin: 0,
-                              fontStyle: "italic",
-                              fontFamily: "var(--app-font-sans)",
-                              lineHeight: 1.5,
-                              animation: "briefingReveal 800ms cubic-bezier(0.4,0,0.2,1) 400ms forwards",
-                              opacity: 0,
-                            }}>
-                              {nextMove}
-                            </p>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-                {/* "Where were we." — fades back in after briefing recedes */}
-                <div style={{
-                  position: briefing ? "absolute" : "relative",
-                  top: 0, left: 0, right: 0,
-                  opacity: (!briefing || !briefingVisible) ? 1 : 0,
-                  transition: "opacity 1200ms ease",
-                  pointerEvents: (!briefing || !briefingVisible) ? "auto" : "none",
-                }}>
-                  <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
-                    Where were we.
-                  </h1>
-                  <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
-                    I'm here. What's on your mind?
-                  </p>
-                </div>
-              </div>
-            ) : null}
-          </div>
+          {homeMessages.length === 0 && (
+            <div style={{ textAlign: "center", marginBottom: 24, marginTop: 32, position: "relative", zIndex: 1 }}>
+              <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
+                Where were we.
+              </h1>
+              <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
+                I'm here. What's on your mind?
+              </p>
+            </div>
+          )}
 
-          {/* Chat thread — fades in after briefing intro */}
-          <div style={{ margin: "18px 0 26px", minHeight: 60, opacity: briefingIntroComplete ? 1 : 0, transition: "opacity 400ms ease", pointerEvents: briefingIntroComplete ? "auto" : "none" }}>
+          {/* Chat thread */}
+          <div style={{ margin: "18px 0 26px", minHeight: 60 }}>
             {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? (
-              <div
-                onClick={() => {
-                  if (briefingTimerRef.current) clearTimeout(briefingTimerRef.current);
-                  setBriefingVisible(true);
-                  briefingTimerRef.current = setTimeout(() => setBriefingVisible(false), 8000);
-                }}
-                style={{ display: "flex", justifyContent: "center", marginTop: 32, opacity: 0.7, animation: "fadeIn 600ms ease forwards", cursor: "pointer" }}
-              >
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 32, opacity: 0.7, animation: "fadeIn 600ms ease forwards" }}>
                 <LoadingSpinner size="sm" color="atlas" />
               </div>
             ) : homeMessages.length === 0 && !isAtlasStreaming ? (
@@ -2117,8 +2003,7 @@ export default function Home() {
               <textarea
                 ref={textareaRef}
                 value={input}
-                onChange={(e) => { setInput(e.target.value); autoResize(); if (createError) setCreateError(null); setBriefingVisible(false); }}
-                onFocus={() => setBriefingVisible(false)}
+                onChange={(e) => { setInput(e.target.value); autoResize(); if (createError) setCreateError(null); }}
                 onKeyDown={handleKeyDown}
                 rows={2}
                 style={{
@@ -2491,10 +2376,6 @@ export default function Home() {
           50%       { opacity: 1; }
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes briefingReveal {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
         @keyframes homeAxiomPulse {
           0%, 100% {
             box-shadow:
