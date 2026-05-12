@@ -5901,6 +5901,7 @@ export default function Workspace() {
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [switchToExpanded, setSwitchToExpanded] = useState(true);
   const projectBtnRef = useRef<HTMLButtonElement>(null);
   const styleBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
@@ -7157,9 +7158,27 @@ export default function Workspace() {
                     const isEmptyNew = messages.length === 0 && project?.name === "New Project";
                     return (
                       <>
-                        <div style={{ padding: "6px 12px 2px", fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.45 }}>
-                          Switch to
-                        </div>
+                        {/* Collapsible "Switch to" header */}
+                        <button
+                          onClick={() => setSwitchToExpanded(x => !x)}
+                          style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            width: "100%", background: "transparent", border: "none",
+                            padding: "6px 12px 4px", cursor: "pointer",
+                          }}
+                        >
+                          <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.45 }}>
+                            Switch to
+                          </span>
+                          <svg
+                            width="9" height="9" viewBox="0 0 10 6" fill="none"
+                            stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+                            style={{ color: "var(--atlas-muted)", opacity: 0.4, transition: "transform 180ms ease", transform: switchToExpanded ? "rotate(0deg)" : "rotate(-90deg)", flexShrink: 0 }}
+                          >
+                            <path d="M1 1l4 4 4-4" />
+                          </svg>
+                        </button>
+                        {switchToExpanded && (<>
                         {/* New idea — creates blank project + opens its workspace */}
                         <MenuBtn
                           icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="8" y1="2" x2="8" y2="14" /><line x1="2" y1="8" x2="14" y2="8" /></svg>}
@@ -7197,6 +7216,7 @@ export default function Workspace() {
                             }}
                           />
                         ))}
+                        </>)}
                         <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
                       </>
                     );
