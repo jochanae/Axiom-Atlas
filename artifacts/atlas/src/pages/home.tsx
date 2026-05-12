@@ -1092,6 +1092,7 @@ export default function Home() {
   const [threadLoading, setThreadLoading] = useState(true);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
+  const [briefingIntroComplete, setBriefingIntroComplete] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isFree } = useSubscription();
 
@@ -1162,6 +1163,19 @@ export default function Home() {
         setBriefingLoading(false);
       })
       .catch(() => setBriefingLoading(false));
+  }, []);
+
+  // After briefing loads, wait 2s then mark intro complete
+  useEffect(() => {
+    if (briefingLoading) return;
+    const t = setTimeout(() => setBriefingIntroComplete(true), 2000);
+    return () => clearTimeout(t);
+  }, [briefingLoading]);
+
+  // Hard ceiling: 1.5s fallback shown + 2s wait = 3.5s max
+  useEffect(() => {
+    const t = setTimeout(() => setBriefingIntroComplete(true), 3500);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -1485,8 +1499,8 @@ export default function Home() {
           }} />
 
           {/* Greeting */}
-          <div style={{ textAlign: "center", marginBottom: homeMessages.length > 0 ? 0 : 24, marginTop: homeMessages.length > 0 ? 0 : 32, position: "relative", zIndex: 1, minHeight: homeMessages.length > 0 ? 0 : 80, overflow: "hidden" }}>
-            {homeMessages.length > 0 ? null : briefingLoading ? (
+          <div style={{ textAlign: "center", marginBottom: (!briefingIntroComplete || homeMessages.length === 0) ? 24 : 0, marginTop: (!briefingIntroComplete || homeMessages.length === 0) ? 32 : 0, position: "relative", zIndex: 1, minHeight: (!briefingIntroComplete || homeMessages.length === 0) ? 80 : 0, overflow: "hidden" }}>
+            {(!briefingIntroComplete || homeMessages.length === 0) ? briefingLoading ? (
               <>
                 <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
                   Where were we.
@@ -1546,11 +1560,11 @@ export default function Home() {
                   I'm here. What's on your mind?
                 </p>
               </>
-            )}
+            ) : null}
           </div>
 
-          {/* Chat thread */}
-          <div style={{ margin: "18px 0 26px", minHeight: 60 }}>
+          {/* Chat thread — fades in after briefing intro */}
+          <div style={{ margin: "18px 0 26px", minHeight: 60, opacity: briefingIntroComplete ? 1 : 0, transition: "opacity 400ms ease", pointerEvents: briefingIntroComplete ? "auto" : "none" }}>
             {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? null : homeMessages.length === 0 && !isAtlasStreaming ? (
               <div style={{ display: "flex", justifyContent: "center" }}>
                 <LoadingSpinner size="sm" color="atlas" />
