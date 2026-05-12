@@ -13,13 +13,12 @@ const POSITIONS = [
   { x: 16, y: 50 },
 ];
 
-// Signature Axiom-Atlas palette: gold center, petals alternate purple/gold
 const ATLAS_PETAL_COLORS = [
-  "#C9A24C", // center — gold
-  "#7C3AED", // top — deep violet
-  "#C9A24C", // right — gold
-  "#6D28D9", // bottom — purple
-  "#9333EA", // left — violet
+  "#C9A24C",
+  "#C9A24C",
+  "#C9A24C",
+  "#C9A24C",
+  "#C9A24C",
 ];
 
 export function LoadingSpinner({
