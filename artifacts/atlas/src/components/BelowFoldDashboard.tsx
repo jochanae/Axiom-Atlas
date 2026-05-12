@@ -18,6 +18,8 @@ type Props = {
   onOpenQuickPrompt?: () => void;
   committedCount?: number;
   parkedCount?: number;
+  briefing?: string | null;
+  briefingLoading?: boolean;
 };
 
 type ActivityItem = {
@@ -232,7 +234,8 @@ function ActivityRow({ item, onOpenProject }: { item: ActivityItem; onOpenProjec
   );
 }
 
-export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOpenParking, onOpenQuickPrompt, committedCount = 0, parkedCount }: Props) {
+export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOpenParking, onOpenQuickPrompt, committedCount = 0, parkedCount, briefing, briefingLoading }: Props) {
+  const [showBriefing, setShowBriefing] = useState(false);
   if (projects.length === 0) return null;
 
   const recent = projects.slice(0, 5);
@@ -240,6 +243,13 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
 
   return (
     <div style={{ width: "100%", maxWidth: 560, padding: "0 0 120px", display: "flex", flexDirection: "column", gap: 14 }}>
+      <style>{`
+        @keyframes briefingSlideDown {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes bfd-spin { to { transform: rotate(360deg); } }
+      `}</style>
 
       {/* Scroll hint / divider */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
@@ -253,14 +263,80 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
       {/* 1. WHERE WERE WE */}
       <RevealOnScroll delayMs={0}>
         <div className="atlas-discovery-card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-              Where were we
-            </h3>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showBriefing ? 10 : 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
+                Where were we
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowBriefing(v => !v)}
+                title="Show briefing"
+                style={{
+                  background: showBriefing ? "rgba(201,162,76,0.12)" : "transparent",
+                  border: `1px solid ${showBriefing ? "rgba(201,162,76,0.35)" : "rgba(201,162,76,0.18)"}`,
+                  borderRadius: 5,
+                  padding: "2px 6px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                  transition: "all 150ms ease",
+                }}
+              >
+                <span style={{ fontSize: 10, color: "var(--atlas-gold)", opacity: showBriefing ? 1 : 0.6, fontFamily: "var(--app-font-mono)", letterSpacing: "0.04em" }}>
+                  ✦
+                </span>
+                <span style={{ fontSize: 8.5, color: "var(--atlas-gold)", opacity: showBriefing ? 0.9 : 0.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Briefing
+                </span>
+              </button>
+            </div>
             <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.4 }}>
               Last 30 days
             </span>
           </div>
+
+          {/* Inline briefing panel */}
+          {showBriefing && (
+            <div style={{
+              marginBottom: 14,
+              padding: "10px 12px",
+              borderRadius: 8,
+              background: "rgba(201,162,76,0.04)",
+              border: "1px solid rgba(201,162,76,0.12)",
+              animation: "briefingSlideDown 200ms ease forwards",
+            }}>
+              {briefingLoading ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ width: 12, height: 12, borderRadius: "50%", border: "1.5px solid rgba(201,162,76,0.2)", borderTopColor: "rgba(201,162,76,0.7)", animation: "bfd-spin 0.8s linear infinite", flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5, letterSpacing: "0.04em" }}>Atlas is preparing your briefing…</span>
+                </div>
+              ) : briefing ? (
+                (() => {
+                  const sentences = briefing.split(/(?<=[.!?])\s+/);
+                  const status = sentences[0] ?? "";
+                  const rest = sentences.slice(1).join(" ");
+                  return (
+                    <>
+                      <p style={{ margin: 0, fontSize: 12.5, fontWeight: 400, color: "var(--atlas-fg)", lineHeight: 1.6, fontFamily: "var(--app-font-sans)", opacity: 0.88 }}>
+                        {status}
+                      </p>
+                      {rest && (
+                        <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "var(--atlas-gold)", opacity: 0.7, fontStyle: "italic", lineHeight: 1.5, fontFamily: "var(--app-font-sans)" }}>
+                          {rest}
+                        </p>
+                      )}
+                    </>
+                  );
+                })()
+              ) : (
+                <p style={{ margin: 0, fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.5, fontStyle: "italic" }}>
+                  No briefing available yet.
+                </p>
+              )}
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {recent.map((p, i) => (
               <button

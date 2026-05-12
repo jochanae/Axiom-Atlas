@@ -2218,6 +2218,8 @@ export default function Home() {
           onOpenQuickPrompt={() => setShowQuickPrompt(true)}
           parkedCount={0}
           committedCount={0}
+          briefing={briefing}
+          briefingLoading={briefingLoading}
         />
       </div>
 
