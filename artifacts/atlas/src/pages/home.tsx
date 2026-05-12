@@ -1256,24 +1256,56 @@ export default function Home() {
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
+      document.body.dataset.voiceActive = "false";
       return;
     }
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) return;
     const rec = new SR();
-    rec.continuous = false;
+    rec.continuous = true;
     rec.interimResults = true;
+    rec.lang = "en-US";
+    let finalTranscript = "";
     rec.onresult = (e: any) => {
-      const t = Array.from(e.results as SpeechRecognitionResultList)
-        .map((r) => (r as SpeechRecognitionResult)[0].transcript)
-        .join("");
-      setInput(t);
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const result = e.results[i];
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript;
+        } else {
+          interim += result[0].transcript;
+        }
+      }
+      // Only update input on final results to avoid per-syllable re-renders
+      if (finalTranscript) {
+        setInput(prev => {
+          const base = prev.trimEnd();
+          const join = base.length > 0 ? " " : "";
+          return base + join + finalTranscript.trimStart();
+        });
+        finalTranscript = "";
+      } else if (interim) {
+        // Show interim text as a preview only — debounced via requestAnimationFrame
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            textareaRef.current.dataset.interim = interim;
+          }
+        });
+      }
     };
-    rec.onend = () => setIsListening(false);
-    rec.onerror = () => setIsListening(false);
+    rec.onend = () => {
+      setIsListening(false);
+      document.body.dataset.voiceActive = "false";
+      if (textareaRef.current) delete textareaRef.current.dataset.interim;
+    };
+    rec.onerror = () => {
+      setIsListening(false);
+      document.body.dataset.voiceActive = "false";
+    };
     rec.start();
     recognitionRef.current = rec;
     setIsListening(true);
+    document.body.dataset.voiceActive = "true";
   }, [isListening]);
 
   const placeholder = useTypewriter(PLACEHOLDERS);
@@ -1535,7 +1567,11 @@ export default function Home() {
   const autoResize = () => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "auto";
+    const currentH = parseFloat(el.style.height) || 0;
+    // Only collapse to auto when shrinking — avoids the flash-collapse on every keystroke
+    if (el.scrollHeight < currentH) {
+      el.style.height = "auto";
+    }
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   };
 

@@ -40,6 +40,7 @@ export function usePullToRefresh(
 
     const onTouchStart = (e: TouchEvent) => {
       if (refreshingRef.current) return;
+      if (document.body.dataset.voiceActive === "true") return;
       if (isAtTop()) startY = e.touches[0].clientY;
     };
 
