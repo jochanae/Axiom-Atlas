@@ -245,7 +245,7 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
         <div style={{ flex: 1, height: 1, background: "var(--atlas-gold-border)" }} />
         <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.4 }}>
-          Your workspace
+          Your overview
         </span>
         <div style={{ flex: 1, height: 1, background: "var(--atlas-gold-border)" }} />
       </div>
