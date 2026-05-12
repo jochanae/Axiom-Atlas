@@ -27,14 +27,38 @@ import ResetPassword from "./pages/reset-password";
 import MasterMap from "./pages/master-map";
 
 // ── Global 401 interceptor ────────────────────────────────────────────────────
+// Noisy background endpoints — a single 401 here should never boot the user.
+const SILENT_401_PATTERNS = ["/api/nexus/activity", "/api/nexus/briefing", "/api/stripe/"];
+
+let _401redirectPending = false;
+
 const _originalFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
   const res = await _originalFetch(...args);
   if (res.status === 401) {
     const url = typeof args[0] === "string" ? args[0] : (args[0] as Request).url;
     if (url.includes("/api/") && !url.includes("/api/auth/")) {
-      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-      window.location.href = `${base}/login?reason=session_expired`;
+      // Skip silent/polling endpoints — they shouldn't boot the user
+      const isSilent = SILENT_401_PATTERNS.some((p) => url.includes(p));
+      if (!isSilent && !_401redirectPending) {
+        _401redirectPending = true;
+        // Wait 1.5 s and confirm the session is still gone before redirecting.
+        // This prevents transient server hiccups (restart, slow DB) from kicking
+        // the user out of a live conversation.
+        setTimeout(async () => {
+          try {
+            const check = await _originalFetch("/api/auth/me", { credentials: "include" });
+            if (check.status === 401) {
+              const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+              window.location.href = `${base}/login?reason=session_expired`;
+            } else {
+              _401redirectPending = false;
+            }
+          } catch {
+            _401redirectPending = false;
+          }
+        }, 1500);
+      }
     }
   }
   return res;
