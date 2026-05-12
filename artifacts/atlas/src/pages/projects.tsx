@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { useListProjects, useCreateProject, getListProjectsQueryKey } from "@workspace/api-client-react";
@@ -39,7 +39,19 @@ function resolveLinkedFullName(linkedRepo?: string | null): string | null {
 }
 
 export default function Projects() {
-  const { data: projects, isLoading } = useListProjects();
+  const { data: projects, isLoading: isLoadingData } = useListProjects();
+  const [showSpinner, setShowSpinner] = useState(true);
+  const spinnerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!isLoadingData) {
+      spinnerTimer.current = setTimeout(() => setShowSpinner(false), 600);
+    } else {
+      setShowSpinner(true);
+      if (spinnerTimer.current) clearTimeout(spinnerTimer.current);
+    }
+    return () => { if (spinnerTimer.current) clearTimeout(spinnerTimer.current); };
+  }, [isLoadingData]);
+  const isLoading = isLoadingData || showSpinner;
   const createProject = useCreateProject();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
