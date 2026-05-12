@@ -3428,44 +3428,13 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
   const [autoDetected, setAutoDetected] = useState<{ url: string; platform: string } | null>(null);
   const autoDetectTriedRef = useRef<string | null>(null);
 
-  // ── Local dev server state ──────────────────────────────────────────────────
-  type DevStatus = "idle" | "cloning" | "installing" | "starting" | "running" | "error";
-  const [devStatus, setDevStatus] = useState<DevStatus>("idle");
-  const [devPort, setDevPort] = useState<number | null>(null);
-  const [devLogs, setDevLogs] = useState<string[]>([]);
-  const [devError, setDevError] = useState<string | null>(null);
-  const [devReloadKey, setDevReloadKey] = useState(0);
-  const [devEnvVars, setDevEnvVars] = useState("");
-  const [showEnvPanel, setShowEnvPanel] = useState(false);
-  const devLogRef = useRef<HTMLDivElement>(null);
+  // ── StackBlitz embed state ───────────────────────────────────────────────────
+  const [sbView, setSbView] = useState<"editor" | "preview">("preview");
 
   const { data: previewProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
   const linkedRepo = (() => { try { return previewProject?.linkedRepo ? JSON.parse(previewProject.linkedRepo) as { fullName: string; defaultBranch?: string } : null; } catch { return null; } })();
   const token = previewProject?.githubToken ?? null;
 
-  // Poll dev server status when in local mode
-  useEffect(() => {
-    if (previewMode !== "local") return;
-    const poll = async () => {
-      try {
-        const r = await fetch("/api/devserver/status");
-        if (!r.ok) return;
-        const d = await r.json() as { status: DevStatus; port: number | null; logs: string[]; errorMsg: string | null };
-        setDevStatus(d.status);
-        setDevPort(d.port);
-        setDevLogs(d.logs);
-        setDevError(d.errorMsg);
-      } catch {}
-    };
-    poll();
-    const id = setInterval(poll, 2000);
-    return () => clearInterval(id);
-  }, [previewMode]);
-
-  // Auto-scroll logs
-  useEffect(() => {
-    if (devLogRef.current) devLogRef.current.scrollTop = devLogRef.current.scrollHeight;
-  }, [devLogs]);
 
   // ── Sandbox handoff from chat ────────────────────────────────────────────────
   const buildSrcdoc = (code: string): string => {
@@ -3483,43 +3452,6 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sandboxCode]);
 
-  const startDev = async () => {
-    if (!linkedRepo) return;
-    try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["x-github-token"] = token;
-      const envVars: Record<string, string> = {};
-      for (const line of devEnvVars.split("\n")) {
-        const eq = line.indexOf("=");
-        if (eq > 0) {
-          const k = line.slice(0, eq).trim();
-          const v = line.slice(eq + 1).trim();
-          if (k) envVars[k] = v;
-        }
-      }
-      const r = await fetch("/api/devserver/start", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ repoFullName: linkedRepo.fullName, branch: linkedRepo.defaultBranch ?? "main", envVars }),
-      });
-      if (r.ok) {
-        const d = await r.json() as { status: DevStatus };
-        setDevStatus(d.status);
-        setDevLogs([]);
-        setDevPort(null);
-        setDevReloadKey((k) => k + 1);
-      }
-    } catch {}
-  };
-
-  const stopDev = async () => {
-    try {
-      await fetch("/api/devserver/stop", { method: "POST" });
-      setDevStatus("idle");
-      setDevPort(null);
-      setDevLogs([]);
-    } catch {}
-  };
 
   // Sync from DB on project load / switch
   useEffect(() => {
@@ -3649,21 +3581,6 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
     return "var(--atlas-muted)";
   };
 
-  const devStatusColor = () => {
-    if (devStatus === "running") return "rgba(134,239,172,0.85)";
-    if (devStatus === "error") return "rgba(252,165,165,0.85)";
-    if (devStatus === "idle") return "var(--atlas-muted)";
-    return "rgba(201,162,76,0.85)";
-  };
-  const devStatusLabel = () => {
-    if (devStatus === "idle") return "Idle";
-    if (devStatus === "cloning") return "Cloning repo…";
-    if (devStatus === "installing") return "Installing deps…";
-    if (devStatus === "starting") return "Starting server…";
-    if (devStatus === "running") return `Running on :${devPort}`;
-    if (devStatus === "error") return "Error";
-    return devStatus;
-  };
 
   // Device config
   const DEVICE_CONFIG = {
@@ -3717,7 +3634,7 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
               transition: "all 140ms ease",
             }}
           >
-            {m === "url" ? "Live URL" : m === "sandbox" ? "Sandbox" : "Local Dev"}
+            {m === "url" ? "Live URL" : m === "sandbox" ? "Sandbox" : "StackBlitz"}
           </button>
         ))}
       </div>
@@ -3987,126 +3904,76 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
         </div>
       )}
 
-      {/* ── Local Dev mode ── */}
+      {/* ── StackBlitz mode ── */}
       {previewMode === "local" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {/* Controls bar */}
-          <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Status dot + label */}
-            <div style={{ display: "flex", alignItems: "center", gap: 5, flex: 1, minWidth: 0 }}>
-              <div style={{
-                width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                background: devStatusColor(),
-                boxShadow: devStatus === "running" ? `0 0 6px ${devStatusColor()}` : "none",
-                transition: "all 400ms ease",
-              }} />
-              <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: devStatusColor(), letterSpacing: "0.04em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {devStatusLabel()}
-              </span>
-            </div>
-            {/* Action buttons */}
-            {devStatus === "running" || devStatus === "cloning" || devStatus === "installing" || devStatus === "starting" ? (
-              <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-                {devStatus === "running" && (
-                  <button
-                    onClick={() => setDevReloadKey((k) => k + 1)}
-                    title="Reload preview"
-                    style={{ padding: "4px 8px", borderRadius: 4, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", fontSize: 11, cursor: "pointer", lineHeight: 1, opacity: 0.6 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                    onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.6")}
-                  >↺</button>
-                )}
-                <button
-                  onClick={stopDev}
-                  style={{ padding: "4px 9px", borderRadius: 4, background: "rgba(220,38,38,0.1)", border: "1px solid rgba(220,38,38,0.25)", color: "rgba(252,165,165,0.85)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", cursor: "pointer" }}
-                >Stop</button>
-              </div>
-            ) : (
-              <button
-                onClick={startDev}
-                disabled={!linkedRepo}
-                title={!linkedRepo ? "Link a GitHub repo in the Files tab first" : `Start dev server for ${linkedRepo?.fullName}`}
-                style={{ padding: "4px 11px", borderRadius: 4, background: linkedRepo ? "rgba(201,162,76,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${linkedRepo ? "rgba(201,162,76,0.3)" : "var(--atlas-border)"}`, color: linkedRepo ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", cursor: linkedRepo ? "pointer" : "not-allowed", flexShrink: 0, opacity: linkedRepo ? 1 : 0.4 }}
-              >
-                {devStatus === "error" ? "Retry" : "Start"}
-              </button>
-            )}
-          </div>
-
-          {/* No repo warning */}
-          {!linkedRepo && devStatus === "idle" && (
-            <div style={{ padding: "10px 12px", flexShrink: 0, borderBottom: "1px solid var(--atlas-border)" }}>
-              <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5, lineHeight: 1.6 }}>
-                Link a GitHub repo in the <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Files</strong> tab to start a local dev server.
-              </div>
-            </div>
-          )}
-
-          {/* Env vars panel */}
-          {linkedRepo && (devStatus === "idle" || devStatus === "error") && (
-            <div style={{ flexShrink: 0, borderBottom: "1px solid var(--atlas-border)" }}>
-              <button
-                onClick={() => setShowEnvPanel((v) => !v)}
-                style={{ width: "100%", padding: "5px 10px", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--atlas-muted)", fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", opacity: 0.6 }}
-              >
-                <span>ENV VARS {devEnvVars.trim() ? `(${devEnvVars.trim().split("\n").filter(l => l.includes("=")).length} set)` : "(optional)"}</span>
-                <span style={{ fontSize: 8 }}>{showEnvPanel ? "▲" : "▼"}</span>
-              </button>
-              {showEnvPanel && (
-                <div style={{ padding: "0 10px 8px" }}>
-                  <textarea
-                    value={devEnvVars}
-                    onChange={(e) => setDevEnvVars(e.target.value)}
-                    placeholder={"VITE_SUPABASE_URL=https://...\nVITE_SUPABASE_ANON_KEY=eyJ..."}
-                    rows={4}
-                    style={{ width: "100%", boxSizing: "border-box", background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)", borderRadius: 4, color: "var(--atlas-fg)", fontSize: 9, fontFamily: "var(--app-font-mono)", lineHeight: 1.7, padding: "6px 8px", resize: "vertical", outline: "none" }}
-                  />
-                  <div style={{ fontSize: 8.5, color: "var(--atlas-muted)", opacity: 0.45, marginTop: 3 }}>One KEY=value per line. Not stored — only used for this session.</div>
+          {linkedRepo ? (
+            <>
+              {/* Controls bar */}
+              <div style={{ padding: "6px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {linkedRepo.fullName}
+                </span>
+                {/* View toggle */}
+                <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+                  {(["preview", "editor"] as const).map(v => (
+                    <button
+                      key={v}
+                      onClick={() => setSbView(v)}
+                      style={{
+                        padding: "3px 9px", borderRadius: 4, fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+                        background: sbView === v ? "rgba(201,162,76,0.12)" : "transparent",
+                        border: `1px solid ${sbView === v ? "rgba(201,162,76,0.3)" : "var(--atlas-border)"}`,
+                        color: sbView === v ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                        cursor: "pointer", transition: "all 140ms ease",
+                      }}
+                    >
+                      {v === "preview" ? "Preview" : "Editor"}
+                    </button>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
+                <a
+                  href={`https://stackblitz.com/github/${linkedRepo.fullName}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open in StackBlitz"
+                  style={{ padding: "3px 7px", borderRadius: 4, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", fontSize: 10, lineHeight: 1, opacity: 0.5, textDecoration: "none", flexShrink: 0, transition: "opacity 140ms ease" }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
+                >↗</a>
+              </div>
 
-          {/* Error message */}
-          {devStatus === "error" && devError && (
-            <div style={{ padding: "8px 12px", flexShrink: 0, borderBottom: "1px solid var(--atlas-border)", background: "rgba(220,38,38,0.05)" }}>
-              <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "rgba(252,165,165,0.7)", lineHeight: 1.5 }}>{devError}</div>
-            </div>
-          )}
+              {/* StackBlitz iframe */}
+              <div style={{ flex: 1, position: "relative" }}>
+                <iframe
+                  key={`sb-${linkedRepo.fullName}-${sbView}`}
+                  src={`https://stackblitz.com/github/${linkedRepo.fullName}?embed=1&view=${sbView}&theme=dark&hideNavigation=1`}
+                  title="StackBlitz"
+                  style={{ border: "none", width: "100%", height: "100%", display: "block" }}
+                  allow="cross-origin-isolated"
+                />
+              </div>
 
-          {/* Log output — always visible, collapsible when running */}
-          {devLogs.length > 0 && (
-            <div
-              ref={devLogRef}
-              style={{ flexShrink: 0, maxHeight: devStatus === "running" ? 90 : 160, overflowY: "auto", padding: "6px 10px", borderBottom: "1px solid var(--atlas-border)", background: "rgba(0,0,0,0.25)" }}
-              className="scrollbar-none"
-            >
-              {devLogs.map((line, i) => (
-                <div key={i} style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: line.toLowerCase().includes("error") || line.toLowerCase().includes("failed") ? "rgba(252,165,165,0.7)" : "var(--atlas-muted)", opacity: 0.75, lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-                  {line}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Preview iframe when running */}
-          {devStatus === "running" ? (
-            <div style={{ flex: 1, position: "relative" }}>
-              <iframe
-                key={`devserver-${devReloadKey}`}
-                src="/api/devserver/proxy"
-                title="Local Dev Preview"
-                style={{ border: "none", width: "100%", height: "100%", display: "block", background: "#fff" }}
-              />
-            </div>
-          ) : devStatus === "idle" && linkedRepo ? (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 10 }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" opacity={0.12}><rect x="3" y="3" width="18" height="18" rx="2" stroke="var(--atlas-fg)" strokeWidth="1.5" /><path d="M9 9l6 3-6 3V9z" fill="var(--atlas-fg)" /></svg>
-              <div style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.7 }}>
-                Click <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Start</strong> to clone and run<br />{linkedRepo.fullName} locally.
+              {/* Private repo note */}
+              <div style={{ flexShrink: 0, padding: "5px 10px", borderTop: "1px solid var(--atlas-border)" }}>
+                <p style={{ margin: 0, fontSize: 8.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.32, lineHeight: 1.5 }}>
+                  Private repos require being logged into StackBlitz in this browser. Works best for web apps (React, Vite, Next.js).
+                </p>
+              </div>
+            </>
+          ) : (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" opacity={0.12}>
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
+                Link a GitHub repo in the <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Files</strong> tab<br />to open it in StackBlitz.
+              </div>
+              <div style={{ fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.22, textAlign: "center", lineHeight: 1.7, fontFamily: "var(--app-font-mono)" }}>
+                Runs your full project in the browser —<br />no install, no server needed.
               </div>
             </div>
-          ) : null}
+          )}
         </div>
       )}
     </div>
