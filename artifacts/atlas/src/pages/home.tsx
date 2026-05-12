@@ -1791,7 +1791,11 @@ export default function Home() {
 
           {/* Chat thread — fades in after briefing intro */}
           <div style={{ margin: "18px 0 26px", minHeight: 60, opacity: briefingIntroComplete ? 1 : 0, transition: "opacity 400ms ease", pointerEvents: briefingIntroComplete ? "auto" : "none" }}>
-            {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? null : homeMessages.length === 0 && !isAtlasStreaming ? (
+            {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? (
+              <div style={{ display: "flex", justifyContent: "center", marginTop: 32, opacity: 0.7, animation: "fadeIn 600ms ease forwards" }}>
+                <LoadingSpinner size="sm" color="atlas" />
+              </div>
+            ) : homeMessages.length === 0 && !isAtlasStreaming ? (
               <div style={{ display: "flex", justifyContent: "center" }}>
                 <LoadingSpinner size="sm" color="atlas" />
               </div>
