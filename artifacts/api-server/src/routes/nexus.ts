@@ -324,12 +324,37 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // Strip MEMORY_Tn tags from visible output
   const { content: visibleContent, memoryUpdated } = extractMemoryLines(rawContent);
 
+  // Detect active mode from Atlas's response
+  const lowerContent = visibleContent.toLowerCase();
+  const detectedMode: string = (() => {
+    const auditSignals = ["broken", "gap", "risk", "fragile", "inconsistent", "conflict", "missing", "dead end", "what's wrong", "fix", "⚠️"];
+    const deepSignals = ["let's go deeper", "specifically", "zoom in", "focused on", "only this", "this one"];
+    const auditScore = auditSignals.filter(s => lowerContent.includes(s)).length;
+    const deepScore = deepSignals.filter(s => lowerContent.includes(s)).length;
+    if (auditScore >= 2) return "audit";
+    if (deepScore >= 2) return "deep-dive";
+    return "strategic";
+  })();
+
+  // Detect if Atlas keeps referencing one project and suggest focus
+  const projectMentions = projects.map(p => ({
+    id: p.id,
+    name: p.name,
+    count: (lowerContent.match(new RegExp(p.name.toLowerCase(), "g")) ?? []).length
+  })).filter(p => p.count >= 2).sort((a, b) => b.count - a.count);
+
+  const focusSuggestion = !focusProjectId && projectMentions.length > 0
+    ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
+    : null;
+
   // Persist the assistant response to the Living Thread
   await db.insert(nexusMessagesTable).values({ userId, role: "assistant", content: visibleContent });
 
   res.json({
     response: visibleContent,
     memoryUpdated,
+    detectedMode,
+    focusSuggestion,
   });
 });
 

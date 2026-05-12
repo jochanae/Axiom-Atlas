@@ -1109,6 +1109,8 @@ export default function Home() {
     try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).mode ?? "strategic") : "strategic"; } catch { return "strategic"; }
   });
   const [showModeSheet, setShowModeSheet] = useState(false);
+  const [atlasDetectedMode, setAtlasDetectedMode] = useState<string>("strategic");
+  const [focusSuggestion, setFocusSuggestion] = useState<{ projectId: number; projectName: string } | null>(null);
 
   // Persist context to localStorage whenever it changes
   useEffect(() => {
@@ -1272,6 +1274,8 @@ export default function Home() {
       const data = await res.json() as { reply?: string; message?: string };
       const replyText = (data as any).response ?? (data as any).reply ?? (data as any).message ?? "";
       setHomeMessages(prev => [...prev, { role: 'assistant', content: replyText }]);
+      if ((data as any).detectedMode) setAtlasDetectedMode((data as any).detectedMode);
+      if ((data as any).focusSuggestion) setFocusSuggestion((data as any).focusSuggestion);
     } catch {
       const target = projects?.at(-1);
       if (target) {
@@ -1663,13 +1667,30 @@ export default function Home() {
                     </div>
                   ))}
                   <div ref={messagesEndRef} />
+                  {focusSuggestion && !homeFocus && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "rgba(99,130,239,0.08)", border: "1px solid rgba(99,130,239,0.2)", fontSize: 12, color: "rgba(180,190,255,0.85)", fontFamily: "var(--app-font-mono)", marginTop: 4 }}>
+                      <span>Looks like we're deep on {focusSuggestion.projectName}. Focus there?</span>
+                      <button
+                        onClick={() => { setHomeFocus(focusSuggestion.projectId); setFocusSuggestion(null); }}
+                        style={{ background: "rgba(99,130,239,0.15)", border: "1px solid rgba(99,130,239,0.3)", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: "rgba(180,190,255,0.9)", cursor: "pointer", fontFamily: "var(--app-font-mono)" }}
+                      >
+                        Focus {focusSuggestion.projectName}
+                      </button>
+                      <button
+                        onClick={() => setFocusSuggestion(null)}
+                        style={{ background: "transparent", border: "none", fontSize: 13, color: "var(--atlas-muted)", cursor: "pointer", padding: "0 4px" }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
                 </div>
               </>
             )}
           </div>
 
           {/* Input shell */}
-          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px" }}>
+          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px", boxShadow: ({ strategic: "0 0 0 1.5px rgba(201,162,76,0.4), 0 0 18px rgba(201,162,76,0.12)", audit: "0 0 0 1.5px rgba(239,100,68,0.5), 0 0 18px rgba(239,100,68,0.15)", "deep-dive": "0 0 0 1.5px rgba(99,130,239,0.5), 0 0 18px rgba(99,130,239,0.15)" } as Record<string, string>)[atlasDetectedMode] ?? "none", transition: "box-shadow 600ms ease" }}>
             {/* Hidden file input */}
             <input
               ref={fileInputRef}
