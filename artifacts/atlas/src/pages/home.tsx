@@ -1668,9 +1668,18 @@ export default function Home() {
                 <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
                   Where were we.
                 </h1>
-                <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
+                <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: "0 0 14px", fontStyle: "italic" }}>
                   I'm here. What's on your mind?
                 </p>
+                <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
+                  {[0, 320, 640].map((delay) => (
+                    <span
+                      key={delay}
+                      className="atlas-pulse-dot"
+                      style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", opacity: 0.5, animationDelay: `${delay}ms` }}
+                    />
+                  ))}
+                </div>
               </>
             ) : briefing ? (
               <div style={{
