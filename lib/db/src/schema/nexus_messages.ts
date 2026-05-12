@@ -8,6 +8,7 @@ export const nexusMessagesTable = pgTable("nexus_messages", {
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   role: text("role").notNull(),
   content: text("content").notNull(),
+  conversationId: text("conversation_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -22,6 +22,13 @@
       "when": 1747000000000,
       "tag": "0002_nexus_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1747100000000,
+      "tag": "0003_nexus_conversations",
+      "breakpoints": true
     }
   ]
 }

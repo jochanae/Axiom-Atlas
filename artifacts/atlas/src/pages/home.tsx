@@ -1185,6 +1185,24 @@ export default function Home() {
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [threadLoading, setThreadLoading] = useState(true);
+  const [activeConversationId, setActiveConversationId] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem("atlas-home-conversation-id");
+      if (stored) return stored;
+      const newId = crypto.randomUUID();
+      localStorage.setItem("atlas-home-conversation-id", newId);
+      return newId;
+    } catch { return crypto.randomUUID(); }
+  });
+  const [showHistorySheet, setShowHistorySheet] = useState(false);
+  const [historyConversations, setHistoryConversations] = useState<Array<{
+    conversationId: string | null;
+    preview: string;
+    messageCount: number;
+    startedAt: string;
+    lastMessageAt: string;
+  }>>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
   const [briefingIntroComplete, setBriefingIntroComplete] = useState(false);
@@ -1292,9 +1310,11 @@ export default function Home() {
     }
   }, [homeMessages]);
 
-  // Load Living Thread from DB on mount
+  // Load the active conversation from DB (re-runs when conversationId changes)
   useEffect(() => {
-    fetch("/api/nexus/thread", { credentials: "include" })
+    setHomeMessages([]);
+    setThreadLoading(true);
+    fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(activeConversationId)}`, { credentials: "include" })
       .then(r => r.ok ? r.json() : [])
       .then((msgs: Array<{ role: string; content: string }>) => {
         if (msgs.length > 0) {
@@ -1303,7 +1323,7 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setThreadLoading(false));
-  }, []);
+  }, [activeConversationId]);
 
   // Pull-to-refresh
   const { pulling, distance, refreshing, threshold } = usePullToRefresh(
@@ -1394,7 +1414,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: fullText, model: homeModel, focusProjectId: homeFocus, mode: homeMode, imageBase64, imageMimeType }),
+        body: JSON.stringify({ message: fullText, model: homeModel, focusProjectId: homeFocus, mode: homeMode, imageBase64, imageMimeType, conversationId: activeConversationId }),
       });
       if (!res.ok) throw new Error("No response");
       const data = await res.json() as { reply?: string; message?: string };
@@ -1450,10 +1470,36 @@ export default function Home() {
   }, [homeMessages, homeFocus, queryClient, setLocation]);
 
   const handleClearThread = useCallback(async () => {
-    await fetch("/api/nexus/thread", { method: "DELETE", credentials: "include" }).catch(() => {});
+    await fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(activeConversationId)}`, { method: "DELETE", credentials: "include" }).catch(() => {});
     setHomeMessages([]);
     setShowClearConfirm(false);
     toast("Conversation cleared");
+  }, []);
+
+  const handleNewConversation = useCallback(() => {
+    const newId = crypto.randomUUID();
+    try { localStorage.setItem("atlas-home-conversation-id", newId); } catch {}
+    setActiveConversationId(newId);
+    setHomeMessages([]);
+    setShowHistorySheet(false);
+  }, []);
+
+  const handleOpenHistory = useCallback(async () => {
+    setShowHistorySheet(true);
+    setHistoryLoading(true);
+    try {
+      const res = await fetch("/api/nexus/conversations", { credentials: "include" });
+      if (res.ok) setHistoryConversations(await res.json());
+    } catch {} finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const handleSwitchConversation = useCallback((convId: string | null) => {
+    const id = convId ?? "__legacy__";
+    try { localStorage.setItem("atlas-home-conversation-id", id); } catch {}
+    setActiveConversationId(id);
+    setShowHistorySheet(false);
   }, []);
 
   const handleDownloadThread = useCallback(() => {
@@ -1680,6 +1726,14 @@ export default function Home() {
                     />
                   ))}
                 </div>
+                <button
+                  onClick={handleOpenHistory}
+                  style={{ marginTop: 14, background: "transparent", border: "none", cursor: "pointer", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.5, padding: "2px 6px" }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
+                >
+                  ↺ History
+                </button>
               </>
             ) : briefing ? (
               <div style={{
@@ -1763,6 +1817,28 @@ export default function Home() {
                     </div>
                   ) : (
                     <>
+                      <button
+                        title="Conversation history"
+                        onClick={handleOpenHistory}
+                        style={{ background: "transparent", border: "none", padding: "3px 5px", cursor: "pointer", opacity: 0.45, color: "var(--atlas-gold)", lineHeight: 1, transition: "opacity 140ms" }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.45")}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 2"/>
+                        </svg>
+                      </button>
+                      <button
+                        title="New conversation"
+                        onClick={handleNewConversation}
+                        style={{ background: "transparent", border: "none", padding: "3px 5px", cursor: "pointer", opacity: 0.35, color: "var(--atlas-muted)", lineHeight: 1, transition: "opacity 140ms" }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.35")}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>
+                        </svg>
+                      </button>
                       <button
                         title="Download conversation"
                         onClick={handleDownloadThread}
@@ -2253,6 +2329,64 @@ export default function Home() {
           briefingLoading={briefingLoading}
         />
       </div>
+
+      {/* ── History sheet ── */}
+      {showHistorySheet && (
+        <>
+          <div onClick={() => setShowHistorySheet(false)} style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.45)" }} />
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999, background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0", maxHeight: "70dvh", display: "flex", flexDirection: "column", boxShadow: "0 -8px 40px rgba(0,0,0,0.5)" }}>
+            {/* Handle */}
+            <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)" }} />
+            </div>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px 10px" }}>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.55 }}>Conversation history</span>
+              <button
+                onClick={handleNewConversation}
+                style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", fontSize: 9.5, letterSpacing: "0.08em", textTransform: "uppercase" }}
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+                New conversation
+              </button>
+            </div>
+            {/* List */}
+            <div style={{ overflowY: "auto", flex: 1, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}>
+              {historyLoading ? (
+                <div style={{ display: "flex", justifyContent: "center", padding: 24 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid rgba(201,162,76,0.2)", borderTopColor: "rgba(201,162,76,0.7)", animation: "bfd-spin 0.8s linear infinite" }} />
+                </div>
+              ) : historyConversations.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "24px 16px", fontFamily: "var(--app-font-mono)", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.45 }}>No past conversations yet</div>
+              ) : historyConversations.map((conv, i) => {
+                const isActive = conv.conversationId === activeConversationId || (conv.conversationId === null && activeConversationId === "__legacy__");
+                const date = new Date(conv.lastMessageAt);
+                const dateStr = date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined });
+                return (
+                  <button
+                    key={conv.conversationId ?? "legacy"}
+                    onClick={() => handleSwitchConversation(conv.conversationId)}
+                    style={{ width: "100%", background: isActive ? "rgba(201,162,76,0.07)" : "transparent", border: "none", borderBottom: "1px solid var(--atlas-border)", padding: "12px 18px", cursor: "pointer", textAlign: "left", display: "flex", flexDirection: "column", gap: 4 }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8.5, color: isActive ? "var(--atlas-gold)" : "var(--atlas-muted)", letterSpacing: "0.1em", opacity: isActive ? 0.9 : 0.45, textTransform: "uppercase" }}>
+                        {isActive ? "● Active" : dateStr}
+                      </span>
+                      <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", opacity: 0.35, letterSpacing: "0.06em" }}>{conv.messageCount} msgs</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12.5, color: "var(--atlas-fg)", opacity: 0.8, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                      {conv.preview || "No preview"}
+                    </p>
+                    {!isActive && (
+                      <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", opacity: 0.3, letterSpacing: "0.08em" }}>{dateStr}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
       {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
       {showProfile && <AccountHubPanel onClose={() => setShowProfile(false)} />}
