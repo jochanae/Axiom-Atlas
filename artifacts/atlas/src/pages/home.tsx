@@ -2594,6 +2594,24 @@ function ProjectsGridSheet({
 
           </div>
         </div>
+
+        {/* Footer — manage link */}
+        <div style={{ flexShrink: 0, borderTop: "1px solid rgba(120,113,108,0.15)", padding: "12px 20px", paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+          <button
+            onClick={() => { onClose(); window.location.href = "/projects"; }}
+            style={{
+              width: "100%", padding: "11px 0", borderRadius: 10,
+              background: "transparent", border: "1px solid rgba(201,162,76,0.25)",
+              cursor: "pointer", fontFamily: "var(--app-font-mono)", fontSize: 11,
+              fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+              color: "var(--atlas-gold)", transition: "all 160ms ease",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.5)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.25)"; }}
+          >
+            Manage all projects →
+          </button>
+        </div>
       </div>
     </>
   );
