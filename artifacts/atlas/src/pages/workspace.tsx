@@ -5982,6 +5982,7 @@ export default function Workspace() {
     } catch { /* ignore */ }
   }, [id]);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameEscapeRef = useRef(false);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [cloningProject, setCloningProject] = useState(false);
@@ -7084,15 +7085,24 @@ export default function Workspace() {
                     onKeyDown={(e) => {
                       if (updateProjectHeader.isPending) return;
                       if (e.key === "Enter") {
+                        e.preventDefault();
                         const newName = renameDraft.trim() || (project?.name ?? "");
                         updateProjectHeader.mutate({ id, data: { name: newName } }, {
                           onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(id) }); setRenaming(false); setRenameError(null); },
                           onError: (err) => { setRenameError((err as Error)?.message ?? "Failed to rename."); setTimeout(() => renameInputRef.current?.focus(), 0); },
                         });
                       }
-                      if (e.key === "Escape") { setRenaming(false); setRenameError(null); }
+                      if (e.key === "Escape") { renameEscapeRef.current = true; setRenaming(false); setRenameError(null); }
                     }}
-                    onBlur={() => { if (updateProjectHeader.isPending) return; setRenaming(false); setRenameError(null); }}
+                    onBlur={() => {
+                      if (updateProjectHeader.isPending) return;
+                      if (renameEscapeRef.current) { renameEscapeRef.current = false; return; }
+                      const newName = renameDraft.trim() || (project?.name ?? "");
+                      updateProjectHeader.mutate({ id, data: { name: newName } }, {
+                        onSuccess: () => { queryClient.invalidateQueries({ queryKey: getGetProjectQueryKey(id) }); setRenaming(false); setRenameError(null); },
+                        onError: (err) => { setRenameError((err as Error)?.message ?? "Failed to rename."); setTimeout(() => renameInputRef.current?.focus(), 0); },
+                      });
+                    }}
                     style={{ background: "transparent", border: "none", outline: "none", color: "var(--atlas-fg)", fontSize: 13, fontWeight: 500, fontFamily: "var(--app-font-sans)", width: 160, textAlign: "center", opacity: updateProjectHeader.isPending ? 0.5 : 1, transition: "opacity 150ms ease" }}
                   />
                   {renameError && (
@@ -7161,8 +7171,8 @@ export default function Workspace() {
                   }}
                 >
                   {/* Switch to existing project — shown when other projects exist */}
-                  {(allProjects ?? []).filter(p => p.id !== id).length > 0 && (() => {
-                    const others = (allProjects ?? []).filter(p => p.id !== id).slice(0, 7);
+                  {(allProjects ?? []).filter(p => p.id !== id && p.status !== "archived").length > 0 && (() => {
+                    const others = (allProjects ?? []).filter(p => p.id !== id && p.status !== "archived").slice(0, 7);
                     const isEmptyNew = messages.length === 0 && project?.name === "New Project";
                     return (
                       <>
