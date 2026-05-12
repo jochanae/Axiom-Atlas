@@ -3545,11 +3545,13 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
   }, [sandboxCode]);
 
   const startDev = async () => {
-    if (!linkedRepo || !token) return;
+    if (!linkedRepo) return;
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["x-github-token"] = token;
       const r = await fetch("/api/devserver/start", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-github-token": token },
+        headers,
         body: JSON.stringify({ repoFullName: linkedRepo.fullName, branch: linkedRepo.defaultBranch ?? "main" }),
       });
       if (r.ok) {
