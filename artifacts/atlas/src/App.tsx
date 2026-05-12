@@ -1,7 +1,8 @@
-import { useEffect, useCallback, Component, type ReactNode } from "react";
+import { useEffect, useCallback, useRef, useState, Component, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { usePullToRefresh } from "./hooks/usePullToRefresh";
+import { LoadingSpinner } from "./components/ui/loading-spinner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
@@ -159,6 +160,64 @@ function GlobalPTR() {
   );
 }
 
+// ── Page Transition Spinner ───────────────────────────────────────────────────
+const SKIP_TRANSITION = ["/landing", "/login", "/reset-password"];
+
+function PageTransition() {
+  const [location] = useLocation();
+  const [visible, setVisible] = useState(true);
+  const [opacity, setOpacity] = useState(1);
+  const prevLocation = useRef<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const show = () => {
+    if (timer.current) clearTimeout(timer.current);
+    setOpacity(1);
+    setVisible(true);
+    timer.current = setTimeout(() => {
+      setOpacity(0);
+      timer.current = setTimeout(() => setVisible(false), 350);
+    }, 650);
+  };
+
+  useEffect(() => {
+    // First load
+    if (prevLocation.current === null) {
+      if (!SKIP_TRANSITION.includes(location)) show();
+      prevLocation.current = location;
+      return;
+    }
+    // Route change
+    if (prevLocation.current !== location) {
+      prevLocation.current = location;
+      if (!SKIP_TRANSITION.includes(location)) show();
+    }
+  }, [location]);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 99999,
+      background: "var(--atlas-bg)",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", gap: 20,
+      opacity, transition: opacity === 0 ? "opacity 350ms ease" : "none",
+      pointerEvents: opacity < 0.5 ? "none" : "all",
+    }}>
+      <LoadingSpinner size="lg" />
+      <p style={{
+        fontSize: 11, letterSpacing: "0.25em", textTransform: "uppercase",
+        color: "rgba(201,162,76,0.5)", fontFamily: "var(--app-font-mono)", margin: 0,
+      }}>
+        thinking strategically
+      </p>
+    </div>
+  );
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 function Router() {
   return (
@@ -218,6 +277,7 @@ function App() {
         <GlobalPTR />
         <ErrorBoundary>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <PageTransition />
             <Router />
           </WouterRouter>
         </ErrorBoundary>
