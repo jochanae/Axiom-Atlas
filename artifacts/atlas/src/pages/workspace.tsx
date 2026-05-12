@@ -5582,6 +5582,7 @@ function MobileTabBar({
   entryCount: number;
   activeCatch: boolean;
 }) {
+  const [, navTo] = useLocation();
   const tabs: { id: "chat" | "ledger" | "files" | "map" | "preview"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     {
       id: "chat",
@@ -5670,7 +5671,7 @@ function MobileTabBar({
         return (
           <button
             key={id}
-            onClick={() => onTabChange(id)}
+            onClick={() => { if (id === "map") { navTo("/map"); } else { onTabChange(id); } }}
             style={{
               flex: 1,
               display: "flex",
