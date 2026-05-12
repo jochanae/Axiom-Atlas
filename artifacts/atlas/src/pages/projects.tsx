@@ -581,6 +581,8 @@ function ProjectRow({
   onArchive: () => void;
   isArchived?: boolean;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const showActions = hovered || menuOpen;
   const date = new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   return (
@@ -713,7 +715,7 @@ function ProjectRow({
         )}
       </Link>
 
-      {/* Action buttons — visible on hover or confirm state */}
+      {/* Action buttons — always accessible via ⋯ button (mobile) or hover (desktop) */}
       {confirmDelete ? (
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "rgba(252,165,165,0.7)", whiteSpace: "nowrap" }}>
@@ -732,7 +734,7 @@ function ProjectRow({
             {deleting ? "…" : "Yes"}
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onCancelDelete(); }}
+            onClick={(e) => { e.stopPropagation(); onCancelDelete(); setMenuOpen(false); }}
             style={{
               fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em",
               padding: "4px 9px", borderRadius: 4, border: "1px solid var(--atlas-border)",
@@ -743,12 +745,12 @@ function ProjectRow({
             No
           </button>
         </div>
-      ) : hovered ? (
+      ) : showActions ? (
         <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           {/* Archive / Restore */}
           <button
             title={isArchived ? "Restore project" : "Archive project"}
-            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onArchive(); }}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); onArchive(); setMenuOpen(false); }}
             style={{
               background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4,
               padding: "4px 7px", cursor: "pointer", lineHeight: 1,
@@ -786,8 +788,37 @@ function ProjectRow({
               <path d="M3 4h10M6 4V2h4v2M13 4l-.867 9.143A2 2 0 0110.138 15H5.862a2 2 0 01-1.995-1.857L3 4" />
             </svg>
           </button>
+          {/* Close menu (mobile) */}
+          {menuOpen && !hovered && (
+            <button
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(false); }}
+              style={{
+                background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 4,
+                padding: "4px 7px", cursor: "pointer", lineHeight: 1,
+                color: "var(--atlas-muted)", transition: "all 140ms ease", fontSize: 11,
+              }}
+            >
+              ×
+            </button>
+          )}
         </div>
-      ) : null}
+      ) : (
+        /* ⋯ button — always visible, primary access on mobile */
+        <button
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpen(true); }}
+          title="Project actions"
+          style={{
+            background: "transparent", border: "none", borderRadius: 4,
+            padding: "4px 6px", cursor: "pointer", lineHeight: 1,
+            color: "var(--atlas-muted)", opacity: 0.4, transition: "opacity 140ms ease",
+            flexShrink: 0, fontSize: 15, letterSpacing: "0.05em",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.4")}
+        >
+          ···
+        </button>
+      )}
     </div>
   );
 }
