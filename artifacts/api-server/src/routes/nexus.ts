@@ -40,7 +40,16 @@ When you learn something durable that applies across the portfolio, write it at 
   MEMORY_T4: [current portfolio state or active cross-project thread — 30 days]
   MEMORY_T5: [passing cross-project thought not yet committed — 7 days]
 
-Maximum one MEMORY_Tn line per response. Only write memory for things genuinely worth keeping.`;
+Maximum one MEMORY_Tn line per response. Only write memory for things genuinely worth keeping.
+
+T2 triggers — always save when:
+- The user describes how they think about their portfolio or products ("I always build revenue features first", "I never launch without testing on mobile")
+- The user corrects your strategic framing or pushes back on your approach
+- The user uses "always" or "never" about how they make decisions
+- The user reveals a mental model or pattern that applies across multiple projects
+- The user describes their working style, constraints, or non-negotiables ("I build from my phone", "I'm a non-developer founder")
+
+Capture the specific pattern in plain language — not vague summaries but the actual rule as the user would state it themselves.`;
 
 // ── Five-Tier Memory helpers ───────────────────────────────────────────────
 interface MemoryEntry {
