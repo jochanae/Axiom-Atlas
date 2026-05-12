@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable } from "@workspace/db";
-import { eq, asc, and, inArray, desc } from "drizzle-orm";
+import { eq, asc, and, inArray, desc, isNull } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -146,13 +146,21 @@ function parseRepo(raw: string | null): string | null {
   }
 }
 
-// GET /api/nexus/thread — return the full Nexus Living Thread for the authenticated user
+// GET /api/nexus/thread — return a conversation thread (optionally scoped by conversationId)
 router.get("/nexus/thread", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
+  const conversationId = req.query.conversationId as string | undefined;
+
+  const whereClause = conversationId === "__legacy__"
+    ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
+    : conversationId
+      ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
+      : eq(nexusMessagesTable.userId, userId);
+
   const messages = await db
     .select()
     .from(nexusMessagesTable)
-    .where(eq(nexusMessagesTable.userId, userId))
+    .where(whereClause)
     .orderBy(asc(nexusMessagesTable.createdAt));
 
   res.json(messages.map((m) => ({
@@ -163,11 +171,49 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
   })));
 });
 
-// DELETE /api/nexus/thread — clear the entire thread (emergency reset)
+// DELETE /api/nexus/thread — clear a conversation (scoped by conversationId, or all if omitted)
 router.delete("/nexus/thread", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
-  await db.delete(nexusMessagesTable).where(eq(nexusMessagesTable.userId, userId));
+  const conversationId = req.query.conversationId as string | undefined;
+
+  const whereClause = conversationId === "__legacy__"
+    ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
+    : conversationId
+      ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
+      : eq(nexusMessagesTable.userId, userId);
+
+  await db.delete(nexusMessagesTable).where(whereClause);
   res.sendStatus(204);
+});
+
+// GET /api/nexus/conversations — list all past conversations, newest first
+router.get("/nexus/conversations", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const messages = await db
+    .select()
+    .from(nexusMessagesTable)
+    .where(eq(nexusMessagesTable.userId, userId))
+    .orderBy(asc(nexusMessagesTable.createdAt));
+
+  const groups = new Map<string, typeof messages>();
+  for (const msg of messages) {
+    const key = msg.conversationId ?? "__legacy__";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(msg);
+  }
+
+  const conversations = Array.from(groups.entries()).map(([key, msgs]) => {
+    const firstUserMsg = msgs.find((m) => m.role === "user");
+    return {
+      conversationId: key === "__legacy__" ? null : key,
+      preview: (firstUserMsg?.content ?? "").slice(0, 120),
+      messageCount: msgs.length,
+      startedAt: msgs[0].createdAt.toISOString(),
+      lastMessageAt: msgs[msgs.length - 1].createdAt.toISOString(),
+    };
+  }).sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+
+  res.json(conversations);
 });
 
 // POST /api/nexus/chat — send a message in Nexus Mode
@@ -181,6 +227,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     model?: string;
     imageBase64?: string;
     imageMimeType?: string;
+    conversationId?: string;
   };
 
   if (!body.message?.trim()) {
@@ -191,7 +238,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { message, userProfile = "", focusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType } = body;
+  const { message, userProfile = "", focusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -202,7 +249,13 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     db
       .select()
       .from(nexusMessagesTable)
-      .where(eq(nexusMessagesTable.userId, userId))
+      .where(
+        conversationId === "__legacy__"
+          ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
+          : conversationId
+            ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
+            : eq(nexusMessagesTable.userId, userId)
+      )
       .orderBy(asc(nexusMessagesTable.createdAt)),
   ]);
 
@@ -323,7 +376,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
 
   // Persist the user message to the Living Thread
-  await db.insert(nexusMessagesTable).values({ userId, role: "user", content: message });
+  await db.insert(nexusMessagesTable).values({ userId, role: "user", content: message, conversationId: conversationId ?? null });
 
   // Call the selected model
   let rawContent = "";
@@ -396,7 +449,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     : null;
 
   // Persist the assistant response to the Living Thread
-  await db.insert(nexusMessagesTable).values({ userId, role: "assistant", content: visibleContent });
+  await db.insert(nexusMessagesTable).values({ userId, role: "assistant", content: visibleContent, conversationId: conversationId ?? null });
 
   res.json({
     response: visibleContent,
