@@ -1553,44 +1553,6 @@ function AssistantBubble({
         )}
 
 
-        {/* Apply to Atlas itself (self-edits to artifacts/atlas or artifacts/api-server) */}
-        {selfEdits.length > 0 && (
-          <div style={{ marginTop: userEdits.length > 0 ? 6 : 10 }}>
-            <button
-              onClick={handleSelfApply}
-              disabled={selfApplyStatus === "applying" || selfApplyStatus === "done"}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 7,
-                padding: "7px 13px", borderRadius: 7,
-                background: selfApplyStatus === "done"
-                  ? "rgba(52,211,153,0.08)"
-                  : selfApplyStatus === "error"
-                    ? "rgba(239,68,68,0.08)"
-                    : "rgba(120,113,108,0.12)",
-                border: `1px solid ${selfApplyStatus === "done" ? "rgba(52,211,153,0.3)" : selfApplyStatus === "error" ? "rgba(239,68,68,0.3)" : "rgba(120,113,108,0.2)"}`,
-                color: selfApplyStatus === "done" ? "#34d399" : selfApplyStatus === "error" ? "rgba(252,165,165,0.85)" : "var(--atlas-muted)",
-                fontSize: 11.5, fontFamily: "var(--app-font-mono)",
-                letterSpacing: "0.05em",
-                cursor: selfApplyStatus === "applying" || selfApplyStatus === "done" ? "default" : "pointer",
-                opacity: selfApplyStatus === "applying" ? 0.6 : 1,
-                transition: "all 160ms ease",
-              }}
-            >
-              {selfApplyStatus === "done"
-                ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7l3 3 7-7" /></svg>
-                : selfApplyStatus === "error"
-                  ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M7 2v6M7 10.5v1" /></svg>
-                  : <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 1v8M4 6l3 3 3-3" /><path d="M2 11h10" /></svg>
-              }
-              {selfApplyStatus === "applying" ? "Applying…"
-                : selfApplyStatus === "done" ? (selfApplyMsg || "Applied")
-                : selfApplyStatus === "error" ? (selfApplyMsg || "Apply failed")
-                : selfEdits.length === 1
-                  ? `Apply ${selfEdits[0].path.split("/").pop()} to Atlas`
-                  : `Apply ${selfEdits.length} files to Atlas`}
-            </button>
-          </div>
-        )}
 
         {/* CMD_EXEC — runnable command card suggested by Atlas */}
         {cmdExec && (
