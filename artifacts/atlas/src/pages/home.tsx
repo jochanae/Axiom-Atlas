@@ -511,11 +511,8 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
 type HomeRepo = { fullName: string; name: string; defaultBranch: string };
 
 const MODELS = [
-  { id: "claude",     label: "Claude",     sub: "Architect · Nuance & Strategy",  available: true },
-  { id: "gpt4o",      label: "GPT-4o",     sub: "Mechanic · Speed & Logic",       available: true },
-  { id: "gemini",     label: "Gemini",     sub: "Strategy · Long Context",        available: true },
-  { id: "perplexity", label: "Perplexity", sub: "Librarian · Live Research",      available: false },
-  { id: "deepseek",   label: "DeepSeek",   sub: "Analyst · Deep Reasoning",       available: false },
+  { id: "claude",  label: "Claude",  sub: "Nuance & Strategy",  available: true },
+  { id: "gemini",  label: "Gemini",  sub: "Long Context & Speed", available: true },
 ];
 
 const MODES = [
@@ -961,7 +958,7 @@ function ModelPickerSheet({ current, onSelect, onClose }: {
                 fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
                 color: m.available ? "rgba(201,162,76,0.85)" : "rgba(120,113,108,0.4)",
               }}>
-                {m.id === "claude" ? "C" : m.id === "gpt4o" ? "G" : m.id === "gemini" ? "Ge" : m.id === "perplexity" ? "P" : "D"}
+                {m.id === "claude" ? "C" : "Ge"}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", display: "flex", alignItems: "center", gap: 6 }}>

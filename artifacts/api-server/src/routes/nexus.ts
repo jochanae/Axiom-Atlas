@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable } from "@workspace/db";
 import { eq, asc, and, inArray, desc } from "drizzle-orm";
 
@@ -9,6 +10,8 @@ const anthropic = new Anthropic({
   apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
+
+const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 
 const NEXUS_SYSTEM_PROMPT = `You are Atlas — the strategic intelligence layer of Axiom, a platform built for founders running multiple products simultaneously.
 
@@ -185,7 +188,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { message, userProfile = "", focusProjectId = null, mode = "strategic" } = body;
+  const { message, userProfile = "", focusProjectId = null, mode = "strategic", model = "claude" } = body;
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -316,24 +319,37 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n--- DEEP DIVE MODE ACTIVE ---\nThe user wants depth, not breadth. Lock onto the specific topic they raise and explore it thoroughly — underlying assumptions, trade-offs, edge cases, second-order implications, what could go wrong, what could go right. Stay focused. Don't jump to other projects unless directly relevant.\n--- END DEEP DIVE MODE ---`;
   }
 
-  // Build messages array for Claude
-  const claudeMessages: Array<{ role: "user" | "assistant"; content: string }> = [
-    ...conversationHistory,
-    { role: "user", content: message },
-  ];
-
   // Persist the user message to the Living Thread
   await db.insert(nexusMessagesTable).values({ userId, role: "user", content: message });
 
-  // Call Claude
-  const aiResponse = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8192,
-    system: systemPrompt,
-    messages: claudeMessages,
-  });
+  // Call the selected model
+  let rawContent = "";
+  const activeModel = model === "gemini" ? "gemini" : "claude";
 
-  const rawContent = aiResponse.content[0]?.type === "text" ? aiResponse.content[0].text : "";
+  if (activeModel === "gemini") {
+    const textParts = [
+      ...conversationHistory.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`),
+      `User: ${message}`,
+    ];
+    const result = await genai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: textParts.join("\n\n"),
+      config: { systemInstruction: systemPrompt },
+    });
+    rawContent = result.text ?? "";
+  } else {
+    const claudeMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+      ...conversationHistory,
+      { role: "user", content: message },
+    ];
+    const aiResponse = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: claudeMessages,
+    });
+    rawContent = aiResponse.content[0]?.type === "text" ? aiResponse.content[0].text : "";
+  }
 
   // Strip MEMORY_Tn tags from visible output
   const { content: visibleContent, memoryUpdated } = extractMemoryLines(rawContent);
