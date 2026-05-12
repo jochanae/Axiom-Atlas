@@ -119,6 +119,16 @@ function extractMemoryLines(content: string): {
   return { content: kept.join("\n").trim(), memoryUpdated };
 }
 
+function parseRepo(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "string" ? parsed : ((parsed as any).fullName ?? null);
+  } catch {
+    return raw.includes("/") ? raw : null;
+  }
+}
+
 // GET /api/nexus/thread — return the full Nexus Living Thread for the authenticated user
 router.get("/nexus/thread", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
@@ -166,7 +176,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
     db
-      .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory })
+      .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo })
       .from(projectsTable)
       .where(eq(projectsTable.userId, userId)),
     db
@@ -236,6 +246,40 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   if (focusProjectId) {
     const focusProject = projects.find(p => p.id === focusProjectId);
     if (focusProject) {
+      if (focusProject?.linkedRepo) {
+        try {
+          const repoFull = parseRepo(focusProject.linkedRepo ?? null);
+          const ghToken = process.env.GITHUB_TOKEN ?? null;
+          if (repoFull && ghToken) {
+            const treeResp = await fetch(
+              `https://api.github.com/repos/${repoFull}/git/trees/main?recursive=1`,
+              {
+                headers: {
+                  Authorization: `Bearer ${ghToken}`,
+                  Accept: "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "User-Agent": "Atlas-Nexus/1.0",
+                },
+                signal: AbortSignal.timeout(6000),
+              }
+            );
+            if (treeResp.ok) {
+              const treeData = await treeResp.json();
+              const filePaths = (treeData.tree ?? [])
+                .filter((f: any) => f.type === "blob")
+                .map((f: any) => f.path)
+                .filter((p: string) => !p.includes("node_modules") && !p.includes(".git"))
+                .slice(0, 120)
+                .join("\n");
+              if (filePaths) {
+                systemPrompt += `\n\n--- ${focusProject.name.toUpperCase()} FILE TREE ---\n${filePaths}\n--- END FILE TREE ---`;
+              }
+            }
+          }
+        } catch {
+          // tree fetch failed silently — continue without it
+        }
+      }
       const focusEntries = committedEntries
         .filter(e => e.projectId === focusProjectId)
         .map(e => `  • ${e.title}${e.summary ? ` — ${e.summary.slice(0, 120)}` : ""}`)
@@ -348,16 +392,6 @@ router.get("/nexus/activity", async (req, res): Promise<void> => {
   if (projectIds.length === 0) { res.json({ items: [] }); return; }
 
   const projectNameById = new Map(projects.map(p => [p.id, p.name]));
-
-  function parseRepo(raw: string | null): string | null {
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw);
-      return typeof parsed === "string" ? parsed : ((parsed as any).fullName ?? null);
-    } catch {
-      return raw.includes("/") ? raw : null;
-    }
-  }
 
   type ActivityItem = {
     type: "commit" | "decision" | "session";
