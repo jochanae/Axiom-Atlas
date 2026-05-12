@@ -1167,7 +1167,7 @@ function FirstRunOverlay({
 export default function Home() {
   const [input, setInput] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
@@ -1364,15 +1364,21 @@ export default function Home() {
   const handleSubmit = useCallback(async () => {
     const text = input.trim();
     if (!text || isLoading) return;
+    const files = attachedFiles;
     setInput("");
-    setHomeMessages(prev => [...prev, { role: 'user', content: text }]);
+    setAttachedFiles([]);
+    const imageFile = files.find(f => f.type.startsWith("image/"));
+    const otherFiles = files.filter(f => f !== imageFile);
+    const suffix = otherFiles.length > 0 ? `\n[Attached: ${otherFiles.map(f => f.name).join(", ")}]` : "";
+    const fullText = text + suffix;
+    setHomeMessages(prev => [...prev, { role: 'user', content: fullText }]);
     setIsAtlasStreaming(true);
     try {
       const res = await fetch("/api/nexus/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: text, model: homeModel, focusProjectId: homeFocus, mode: homeMode }),
+        body: JSON.stringify({ message: fullText, model: homeModel, focusProjectId: homeFocus, mode: homeMode }),
       });
       if (!res.ok) throw new Error("No response");
       const data = await res.json() as { reply?: string; message?: string };
@@ -1402,7 +1408,7 @@ export default function Home() {
     } finally {
       setIsAtlasStreaming(false);
     }
-  }, [input, isLoading, homeModel, homeFocus, projects, setLocation, handleNewProject]);
+  }, [input, attachedFiles, isLoading, homeModel, homeFocus, projects, setLocation, handleNewProject]);
 
 
   const handleHandoff = useCallback(async () => {
@@ -1903,27 +1909,37 @@ export default function Home() {
               type="file"
               accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.txt,.md,.csv,.json"
               style={{ display: "none" }}
+              multiple
               onChange={(e) => {
-                const file = e.target.files?.[0] ?? null;
-                setAttachedFile(file);
+                const incoming = Array.from(e.target.files ?? []).slice(0, 10);
+                setAttachedFiles(prev => [...prev, ...incoming].slice(0, 10));
                 e.target.value = "";
               }}
             />
 
-            {/* Attached file pill */}
-            {attachedFile && (
-              <div style={{
-                display: "flex", alignItems: "center", gap: 6, marginBottom: 8,
-                padding: "4px 10px", borderRadius: 6, width: "fit-content",
-                background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.2)",
-              }}>
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                  <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(201,162,76,0.8)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.7)", letterSpacing: "0.05em", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {attachedFile.name}
-                </span>
-                <button onClick={() => setAttachedFile(null)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 13, lineHeight: 1, padding: "0 0 0 2px" }}>×</button>
+            {/* Attached files preview strip */}
+            {attachedFiles.length > 0 && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 10, overflowX: "auto", paddingBottom: 2, flexShrink: 0 }}>
+                {attachedFiles.map((file, idx) => (
+                  <div key={idx} style={{ position: "relative", flexShrink: 0 }}>
+                    {file.type.startsWith("image/") ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        style={{ width: 54, height: 54, borderRadius: 7, objectFit: "cover", border: "1px solid rgba(201,162,76,0.25)", display: "block" }}
+                      />
+                    ) : (
+                      <div style={{ width: 54, height: 54, borderRadius: 7, background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.2)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, overflow: "hidden" }}>
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(201,162,76,0.6)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        <span style={{ fontSize: 8, color: "rgba(201,162,76,0.55)", maxWidth: 46, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}>{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
+                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "rgba(231,229,228,0.85)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
+                    >×</button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -2004,12 +2020,12 @@ export default function Home() {
                 onClick={() => fileInputRef.current?.click()}
                 style={{
                   width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none",
-                  color: attachedFile ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", cursor: "pointer",
+                  color: attachedFiles.length > 0 ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   transition: "color 160ms ease", flexShrink: 0,
                 }}
-                onMouseEnter={(e) => { if (!attachedFile) e.currentTarget.style.color = "var(--atlas-fg)"; }}
-                onMouseLeave={(e) => { if (!attachedFile) e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
+                onMouseEnter={(e) => { if (!attachedFiles.length) e.currentTarget.style.color = "var(--atlas-fg)"; }}
+                onMouseLeave={(e) => { if (!attachedFiles.length) e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
               >
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
                   <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
