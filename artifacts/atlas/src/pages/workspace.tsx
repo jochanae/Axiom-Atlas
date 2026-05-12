@@ -5841,6 +5841,14 @@ export default function Workspace() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
+
+  // Reset all chat state when the project changes so old messages never bleed into a new workspace
+  useEffect(() => {
+    setMessages([]);
+    setSessionId(null);
+    setActiveCatch(null);
+    priorLoaded.current = false;
+  }, [id]);
   const { playSend, playCatch, playCommit, playPark, playNavigate } = useSound();
   const [memoryChips, setMemoryChips] = useState<MemoryChip[]>([]);
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
