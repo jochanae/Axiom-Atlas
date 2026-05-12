@@ -37,7 +37,7 @@ router.get("/projects", async (req, res): Promise<void> => {
     .select()
     .from(projectsTable)
     .where(eq(projectsTable.userId, userId))
-    .orderBy(projectsTable.updatedAt);
+    .orderBy(desc(projectsTable.updatedAt));
 
   let latestScores: Array<{ projectId: number; score: number }> = [];
   try {
