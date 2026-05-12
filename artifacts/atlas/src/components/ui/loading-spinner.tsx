@@ -4,12 +4,6 @@ type BloomColor = "atlas" | "ember" | "phosphor";
 const SIZE_MAP: Record<BloomSize, number> = { sm: 32, md: 48, lg: 64 };
 const CIRCLE_SIZE: Record<BloomSize, number> = { sm: 5, md: 7, lg: 9 };
 
-const COLOR_MAP: Record<BloomColor, string> = {
-  atlas: "var(--atlas-gold)",
-  ember: "var(--atlas-ember)",
-  phosphor: "var(--atlas-phosphor)",
-};
-
 // Center + 4 petals (top, right, bottom, left) as % of container
 const POSITIONS = [
   { x: 50, y: 50 },
@@ -17,6 +11,15 @@ const POSITIONS = [
   { x: 84, y: 50 },
   { x: 50, y: 84 },
   { x: 16, y: 50 },
+];
+
+// Signature Axiom-Atlas palette: gold center, petals alternate purple/gold
+const ATLAS_PETAL_COLORS = [
+  "#C9A24C", // center — gold
+  "#7C3AED", // top — deep violet
+  "#C9A24C", // right — gold
+  "#6D28D9", // bottom — purple
+  "#9333EA", // left — violet
 ];
 
 export function LoadingSpinner({
@@ -28,8 +31,13 @@ export function LoadingSpinner({
 }) {
   const containerSize = SIZE_MAP[size];
   const circleSize = CIRCLE_SIZE[size];
-  const c = COLOR_MAP[color];
   const blurPx = circleSize * 0.65;
+
+  const getColor = (index: number) => {
+    if (color === "atlas") return ATLAS_PETAL_COLORS[index];
+    if (color === "ember") return "var(--atlas-ember)";
+    return "var(--atlas-phosphor)";
+  };
 
   return (
     <div
@@ -42,49 +50,52 @@ export function LoadingSpinner({
         flexShrink: 0,
       }}
     >
-      {POSITIONS.map((pos, i) => (
-        <div
-          key={i}
-          style={{
-            position: "absolute",
-            left: `${pos.x}%`,
-            top: `${pos.y}%`,
-            width: circleSize,
-            height: circleSize,
-            marginLeft: -circleSize / 2,
-            marginTop: -circleSize / 2,
-          }}
-        >
-          {/* Glow blur layer behind */}
+      {POSITIONS.map((pos, i) => {
+        const c = getColor(i);
+        return (
           <div
-            aria-hidden
-            className="atlas-bloom-blur"
+            key={i}
             style={{
               position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              background: c,
-              filter: `blur(${blurPx}px)`,
-              opacity: 0,
-              transform: "scale(0.15)",
-              animationDelay: `${i * 140}ms`,
+              left: `${pos.x}%`,
+              top: `${pos.y}%`,
+              width: circleSize,
+              height: circleSize,
+              marginLeft: -circleSize / 2,
+              marginTop: -circleSize / 2,
             }}
-          />
-          {/* Main circle */}
-          <div
-            className="atlas-bloom-circle"
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: "50%",
-              background: c,
-              opacity: 0,
-              transform: "scale(0.25)",
-              animationDelay: `${i * 140}ms`,
-            }}
-          />
-        </div>
-      ))}
+          >
+            {/* Glow blur layer behind */}
+            <div
+              aria-hidden
+              className="atlas-bloom-blur"
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                background: c,
+                filter: `blur(${blurPx}px)`,
+                opacity: 0,
+                transform: "scale(0.15)",
+                animationDelay: `${i * 140}ms`,
+              }}
+            />
+            {/* Main circle */}
+            <div
+              className="atlas-bloom-circle"
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                background: c,
+                opacity: 0,
+                transform: "scale(0.25)",
+                animationDelay: `${i * 140}ms`,
+              }}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
