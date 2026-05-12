@@ -91,6 +91,7 @@ interface ChatMessage {
   autoFetchedFiles?: string[];
   model?: string;
   isDeepDive?: boolean;
+  autoPushed?: boolean;
 }
 
 type MemoryChip = { label: string; insight?: string };
@@ -714,6 +715,7 @@ function GitHubPushModal({
   onClose,
   onPushSuccess,
   onPrCreated,
+  autoRunCmd = "pnpm typecheck",
 }: {
   fileEdits: FileEdit[];
   linkedRepo: LinkedRepo | null;
@@ -721,6 +723,7 @@ function GitHubPushModal({
   onClose: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
   onPrCreated?: (prUrl: string) => void;
+  autoRunCmd?: string;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const _projectId = projectId; void _projectId;
@@ -831,6 +834,33 @@ function GitHubPushModal({
       }));
       onPushSuccess(records);
       setSuccess({ commitUrl: lastCommitUrl, branch: targetBranch });
+      if (autoRunCmd.trim()) {
+        try {
+          const termRes = await fetch("/api/terminal/exec", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ command: autoRunCmd }),
+          });
+          const reader = termRes.body?.getReader();
+          const decoder = new TextDecoder();
+          let termOutput = "";
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              termOutput += decoder.decode(value);
+            }
+          }
+          if (termOutput.toLowerCase().includes("error")) {
+            toast.error("Post-push typecheck found issues — check Terminal tab");
+          } else {
+            toast.success("✓ typecheck passed");
+          }
+        } catch {
+          // terminal exec failed silently
+        }
+      }
     } catch (e: any) {
       setError(e.message ?? "Push failed");
     } finally {
@@ -5818,6 +5848,8 @@ export default function Workspace() {
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [trustMode, setTrustMode] = useState<"review" | "auto">("review");
+  const [autoRunCmd] = useState<string>("pnpm typecheck");
 
   const importSource = (() => {
     try { return new URLSearchParams(window.location.search).get("source") ?? null; } catch { return null; }
@@ -5934,6 +5966,74 @@ export default function Workspace() {
   const { data: entries } = useListEntries(id, {}, { query: { enabled: !!id, queryKey: getListEntriesQueryKey(id, {}) } });
   const createSession = useCreateSession();
   const createEntry = useCreateEntry();
+
+  const handlePushAll = useCallback(async (fileEdits: FileEdit[]) => {
+    if (!linkedRepo) return;
+    const token = project?.githubToken ?? null;
+    if (!token) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const branch = `atlas/auto-${today}-${Date.now().toString(36).slice(-4)}`;
+    try {
+      await fetch("/api/github/branch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-github-token": token },
+        body: JSON.stringify({ repo: linkedRepo.fullName, branch, baseBranch: linkedRepo.defaultBranch }),
+      });
+      for (let i = 0; i < fileEdits.length; i++) {
+        const fe = fileEdits[i];
+        await fetch("/api/github/commit", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", "x-github-token": token },
+          body: JSON.stringify({
+            repo: linkedRepo.fullName, branch, path: fe.path, content: fe.content,
+            message: fileEdits.length === 1
+              ? `Atlas: update ${fe.path.split("/").pop()}`
+              : `Atlas: update ${fileEdits.length} files (${i + 1}/${fileEdits.length})`,
+          }),
+        });
+      }
+      toast.success(`AUTO: pushed ${fileEdits.length} file${fileEdits.length > 1 ? "s" : ""} to ${branch}`);
+      if (autoRunCmd.trim()) {
+        try {
+          const termRes = await fetch("/api/terminal/exec", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ command: autoRunCmd }),
+          });
+          const reader = termRes.body?.getReader();
+          const decoder = new TextDecoder();
+          let termOutput = "";
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              termOutput += decoder.decode(value);
+            }
+          }
+          if (termOutput.toLowerCase().includes("error")) {
+            toast.error("Post-push typecheck found issues — check Terminal tab");
+          } else {
+            toast.success("✓ typecheck passed");
+          }
+        } catch {
+          // terminal exec failed silently
+        }
+      }
+    } catch (e: unknown) {
+      toast.error(`AUTO push failed: ${e instanceof Error ? e.message : "unknown error"}`);
+    }
+  }, [linkedRepo, project, autoRunCmd]);
+
+  useEffect(() => {
+    if (trustMode !== "auto") return;
+    messages.forEach(msg => {
+      if (msg.fileEdits?.length && !msg.autoPushed) {
+        msg.autoPushed = true;
+        handlePushAll(msg.fileEdits);
+      }
+    });
+  }, [messages, trustMode, handlePushAll]);
 
   // Load prior messages when a session already exists (resuming a project)
   const { data: priorMessages } = useListMessages(sessionId ?? 0, {
@@ -7015,6 +7115,29 @@ export default function Workspace() {
 
           {/* Right: % score + mode + P + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={() => {
+                if (trustMode === "review") {
+                  const confirmed = window.confirm("AUTO mode: Atlas will push file changes without showing you the diff first. Continue?");
+                  if (!confirmed) return;
+                  setTrustMode("auto");
+                } else {
+                  setTrustMode("review");
+                }
+              }}
+              style={{
+                display: "flex", alignItems: "center", gap: 5, padding: "4px 10px",
+                borderRadius: 6, fontSize: 10, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.08em", cursor: "pointer",
+                background: trustMode === "auto" ? "rgba(239,100,68,0.12)" : "rgba(37,34,32,0.06)",
+                border: trustMode === "auto" ? "1px solid rgba(239,100,68,0.35)" : "1px solid var(--atlas-border)",
+                color: trustMode === "auto" ? "rgba(239,100,68,0.9)" : "var(--atlas-muted)",
+                transition: "all 300ms ease",
+              }}
+            >
+              <span style={{ fontSize: 7 }}>{trustMode === "auto" ? "●" : "○"}</span>
+              {trustMode === "auto" ? "AUTO" : "REVIEW"}
+            </button>
             <ReadinessRing
               archScore={mapReadiness}
               decisionsScore={healthPct}
