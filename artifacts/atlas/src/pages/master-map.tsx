@@ -389,7 +389,7 @@ export default function MasterMap() {
       const idx = nodeMeshes.indexOf(obj);
       if (idx < 0) return;
       const proj = projectsRef.current[idx];
-      warpTo(proj.id, nodeMeshes[idx].position);
+      warpTo(proj.id, nodeMeshes[idx].position, "?view=flow");
     };
 
     // ── Mouse drag + click ────────────────────────────────────────────────
