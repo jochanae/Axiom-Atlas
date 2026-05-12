@@ -2186,12 +2186,14 @@ export default function Home() {
             </div>
           )}
 
-          {/* Scroll cue — pinned to bottom of hero */}
-          <div aria-hidden style={{ position: "absolute", bottom: 6, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
-            <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.28 }}>
-              ↓ scroll for your workspace
+          {/* Scroll cue — only when no messages, pinned to bottom of hero */}
+          {homeMessages.length === 0 && (
+            <div aria-hidden style={{ position: "absolute", bottom: 6, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
+              <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.28 }}>
+                ↓ scroll for your overview
+              </div>
             </div>
-          </div>
+          )}
           </div>{/* end hero */}
 
         </div>
