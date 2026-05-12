@@ -1179,7 +1179,7 @@ export default function Home() {
   const [showProjectsSheet, setShowProjectsSheet] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; model?: string; intentType?: string | null; isNew?: boolean}>>([]);
+  const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; imageUrl?: string; model?: string; intentType?: string | null; isNew?: boolean}>>([]);
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
   const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
@@ -1368,17 +1368,33 @@ export default function Home() {
     setInput("");
     setAttachedFiles([]);
     const imageFile = files.find(f => f.type.startsWith("image/"));
-    const otherFiles = files.filter(f => f !== imageFile);
+    const otherFiles = files.filter(f => !f.type.startsWith("image/"));
     const suffix = otherFiles.length > 0 ? `\n[Attached: ${otherFiles.map(f => f.name).join(", ")}]` : "";
     const fullText = text + suffix;
-    setHomeMessages(prev => [...prev, { role: 'user', content: fullText }]);
+
+    // Convert image for display + API
+    let imageUrl: string | undefined;
+    let imageBase64: string | undefined;
+    let imageMimeType: string | undefined;
+    if (imageFile) {
+      imageUrl = URL.createObjectURL(imageFile);
+      imageMimeType = imageFile.type;
+      imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageFile);
+      });
+    }
+
+    setHomeMessages(prev => [...prev, { role: 'user', content: fullText, imageUrl }]);
     setIsAtlasStreaming(true);
     try {
       const res = await fetch("/api/nexus/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: fullText, model: homeModel, focusProjectId: homeFocus, mode: homeMode }),
+        body: JSON.stringify({ message: fullText, model: homeModel, focusProjectId: homeFocus, mode: homeMode, imageBase64, imageMimeType }),
       });
       if (!res.ok) throw new Error("No response");
       const data = await res.json() as { reply?: string; message?: string };
@@ -1831,6 +1847,17 @@ export default function Home() {
                           fontSize: 13, lineHeight: 1.55, color: "var(--atlas-fg)",
                           fontFamily: "var(--app-font-sans)",
                         }}>
+                          {msg.imageUrl && (
+                            <img
+                              src={msg.imageUrl}
+                              alt="Attached"
+                              style={{
+                                maxWidth: "100%", borderRadius: 8, display: "block",
+                                marginBottom: msg.content ? 8 : 0,
+                                maxHeight: 320, objectFit: "cover",
+                              }}
+                            />
+                          )}
                           {msg.content}
                         </div>
                       )}
