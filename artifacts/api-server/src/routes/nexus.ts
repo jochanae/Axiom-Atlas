@@ -278,7 +278,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
               }
             );
             if (treeResp.ok) {
-              const treeData = await treeResp.json();
+              const treeData = await treeResp.json() as { tree?: Array<{ type?: string; path?: string }> };
               const filePaths = (treeData.tree ?? [])
                 .filter((f: any) => f.type === "blob")
                 .map((f: any) => f.path)
