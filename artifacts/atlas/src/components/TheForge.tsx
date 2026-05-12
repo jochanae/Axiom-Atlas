@@ -24,13 +24,14 @@ interface Props {
   readinessScore?: number;
   activeProjectName?: string;
   projectId?: number;
+  defaultTab?: "forge" | "prompt";
   onClose: () => void;
   onNodesReady?: (nodes: ArchNode[]) => void;
 }
 
-export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, onClose, onNodesReady }: Props) {
+export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, defaultTab = "forge", onClose, onNodesReady }: Props) {
   const [isMobile] = useState(() => window.innerWidth < 768);
-  const [tab, setTab] = useState<"forge" | "prompt">("forge");
+  const [tab, setTab] = useState<"forge" | "prompt">(defaultTab);
 
   // Forge state
   const [transcript, setTranscript] = useState("");

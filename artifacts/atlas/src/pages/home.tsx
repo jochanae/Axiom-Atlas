@@ -2273,6 +2273,9 @@ export default function Home() {
 
       {showQuickPrompt && (
         <TheForge
+          defaultTab="prompt"
+          projectId={homeFocus ?? undefined}
+          activeProjectName={homeFocus ? (projects?.find(p => p.id === homeFocus)?.name ?? undefined) : undefined}
           onClose={() => setShowQuickPrompt(false)}
         />
       )}
