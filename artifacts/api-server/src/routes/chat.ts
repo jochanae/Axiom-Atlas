@@ -668,9 +668,34 @@ async function callModel(
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
+function extractFlowNodes(content: string): {
+  content: string;
+  flowNodes: Array<{ id: string; type: string; label: string; question?: string; x: number; y: number }>;
+} {
+  const nodeLines: string[] = [];
+  const clean = content
+    .replace(/^FLOW_NODE:\{[^\n]*\}$/gm, (match) => { nodeLines.push(match); return ""; })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  const flowNodes = nodeLines.map((line, i) => {
+    try {
+      const parsed = JSON.parse(line.replace(/^FLOW_NODE:/, "")) as { type?: string; label?: string; question?: string };
+      return {
+        id: `flow-${Date.now()}-${i}`,
+        type: parsed.type ?? "feature",
+        label: parsed.label ?? "New Node",
+        question: parsed.question,
+        x: 160 + (i % 3) * 200,
+        y: 140 + Math.floor(i / 3) * 130,
+      };
+    } catch { return null; }
+  }).filter((n): n is NonNullable<typeof n> => n !== null);
+  return { content: clean, flowNodes };
+}
+
 router.post("/chat", async (req, res): Promise<void> => {
   const body = req.body as {
-    sessionId: number;
+    sessionId?: number;
     projectId: number;
     message: string;
     model?: string;
@@ -681,14 +706,18 @@ router.post("/chat", async (req, res): Promise<void> => {
     fileContext?: string;
     userProfile?: string;
     imageData?: { base64: string; mediaType: string };
+    flowMode?: boolean;
+    flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
   };
 
-  if (!body.sessionId || !body.projectId || !body.message) {
+  const isFlowMode = !!body.flowMode;
+
+  if ((!body.sessionId && !isFlowMode) || !body.projectId || !body.message) {
     res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
     return;
   }
 
-  const { sessionId, projectId, message, history = [], entries = [] } = body;
+  const { sessionId = 0, projectId, message, history = [], entries = [] } = body;
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
@@ -828,6 +857,32 @@ You are now in THINK mode. This changes how you respond:
   };
   systemPrompt += modeInstructions[activeMode] ?? modeInstructions.think;
 
+  if (isFlowMode) {
+    const existingNodes = (body.flowNodes ?? []);
+    const nodeList = existingNodes.length > 0
+      ? `\n\nCurrent canvas nodes:\n${existingNodes.map(n => `- [${n.type}] ${n.label}${n.strategicAnswer ? ` (answered)` : " (unanswered)"}`).join("\n")}`
+      : "\n\nThe canvas is currently empty.";
+    systemPrompt += `\n\n--- ACTIVE MODE: FLOW ARCHITECT ---
+You are helping the user build their AxiomFlow map — a strategic canvas of goals, requirements, blockers, decisions, and sprints.${nodeList}
+
+In this mode you have TWO jobs:
+1. Respond naturally as a strategic thinking partner — concise, direct, no fluff.
+2. At the END of your response, emit any NEW nodes that belong on the canvas.
+
+Node format — one per line, at the very end of your response ONLY:
+FLOW_NODE:{"type":"goal","label":"Short label","question":"Strategic question for this node"}
+
+Valid types: goal · requirement · blocker · decision · sprint · feature
+Rules:
+- Only emit nodes for NEW concepts not already on the canvas above.
+- Labels must be 2–5 words max.
+- Only emit nodes when the conversation surfaces something worth mapping — not every response needs them.
+- Maximum 3 nodes per response.
+- No FLOW_NODE lines if nothing new needs mapping.
+- These lines are invisible to the user — they power the live canvas.
+--- END FLOW ARCHITECT ---`;
+  }
+
   // Lens-specific instructions — shape Atlas's response style for this project
   const activeLens = (body.lens ?? "builder").toLowerCase();
   const lensInstructions: Record<string, string> = {
@@ -873,12 +928,14 @@ You are now in THINK mode. This changes how you respond:
     { role: "user", content: userContent },
   ];
 
-  await db.insert(chatMessagesTable).values({
-    sessionId,
-    role: "user",
-    content: message,
-    intentType: body.mode ?? null,
-  });
+  if (!isFlowMode) {
+    await db.insert(chatMessagesTable).values({
+      sessionId,
+      role: "user",
+      content: message,
+      intentType: body.mode ?? null,
+    });
+  }
 
   const rawContent = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
 
@@ -916,26 +973,34 @@ You are now in THINK mode. This changes how you respond:
       .where(eq(projectsTable.id, projectId));
   }
 
-  const [savedMsg] = await db
-    .insert(chatMessagesTable)
-    .values({
-      sessionId,
-      role: "assistant",
-      content: finalContent,
-      intentType: detectedIntentType,
-      catchPayload: undefined,
-    })
-    .returning();
+  // Extract FLOW_NODE lines before persisting
+  const { content: flowStripped, flowNodes } = extractFlowNodes(finalContent);
+  const displayContent = isFlowMode ? flowStripped : finalContent;
 
-  await db
-    .update(sessionsTable)
-    .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
-    .where(eq(sessionsTable.id, sessionId));
+  let savedMsgId: number | undefined;
+  if (!isFlowMode) {
+    const [savedMsg] = await db
+      .insert(chatMessagesTable)
+      .values({
+        sessionId,
+        role: "assistant",
+        content: displayContent,
+        intentType: detectedIntentType,
+        catchPayload: undefined,
+      })
+      .returning();
+    savedMsgId = savedMsg.id;
+
+    await db
+      .update(sessionsTable)
+      .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
+      .where(eq(sessionsTable.id, sessionId));
+  }
 
   // Attempt image generation if the user's message looks like an image request
   let imageB64: string | undefined;
   let imageMimeType: string | undefined;
-  if (IMAGE_REQUEST_RE.test(message)) {
+  if (!isFlowMode && IMAGE_REQUEST_RE.test(message)) {
     try {
       const imagePrompt = `${message}. Clean, professional style. For a software product / startup context.`;
       const imgResponse = await genai.models.generateContent({
@@ -955,17 +1020,18 @@ You are now in THINK mode. This changes how you respond:
   }
 
   res.json({
-    content: finalContent,
+    content: displayContent,
     intentType: detectedIntentType ?? null,
     catchPayload: null,
     model: activeModel,
     memoryChips: allChips.length > 0 ? allChips : undefined,
-    messageId: savedMsg.id,
+    messageId: savedMsgId,
     memoryUpdated: newFacts.length > 0,
     fileEdits: fileEdits.length > 0 ? fileEdits : undefined,
     fileEdit: fileEdits.length > 0 ? fileEdits[0] : undefined,
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
+    ...(flowNodes.length > 0 ? { flowNodes } : {}),
     ...(imageB64 ? { imageB64, imageMimeType } : {}),
   });
 });

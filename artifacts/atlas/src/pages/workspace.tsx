@@ -4453,7 +4453,52 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
   const intent = signals[activeSignalIdx] ?? "";
   const setIntent = (val: string) => setSignals(prev => prev.map((s, i) => i === activeSignalIdx ? val : s));
 
+  const [flowChatTab, setFlowChatTab] = useState<"flow" | "intent">("flow");
+  const [flowMessages, setFlowMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [flowLoading, setFlowLoading] = useState(false);
+  const [flowInput, setFlowInput] = useState("");
+  const flowScrollRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => () => { if (sentFlashTimerRef.current) clearTimeout(sentFlashTimerRef.current); }, []);
+
+  useEffect(() => {
+    if (flowScrollRef.current) {
+      flowScrollRef.current.scrollTop = flowScrollRef.current.scrollHeight;
+    }
+  }, [flowMessages, flowLoading]);
+
+  const sendFlowMessage = useCallback(async (text: string) => {
+    if (!text.trim() || flowLoading) return;
+    setFlowMessages(prev => [...prev, { role: "user", content: text }]);
+    setFlowInput("");
+    setFlowLoading(true);
+    try {
+      const nodeContext = nodes.length > 0
+        ? `Current canvas nodes:\n${nodes.map(n => `- [${n.type}] ${n.label}${n.strategicAnswer ? " (answered)" : " (unanswered)"}`).join("\n")}`
+        : "Canvas is empty — no nodes yet.";
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          projectId,
+          message: text,
+          flowMode: true,
+          flowNodes: nodes,
+          history: flowMessages.map(m => ({ role: m.role, content: m.content })),
+          projectMap: nodeContext,
+          mode: "plan",
+        }),
+      }).then(r => r.ok ? r.json() : Promise.reject(r.status));
+      const incoming = (res.flowNodes ?? []) as ArchNode[];
+      setFlowMessages(prev => [...prev, { role: "assistant", content: res.content ?? "" }]);
+      if (incoming.length > 0) setPendingNodes(incoming);
+    } catch {
+      setFlowMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Try again." }]);
+    } finally {
+      setFlowLoading(false);
+    }
+  }, [flowMessages, flowLoading, nodes, projectId]);
 
   const handleSend = useCallback(() => {
     if (!intent.trim()) return;
@@ -4608,13 +4653,143 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
         <div style={{ flex: 1, minHeight: 190, overflow: "hidden", display: "flex", flexDirection: "column", background: "oklch(0.11 0.01 60)" }}>
           <style>{`@keyframes intent-dot-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}`}</style>
 
-          {/* Section label — compact, no button here (controls moved into card header) */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px 4px", flexShrink: 0 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#D4AF37", animation: "intent-dot-pulse 2s ease-in-out infinite", flexShrink: 0 }} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.12em" }}>INTENT CAPTURE</span>
+          {/* Tab switcher — FLOW CHAT | INTENT */}
+          <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "5px 14px 4px", flexShrink: 0, borderBottom: "1px solid rgba(212,175,55,0.08)" }}>
+            <button
+              onClick={() => setFlowChatTab("flow")}
+              style={{
+                background: flowChatTab === "flow" ? "rgba(212,175,55,0.12)" : "transparent",
+                border: "none", borderBottom: flowChatTab === "flow" ? "2px solid rgba(212,175,55,0.7)" : "2px solid transparent",
+                padding: "3px 10px 4px", cursor: "pointer",
+                color: flowChatTab === "flow" ? "#D4AF37" : "rgba(120,113,108,0.55)",
+                fontSize: 9, fontWeight: 700, letterSpacing: "0.12em",
+                fontFamily: "var(--app-font-mono)", textTransform: "uppercase",
+                transition: "all 180ms ease",
+              }}
+            >⬡ Flow Chat</button>
+            <button
+              onClick={() => setFlowChatTab("intent")}
+              style={{
+                background: flowChatTab === "intent" ? "rgba(212,175,55,0.12)" : "transparent",
+                border: "none", borderBottom: flowChatTab === "intent" ? "2px solid rgba(212,175,55,0.7)" : "2px solid transparent",
+                padding: "3px 10px 4px", cursor: "pointer",
+                color: flowChatTab === "intent" ? "#D4AF37" : "rgba(120,113,108,0.55)",
+                fontSize: 9, fontWeight: 700, letterSpacing: "0.12em",
+                fontFamily: "var(--app-font-mono)", textTransform: "uppercase",
+                transition: "all 180ms ease",
+              }}
+            >Intent</button>
           </div>
 
-          {/* Prompt card — full remaining height */}
+          {/* FLOW CHAT — Atlas drives the canvas */}
+          {flowChatTab === "flow" && (
+            <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column", padding: "0 14px 10px" }}>
+              {/* Message list */}
+              <div
+                ref={flowScrollRef}
+                style={{
+                  flex: 1, minHeight: 0, overflowY: "auto",
+                  padding: "8px 0 4px",
+                  display: "flex", flexDirection: "column", gap: 8,
+                }}
+              >
+                {flowMessages.length === 0 && (
+                  <div style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                    height: "100%", gap: 6, opacity: 0.45,
+                  }}>
+                    <span style={{ fontSize: 18 }}>⬡</span>
+                    <span style={{ fontSize: 10, color: "rgba(120,113,108,0.8)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", textAlign: "center", lineHeight: 1.5 }}>
+                      Talk to Atlas.<br />Nodes appear on the canvas as you plan.
+                    </span>
+                  </div>
+                )}
+                {flowMessages.map((m, i) => (
+                  <div key={i} style={{
+                    alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                    maxWidth: "86%",
+                    background: m.role === "user"
+                      ? "rgba(212,175,55,0.12)"
+                      : "rgba(28,25,23,0.92)",
+                    border: m.role === "user"
+                      ? "1px solid rgba(212,175,55,0.28)"
+                      : "1px solid rgba(212,175,55,0.10)",
+                    borderRadius: m.role === "user" ? "10px 10px 2px 10px" : "10px 10px 10px 2px",
+                    padding: "7px 10px",
+                    fontSize: 12, lineHeight: 1.55,
+                    color: m.role === "user" ? "#E7E5E4" : "rgba(231,229,228,0.88)",
+                    fontFamily: "inherit",
+                    whiteSpace: "pre-wrap", wordBreak: "break-word",
+                  }}>
+                    {m.content}
+                  </div>
+                ))}
+                {flowLoading && (
+                  <div style={{
+                    alignSelf: "flex-start",
+                    background: "rgba(28,25,23,0.92)",
+                    border: "1px solid rgba(212,175,55,0.10)",
+                    borderRadius: "10px 10px 10px 2px",
+                    padding: "8px 12px",
+                    display: "flex", gap: 4, alignItems: "center",
+                  }}>
+                    {[0, 1, 2].map(d => (
+                      <div key={d} style={{
+                        width: 5, height: 5, borderRadius: "50%",
+                        background: "rgba(212,175,55,0.6)",
+                        animation: `intent-dot-pulse 1.2s ease-in-out ${d * 0.2}s infinite`,
+                      }} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Input row */}
+              <div style={{
+                display: "flex", gap: 6, alignItems: "flex-end",
+                paddingTop: 6, borderTop: "1px solid rgba(212,175,55,0.07)",
+                flexShrink: 0,
+              }}>
+                <textarea
+                  value={flowInput}
+                  onChange={e => setFlowInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendFlowMessage(flowInput); }
+                  }}
+                  placeholder="What are you building? Atlas will map it..."
+                  rows={2}
+                  disabled={flowLoading}
+                  style={{
+                    flex: 1, resize: "none", background: "rgba(12,10,9,0.85)",
+                    border: "1px solid rgba(212,175,55,0.20)", borderRadius: 8,
+                    padding: "7px 10px", color: "var(--atlas-fg)", fontSize: 12,
+                    lineHeight: 1.5, fontFamily: "inherit", outline: "none",
+                    opacity: flowLoading ? 0.6 : 1,
+                  }}
+                />
+                <button
+                  onClick={() => sendFlowMessage(flowInput)}
+                  disabled={!flowInput.trim() || flowLoading}
+                  style={{
+                    width: 32, height: 32, flexShrink: 0, borderRadius: 8,
+                    background: flowInput.trim() && !flowLoading ? "rgba(212,175,55,0.18)" : "transparent",
+                    border: `1px solid ${flowInput.trim() && !flowLoading ? "rgba(212,175,55,0.45)" : "rgba(120,113,108,0.2)"}`,
+                    cursor: flowInput.trim() && !flowLoading ? "pointer" : "not-allowed",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: flowInput.trim() && !flowLoading ? "#D4AF37" : "rgba(120,113,108,0.3)",
+                    transition: "all 180ms ease",
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Intent capture — prompt card */}
+          {flowChatTab === "intent" && (
           <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: "0 14px 12px" }}>
             <div style={{
               height: "100%", display: "flex", flexDirection: "column",
@@ -4759,6 +4934,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onBackToChat
               </div>
             </div>
           </div>
+          )}
         </div>
       )}
 
