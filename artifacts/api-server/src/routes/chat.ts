@@ -642,13 +642,21 @@ async function callModel(
   }
 
   if (modelId === "gemini") {
-    const textParts = messages.map((m) => {
+    const combinedText = messages.map((m) => {
       const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
       return `${m.role === "user" ? "User" : "Atlas"}: ${text}`;
-    });
+    }).join("\n\n");
+    if (imageData?.base64 && imageData?.mediaType) {
+      const result = await genai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: [{ role: "user", parts: [{ text: combinedText }, { inlineData: { mimeType: imageData.mediaType, data: imageData.base64 } }] }],
+        config: { systemInstruction: systemPrompt },
+      });
+      return result.text ?? "";
+    }
     const result = await genai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: textParts.join("\n\n"),
+      contents: combinedText,
       config: { systemInstruction: systemPrompt },
     });
     return result.text ?? "";

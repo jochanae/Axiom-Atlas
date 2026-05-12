@@ -382,16 +382,25 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const activeModel = model === "gemini" ? "gemini" : "claude";
 
   if (activeModel === "gemini") {
-    const textParts = [
+    const combinedText = [
       ...conversationHistory.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`),
       `User: ${message}`,
-    ];
-    const result = await genai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: textParts.join("\n\n"),
-      config: { systemInstruction: systemPrompt },
-    });
-    rawContent = result.text ?? "";
+    ].join("\n\n");
+    if (imageBase64 && imageMimeType) {
+      const result = await genai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: [{ role: "user", parts: [{ text: combinedText }, { inlineData: { mimeType: imageMimeType, data: imageBase64 } }] }],
+        config: { systemInstruction: systemPrompt },
+      });
+      rawContent = result.text ?? "";
+    } else {
+      const result = await genai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: combinedText,
+        config: { systemInstruction: systemPrompt },
+      });
+      rawContent = result.text ?? "";
+    }
   } else {
     // Build user content — plain text or vision block when an image is attached
     const userContent: Anthropic.MessageParam["content"] =
