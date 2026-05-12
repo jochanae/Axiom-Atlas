@@ -67,7 +67,7 @@ function groupBySession(entries: Entry[]): SessionGroup[] {
 
 type CategoryFilter = "all" | Category;
 type SeverityFilter = "all" | "committed" | "blocker" | "parked" | "neutral";
-type VerbFilter = "all" | "new" | "bug" | "perf" | "note" | "wip" | "audit" | "merge" | "plan";
+type VerbFilter = "all" | "new" | "bug" | "perf" | "note" | "wip" | "audit" | "merge" | "plan" | "axiom_import";
 type DateFilter = "all" | "today" | "week" | "month";
 
 /* ─── Main component ─────────────────────────────────────────────── */
@@ -149,6 +149,10 @@ export default function Ledger() {
 
   const groups = useMemo(() => groupBySession(filtered), [filtered]);
   const mostRecent = entries.find((e: Entry) => e.status === "committed");
+
+  // Compani import summary
+  const companiEntries = useMemo(() => entries.filter((e: Entry) => e.verb === "axiom_import"), [entries]);
+  const lastCompaniImport = companiEntries[0] ?? null;
 
   // IDs of committed entries that currently have an active draft successor
   const activeReopenIds = useMemo(() => {
@@ -314,7 +318,7 @@ export default function Ledger() {
       {filtersExpanded && (
         <div style={{ padding: "8px 18px 10px", borderBottom: "1px solid var(--border)", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <FilterSelect label="Severity" value={severityFilter} onChange={(v) => setSeverityFilter(v as SeverityFilter)} options={[{ value: "all", label: "All" }, { value: "committed", label: "Committed" }, { value: "blocker", label: "Blocker" }, { value: "parked", label: "Parked" }, { value: "neutral", label: "Neutral" }]} />
-          <FilterSelect label="Verb" value={verbFilter} onChange={(v) => setVerbFilter(v as VerbFilter)} options={[{ value: "all", label: "All" }, { value: "new", label: "New" }, { value: "bug", label: "Bug" }, { value: "perf", label: "Perf" }, { value: "note", label: "Note" }, { value: "wip", label: "WIP" }, { value: "audit", label: "Audit" }, { value: "merge", label: "Merge" }, { value: "plan", label: "Plan" }]} />
+          <FilterSelect label="Verb" value={verbFilter} onChange={(v) => setVerbFilter(v as VerbFilter)} options={[{ value: "all", label: "All" }, { value: "new", label: "New" }, { value: "bug", label: "Bug" }, { value: "perf", label: "Perf" }, { value: "note", label: "Note" }, { value: "wip", label: "WIP" }, { value: "audit", label: "Audit" }, { value: "merge", label: "Merge" }, { value: "plan", label: "Plan" }, { value: "axiom_import", label: "Compani" }]} />
           <FilterSelect label="Date" value={dateFilter} onChange={(v) => setDateFilter(v as DateFilter)} options={[{ value: "all", label: "All time" }, { value: "today", label: "Today" }, { value: "week", label: "This week" }, { value: "month", label: "This month" }]} />
           {(severityFilter !== "all" || verbFilter !== "all" || dateFilter !== "all") && (
             <button onClick={() => { setSeverityFilter("all"); setVerbFilter("all"); setDateFilter("all"); }} style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "var(--ember)", background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
@@ -337,6 +341,46 @@ export default function Ledger() {
             });
           }}
         />
+      )}
+
+      {/* ─── Compani handoff banner ─── */}
+      {!isLoading && lastCompaniImport && (
+        <div
+          style={{
+            margin: "12px 18px 0",
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px solid rgba(201,162,76,0.25)",
+            background: "rgba(201,162,76,0.06)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+            <svg width={14} height={14} viewBox="0 0 16 16" fill="none" stroke="var(--accent-gold)" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <rect x="2" y="7" width="8" height="7" rx="1.25" />
+              <path d="M10 3.5 H14" />
+              <path d="M11.5 5.5 L14 3.5 L11.5 1.5" />
+              <path d="M6 7 V5 H10" opacity="0.55" />
+            </svg>
+            <div style={{ minWidth: 0 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--accent-gold)" }}>
+                Compani Blueprint
+              </span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted-text)", marginLeft: 8 }}>
+                {companiEntries.length} decision{companiEntries.length !== 1 ? "s" : ""} imported · last sync {relativeTime(lastCompaniImport.createdAt)}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => { setFiltersExpanded(true); setVerbFilter("axiom_import"); }}
+            style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--accent-gold)", background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)", borderRadius: 5, padding: "3px 9px", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" as const }}
+          >
+            View all →
+          </button>
+        </div>
       )}
 
       {/* ─── Decision Ledger Grouped overview ─── */}
@@ -491,7 +535,19 @@ function EntryRow({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--muted-text)", letterSpacing: "0.06em" }}>{relativeTime(entry.createdAt)}</span>
-            {entry.verb && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: catColor, background: `color-mix(in oklab, ${catColor} 10%, transparent)`, border: `1px solid color-mix(in oklab, ${catColor} 25%, transparent)`, padding: "1px 6px", borderRadius: 3, textTransform: "uppercase" as const }}>{entry.verb}</span>}
+            {entry.verb && (
+              entry.verb === "axiom_import" ? (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--accent-gold)", background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.28)", padding: "1px 6px", borderRadius: 3, textTransform: "uppercase" as const, display: "inline-flex", alignItems: "center", gap: 3 }}>
+                  <svg width={8} height={8} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="7" width="8" height="7" rx="1.25" />
+                    <path d="M10 3.5 H14" /><path d="M11.5 5.5 L14 3.5 L11.5 1.5" /><path d="M6 7 V5 H10" opacity="0.55" />
+                  </svg>
+                  Compani
+                </span>
+              ) : (
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: catColor, background: `color-mix(in oklab, ${catColor} 10%, transparent)`, border: `1px solid color-mix(in oklab, ${catColor} 25%, transparent)`, padding: "1px 6px", borderRadius: 3, textTransform: "uppercase" as const }}>{entry.verb}</span>
+              )
+            )}
             {entry.costOfLesson != null && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--ember)", letterSpacing: "0.06em" }}>{formatCost(entry.costOfLesson)}</span>}
             {entry.isViolation && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--ember)", background: "rgba(146,64,14,0.12)", border: "1px solid rgba(146,64,14,0.25)", padding: "1px 6px", borderRadius: 3, textTransform: "uppercase" as const }}>violation</span>}
           </div>

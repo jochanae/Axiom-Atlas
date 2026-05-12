@@ -1,7 +1,7 @@
 import type React from "react";
 
 export type Severity = "blocker" | "parked" | "committed" | "neutral";
-export type Verb = "new" | "bug" | "perf" | "note" | "wip" | "audit" | "merge" | "plan";
+export type Verb = "new" | "bug" | "perf" | "note" | "wip" | "audit" | "merge" | "plan" | "axiom_import";
 
 const severityColor: Record<Severity, string> = {
   blocker:   "var(--atlas-ember)",
@@ -18,14 +18,15 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
 };
 
 const VERB_LABEL: Record<Verb, string> = {
-  new:   "New",
-  bug:   "Bug",
-  perf:  "Perf",
-  note:  "Note",
-  wip:   "WIP",
-  audit: "Audit",
-  merge: "Merge",
-  plan:  "Plan",
+  new:          "New",
+  bug:          "Bug",
+  perf:         "Perf",
+  note:         "Note",
+  wip:          "WIP",
+  audit:        "Audit",
+  merge:        "Merge",
+  plan:         "Plan",
+  axiom_import: "Compani",
 };
 
 interface VerbGlyphProps { size?: number; }
@@ -81,6 +82,17 @@ const VerbGlyphs: Record<Verb, (p: VerbGlyphProps) => React.ReactElement> = {
       <path d="M3 8 H13" opacity="0.85" />
       <path d="M3 11.75 H7.5" opacity="0.6" />
       <circle cx="12" cy="4.25" r="1.1" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  axiom_import: ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round">
+      {/* Destination box */}
+      <rect x="2" y="7" width="8" height="7" rx="1.25" />
+      {/* Arrow shaft coming in from top-right */}
+      <path d="M10 3.5 H14" />
+      <path d="M11.5 5.5 L14 3.5 L11.5 1.5" />
+      {/* Connector into box */}
+      <path d="M6 7 V5 H10" opacity="0.55" />
     </svg>
   ),
 };
