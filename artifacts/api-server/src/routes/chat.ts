@@ -18,8 +18,7 @@ const IMAGE_REQUEST_RE = /\b(generate|create|make|draw|sketch|visualize|design|m
 const router: IRouter = Router();
 
 const anthropic = new Anthropic({
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 // ── Five-Tier Memory System ───────────────────────────────────────────────────
