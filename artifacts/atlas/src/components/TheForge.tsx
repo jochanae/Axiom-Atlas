@@ -109,10 +109,17 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     if (ghProjects.length > 0) return;
     fetch("/api/projects", { credentials: "include" })
       .then(r => r.ok ? r.json() : [])
-      .then((data: Array<{ name: string; githubRepo?: string; defaultBranch?: string }>) => {
-        const linked = data
-          .filter(p => p.githubRepo)
-          .map(p => ({ name: p.name, githubRepo: p.githubRepo!, defaultBranch: p.defaultBranch ?? "main" }));
+      .then((data: Array<{ name: string; linkedRepo?: string | null }>) => {
+        const linked: GhProject[] = [];
+        for (const p of data) {
+          if (!p.linkedRepo) continue;
+          try {
+            const parsed = JSON.parse(p.linkedRepo) as { fullName?: string; defaultBranch?: string };
+            if (parsed.fullName) {
+              linked.push({ name: p.name, githubRepo: parsed.fullName, defaultBranch: parsed.defaultBranch ?? "main" });
+            }
+          } catch { /* malformed linkedRepo, skip */ }
+        }
         setGhProjects(linked);
       })
       .catch(() => {});
@@ -520,6 +527,11 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           {filePath
             ? `File: ${filePath.split("/").pop()}`
             : isCursor ? "Add file — makes prompt surgical (recommended)" : "Add file context (optional)"}
+          {!showFilePane && !filePath && zipName && (
+            <span style={{ marginLeft: 6, fontSize: 9, color: "rgba(212,175,55,0.55)", fontFamily: "var(--app-font-mono)", background: "rgba(212,175,55,0.08)", border: "1px solid rgba(212,175,55,0.18)", borderRadius: 4, padding: "1px 5px" }}>
+              ZIP stored
+            </span>
+          )}
         </button>
 
         {showFilePane && (
@@ -630,12 +642,13 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
             {/* ── ZIP MODE ── */}
             {fileSource === "zip" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                {/* Hidden file input */}
+                {/* File input — rendered visibly via label, NOT via .click(), which causes mobile refresh */}
                 <input
                   ref={zipInputRef}
+                  id="forge-zip-input"
                   type="file"
                   accept=".zip"
-                  style={{ display: "none" }}
+                  style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
                   onChange={handleZipUpload}
                 />
 
@@ -647,12 +660,12 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                       <span style={{ fontSize: 9, color: "rgba(120,113,108,0.55)", fontFamily: "var(--app-font-mono)" }}>{Object.keys(zipFiles).length} files stored · tap Update to replace</span>
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
-                      <button
-                        onClick={() => zipInputRef.current?.click()}
-                        style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(212,175,55,0.3)", background: "transparent", color: "rgba(212,175,55,0.7)", fontSize: 9, fontFamily: "var(--app-font-mono)", cursor: "pointer" }}
+                      <label
+                        htmlFor="forge-zip-input"
+                        style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(212,175,55,0.3)", background: "transparent", color: "rgba(212,175,55,0.7)", fontSize: 9, fontFamily: "var(--app-font-mono)", cursor: "pointer", display: "inline-block" }}
                       >
                         Update
-                      </button>
+                      </label>
                       <button
                         onClick={clearZip}
                         style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(120,113,108,0.25)", background: "transparent", color: "rgba(120,113,108,0.55)", fontSize: 9, fontFamily: "var(--app-font-mono)", cursor: "pointer" }}
@@ -662,17 +675,18 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                     </div>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => zipInputRef.current?.click()}
-                    disabled={zipLoading}
+                  <label
+                    htmlFor="forge-zip-input"
                     style={{
-                      padding: "12px", borderRadius: 10, cursor: "pointer",
+                      display: "block", padding: "12px", borderRadius: 10, cursor: zipLoading ? "default" : "pointer",
                       border: "1px dashed rgba(212,175,55,0.28)", background: "oklch(0.13 0.01 60)",
-                      color: "rgba(212,175,55,0.65)", fontSize: 12, fontFamily: "var(--app-font-mono)", fontWeight: 600,
+                      color: zipLoading ? "rgba(212,175,55,0.35)" : "rgba(212,175,55,0.65)",
+                      fontSize: 12, fontFamily: "var(--app-font-mono)", fontWeight: 600,
+                      textAlign: "center" as const,
                     }}
                   >
                     {zipLoading ? "Extracting…" : "Upload ZIP of your project →"}
-                  </button>
+                  </label>
                 )}
 
                 {/* File picker from ZIP */}
