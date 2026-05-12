@@ -39,20 +39,27 @@ function killProc() {
   }
 }
 
+// Port we must never proxy to — that's our own API server
+const OWN_PORT = parseInt(process.env.PORT ?? "8080", 10);
+
 function detectPort(line: string): number | null {
   const clean = line.replace(/\x1B\[[0-9;]*m/g, "");
+
+  // Only consider lines that look like actual server-ready announcements
+  const isReadyLine = /\b(local|network|ready|listening|running|started|available|serving|server)\b/i.test(clean);
+  if (!isReadyLine) return null;
+
   const patterns = [
     /localhost:(\d{4,5})/i,
     /127\.0\.0\.1:(\d{4,5})/i,
-    /\bport[:\s]+(\d{4,5})/i,
     /http:\/\/[^:]+:(\d{4,5})/i,
-    /:(\d{4,5})\b/,
+    /\bport[:\s]+(\d{4,5})/i,
   ];
   for (const p of patterns) {
     const m = clean.match(p);
     if (m) {
       const port = parseInt(m[1], 10);
-      if (port > 1024 && port < 65535) return port;
+      if (port > 1024 && port < 65535 && port !== OWN_PORT) return port;
     }
   }
   return null;
