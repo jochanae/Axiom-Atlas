@@ -1528,11 +1528,8 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }, [homeMessages]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (input.trim()) handleSubmit();
-    }
+  const handleKeyDown = (_e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter adds a new line naturally — send via the send button
   };
 
   const autoResize = () => {
