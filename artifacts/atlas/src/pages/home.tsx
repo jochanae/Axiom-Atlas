@@ -1167,6 +1167,25 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const filePreviewUrls = useRef<Map<File, string>>(new Map());
+
+  // Create/revoke Object URLs exactly once per file — never inside JSX
+  useEffect(() => {
+    const current = new Set(attachedFiles);
+    // Revoke URLs for files that were removed
+    for (const [file, url] of filePreviewUrls.current.entries()) {
+      if (!current.has(file)) {
+        URL.revokeObjectURL(url);
+        filePreviewUrls.current.delete(file);
+      }
+    }
+    // Create URLs for newly added files
+    for (const file of attachedFiles) {
+      if (file.type.startsWith("image/") && !filePreviewUrls.current.has(file)) {
+        filePreviewUrls.current.set(file, URL.createObjectURL(file));
+      }
+    }
+  }, [attachedFiles]);
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
@@ -1496,6 +1515,7 @@ export default function Home() {
 
     setHomeMessages(prev => [...prev, { role: 'user', content: messageText, imageUrl }]);
     setIsAtlasStreaming(true);
+    document.body.dataset.voiceActive = "true"; // block PTR while waiting for response
     try {
       const res = await fetch("/api/nexus/chat", {
         method: "POST",
@@ -1533,6 +1553,7 @@ export default function Home() {
       setAttachedFiles(files);
     } finally {
       setIsAtlasStreaming(false);
+      document.body.dataset.voiceActive = "false";
     }
   }, [input, attachedFiles, isLoading, homeModel, homeFocus, projects, activeConversationId, compressImage, homeMessages.length]);
 
@@ -2021,8 +2042,12 @@ export default function Home() {
               style={{ display: "none" }}
               multiple
               onChange={(e) => {
-                const incoming = Array.from(e.target.files ?? []).slice(0, 10);
-                setAttachedFiles(prev => [...prev, ...incoming].slice(0, 10));
+                const incoming = Array.from(e.target.files ?? []);
+                const combined = [...attachedFiles, ...incoming].slice(0, 3);
+                if (incoming.length + attachedFiles.length > 3) {
+                  toast("Max 3 images at a time");
+                }
+                setAttachedFiles(combined);
                 e.target.value = "";
               }}
             />
@@ -2034,7 +2059,7 @@ export default function Home() {
                   <div key={idx} style={{ position: "relative", flexShrink: 0 }}>
                     {file.type.startsWith("image/") ? (
                       <img
-                        src={URL.createObjectURL(file)}
+                        src={filePreviewUrls.current.get(file)}
                         alt={file.name}
                         style={{ width: 54, height: 54, borderRadius: 7, objectFit: "cover", border: "1px solid rgba(201,162,76,0.25)", display: "block" }}
                       />
