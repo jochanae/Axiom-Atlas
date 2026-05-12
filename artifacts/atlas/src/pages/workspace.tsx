@@ -5901,7 +5901,7 @@ export default function Workspace() {
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
-  const [switchToExpanded, setSwitchToExpanded] = useState(true);
+  const [switchToExpanded, setSwitchToExpanded] = useState(false);
   const projectBtnRef = useRef<HTMLButtonElement>(null);
   const styleBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
@@ -7171,9 +7171,9 @@ export default function Workspace() {
                             Switch to
                           </span>
                           <svg
-                            width="9" height="9" viewBox="0 0 10 6" fill="none"
-                            stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
-                            style={{ color: "var(--atlas-muted)", opacity: 0.4, transition: "transform 180ms ease", transform: switchToExpanded ? "rotate(0deg)" : "rotate(-90deg)", flexShrink: 0 }}
+                            width="11" height="11" viewBox="0 0 10 6" fill="none"
+                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                            style={{ color: "var(--atlas-gold)", opacity: 0.7, transition: "transform 200ms ease", transform: switchToExpanded ? "rotate(0deg)" : "rotate(-90deg)", flexShrink: 0 }}
                           >
                             <path d="M1 1l4 4 4-4" />
                           </svg>
