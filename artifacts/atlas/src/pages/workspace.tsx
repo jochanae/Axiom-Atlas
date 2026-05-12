@@ -3470,8 +3470,73 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
   // ── Sandbox handoff from chat ────────────────────────────────────────────────
   const buildSrcdoc = (code: string): string => {
     const t = code.trim();
+    // Already a full HTML doc
     if (/^\s*<!DOCTYPE/i.test(t) || /^\s*<html/i.test(t)) return t;
-    return `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <script src="https://cdn.tailwindcss.com"><\/script>\n  <style>*, *::before, *::after { box-sizing: border-box; } body { margin: 0; padding: 0; }</style>\n</head>\n<body>\n${t}\n</body>\n</html>`;
+
+    // Detect React/JSX: has imports from react, JSX syntax, or export default function
+    const isReact = /from\s+['"]react['"]|useState|useEffect|export\s+default\s+function|export\s+default\s+class|<[A-Z][A-Za-z]*[\s/>]/.test(t);
+
+    if (isReact) {
+      // Capture which function/class was the default export before stripping
+      const exportMatch = t.match(/export\s+default\s+(?:function|class)\s+([A-Z]\w*)/);
+      // Also handle: export default SomeName; at end of file
+      const namedExportMatch = t.match(/export\s+default\s+([A-Z]\w*)\s*;/);
+      const mainComponent = exportMatch?.[1] ?? namedExportMatch?.[1];
+
+      let processed = t
+        // Strip all import lines
+        .replace(/^import\s+.*?\n/gm, "")
+        // Remove export default from function/class declaration
+        .replace(/export\s+default\s+(function|class)\s+/g, "$1 ")
+        // Remove standalone export default SomeName;
+        .replace(/export\s+default\s+[A-Z]\w*\s*;\s*/g, "");
+
+      // If we couldn't find a named export, find the last uppercase function as fallback
+      const fallback = mainComponent ?? [...processed.matchAll(/function\s+([A-Z]\w*)\s*\(/g)].pop()?.[1];
+
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+  <style>*, *::before, *::after { box-sizing: border-box; } body { margin: 0; padding: 0; }</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef, useMemo, useContext, createContext } = React;
+    const useNavigate = () => () => {};
+    const useLocation = () => ({ pathname: "/" });
+    const useParams = () => ({});
+    const Link = ({ children, to, className, style, onClick }) => (
+      <a href={to ?? "#"} className={className} style={style} onClick={onClick}>{children}</a>
+    );
+
+    ${processed}
+
+    ${fallback ? `ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(${fallback}));` : ""}
+  <\/script>
+</body>
+</html>`;
+    }
+
+    // Plain HTML
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>*, *::before, *::after { box-sizing: border-box; } body { margin: 0; padding: 0; }</style>
+</head>
+<body>
+${t}
+</body>
+</html>`;
   };
   useEffect(() => {
     if (!sandboxCode) return;
@@ -3899,7 +3964,7 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
                     disabled={!sandboxInput.trim()}
                     style={{ padding: "5px 12px", borderRadius: 5, background: sandboxInput.trim() ? "var(--atlas-ember)" : "rgba(255,255,255,0.04)", border: "none", color: sandboxInput.trim() ? "var(--atlas-fg)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", cursor: sandboxInput.trim() ? "pointer" : "not-allowed", transition: "all 140ms ease" }}
                   >Render</button>
-                  <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.28 }}>HTML · Tailwind included</span>
+                  <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.28 }}>React + HTML · Tailwind included</span>
                 </div>
               </div>
             )}
@@ -3924,7 +3989,7 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
                   <path d="M8 6l-6 6 6 6M16 6l6 6-6 6" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
-                  Paste any HTML or component above<br />and hit <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Render</strong> to preview it.
+                  Paste any HTML or React component above<br />and hit <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Render</strong> to preview it.
                 </div>
                 <div style={{ fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.22, textAlign: "center", lineHeight: 1.7, fontFamily: "var(--app-font-mono)" }}>
                   Or tap Preview on any code block in the chat<br />to send it here instantly.
