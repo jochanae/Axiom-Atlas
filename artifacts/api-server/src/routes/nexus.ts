@@ -179,6 +179,8 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     focusProjectId?: number | null;
     mode?: string;
     model?: string;
+    imageBase64?: string;
+    imageMimeType?: string;
   };
 
   if (!body.message?.trim()) {
@@ -189,7 +191,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { message, userProfile = "", focusProjectId = null, mode = "strategic", model = "claude" } = body;
+  const { message, userProfile = "", focusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType } = body;
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -339,9 +341,24 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     });
     rawContent = result.text ?? "";
   } else {
-    const claudeMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+    // Build user content — plain text or vision block when an image is attached
+    const userContent: Anthropic.MessageParam["content"] =
+      imageBase64 && imageMimeType
+        ? [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                data: imageBase64,
+              },
+            },
+            { type: "text", text: message },
+          ]
+        : message;
+    const claudeMessages: Anthropic.MessageParam[] = [
       ...conversationHistory,
-      { role: "user", content: message },
+      { role: "user", content: userContent },
     ];
     const aiResponse = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
