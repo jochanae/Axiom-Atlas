@@ -512,7 +512,10 @@ html, body {
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  border-bottom: 1px solid rgba(180, 83, 9, 0.30) !important;
 }
 [data-theme="parchment"] .atlas-chat-card-top::before {
   background: linear-gradient(90deg, transparent 0%, rgba(180,83,9,0.0) 10%, rgba(180,83,9,0.55) 50%, rgba(180,83,9,0.0) 90%, transparent 100%);
