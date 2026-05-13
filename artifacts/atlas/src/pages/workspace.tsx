@@ -10,6 +10,7 @@ import type { ArchNode, NodeStateMap, HandoverSnapshot } from "../components/Axi
 import { SystemMap } from "../components/SystemMap";
 import type { ArchNode as SystemMapNode } from "../components/SystemMap";
 import { TheForge } from "../components/TheForge";
+import { VisualVault } from "../components/VisualVault";
 import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
@@ -6003,6 +6004,7 @@ export default function Workspace() {
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
   const [showDrawer, setShowDrawer] = useState(false);
+  const [showVault, setShowVault] = useState(false);
   const [showForgeExternal, setShowForgeExternal] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -7351,8 +7353,28 @@ export default function Workspace() {
             )}
           </div>
 
-          {/* Right: % score + mode + avatar */}
+          {/* Right: vault + % score + mode + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <button
+              title="Visual Vault"
+              onClick={() => setShowVault(true)}
+              style={{
+                width: 28, height: 28, borderRadius: 7,
+                background: "transparent", border: "none",
+                color: "rgba(201,162,76,0.45)", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "color 160ms ease", flexShrink: 0,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(201,162,76,0.45)")}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+            </button>
             <ReadinessRing
               archScore={mapReadiness}
               decisionsScore={healthPct}
@@ -8574,6 +8596,13 @@ export default function Workspace() {
           </div>
         </div>,
         document.body
+      )}
+
+      {showVault && (
+        <VisualVault
+          projectId={id}
+          onClose={() => setShowVault(false)}
+        />
       )}
 
     </div>

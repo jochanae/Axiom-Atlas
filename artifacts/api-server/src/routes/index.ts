@@ -21,6 +21,8 @@ import stripeRouter from "./stripe";
 import statsRouter from "./stats";
 import nexusRouter from "./nexus";
 import terminalRouter from "./terminal";
+import galleryRouter from "./gallery";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
@@ -55,6 +57,12 @@ router.use(requireAuth, statsRouter);
 
 // Nexus — global command space (mode, not a project)
 router.use(requireAuth, nexusRouter);
+
+// Gallery — visual vault (global + per-project)
+router.use(requireAuth, galleryRouter);
+
+// Object storage — presigned URL upload + serve
+router.use(storageRouter);
 
 // Terminal — command execution with streaming output
 router.use(requireAuth, terminalRouter);
