@@ -164,7 +164,7 @@ export default function SecretsPage() {
     <div style={{ height: "100dvh", overflowY: "auto", background: "transparent", display: "flex", flexDirection: "column" }}>
 
       {toast && (
-        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 99999, background: "rgba(12,10,9,0.97)", border: "1px solid rgba(201,162,76,0.45)", borderRadius: 10, padding: "9px 18px", ...mono, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--atlas-gold)", boxShadow: "0 8px 32px rgba(0,0,0,0.6)", pointerEvents: "none" }}>
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 99999, background: "var(--atlas-surface)", border: "1px solid rgba(201,162,76,0.45)", borderRadius: 10, padding: "9px 18px", ...mono, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: "var(--atlas-gold)", boxShadow: "0 8px 32px rgba(0,0,0,0.6)", pointerEvents: "none" }}>
           {toast}
         </div>
       )}

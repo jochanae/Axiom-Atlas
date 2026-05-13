@@ -8,7 +8,7 @@ export function StatusToggle({ deepWork, onToggle }: { deepWork: boolean; onTogg
         gap: 6,
         padding: "6px 14px",
         borderRadius: 20,
-        background: deepWork ? "rgba(80,30,5,0.55)" : "rgba(12,10,9,0.65)",
+        background: deepWork ? "rgba(80,30,5,0.55)" : "var(--atlas-surface)",
         border: `1px solid ${deepWork ? "rgba(201,162,76,0.5)" : "rgba(255,255,255,0.07)"}`,
         backdropFilter: "blur(10px)",
         WebkitBackdropFilter: "blur(10px)",

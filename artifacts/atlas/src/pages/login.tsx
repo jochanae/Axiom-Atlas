@@ -397,7 +397,7 @@ export default function Login() {
                 transition: "all 240ms ease",
                 boxShadow: loading || !email || !password
                   ? "none"
-                  : "0 0 28px rgba(212,175,55,0.3), 0 0 8px rgba(212,175,55,0.15), inset 0 1px 0 rgba(255,255,255,0.15)",
+                  : "0 0 28px rgba(212,175,55,0.3), 0 0 8px rgba(212,175,55,0.15), inset 0 1px 0 var(--atlas-border)",
                 marginTop: 4,
               }}
             >
@@ -421,13 +421,13 @@ export default function Login() {
               style={{
                 width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
                 gap: 10, padding: "10px 16px", borderRadius: 10,
-                background: "rgba(255,255,255,0.04)", border: "1px solid var(--atlas-border)",
+                background: "var(--atlas-glass-bg)", border: "1px solid var(--atlas-border)",
                 color: "var(--atlas-fg)", fontSize: 11, ...mono, letterSpacing: "0.12em",
                 textTransform: "uppercase", cursor: "pointer", textDecoration: "none",
                 transition: "all 200ms ease", boxSizing: "border-box",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "var(--atlas-border)"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--atlas-glass-bg)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--atlas-glass-bg)"; e.currentTarget.style.borderColor = "var(--atlas-border)"; }}
             >
               <GoogleIcon />
               <span>Continue with Google</span>
@@ -490,7 +490,7 @@ const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "11px 14px",
   borderRadius: 9,
-  background: "rgba(12,10,9,0.6)",
+  background: "var(--atlas-surface)",
   border: "1px solid rgba(255,255,255,0.07)",
   color: "var(--atlas-fg)",
   fontSize: 13,

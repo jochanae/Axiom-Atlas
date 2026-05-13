@@ -724,7 +724,7 @@ export default function MasterMap() {
         position: "absolute", top: 0, left: 0, right: 0, zIndex: 20,
         display: "flex", alignItems: "center", gap: 10, padding: "12px 16px 10px",
         borderBottom: "1px solid rgba(201,162,76,0.07)",
-        background: "rgba(9,8,6,0.78)", backdropFilter: "blur(16px)",
+        background: "var(--atlas-bg)", backdropFilter: "blur(16px)",
       }}>
         <button onClick={() => setLocation("/nexus")} style={{
           width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(201,162,76,0.18)",

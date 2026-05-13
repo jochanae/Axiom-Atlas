@@ -125,7 +125,7 @@ export default function Vault() {
       {toast && (
         <div style={{
           position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)",
-          zIndex: 99999, background: "rgba(12,10,9,0.97)",
+          zIndex: 99999, background: "var(--atlas-surface)",
           border: "1px solid rgba(201,162,76,0.45)", borderRadius: 10,
           padding: "9px 18px", ...mono, fontSize: 11, fontWeight: 700,
           letterSpacing: "0.08em", color: "var(--atlas-gold)",

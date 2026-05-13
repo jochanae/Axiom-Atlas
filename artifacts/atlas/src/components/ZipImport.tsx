@@ -120,7 +120,7 @@ export function ZipDragOverlay({ visible }: { visible: boolean }) {
     <div
       style={{
         position: "absolute", inset: 0, zIndex: 300,
-        background: "rgba(12,10,9,0.88)",
+        background: "var(--atlas-surface)",
         backdropFilter: "blur(6px)",
         display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center", gap: 16,

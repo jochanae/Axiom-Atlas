@@ -415,7 +415,7 @@ function ErrorsTab({ errors, onRefresh }: { errors: ErrorLog[] | null; onRefresh
       {expandedId === e.id && (
         <div style={{ padding: "0 14px 14px", borderTop: "1px solid var(--atlas-border)" }}>
           {e.stack && (
-            <pre style={{ fontSize: 10, ...mono, color: "var(--atlas-muted)", background: "rgba(0,0,0,0.3)", padding: 10, borderRadius: 6, overflow: "auto", maxHeight: 140, marginTop: 10, marginBottom: 10 }}>
+            <pre style={{ fontSize: 10, ...mono, color: "var(--atlas-muted)", background: "var(--atlas-glass-bg)", padding: 10, borderRadius: 6, overflow: "auto", maxHeight: 140, marginTop: 10, marginBottom: 10 }}>
               {e.stack}
             </pre>
           )}
@@ -563,7 +563,7 @@ export default function Admin() {
       {/* Header */}
       <div style={{
         position: "sticky", top: 0, zIndex: 100,
-        background: "rgba(12,10,9,0.92)", backdropFilter: "blur(20px)",
+        background: "var(--atlas-surface)", backdropFilter: "blur(20px)",
         borderBottom: "1px solid var(--atlas-border)",
         padding: "0 16px",
         display: "flex", alignItems: "center", gap: 12, height: 56,

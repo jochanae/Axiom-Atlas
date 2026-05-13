@@ -70,7 +70,7 @@ function GlassInput({
       </label>
       <div style={{
         position: "relative",
-        background: readOnly ? "rgba(255,255,255,0.015)" : "rgba(255,255,255,0.04)",
+        background: readOnly ? "rgba(255,255,255,0.015)" : "var(--atlas-glass-bg)",
         border: `1px solid ${focused ? "rgba(201,162,76,0.38)" : "rgba(255,255,255,0.07)"}`,
         borderRadius: 8, backdropFilter: "blur(8px)", transition: "border-color 160ms ease",
       }}>
@@ -112,7 +112,7 @@ function GlassTextarea({ label, value, onChange, placeholder }: {
         {label}
       </label>
       <div style={{
-        background: "rgba(255,255,255,0.04)",
+        background: "var(--atlas-glass-bg)",
         border: `1px solid ${focused ? "rgba(201,162,76,0.38)" : "rgba(255,255,255,0.07)"}`,
         borderRadius: 8, backdropFilter: "blur(8px)", transition: "border-color 160ms ease",
       }}>
@@ -210,7 +210,7 @@ function PasswordInput({ label, value, onChange }: { label: string; value: strin
       </label>
       <div style={{
         position: "relative",
-        background: "rgba(255,255,255,0.04)",
+        background: "var(--atlas-glass-bg)",
         border: `1px solid ${focused ? "rgba(201,162,76,0.38)" : "rgba(255,255,255,0.07)"}`,
         borderRadius: 7, transition: "border-color 160ms ease",
       }}>
@@ -472,7 +472,7 @@ export function AccountHubPanel({ onClose, isMobile = false }: { onClose: () => 
                   <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "rgba(66,133,244,0.8)", letterSpacing: "0.07em" }}>Google</span>
                 </div>
               ) : (
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, background: "var(--atlas-glass-bg)", border: "1px solid var(--atlas-glass-bg)" }}>
                   <LockIcon size={9} />
                   <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.6, letterSpacing: "0.07em" }}>Email</span>
                 </div>
@@ -492,14 +492,14 @@ export function AccountHubPanel({ onClose, isMobile = false }: { onClose: () => 
                 onClick={() => fileInputRef.current?.click()}
                 style={{
                   flex: 1, padding: "7px 10px", borderRadius: 7,
-                  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                  background: "var(--atlas-glass-bg)", border: "1px solid var(--atlas-glass-bg)",
                   color: "var(--atlas-fg)", fontSize: 10.5, fontFamily: "var(--app-font-mono)",
                   cursor: "pointer", letterSpacing: "0.04em",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
                   transition: "all 160ms ease",
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.22)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "var(--atlas-glass-bg)"; e.currentTarget.style.borderColor = "var(--atlas-glass-bg)"; }}
               >
                 <UploadIcon size={11} />
                 Upload photo
@@ -610,7 +610,7 @@ export function AccountHubPanel({ onClose, isMobile = false }: { onClose: () => 
                             onClick={() => { setShowChangePw(false); setPwError(null); setCurrentPw(""); setNewPw(""); setConfirmPw(""); }}
                             style={{
                               padding: "8px 14px", borderRadius: 6,
-                              border: "1px solid rgba(255,255,255,0.08)",
+                              border: "1px solid var(--atlas-glass-bg)",
                               background: "transparent", color: "var(--atlas-muted)",
                               fontSize: 10, fontFamily: "var(--app-font-mono)", cursor: "pointer",
                             }}
@@ -741,7 +741,7 @@ export function AccountHubPanel({ onClose, isMobile = false }: { onClose: () => 
                     onClick={() => { setShowDeleteConfirm(false); setDeleteInput(""); }}
                     style={{
                       padding: "8px 14px", borderRadius: 6,
-                      border: "1px solid rgba(255,255,255,0.08)",
+                      border: "1px solid var(--atlas-glass-bg)",
                       background: "transparent", color: "var(--atlas-muted)",
                       fontSize: 10, fontFamily: "var(--app-font-mono)", cursor: "pointer",
                     }}
