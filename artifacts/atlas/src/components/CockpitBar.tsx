@@ -13,24 +13,26 @@ interface CockpitBarProps {
 
 function AxiomLogoSVG() {
   return (
-    <svg viewBox="0 0 512 512" width="58" height="58">
-      <defs>
-        <radialGradient id="cpg" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#0D0B09" stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="cgs" cx="50%" cy="40%" r="50%">
-          <stop offset="0%" stopColor="#F5D97A" />
-          <stop offset="50%" stopColor="#D4AF37" />
-          <stop offset="100%" stopColor="#A07820" />
-        </radialGradient>
-      </defs>
-      <rect width="512" height="512" rx="90" fill="#0D0B09" />
-      <rect width="512" height="512" rx="90" fill="url(#cpg)" />
-      <polygon points="256,110 170,402 212,402 274,172" fill="url(#cgs)" />
-      <polygon points="256,110 342,402 300,402 238,172" fill="url(#cgs)" />
-      <rect x="180" y="282" width="152" height="34" rx="5" fill="url(#cgs)" />
-    </svg>
+    <div style={{ width: 60, height: 60, borderRadius: "50%", overflow: "hidden", flexShrink: 0 }}>
+      <svg viewBox="0 0 512 512" width="60" height="60" display="block">
+        <defs>
+          <radialGradient id="cpg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#0D0B09" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="cgs" cx="50%" cy="40%" r="50%">
+            <stop offset="0%" stopColor="#F5D97A" />
+            <stop offset="50%" stopColor="#D4AF37" />
+            <stop offset="100%" stopColor="#A07820" />
+          </radialGradient>
+        </defs>
+        <rect width="512" height="512" fill="#0D0B09" />
+        <rect width="512" height="512" fill="url(#cpg)" />
+        <polygon points="256,110 170,402 212,402 274,172" fill="url(#cgs)" />
+        <polygon points="256,110 342,402 300,402 238,172" fill="url(#cgs)" />
+        <rect x="180" y="282" width="152" height="34" rx="5" fill="url(#cgs)" />
+      </svg>
+    </div>
   );
 }
 
