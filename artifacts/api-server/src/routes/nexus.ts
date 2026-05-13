@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
-import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable } from "@workspace/db";
-import { eq, asc, and, inArray, desc, isNull } from "drizzle-orm";
+import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable } from "@workspace/db";
+import { eq, asc, and, inArray, desc, isNull, sql } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 
@@ -235,34 +235,47 @@ router.delete("/nexus/thread", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-// GET /api/nexus/conversations — list all past conversations, newest first
+router.post("/nexus/conversation/save", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+    const { messages, title } = req.body as {
+      messages: Array<{ role: string; content: string }>;
+      title?: string;
+    };
+    if (!messages?.length) { res.status(400).json({ error: "No messages" }); return; }
+
+    const autoTitle = title || messages.find(m => m.role === "user")?.content?.slice(0, 60) || "Conversation";
+
+    await db.insert(conversationsTable).values({
+      userId,
+      title: autoTitle,
+      messages: JSON.stringify(messages),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    res.json({ saved: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to save" });
+  }
+});
+
 router.get("/nexus/conversations", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
-  const messages = await db
-    .select()
-    .from(nexusMessagesTable)
-    .where(eq(nexusMessagesTable.userId, userId))
-    .orderBy(asc(nexusMessagesTable.createdAt));
+  const rows = await db
+    .select({ id: conversationsTable.id, title: conversationsTable.title, createdAt: conversationsTable.createdAt, messageCount: sql<number>`jsonb_array_length(${conversationsTable.messages}::jsonb)` })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.userId, userId))
+    .orderBy(desc(conversationsTable.createdAt))
+    .limit(30);
+  res.json({ conversations: rows });
+});
 
-  const groups = new Map<string, typeof messages>();
-  for (const msg of messages) {
-    const key = msg.conversationId ?? "__legacy__";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(msg);
-  }
-
-  const conversations = Array.from(groups.entries()).map(([key, msgs]) => {
-    const firstUserMsg = msgs.find((m) => m.role === "user");
-    return {
-      conversationId: key === "__legacy__" ? null : key,
-      preview: (firstUserMsg?.content ?? "").slice(0, 120),
-      messageCount: msgs.length,
-      startedAt: msgs[0].createdAt.toISOString(),
-      lastMessageAt: msgs[msgs.length - 1].createdAt.toISOString(),
-    };
-  }).sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
-
-  res.json(conversations);
+router.get("/nexus/conversation/:id", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const id = parseInt(req.params.id, 10);
+  const [row] = await db.select().from(conversationsTable).where(and(eq(conversationsTable.id, id), eq(conversationsTable.userId, userId)));
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ conversation: row });
 });
 
 // POST /api/nexus/chat — send a message in Nexus Mode
