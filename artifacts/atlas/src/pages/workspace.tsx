@@ -7952,12 +7952,13 @@ export default function Workspace() {
 
           {/* Input */}
           <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
-            {/* Hidden file input */}
+            {/* Hidden file input — id used by label for native mobile trigger */}
             <input
               ref={fileInputRef}
+              id="ws-file-input"
               type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.txt,.md,.csv,.json,.js,.ts,.tsx,.jsx"
-              style={{ display: "none" }}
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              style={{ position: "absolute", width: "1px", height: "1px", opacity: 0, pointerEvents: "none", overflow: "hidden" }}
               multiple
               onChange={(e) => {
                 const incoming = Array.from(e.target.files ?? []).slice(0, 10);
@@ -7968,9 +7969,10 @@ export default function Workspace() {
             {/* Hidden ZIP input */}
             <input
               ref={zipInputRef}
+              id="ws-zip-input"
               type="file"
               accept=".zip,application/zip"
-              style={{ display: "none" }}
+              style={{ position: "absolute", width: "1px", height: "1px", opacity: 0, pointerEvents: "none", overflow: "hidden" }}
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (file) await processZip(file);
@@ -8051,28 +8053,26 @@ export default function Workspace() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
                 {/* Left: paperclip + wrench (read Atlas source) */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Attach file"
+                  <label
+                    htmlFor="ws-file-input"
+                    title="Attach image"
                     style={{
                       width: 30, height: 30, borderRadius: 7,
-                      background: "transparent", border: "none",
+                      background: "transparent",
                       color: attachedFiles.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                       opacity: attachedFiles.length > 0 ? 1 : 0.4, transition: "opacity 160ms ease",
-                      flexShrink: 0,
+                      flexShrink: 0, userSelect: "none",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                    onMouseLeave={(e) => { if (!attachedFiles.length) e.currentTarget.style.opacity = "0.4"; }}
                   >
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                       <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                  </button>
+                  </label>
 
                   {/* ZIP import button */}
-                  <button
-                    onClick={() => zipInputRef.current?.click()}
+                  <label
+                    htmlFor="ws-zip-input"
                     title="Load project ZIP into context"
                     style={{
                       width: 30, height: 30, borderRadius: 7,
@@ -8081,17 +8081,15 @@ export default function Workspace() {
                       color: zipFiles.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                       opacity: zipFiles.length > 0 ? 1 : 0.4, transition: "all 160ms ease",
-                      flexShrink: 0,
+                      flexShrink: 0, userSelect: "none",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-                    onMouseLeave={(e) => { if (!zipFiles.length) e.currentTarget.style.opacity = "0.4"; }}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
                       <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
                       <line x1="12" y1="22.08" x2="12" y2="12" />
                     </svg>
-                  </button>
+                  </label>
 
                   {/* Wrench — read Atlas source into context */}
                   <button

@@ -2060,12 +2060,13 @@ export default function Home() {
 
           {/* Input shell */}
           <div className="atlas-input-shell" style={{ padding: "18px 20px 14px", boxShadow: ({ strategic: "0 0 0 1.5px rgba(201,162,76,0.4), 0 0 18px rgba(201,162,76,0.12)", audit: "0 0 0 1.5px rgba(239,100,68,0.5), 0 0 18px rgba(239,100,68,0.15)", "deep-dive": "0 0 0 1.5px rgba(99,130,239,0.5), 0 0 18px rgba(99,130,239,0.15)" } as Record<string, string>)[atlasDetectedMode] ?? "none", transition: "box-shadow 600ms ease" }}>
-            {/* Hidden file input */}
+            {/* Hidden file input — uses id so label can trigger it natively on mobile */}
             <input
               ref={fileInputRef}
+              id="home-file-input"
               type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.txt,.md,.csv,.json"
-              style={{ display: "none" }}
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              style={{ position: "absolute", width: "1px", height: "1px", opacity: 0, pointerEvents: "none", overflow: "hidden" }}
               multiple
               onChange={(e) => {
                 const incoming = Array.from(e.target.files ?? []);
@@ -2157,23 +2158,21 @@ export default function Home() {
 
             {/* Bottom action bar */}
             <div style={{ display: "flex", alignItems: "center", marginTop: 12, gap: 2 }}>
-              {/* Paperclip — attach files; turns gold when files are loaded */}
-              <button
-                title="Attach file"
-                onClick={() => fileInputRef.current?.click()}
+              {/* Paperclip — label triggers file input natively; works on mobile Safari */}
+              <label
+                htmlFor="home-file-input"
+                title="Attach image"
                 style={{
-                  width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none",
+                  width: 32, height: 32, borderRadius: 8, background: "transparent",
                   color: attachedFiles.length > 0 ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "color 160ms ease", flexShrink: 0,
+                  transition: "color 160ms ease", flexShrink: 0, userSelect: "none",
                 }}
-                onMouseEnter={(e) => { if (!attachedFiles.length) e.currentTarget.style.color = "var(--atlas-fg)"; }}
-                onMouseLeave={(e) => { if (!attachedFiles.length) e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
               >
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
                   <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-              </button>
+              </label>
 
               {/* Deep Dive button */}
               <div style={{ position: "relative", flexShrink: 0 }}>
