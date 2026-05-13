@@ -5,15 +5,15 @@
  *   - Claude vision blocks (base64) for the message content
  *   - A short text summary for injection into the system prompt
  *
- * Cap: 3 images max per request to manage token cost.
+ * Cap: 10 images max per request — covers a full mobile page flow.
  */
 
 import { db, galleryImagesTable } from "@workspace/db";
-import { eq, and, isNull, desc } from "drizzle-orm";
+import { eq, and, isNull, asc } from "drizzle-orm";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 
 const storage = new ObjectStorageService();
-const MAX_VAULT_IMAGES = 3;
+const MAX_VAULT_IMAGES = 10;
 
 export interface VaultImageBlock {
   type: "image";
@@ -44,19 +44,19 @@ export async function loadVaultContext(
   const empty: VaultContext = { imageBlocks: [], systemNote: "", hasImages: false };
 
   try {
-    // Fetch newest images from DB
+    // Fetch images oldest-first so sequential page-flow screenshots read top→bottom
     const rows = projectId
       ? await db
           .select()
           .from(galleryImagesTable)
           .where(and(eq(galleryImagesTable.userId, userId), eq(galleryImagesTable.projectId, projectId)))
-          .orderBy(desc(galleryImagesTable.createdAt))
+          .orderBy(asc(galleryImagesTable.createdAt))
           .limit(MAX_VAULT_IMAGES)
       : await db
           .select()
           .from(galleryImagesTable)
           .where(and(eq(galleryImagesTable.userId, userId), isNull(galleryImagesTable.projectId)))
-          .orderBy(desc(galleryImagesTable.createdAt))
+          .orderBy(asc(galleryImagesTable.createdAt))
           .limit(MAX_VAULT_IMAGES);
 
     if (rows.length === 0) return empty;
