@@ -1207,6 +1207,7 @@ export default function Home() {
   const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showChatMenu, setShowChatMenu] = useState(false);
   const [threadLoading, setThreadLoading] = useState(true);
   const [activeConversationId, setActiveConversationId] = useState<string>(() => {
     try {
@@ -1844,73 +1845,59 @@ export default function Home() {
               </div>
             ) : (
               <>
-                {/* Chat action bar */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 2, borderBottom: "1px solid var(--atlas-border)", background: "rgba(0,0,0,0.15)", paddingRight: 6, height: 26, flexShrink: 0, marginBottom: 6 }}>
-                  {showClearConfirm ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(239,68,68,0.65)", letterSpacing: "0.04em" }}>Clear conversation?</span>
-                      <button
-                        onClick={handleClearThread}
-                        style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 9px", fontSize: 10, color: "rgba(252,165,165,0.9)", cursor: "pointer", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}
-                      >
-                        Clear
-                      </button>
-                      <button
-                        onClick={() => setShowClearConfirm(false)}
-                        style={{ background: "transparent", border: "none", padding: "3px 6px", fontSize: 11, color: "var(--atlas-muted)", cursor: "pointer" }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        title="Conversation history"
-                        onClick={handleOpenHistory}
-                        style={{ background: "transparent", border: "none", padding: "3px 5px", cursor: "pointer", opacity: 0.45, color: "var(--atlas-gold)", lineHeight: 1, transition: "opacity 140ms" }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.45")}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 2"/>
-                        </svg>
-                      </button>
-                      <button
-                        title="New conversation"
-                        onClick={handleNewConversation}
-                        style={{ background: "transparent", border: "none", padding: "3px 5px", cursor: "pointer", opacity: 0.35, color: "var(--atlas-muted)", lineHeight: 1, transition: "opacity 140ms" }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.35")}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                          <line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>
-                        </svg>
-                      </button>
-                      <button
-                        title="Download conversation"
-                        onClick={handleDownloadThread}
-                        style={{ background: "transparent", border: "none", padding: "3px 5px", cursor: "pointer", opacity: 0.35, color: "var(--atlas-muted)", lineHeight: 1, transition: "opacity 140ms" }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.35")}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M8 2v9M5 8l3 3 3-3"/><path d="M2 14h12"/>
-                        </svg>
-                      </button>
-                      <button
-                        title="Clear conversation"
-                        onClick={() => setShowClearConfirm(true)}
-                        style={{ background: "transparent", border: "none", padding: "3px 5px", cursor: "pointer", opacity: 0.35, color: "var(--atlas-muted)", lineHeight: 1, transition: "opacity 140ms" }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.35")}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 4h10M6 4V2h4v2M13 4l-.867 9.143A2 2 0 0110.138 15H5.862a2 2 0 01-1.995-1.857L3 4"/>
-                        </svg>
-                      </button>
-                    </>
-                  )}
-                </div>
+                {/* Three-dot actions menu */}
+                {showClearConfirm ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end", marginBottom: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(239,68,68,0.65)", letterSpacing: "0.04em" }}>Clear conversation?</span>
+                    <button
+                      onClick={handleClearThread}
+                      style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 4, padding: "3px 9px", fontSize: 10, color: "rgba(252,165,165,0.9)", cursor: "pointer", fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em" }}
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={() => setShowClearConfirm(false)}
+                      style={{ background: "transparent", border: "none", padding: "3px 6px", fontSize: 11, color: "var(--atlas-muted)", cursor: "pointer" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ position: "relative", display: "flex", justifyContent: "flex-end", marginBottom: 4, flexShrink: 0 }}>
+                    <button
+                      onClick={() => setShowChatMenu(v => !v)}
+                      title="More options"
+                      style={{ background: "transparent", border: "none", padding: "4px 6px", cursor: "pointer", color: "var(--atlas-muted)", opacity: 0.4, lineHeight: 1, transition: "opacity 140ms" }}
+                      onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                      onMouseLeave={e => (e.currentTarget.style.opacity = "0.4")}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+                      </svg>
+                    </button>
+                    {showChatMenu && (
+                      <>
+                        <div onClick={() => setShowChatMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 49 }} />
+                        <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 50, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", borderRadius: 10, padding: "4px 0", minWidth: 178, boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}>
+                          {([ 
+                            { label: "Conversation history", action: () => { handleOpenHistory(); setShowChatMenu(false); } },
+                            { label: "New conversation", action: () => { handleNewConversation(); setShowChatMenu(false); } },
+                            { label: "Download", action: () => { handleDownloadThread(); setShowChatMenu(false); } },
+                            { label: "Clear conversation", action: () => { setShowClearConfirm(true); setShowChatMenu(false); }, danger: true },
+                          ] as Array<{ label: string; action: () => void; danger?: boolean }>).map(item => (
+                            <button
+                              key={item.label}
+                              onClick={item.action}
+                              style={{ display: "flex", width: "100%", background: "transparent", border: "none", padding: "9px 14px", cursor: "pointer", fontSize: 12, fontFamily: "var(--app-font-mono)", color: item.danger ? "rgba(239,68,68,0.8)" : "var(--atlas-fg)", letterSpacing: "0.04em", textAlign: "left" }}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Messages */}
                 <div
