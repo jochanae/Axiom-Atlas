@@ -2634,24 +2634,26 @@ export default function Home() {
               }}
               onClick={() => setLocation(projects && projects.length > 0 ? `/project/${projects[0]?.id}` : "/projects")}
             >
-              <svg viewBox="0 0 512 512" width="40" height="40">
-                <defs>
-                  <radialGradient id="hnpg" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="#0D0B09" stopOpacity="0" />
-                  </radialGradient>
-                  <radialGradient id="hngs" cx="50%" cy="40%" r="50%">
-                    <stop offset="0%" stopColor="#F5D97A" />
-                    <stop offset="50%" stopColor="#D4AF37" />
-                    <stop offset="100%" stopColor="#A07820" />
-                  </radialGradient>
-                </defs>
-                <rect width="512" height="512" rx="90" fill="#0D0B09" />
-                <rect width="512" height="512" rx="90" fill="url(#hnpg)" />
-                <polygon points="256,110 170,402 212,402 274,172" fill="url(#hngs)" />
-                <polygon points="256,110 342,402 300,402 238,172" fill="url(#hngs)" />
-                <rect x="180" y="282" width="152" height="34" rx="5" fill="url(#hngs)" />
-              </svg>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", overflow: "hidden", flexShrink: 0 }}>
+                <svg viewBox="0 0 512 512" width="52" height="52" display="block">
+                  <defs>
+                    <radialGradient id="hnpg" cx="50%" cy="50%" r="50%">
+                      <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
+                      <stop offset="100%" stopColor="#0D0B09" stopOpacity="0" />
+                    </radialGradient>
+                    <radialGradient id="hngs" cx="50%" cy="40%" r="50%">
+                      <stop offset="0%" stopColor="#F5D97A" />
+                      <stop offset="50%" stopColor="#D4AF37" />
+                      <stop offset="100%" stopColor="#A07820" />
+                    </radialGradient>
+                  </defs>
+                  <rect width="512" height="512" fill="#0D0B09" />
+                  <rect width="512" height="512" fill="url(#hnpg)" />
+                  <polygon points="256,110 170,402 212,402 274,172" fill="url(#hngs)" />
+                  <polygon points="256,110 342,402 300,402 238,172" fill="url(#hngs)" />
+                  <rect x="180" y="282" width="152" height="34" rx="5" fill="url(#hngs)" />
+                </svg>
+              </div>
             </button>
           </div>
 
