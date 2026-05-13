@@ -166,7 +166,7 @@ export default function Login() {
         <div className="atlas-input-shell" style={{
           borderRadius: 18,
           padding: "36px 28px 32px",
-          background: "rgba(28,25,23,0.92)",
+          background: "var(--atlas-surface)",
           backdropFilter: "blur(28px) saturate(140%)",
           WebkitBackdropFilter: "blur(28px) saturate(140%)",
           boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(201,162,76,0.08)",
@@ -421,13 +421,13 @@ export default function Login() {
               style={{
                 width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
                 gap: 10, padding: "10px 16px", borderRadius: 10,
-                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.04)", border: "1px solid var(--atlas-border)",
                 color: "var(--atlas-fg)", fontSize: 11, ...mono, letterSpacing: "0.12em",
                 textTransform: "uppercase", cursor: "pointer", textDecoration: "none",
                 transition: "all 200ms ease", boxSizing: "border-box",
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.22)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "var(--atlas-border)"; }}
             >
               <GoogleIcon />
               <span>Continue with Google</span>

@@ -684,7 +684,7 @@ export default function MasterMap() {
               opacity: hoveredIdx !== null && !isHovered ? 0.28 : 1,
               transition: "opacity 180ms ease",
             }}>
-              <div style={{ fontSize: isHovered ? 11.5 : 10.5, fontWeight: 600, color: isHovered ? "rgba(231,229,228,1)" : "rgba(231,229,228,0.58)", letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "font-size 150ms ease, color 150ms ease" }}>
+              <div style={{ fontSize: isHovered ? 11.5 : 10.5, fontWeight: 600, color: isHovered ? "var(--atlas-fg)" : "var(--atlas-fg)", letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "font-size 150ms ease, color 150ms ease" }}>
                 {p.name}
               </div>
               <div style={{ fontSize: 8.5, color: act > 0.6 ? "rgba(201,162,76,0.65)" : "rgba(120,113,108,0.42)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
@@ -704,7 +704,7 @@ export default function MasterMap() {
       {warping && (
         <div style={{
           position: "absolute", inset: 0, zIndex: 90, pointerEvents: "none",
-          background: "#090806", animation: "warp-dark 900ms cubic-bezier(0.4,0,1,1) both",
+          background: "var(--atlas-bg)", animation: "warp-dark 900ms cubic-bezier(0.4,0,1,1) both",
         }}>
           <div style={{
             position: "absolute", inset: 0,
@@ -904,7 +904,7 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
               <button key={p.id} onClick={() => { setFlowOpen(false); onDive(p.id); }} style={{
                 width: "100%", padding: "8px 12px", background: "transparent", border: "none",
                 cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
-                color: "rgba(231,229,228,0.76)", fontSize: 12.5,
+                color: "var(--atlas-fg)", fontSize: 12.5,
                 fontFamily: "var(--app-font-sans)", transition: "background 120ms ease",
               }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.08)")}

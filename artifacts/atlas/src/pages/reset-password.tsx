@@ -74,7 +74,7 @@ export default function ResetPassword() {
         <div className="atlas-input-shell" style={{
           borderRadius: 18,
           padding: "36px 28px 32px",
-          background: "rgba(28,25,23,0.92)",
+          background: "var(--atlas-surface)",
           backdropFilter: "blur(28px) saturate(140%)",
           WebkitBackdropFilter: "blur(28px) saturate(140%)",
           boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(201,162,76,0.08)",

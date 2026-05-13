@@ -132,7 +132,7 @@ html, body {
   --atlas-home-bg-gradient: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,28,135,0.25) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(88,28,135,0.15) 0%, transparent 60%);
   --atlas-home-header-shadow: 0 1px 24px rgba(0,0,0,0.5);
   --atlas-nav-arch-fill: rgba(13,11,9,0.97);
-  --atlas-home-btn-bg: #0D0B09;
+  --atlas-home-btn-bg: var(--atlas-bg);
 
   --app-font-sans: 'Geist', system-ui, -apple-system, sans-serif;
   --app-font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
@@ -293,7 +293,7 @@ html, body {
 .atlas-sonner-toaster .atlas-luxury-toast-description {
   font-family: var(--app-font-mono);
   font-size: 11px;
-  color: rgba(231,229,228,0.58) !important;
+  color: var(--atlas-fg) !important;
   letter-spacing: 0.01em;
 }
 

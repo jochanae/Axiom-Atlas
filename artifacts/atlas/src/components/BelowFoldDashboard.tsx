@@ -183,7 +183,7 @@ function ActivityRow({ item, onOpenProject }: { item: ActivityItem; onOpenProjec
           {/* Project chip */}
           <span style={{
             fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)",
-            background: "rgba(37,34,32,0.9)", border: "1px solid var(--atlas-border)",
+            background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)",
             borderRadius: 4, padding: "1px 5px", letterSpacing: "0.04em", flexShrink: 0,
             whiteSpace: "nowrap", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis",
           }}>

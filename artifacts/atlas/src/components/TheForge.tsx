@@ -379,7 +379,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
             border: `1px solid ${transcript.length > 10 ? "rgba(212,175,55,0.35)" : "rgba(212,175,55,0.18)"}`,
             background: "oklch(0.14 0.01 60)",
             padding: "12px 14px",
-            color: "rgba(231,229,228,0.87)", fontSize: 13, lineHeight: 1.65,
+            color: "var(--atlas-fg)", fontSize: 13, lineHeight: 1.65,
             outline: "none", resize: "none", transition: "border-color 180ms",
             boxSizing: "border-box" as const, fontFamily: "inherit",
           }}
@@ -426,7 +426,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                 border: "1px solid rgba(212,175,55,0.18)",
                 background: "oklch(0.13 0.01 60)",
                 padding: "10px 12px",
-                color: "rgba(231,229,228,0.75)", fontSize: 12, lineHeight: 1.6,
+                color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.6,
                 outline: "none", resize: "none", transition: "border-color 180ms",
                 boxSizing: "border-box" as const, fontFamily: "inherit",
               }}
@@ -537,7 +537,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
             border: `1px solid ${promptDesc.length > 5 ? "rgba(212,175,55,0.35)" : "rgba(212,175,55,0.18)"}`,
             background: "oklch(0.14 0.01 60)",
             padding: "12px 14px",
-            color: "rgba(231,229,228,0.87)", fontSize: 13, lineHeight: 1.65,
+            color: "var(--atlas-fg)", fontSize: 13, lineHeight: 1.65,
             outline: "none", resize: "none", transition: "border-color 180ms",
             boxSizing: "border-box" as const, fontFamily: "inherit",
           }}
@@ -627,7 +627,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                         style={{
                           width: "100%", borderRadius: 8, padding: "8px 10px",
                           border: "1px solid rgba(212,175,55,0.2)", background: "oklch(0.13 0.01 60)",
-                          color: ghRepo ? "rgba(231,229,228,0.85)" : "rgba(120,113,108,0.5)",
+                          color: ghRepo ? "var(--atlas-fg)" : "rgba(120,113,108,0.5)",
                           fontSize: 12, fontFamily: "var(--app-font-mono)", outline: "none",
                         }}
                       >
@@ -650,7 +650,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                           style={{
                             width: "100%", borderRadius: 8, padding: "8px 10px",
                             border: "1px solid rgba(212,175,55,0.2)", background: "oklch(0.13 0.01 60)",
-                            color: ghSelectedFile ? "rgba(231,229,228,0.85)" : "rgba(120,113,108,0.5)",
+                            color: ghSelectedFile ? "var(--atlas-fg)" : "rgba(120,113,108,0.5)",
                             fontSize: 11, fontFamily: "var(--app-font-mono)", outline: "none",
                           }}
                         >
@@ -742,7 +742,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                       style={{
                         width: "100%", borderRadius: 8, padding: "8px 10px",
                         border: "1px solid rgba(212,175,55,0.2)", background: "oklch(0.13 0.01 60)",
-                        color: zipSelectedFile ? "rgba(231,229,228,0.85)" : "rgba(120,113,108,0.5)",
+                        color: zipSelectedFile ? "var(--atlas-fg)" : "rgba(120,113,108,0.5)",
                         fontSize: 11, fontFamily: "var(--app-font-mono)", outline: "none",
                       }}
                     >
@@ -781,7 +781,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                       border: "1px solid rgba(212,175,55,0.18)",
                       background: "oklch(0.13 0.01 60)",
                       padding: "8px 12px",
-                      color: "rgba(231,229,228,0.8)", fontSize: 12, lineHeight: 1.5,
+                      color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.5,
                       outline: "none", fontFamily: "var(--app-font-mono)",
                       boxSizing: "border-box" as const,
                     }}
@@ -812,7 +812,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                       border: `1px solid ${fileContent ? "rgba(212,175,55,0.28)" : "rgba(212,175,55,0.15)"}`,
                       background: "oklch(0.12 0.01 60)",
                       padding: "10px 12px",
-                      color: "rgba(231,229,228,0.75)", fontSize: 11, lineHeight: 1.6,
+                      color: "var(--atlas-fg)", fontSize: 11, lineHeight: 1.6,
                       outline: "none", resize: "none", transition: "border-color 180ms",
                       boxSizing: "border-box" as const, fontFamily: "var(--app-font-mono)",
                     }}
@@ -889,7 +889,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
               margin: 0, padding: "14px", borderRadius: 10,
               background: "oklch(0.12 0.01 60)",
               border: "1px solid rgba(212,175,55,0.22)",
-              color: "rgba(231,229,228,0.87)", fontSize: 12, lineHeight: 1.75,
+              color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.75,
               whiteSpace: "pre-wrap", wordBreak: "break-word",
               fontFamily: "var(--app-font-mono)",
               maxHeight: 320, overflowY: "auto",

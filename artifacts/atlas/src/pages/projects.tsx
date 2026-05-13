@@ -640,7 +640,7 @@ function ProjectRow({
             fontFamily: "var(--app-font-sans)",
             fontSize: 14,
             fontWeight: 500,
-            color: hovered ? "var(--atlas-fg)" : "rgba(231,229,228,0.82)",
+            color: hovered ? "var(--atlas-fg)" : "var(--atlas-fg)",
             marginBottom: 2,
             whiteSpace: "nowrap",
             overflow: "hidden",

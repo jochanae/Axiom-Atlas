@@ -175,7 +175,7 @@ export function CockpitBar({
       {/* Export sheet */}
       {showExport && (
         <>
-          <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} onClick={() => setShowExport(false)} />
+          <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "var(--atlas-glass-bg)", backdropFilter: "blur(4px)" }} onClick={() => setShowExport(false)} />
           <div style={{ position: "fixed", left: 0, right: 0, zIndex: 50, bottom: cockpitH, background: "rgba(13,11,9,0.99)", border: "1px solid rgba(212,175,55,0.35)", borderRadius: "16px 16px 0 0", padding: "20px 20px 24px", animation: "slideUpCb 220ms ease" }}>
             <p style={{ fontSize: 14, fontWeight: 700, color: "#D4AF37", marginBottom: 4 }}>Export Blueprint</p>
             <p style={{ fontSize: 11, color: "#6b7280", marginBottom: 20 }}>Copy or download your Axiom Flow map.</p>
@@ -210,7 +210,7 @@ export function CockpitBar({
             position: "absolute", top: -28, left: "50%",
             transform: "translateX(-50%)",
             width: 64, height: 64, borderRadius: "50%",
-            background: "#0D0B09", border: "2px solid #D4AF37",
+            background: "var(--atlas-bg)", border: "2px solid #D4AF37",
             display: "flex", alignItems: "center", justifyContent: "center",
             zIndex: 10, cursor: "pointer",
             animation: hasSession ? "axiom-pulse-bar 2s ease-in-out infinite" : "none",

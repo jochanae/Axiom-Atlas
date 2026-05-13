@@ -237,7 +237,7 @@ export function ZipPanel({ zipName, entries, truncated, onToggle, onSelectAll, o
                   onChange={() => onToggle(e.path)}
                   style={{ width: 12, height: 12, accentColor: "var(--atlas-gold)", flexShrink: 0 }}
                 />
-                <span style={{ flex: 1, fontSize: 10.5, fontFamily: "var(--app-font-mono)", color: e.selected ? "rgba(231,229,228,0.8)" : "rgba(120,113,108,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ flex: 1, fontSize: 10.5, fontFamily: "var(--app-font-mono)", color: e.selected ? "var(--atlas-fg)" : "rgba(120,113,108,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {e.path}
                 </span>
                 <span style={{ fontSize: 9.5, color: "rgba(120,113,108,0.4)", fontFamily: "var(--app-font-mono)", flexShrink: 0 }}>

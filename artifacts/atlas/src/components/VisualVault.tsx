@@ -184,8 +184,8 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
                 onClick={onClose}
                 style={{
                   width: 30, height: 30, borderRadius: "50%",
-                  background: "rgba(231,229,228,0.06)",
-                  border: "1px solid rgba(231,229,228,0.1)",
+                  background: "var(--atlas-fg)",
+                  border: "1px solid var(--atlas-fg)",
                   color: "var(--atlas-muted)", fontSize: 16, lineHeight: 1,
                   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                 }}
@@ -257,7 +257,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
                         background: "linear-gradient(transparent, rgba(9,8,6,0.85))",
                         padding: "12px 6px 5px",
                         fontSize: 9,
-                        color: "rgba(231,229,228,0.75)",
+                        color: "var(--atlas-fg)",
                         fontFamily: "var(--app-font-mono)",
                         letterSpacing: "0.04em",
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -271,8 +271,8 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
                         position: "absolute", top: 4, right: 4,
                         width: 20, height: 20, borderRadius: "50%",
                         background: "rgba(9,8,6,0.8)",
-                        border: "1px solid rgba(231,229,228,0.15)",
-                        color: "rgba(231,229,228,0.7)",
+                        border: "1px solid var(--atlas-fg)",
+                        color: "var(--atlas-fg)",
                         fontSize: 11, lineHeight: 1,
                         cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                       }}
@@ -331,7 +331,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
             style={{
               position: "absolute", top: 20, right: 20,
               width: 36, height: 36, borderRadius: "50%",
-              background: "rgba(28,25,23,0.9)",
+              background: "var(--atlas-surface)",
               border: "1px solid rgba(201,162,76,0.2)",
               color: "var(--atlas-fg)", fontSize: 18,
               cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
@@ -364,7 +364,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
               padding: "7px 18px", borderRadius: 8,
               background: "rgba(146,64,14,0.15)",
               border: "1px solid rgba(146,64,14,0.4)",
-              color: "rgba(231,229,228,0.6)",
+              color: "var(--atlas-fg)",
               fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
               cursor: "pointer",
             }}

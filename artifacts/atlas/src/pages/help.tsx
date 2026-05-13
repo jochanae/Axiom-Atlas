@@ -153,7 +153,7 @@ export default function Help() {
         <div style={{
           marginTop: 48, padding: "24px", borderRadius: 12,
           border: "1px solid var(--atlas-border)",
-          background: "rgba(28,25,23,0.6)",
+          background: "var(--atlas-surface)",
         }}>
           <div style={{ ...mono, fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.7, marginBottom: 10 }}>
             Still need help?

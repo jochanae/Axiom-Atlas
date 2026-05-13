@@ -2070,7 +2070,7 @@ function PushDiffCard({ records, onRollbackAll }: { records: PushRecord[]; onRol
               : "rgba(120,113,108,0.65)";
             const isNew = r.originalContent === null;
             return (
-              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid rgba(37,34,32,0.6)" }}>
+              <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid var(--atlas-surface)" }}>
                 <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.8 }}>
                   <path d="M9 1H3a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V6L9 1z" stroke={iconColor} strokeWidth="1.2" strokeLinejoin="round" />
                   <path d="M9 1v5h5" stroke={iconColor} strokeWidth="1.2" strokeLinejoin="round" />
@@ -3008,7 +3008,7 @@ function FilesTab({
             disabled={!tokenInput.trim()}
             style={{
               padding: "7px", borderRadius: 6, width: "100%",
-              background: tokenInput.trim() ? "var(--atlas-ember)" : "rgba(37,34,32,0.6)",
+              background: tokenInput.trim() ? "var(--atlas-ember)" : "var(--atlas-surface)",
               border: "none", color: "var(--atlas-fg)", fontSize: 10,
               fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
               textTransform: "uppercase", cursor: tokenInput.trim() ? "pointer" : "not-allowed",
@@ -3117,7 +3117,7 @@ function FilesTab({
               <button
                 onClick={() => setDisconnectConfirm(false)}
                 disabled={isDisconnecting}
-                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 5, cursor: isDisconnecting ? "default" : "pointer", color: "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", padding: "3px 8px", opacity: isDisconnecting ? 0.35 : 0.8, minHeight: 28 }}
+                style={{ background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 5, cursor: isDisconnecting ? "default" : "pointer", color: "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", padding: "3px 8px", opacity: isDisconnecting ? 0.35 : 0.8, minHeight: 28 }}
               >Cancel</button>
               <button
                 onClick={clearToken}
@@ -4482,7 +4482,7 @@ function MapTab({ projectId }: { projectId: number }) {
 
           <MapSection label="Routes" items={scan.routes || []} color="rgba(147,197,253,0.8)" />
           <MapSection label="Pages" items={scan.pages || []} color="rgba(216,180,254,0.8)" />
-          <MapSection label="Components" items={scan.components || []} color="rgba(231,229,228,0.7)" />
+          <MapSection label="Components" items={scan.components || []} color="var(--atlas-fg)" />
           <MapSection label="Supabase Tables" items={scan.tables || []} color="rgba(110,231,183,0.8)" />
 
           {/* Stats row */}
@@ -4841,14 +4841,14 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                     maxWidth: "86%",
                     background: m.role === "user"
                       ? "rgba(212,175,55,0.12)"
-                      : "rgba(28,25,23,0.92)",
+                      : "var(--atlas-surface)",
                     border: m.role === "user"
                       ? "1px solid rgba(212,175,55,0.28)"
                       : "1px solid rgba(212,175,55,0.10)",
                     borderRadius: m.role === "user" ? "10px 10px 2px 10px" : "10px 10px 10px 2px",
                     padding: "7px 10px",
                     fontSize: 12, lineHeight: 1.55,
-                    color: m.role === "user" ? "#E7E5E4" : "rgba(231,229,228,0.88)",
+                    color: m.role === "user" ? "#E7E5E4" : "var(--atlas-fg)",
                     fontFamily: "inherit",
                     whiteSpace: "pre-wrap", wordBreak: "break-word",
                   }}>
@@ -4858,7 +4858,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                 {flowLoading && (
                   <div style={{
                     alignSelf: "flex-start",
-                    background: "rgba(28,25,23,0.92)",
+                    background: "var(--atlas-surface)",
                     border: "1px solid rgba(212,175,55,0.10)",
                     borderRadius: "10px 10px 10px 2px",
                     padding: "8px 12px",
@@ -4902,7 +4902,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                           <span style={{ fontSize: 7, color: "rgba(212,175,55,0.55)", maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-mono)" }}>{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
                         </div>
                       )}
-                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(212,175,55,0.3)", cursor: "pointer", color: "rgba(231,229,228,0.85)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>×</button>
+                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(212,175,55,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>×</button>
                     </div>
                   ))}
                 </div>
@@ -5653,7 +5653,7 @@ function TerminalPanel({
     if (kind === "stderr") return "rgba(252,165,100,0.88)";
     if (kind === "system") return "rgba(120,113,108,0.65)";
     if (kind === "error") return "rgba(252,100,100,0.88)";
-    return "rgba(231,229,228,0.82)";
+    return "var(--atlas-fg)";
   };
 
   return (
@@ -5682,7 +5682,7 @@ function TerminalPanel({
       </div>
       {/* Input row */}
       <div style={{
-        borderTop: "1px solid rgba(37,34,32,0.9)", padding: "9px 13px",
+        borderTop: "1px solid var(--atlas-surface)", padding: "9px 13px",
         display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
         background: "#0C0A09",
       }}>
@@ -5700,7 +5700,7 @@ function TerminalPanel({
           style={{
             flex: 1, background: "transparent", border: "none", outline: "none",
             fontFamily: "var(--app-font-mono)", fontSize: 12,
-            color: "rgba(231,229,228,0.9)",
+            color: "var(--atlas-fg)",
             caretColor: "rgba(201,162,76,0.9)",
           }}
         />
@@ -7103,7 +7103,7 @@ export default function Workspace() {
                 padding: isMobile ? "5px 7px" : "4px 10px",
                 borderRadius: 6, fontSize: 10, fontFamily: "var(--app-font-mono)",
                 letterSpacing: "0.08em", cursor: "pointer",
-                background: trustMode === "auto" ? "rgba(239,100,68,0.12)" : "rgba(37,34,32,0.06)",
+                background: trustMode === "auto" ? "rgba(239,100,68,0.12)" : "var(--atlas-surface)",
                 border: trustMode === "auto" ? "1px solid rgba(239,100,68,0.35)" : "1px solid var(--atlas-border)",
                 color: trustMode === "auto" ? "rgba(239,100,68,0.9)" : "var(--atlas-muted)",
                 transition: "all 300ms ease", flexShrink: 0,
@@ -7416,7 +7416,7 @@ export default function Workspace() {
             {/* Combined Workflow + Atlas Style pill — hidden in mobile map mode */}
             {!(isMobile && mobileTab === "map") && (() => {
               const lensConfig = {
-                builder:    { color: "rgba(231,229,228,0.6)",  dot: "rgba(231,229,228,0.55)", label: "Builder",    desc: "Direct · Code-first · Ship it" },
+                builder:    { color: "var(--atlas-fg)",  dot: "var(--atlas-fg)", label: "Builder",    desc: "Direct · Code-first · Ship it" },
                 strategist: { color: "rgba(201,162,76,0.85)",  dot: "rgba(201,162,76,0.85)",  label: "Strategist", desc: "Big picture · Priorities · Risk" },
                 reviewer:   { color: "rgba(239,100,68,0.85)",  dot: "rgba(239,100,68,0.85)",  label: "Reviewer",   desc: "Critical · Find gaps · Stress-test" },
                 teacher:    { color: "rgba(99,200,150,0.85)",  dot: "rgba(99,200,150,0.85)",  label: "Teacher",    desc: "Explain everything · No jargon" },
@@ -7886,7 +7886,7 @@ export default function Workspace() {
                   <circle cx="8" cy="8" r="6" stroke="rgba(66,133,244,0.7)" strokeWidth="1.3" />
                   <path d="M8 5v4M8 10.5v.5" stroke="rgba(66,133,244,0.7)" strokeWidth="1.3" strokeLinecap="round" />
                 </svg>
-                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "rgba(231,229,228,0.6)", letterSpacing: "0.04em", flex: 1 }}>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-fg)", letterSpacing: "0.04em", flex: 1 }}>
                   Long thread. Gemini handles more context without losing the top.
                 </span>
                 <button
@@ -8010,7 +8010,7 @@ export default function Workspace() {
                     )}
                     <button
                       onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
-                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "rgba(231,229,228,0.85)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
+                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
                     >×</button>
                   </div>
                 ))}
@@ -8250,18 +8250,18 @@ export default function Workspace() {
                     style={{
                       display: "flex", alignItems: "center", gap: 4,
                       padding: "4px 8px", borderRadius: 20,
-                      background: "rgba(28,25,23,0.6)",
-                      border: "1px solid rgba(37,34,32,0.9)",
+                      background: "var(--atlas-surface)",
+                      border: "1px solid var(--atlas-surface)",
                       cursor: "pointer", transition: "all 160ms ease", flexShrink: 0,
                     }}
                     onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.07)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.32)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = "rgba(28,25,23,0.6)"; e.currentTarget.style.borderColor = "rgba(37,34,32,0.9)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "var(--atlas-surface)"; e.currentTarget.style.borderColor = "var(--atlas-surface)"; }}
                   >
                     <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="rgba(120,113,108,0.7)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="8" cy="8" r="6" />
                       <path d="M5.5 8.5L7 10l3-4" />
                     </svg>
-                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "rgba(231,229,228,0.55)", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>
+                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-fg)", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>
                       {wsModel === "claude" ? "Claude" : wsModel === "gpt4o" ? "GPT-4o" : wsModel === "gemini" ? "Gemini" : wsModel}
                     </span>
                     <svg width="7" height="7" viewBox="0 0 8 8" fill="none" style={{ opacity: 0.35, flexShrink: 0 }}>
@@ -8534,7 +8534,7 @@ export default function Workspace() {
             borderTop: "1px solid rgba(201,162,76,0.18)",
             boxShadow: "0 -8px 40px rgba(0,0,0,0.5)", paddingBottom: 32,
           }}>
-            <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
               <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Model</span>
               <button onClick={() => setShowWsModelSheet(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
@@ -8562,8 +8562,8 @@ export default function Workspace() {
                 >
                   <div style={{
                     width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-                    background: m.available ? "rgba(201,162,76,0.1)" : "rgba(37,34,32,0.8)",
-                    border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "rgba(37,34,32,0.9)"}`,
+                    background: m.available ? "rgba(201,162,76,0.1)" : "var(--atlas-surface)",
+                    border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "var(--atlas-surface)"}`,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
                     color: m.available ? "rgba(201,162,76,0.85)" : "rgba(120,113,108,0.4)",

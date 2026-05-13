@@ -449,7 +449,7 @@ export default function NexusPage() {
               display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
               padding: "4px 9px", borderRadius: 7,
               background: rightOpen ? "rgba(201,162,76,0.08)" : "transparent",
-              border: `1px solid ${rightOpen ? "rgba(201,162,76,0.25)" : "rgba(37,34,32,0.9)"}`,
+              border: `1px solid ${rightOpen ? "rgba(201,162,76,0.25)" : "var(--atlas-surface)"}`,
               color: rightOpen ? "rgba(201,162,76,0.7)" : "var(--atlas-muted)", cursor: "pointer",
               fontSize: 9.5, fontFamily: "var(--app-font-mono)", fontWeight: 700,
               letterSpacing: "0.12em", textTransform: "uppercase",
@@ -509,7 +509,7 @@ export default function NexusPage() {
 
           {/* Thread sub-header: clear thread button when there are messages */}
           {messages.length > 0 && (
-            <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "4px 16px", borderBottom: "1px solid rgba(37,34,32,0.6)" }}>
+            <div style={{ flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "4px 16px", borderBottom: "1px solid var(--atlas-surface)" }}>
               {showClearConfirm ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 10.5, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.7 }}>Erase the Living Thread?</span>

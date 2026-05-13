@@ -41,14 +41,14 @@ const HOME_PENDING_PHRASES = [
 function renderMarkdown(text: string): string {
   return text
     .replace(/```(\w*)\n?([\s\S]*?)```/g, (_: string, _lang: string, code: string) =>
-      `<pre style="background:rgba(28,25,23,0.9);border:1px solid rgba(37,34,32,0.9);border-radius:6px;padding:9px 11px;overflow-x:auto;margin:6px 0"><code style="font-family:var(--app-font-mono);font-size:11px;color:rgba(231,229,228,0.85);white-space:pre">${code.trim().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</code></pre>`)
+      `<pre style="background:var(--atlas-surface);border:1px solid var(--atlas-surface);border-radius:6px;padding:9px 11px;overflow-x:auto;margin:6px 0"><code style="font-family:var(--app-font-mono);font-size:11px;color:var(--atlas-fg);white-space:pre">${code.trim().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</code></pre>`)
     .replace(/^### (.+)$/gm, '<div style="font-size:11px;font-weight:700;color:var(--atlas-gold);letter-spacing:0.07em;text-transform:uppercase;margin:10px 0 3px">$1</div>')
     .replace(/^## (.+)$/gm, '<div style="font-size:13px;font-weight:700;color:var(--atlas-fg);margin:8px 0 3px">$1</div>')
     .replace(/^# (.+)$/gm, '<div style="font-size:14px;font-weight:700;color:var(--atlas-fg);margin:8px 0 4px">$1</div>')
     .replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(/`([^`\n]+)`/g, '<code style="font-family:var(--app-font-mono);font-size:11px;background:rgba(37,34,32,0.9);padding:1px 5px;border-radius:3px;color:rgba(201,162,76,0.9)">$1</code>')
+    .replace(/`([^`\n]+)`/g, '<code style="font-family:var(--app-font-mono);font-size:11px;background:var(--atlas-surface);padding:1px 5px;border-radius:3px;color:rgba(201,162,76,0.9)">$1</code>')
     .replace(/^[-•*] (.+)$/gm, '<div style="display:flex;gap:7px;margin:2px 0"><span style="color:var(--atlas-gold);opacity:0.6;flex-shrink:0;margin-top:2px;font-size:10px">▸</span><span>$1</span></div>')
     .replace(/^(\d+)\. (.+)$/gm, '<div style="display:flex;gap:7px;margin:2px 0"><span style="color:var(--atlas-muted);font-family:var(--app-font-mono);font-size:10px;flex-shrink:0;min-width:14px;margin-top:1px">$1.</span><span>$2</span></div>')
     .replace(/\n\n/g, "<br/><br/>")
@@ -391,8 +391,8 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
         textAlign: "left",
         padding: "11px 14px",
         borderRadius: 10,
-        background: hov ? "rgba(201,162,76,0.04)" : "rgba(28,25,23,0.55)",
-        border: `1px solid ${hov ? "rgba(201,162,76,0.28)" : "rgba(37,34,32,0.9)"}`,
+        background: hov ? "rgba(201,162,76,0.04)" : "var(--atlas-surface)",
+        border: `1px solid ${hov ? "rgba(201,162,76,0.28)" : "var(--atlas-surface)"}`,
         cursor: "pointer",
         transition: "all 180ms var(--ease-cinematic)",
         display: "flex",
@@ -410,7 +410,7 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
           style={{
             fontSize: 13,
             fontWeight: 500,
-            color: hov ? "var(--atlas-fg)" : "rgba(231,229,228,0.78)",
+            color: hov ? "var(--atlas-fg)" : "var(--atlas-fg)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -542,13 +542,13 @@ function ContextChip({
   const [hov, setHov] = useState(false);
   const borderColor = accent
     ? hov ? accent.replace("0.15", "0.5") : accent.replace("0.15", "0.3")
-    : hov ? "rgba(201,162,76,0.32)" : "rgba(37,34,32,0.9)";
+    : hov ? "rgba(201,162,76,0.32)" : "var(--atlas-surface)";
   const bg = accent
     ? hov ? accent.replace("0.15", "0.2") : accent
-    : hov ? "rgba(201,162,76,0.07)" : "rgba(28,25,23,0.6)";
+    : hov ? "rgba(201,162,76,0.07)" : "var(--atlas-surface)";
   const textColor = accent
     ? hov ? accent.replace("0.15", "0.95") : accent.replace("0.15", "0.85")
-    : hov ? "rgba(201,162,76,0.9)" : "rgba(231,229,228,0.65)";
+    : hov ? "rgba(201,162,76,0.9)" : "var(--atlas-fg)";
   return (
     <button
       onClick={onClick}
@@ -602,7 +602,7 @@ function HomeContextBar({
         }
         label={focusLabel}
       />
-      <div style={{ width: 1, height: 14, background: "rgba(37,34,32,0.9)", flexShrink: 0 }} />
+      <div style={{ width: 1, height: 14, background: "var(--atlas-surface)", flexShrink: 0 }} />
       <ContextChip
         onClick={onModeClick}
         accent={modeAccent}
@@ -613,7 +613,7 @@ function HomeContextBar({
         }
         label={modeLabel}
       />
-      <div style={{ width: 1, height: 14, background: "rgba(37,34,32,0.9)", flexShrink: 0 }} />
+      <div style={{ width: 1, height: 14, background: "var(--atlas-surface)", flexShrink: 0 }} />
       <ContextChip
         onClick={onModelClick}
         icon={
@@ -669,7 +669,7 @@ function RepoSearchSheet({
         boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
       }}>
         {/* Handle */}
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
           <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
@@ -784,7 +784,7 @@ function BranchPickerSheet({
         maxHeight: "55dvh", display: "flex", flexDirection: "column",
         boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
       }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
           <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
             Choose Branch
@@ -863,7 +863,7 @@ function ModePickerSheet({ current, onSelect, onClose }: {
         boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
         paddingBottom: 32,
       }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
           <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
             Mode
@@ -927,7 +927,7 @@ function ModelPickerSheet({ current, onSelect, onClose }: {
         boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
         paddingBottom: 32,
       }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
           <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
             Model
@@ -952,8 +952,8 @@ function ModelPickerSheet({ current, onSelect, onClose }: {
             >
               <div style={{
                 width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-                background: m.available ? "rgba(201,162,76,0.1)" : "rgba(37,34,32,0.8)",
-                border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "rgba(37,34,32,0.9)"}`,
+                background: m.available ? "rgba(201,162,76,0.1)" : "var(--atlas-surface)",
+                border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "var(--atlas-surface)"}`,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
                 color: m.available ? "rgba(201,162,76,0.85)" : "rgba(120,113,108,0.4)",
@@ -1002,7 +1002,7 @@ function FocusPickerSheet({ current, projects, onSelect, onClose }: {
         borderTop: "1px solid rgba(201,162,76,0.18)",
         boxShadow: "0 -8px 40px rgba(0,0,0,0.5)", paddingBottom: 32,
       }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "12px auto 4px" }} />
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
           <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Focus</span>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
@@ -1936,8 +1936,8 @@ export default function Home() {
                           {/* Bubble */}
                           <div style={{
                             padding: "10px 13px", borderRadius: "4px 12px 12px 12px",
-                            background: "rgba(28,25,23,0.8)",
-                            border: "0.5px solid rgba(37,34,32,0.9)",
+                            background: "var(--atlas-surface)",
+                            border: "0.5px solid var(--atlas-surface)",
                             fontSize: 13, lineHeight: 1.65, color: "var(--atlas-fg)",
                             fontFamily: "var(--app-font-sans)",
                           }}>
@@ -2097,7 +2097,7 @@ export default function Home() {
                     )}
                     <button
                       onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
-                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "rgba(231,229,228,0.85)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
+                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
                     >×</button>
                   </div>
                 ))}
