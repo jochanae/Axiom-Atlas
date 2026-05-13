@@ -41,6 +41,13 @@ export function usePullToRefresh(
     const onTouchStart = (e: TouchEvent) => {
       if (refreshingRef.current) return;
       if (document.body.dataset.voiceActive === "true") return;
+      // Don't engage if the touch originates inside any scrollable child element
+      const container = containerRef?.current ?? document.documentElement;
+      let el = e.target as HTMLElement | null;
+      while (el && el !== container) {
+        if (el.scrollHeight > el.clientHeight + 10) return;
+        el = el.parentElement;
+      }
       if (isAtTop()) startY = e.touches[0].clientY;
     };
 
