@@ -1199,6 +1199,7 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; imageUrl?: string; model?: string; intentType?: string | null; isNew?: boolean}>>([]);
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -1477,7 +1478,10 @@ export default function Home() {
   const handleSubmit = useCallback(async () => {
     const text = input.trim();
     const hasImages = attachedFiles.some(f => f.type.startsWith("image/"));
-    if ((!text && !hasImages) || isLoading) return;
+    if ((!text && !hasImages) || isSending) return;
+    // Block PTR and double-sends immediately — before any async work
+    setIsSending(true);
+    document.body.dataset.voiceActive = "true";
     const files = attachedFiles;
     setInput("");
     setAttachedFiles([]);
@@ -1515,7 +1519,6 @@ export default function Home() {
 
     setHomeMessages(prev => [...prev, { role: 'user', content: messageText, imageUrl }]);
     setIsAtlasStreaming(true);
-    document.body.dataset.voiceActive = "true"; // block PTR while waiting for response
     try {
       const res = await fetch("/api/nexus/chat", {
         method: "POST",
@@ -1553,9 +1556,10 @@ export default function Home() {
       setAttachedFiles(files);
     } finally {
       setIsAtlasStreaming(false);
+      setIsSending(false);
       document.body.dataset.voiceActive = "false";
     }
-  }, [input, attachedFiles, isLoading, homeModel, homeFocus, projects, activeConversationId, compressImage, homeMessages.length]);
+  }, [input, attachedFiles, isSending, homeModel, homeFocus, projects, activeConversationId, compressImage, homeMessages.length]);
 
 
   const handleHandoff = useCallback(async () => {
