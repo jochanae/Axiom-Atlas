@@ -1844,19 +1844,9 @@ export default function Home() {
                 <LoadingSpinner size="sm" color="atlas" />
               </div>
             ) : (
-              <div style={{ borderRadius: 12, overflow: "hidden", background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)" }}>
-                {/* Chat card top header — glassmorphism + ATLAS label + three-dot */}
+              <div style={{ borderRadius: "0 0 12px 12px", overflow: "hidden", background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)" }}>
+                {/* Chat card top header — glassmorphism + three-dot */}
                 <div className="atlas-chat-card-top">
-                  {/* ATLAS identity label — centered */}
-                  <span style={{
-                    position: "absolute", left: "50%", transform: "translateX(-50%)",
-                    fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em",
-                    color: "var(--atlas-gold)", opacity: 0.45, fontWeight: 700,
-                    textTransform: "uppercase", pointerEvents: "none", whiteSpace: "nowrap",
-                  }}>
-                    ATLAS
-                  </span>
-
                   {/* Right side — clear confirm or three-dot */}
                   <div style={{ marginLeft: "auto", position: "relative" }}>
                     {showClearConfirm ? (
@@ -2090,6 +2080,12 @@ export default function Home() {
                       </button>
                     </div>
                   )}
+                </div>
+                {/* ATLAS label — bottom center of card */}
+                <div style={{ display: "flex", justifyContent: "center", padding: "6px 0 8px", pointerEvents: "none" }}>
+                  <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", color: "var(--atlas-gold)", opacity: 0.35, fontWeight: 700, textTransform: "uppercase" }}>
+                    ATLAS
+                  </span>
                 </div>
               </div>
             )}
