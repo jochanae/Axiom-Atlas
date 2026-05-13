@@ -934,7 +934,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     return (
       <>
         <style>{`@keyframes forge-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.7); } }`}</style>
-        <div style={{ display: "flex", flexDirection: "column", background: "rgba(13,11,9,0.99)", border: "1px solid rgba(212,175,55,0.22)", borderRadius: 12, height: "100%", overflow: "hidden" }}>
+        <div style={{ display: "flex", flexDirection: "column", background: "var(--atlas-surface)", border: "1px solid rgba(212,175,55,0.22)", borderRadius: 12, height: "100%", overflow: "hidden" }}>
           {headerBlock}
           {tab === "forge" ? forgeContent : quickPromptContent}
         </div>
@@ -946,7 +946,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     <>
       <style>{`@keyframes forge-pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.5; transform:scale(0.7); } }`}</style>
       <div style={{ position: "fixed", inset: 0, zIndex: 350, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }} onClick={onClose} />
-      <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: 0, zIndex: 360, background: "rgba(13,11,9,0.99)", border: "1px solid rgba(212,175,55,0.22)", borderRadius: "16px 16px 0 0", display: "flex", flexDirection: "column" }}>
+      <div style={{ position: "fixed", left: 0, right: 0, top: 0, bottom: 0, zIndex: 360, background: "var(--atlas-surface)", border: "1px solid rgba(212,175,55,0.22)", borderRadius: "16px 16px 0 0", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 2px" }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(212,175,55,0.18)" }} />
         </div>
