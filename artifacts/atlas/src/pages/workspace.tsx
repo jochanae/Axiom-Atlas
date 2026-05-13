@@ -759,6 +759,9 @@ function GitHubPushModal({
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [typechecking, setTypechecking] = useState(false);
   const [typecheckResult, setTypecheckResult] = useState<{ errors: Array<{ line: number; col: number; message: string }>; clean: boolean } | null>(null);
+  const [localApplying, setLocalApplying] = useState(false);
+  const [localApplied, setLocalApplied] = useState<string[] | null>(null);
+  const [localApplyError, setLocalApplyError] = useState<string | null>(null);
 
   const { data: modalProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
   const token = modalProject?.githubToken ?? null;
@@ -1114,8 +1117,57 @@ function GitHubPushModal({
                 )}
               </div>
             )}
+            {localApplied && (
+              <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 6, background: "rgba(52,211,153,0.07)", border: "1px solid rgba(52,211,153,0.3)" }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(52,211,153,0.9)", marginBottom: localApplied.length > 1 ? 4 : 0 }}>
+                  ✓ Applied to workspace — Vite is hot-reloading
+                </div>
+                {localApplied.map((p, i) => (
+                  <div key={i} style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "rgba(52,211,153,0.6)", lineHeight: 1.6 }}>{p}</div>
+                ))}
+              </div>
+            )}
+            {localApplyError && (
+              <div style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 6, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.25)", fontSize: 11, color: "rgba(239,68,68,0.8)", fontFamily: "var(--app-font-mono)", lineHeight: 1.55 }}>
+                {localApplyError}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: 6, fontSize: 12, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer" }}>Cancel</button>
+              <button
+                onClick={async () => {
+                  if (localApplying) return;
+                  setLocalApplying(true);
+                  setLocalApplied(null);
+                  setLocalApplyError(null);
+                  try {
+                    const r = await fetch("/api/github/apply-local", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({ files: fileEdits.map(fe => ({ path: fe.path, content: fe.content })) }),
+                    });
+                    if (!r.ok) { const d = await r.json() as { error?: string }; throw new Error(d.error ?? "Apply failed"); }
+                    const result = await r.json() as { applied: string[]; requiresServerBuild: boolean };
+                    setLocalApplied(result.applied);
+                    if (result.requiresServerBuild) {
+                      toast("Building server…", { icon: "⚙️" });
+                      fetch("/api/terminal/exec", {
+                        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+                        body: JSON.stringify({ command: "pnpm --filter @workspace/api-server run build" }),
+                      }).catch(() => {});
+                    }
+                  } catch (e) {
+                    setLocalApplyError(e instanceof Error ? e.message : "Local apply failed");
+                  } finally {
+                    setLocalApplying(false);
+                  }
+                }}
+                disabled={localApplying}
+                style={{ padding: "8px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: localApplied ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${localApplied ? "rgba(52,211,153,0.3)" : "var(--atlas-border)"}`, color: localApplied ? "rgba(52,211,153,0.8)" : "var(--atlas-muted)", cursor: localApplying ? "default" : "pointer", opacity: localApplying ? 0.55 : 1, transition: "all 150ms ease" }}
+              >
+                {localApplying ? "Applying…" : localApplied ? "✓ Applied" : "Apply to workspace"}
+              </button>
               <button
                 onClick={async () => {
                   const currentFile = fileEdits[selectedIdx] ?? fileEdits[0];
@@ -3616,10 +3668,11 @@ function FilesTab({
 }
 
 // ── Preview tab ──────────────────────────────────────────────────────────────
-function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
+function PreviewTab({ projectId, sandboxCode, onSandboxConsumed, refreshTrigger }: {
   projectId: number;
   sandboxCode?: string | null;
   onSandboxConsumed?: () => void;
+  refreshTrigger?: number;
 }) {
   const queryClient = useQueryClient();
   const { data: project } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
@@ -3657,6 +3710,17 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed }: {
   const [detectResults, setDetectResults] = useState<Array<{ url: string; platform: string; confidence: string }>>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [savedIndicator, setSavedIndicator] = useState(false);
+
+  // Sync external refresh trigger (from push success) into local reloadKey
+  const prevRefreshTrigger = useRef(refreshTrigger ?? 0);
+  useEffect(() => {
+    if ((refreshTrigger ?? 0) > prevRefreshTrigger.current) {
+      prevRefreshTrigger.current = refreshTrigger ?? 0;
+      setIframeLoading(true);
+      setIframeError(false);
+      setReloadKey((k) => k + 1);
+    }
+  }, [refreshTrigger]);
   const [autoDetected, setAutoDetected] = useState<{ url: string; platform: string } | null>(null);
   const autoDetectTriedRef = useRef<string | null>(null);
 
@@ -5417,6 +5481,7 @@ function RightPanel({
   onHandoverOpenChange,
   sandboxCode,
   onSandboxConsumed,
+  previewRefreshTrigger,
   pendingTerminalCommand,
   onTerminalCommandConsumed,
   onCommandComplete,
@@ -5450,6 +5515,7 @@ function RightPanel({
   onHandoverOpenChange?: (open: boolean) => void;
   sandboxCode?: string | null;
   onSandboxConsumed?: () => void;
+  previewRefreshTrigger?: number;
   pendingTerminalCommand?: string | null;
   onTerminalCommandConsumed?: () => void;
   onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
@@ -5705,7 +5771,7 @@ function RightPanel({
         <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} pushHistory={pushHistory} onRollbackPush={onRollbackPush} />
       )}
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
-      {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} />}
+      {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
       {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} />}
@@ -6210,7 +6276,8 @@ export default function Workspace() {
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [trustMode, setTrustMode] = useState<"review" | "auto">("review");
-  const [autoRunCmd] = useState<string>("pnpm typecheck");
+  const [autoRunCmd] = useState<string>("");
+  const [previewRefreshTrigger, setPreviewRefreshTrigger] = useState(0);
 
   const importSource = (() => {
     try { return new URLSearchParams(window.location.search).get("source") ?? null; } catch { return null; }
@@ -8083,6 +8150,10 @@ export default function Workspace() {
                       },
                       { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }) }
                     );
+                    // Refresh preview iframe after push — immediate + follow-up for slower deployments
+                    setPreviewRefreshTrigger((t) => t + 1);
+                    setTimeout(() => setPreviewRefreshTrigger((t) => t + 1), 25000);
+                    setTimeout(() => setPreviewRefreshTrigger((t) => t + 1), 55000);
                   }}
                 />
               )
@@ -8622,6 +8693,7 @@ export default function Workspace() {
                 onHandoverOpenChange={setHandoverOpen}
                 sandboxCode={sandboxCode}
                 onSandboxConsumed={() => setSandboxCode(null)}
+                previewRefreshTrigger={previewRefreshTrigger}
                 pendingTerminalCommand={pendingTerminalCommand}
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
                 onCommandComplete={handleTerminalComplete}
@@ -8693,6 +8765,7 @@ export default function Workspace() {
                 onHandoverOpenChange={setHandoverOpen}
                 sandboxCode={sandboxCode}
                 onSandboxConsumed={() => setSandboxCode(null)}
+                previewRefreshTrigger={previewRefreshTrigger}
                 pendingTerminalCommand={pendingTerminalCommand}
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
                 onCommandComplete={handleTerminalComplete}
