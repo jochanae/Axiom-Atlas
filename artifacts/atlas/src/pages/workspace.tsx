@@ -5834,7 +5834,7 @@ function MobileTabBar({
               background: "transparent",
               border: "none",
               cursor: "pointer",
-              color: active ? "var(--atlas-gold)" : "rgba(210,205,200,0.65)",
+              color: active ? "var(--atlas-gold)" : "var(--atlas-muted)",
               transition: "color 180ms ease",
               position: "relative",
               WebkitTapHighlightColor: "transparent",
