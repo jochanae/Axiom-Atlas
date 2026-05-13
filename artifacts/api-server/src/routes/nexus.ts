@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable } from "@workspace/db";
 import { eq, asc, and, inArray, desc, isNull } from "drizzle-orm";
+import { loadVaultContext } from "../lib/vaultContext";
 
 const router: IRouter = Router();
 
@@ -427,6 +428,14 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n--- DEEP DIVE MODE ACTIVE ---\nThe user wants depth, not breadth. Lock onto the specific topic they raise and explore it thoroughly — underlying assumptions, trade-offs, edge cases, second-order implications, what could go wrong, what could go right. Stay focused. Don't jump to other projects unless directly relevant.\n--- END DEEP DIVE MODE ---`;
   }
 
+  // Load Visual Vault images (project-scoped if focused, otherwise skip for global)
+  const vault = focusProjectId
+    ? await loadVaultContext(userId, focusProjectId)
+    : { imageBlocks: [], systemNote: "", hasImages: false };
+  if (vault.hasImages) {
+    systemPrompt += `\n\n--- VISUAL VAULT ---\n${vault.systemNote}\n--- END VISUAL VAULT ---`;
+  }
+
   // Persist the user message to the Living Thread
   await db.insert(nexusMessagesTable).values({ userId, role: "user", content: message, conversationId: conversationId ?? null });
 
@@ -456,20 +465,42 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     }
   } else {
     // Build user content — plain text or vision block when an image is attached
+    // Vault images are prepended ahead of any user-attached image
+    type VaultBlock = Anthropic.ImageBlockParam;
+    type TextBlock = Anthropic.TextBlockParam;
+
+    const contentParts: Array<VaultBlock | TextBlock> = [];
+
+    // 1. Vault images (project visual context) — injected first so Atlas sees them before the user's message
+    for (const vb of vault.imageBlocks) {
+      contentParts.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: vb.source.media_type,
+          data: vb.source.data,
+        },
+      } as VaultBlock);
+    }
+
+    // 2. User-attached image (if any)
+    if (imageBase64 && imageMimeType) {
+      contentParts.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+          data: imageBase64,
+        },
+      } as VaultBlock);
+    }
+
+    // 3. User text
+    contentParts.push({ type: "text", text: message });
+
     const userContent: Anthropic.MessageParam["content"] =
-      imageBase64 && imageMimeType
-        ? [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-                data: imageBase64,
-              },
-            },
-            { type: "text", text: message },
-          ]
-        : message;
+      contentParts.length === 1 ? message : contentParts;
+
     const claudeMessages: Anthropic.MessageParam[] = [
       ...conversationHistory,
       { role: "user", content: userContent },

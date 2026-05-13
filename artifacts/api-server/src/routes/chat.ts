@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import { db, chatMessagesTable, sessionsTable, projectsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
+import { loadVaultContext } from "../lib/vaultContext";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 
@@ -923,6 +924,15 @@ Rules:
     return;
   }
 
+  // ── Load Visual Vault images for this project ────────────────────────────
+  const userId = (req as any).authUser?.id as number | undefined;
+  const vault = userId
+    ? await loadVaultContext(userId, projectId)
+    : { imageBlocks: [], systemNote: "", hasImages: false };
+  if (vault.hasImages) {
+    systemPrompt += `\n\n--- VISUAL VAULT ---\n${vault.systemNote}\n--- END VISUAL VAULT ---`;
+  }
+
   // ── Build message history for multi-model dispatcher ─────────────────────
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = {
@@ -930,12 +940,30 @@ Rules:
     source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string };
   };
 
-  const userContent: string | Array<TextBlock | ImageBlock> = imageData
-    ? [
-        { type: "image", source: { type: "base64", media_type: imageData.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData.base64 } },
-        { type: "text", text: message },
-      ]
-    : message;
+  // Combine vault images + user-attached image + text into a single content array
+  const contentParts: Array<TextBlock | ImageBlock> = [];
+
+  // 1. Vault images first (visual context Atlas should have before reading the message)
+  for (const vb of vault.imageBlocks) {
+    contentParts.push({
+      type: "image",
+      source: { type: "base64", media_type: vb.source.media_type, data: vb.source.data },
+    } as ImageBlock);
+  }
+
+  // 2. User-attached image (if any)
+  if (imageData) {
+    contentParts.push({
+      type: "image",
+      source: { type: "base64", media_type: imageData.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData.base64 },
+    } as ImageBlock);
+  }
+
+  // 3. User text
+  contentParts.push({ type: "text", text: message });
+
+  const userContent: string | Array<TextBlock | ImageBlock> =
+    contentParts.length === 1 ? message : contentParts;
 
   const dispatchMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = [
     ...(history || []).map((h: { role: string; content: string }) => ({
