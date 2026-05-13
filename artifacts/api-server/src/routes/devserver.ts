@@ -68,9 +68,17 @@ function detectPort(line: string): number | null {
 function detectDevCommand(repoDir: string): { cmd: string; args: string[] } {
   try {
     const pkgRaw = readFileSync(path.join(repoDir, "package.json"), "utf8");
-    const pkg = JSON.parse(pkgRaw) as { scripts?: Record<string, string> };
+    const pkg = JSON.parse(pkgRaw) as { scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
     const scripts = pkg.scripts ?? {};
-    if (scripts["dev"]) return { cmd: "npm", args: ["run", "dev"] };
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const isVite = !!allDeps["vite"] || (scripts["dev"] ?? "").includes("vite");
+    const isNext = !!allDeps["next"] || (scripts["dev"] ?? "").includes("next");
+
+    if (scripts["dev"]) {
+      // For Vite: append -- --host 0.0.0.0 so it accepts proxied requests
+      if (isVite && !isNext) return { cmd: "npm", args: ["run", "dev", "--", "--host", "0.0.0.0"] };
+      return { cmd: "npm", args: ["run", "dev"] };
+    }
     if (scripts["start"]) return { cmd: "npm", args: ["start"] };
     if (scripts["serve"]) return { cmd: "npm", args: ["run", "serve"] };
   } catch {}
@@ -260,6 +268,19 @@ router.use("/devserver/proxy", (req, res): void => {
       // Drop these when we buffer + rewrite — we'll recalculate
       if (needsRewrite && lk === "content-encoding") continue;
       if (needsRewrite && lk === "content-length") continue;
+      // Rewrite Location redirects so they stay inside the proxy
+      if (lk === "location" && typeof v === "string") {
+        let loc = v;
+        // Strip http://localhost:PORT prefix and rewrite as proxy path
+        loc = loc.replace(/^https?:\/\/localhost:\d+/, "");
+        loc = loc.replace(/^https?:\/\/127\.0\.0\.1:\d+/, "");
+        // Absolute paths get prefixed with the proxy base
+        if (loc.startsWith("/") && !loc.startsWith(PROXY_BASE)) {
+          loc = `${PROXY_BASE}${loc}`;
+        }
+        headers[k] = loc;
+        continue;
+      }
       headers[k] = v;
     }
 

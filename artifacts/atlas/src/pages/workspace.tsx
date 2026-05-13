@@ -4071,7 +4071,7 @@ ${t}
               transition: "all 140ms ease",
             }}
           >
-            {m === "url" ? "Live URL" : m === "sandbox" ? "Sandbox" : "StackBlitz"}
+            {m === "url" ? "Live URL" : m === "sandbox" ? "Sandbox" : "Local"}
           </button>
         ))}
       </div>
