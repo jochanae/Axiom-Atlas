@@ -277,7 +277,8 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     conversationId?: string;
   };
 
-  if (!body.message?.trim()) {
+  const hasImage = !!(body.imageBase64 && body.imageMimeType);
+  if (!body.message?.trim() && !hasImage) {
     res.status(400).json({ error: "message is required" });
     return;
   }
@@ -285,7 +286,11 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { message, userProfile = "", focusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
+  const { userProfile = "", focusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
+  // Use a sensible fallback when the user sends an image with no text
+  const message = body.message?.trim() || (hasImage ? "[image]" : "");
+
+  try {
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -513,6 +518,13 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     detectedMode,
     focusSuggestion,
   });
+
+  } catch (err) {
+    req.log.error({ err }, "nexus/chat error");
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Atlas ran into an issue. Please try again." });
+    }
+  }
 });
 
 router.post("/nexus/handoff", async (req, res): Promise<void> => {
