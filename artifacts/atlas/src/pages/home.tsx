@@ -1923,7 +1923,7 @@ export default function Home() {
                     const el = e.currentTarget;
                     setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
                   }}
-                  style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: "min(55vh, 360px)", overflowY: "auto", paddingRight: 4, position: "relative" }}
+                  style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: "min(55vh, 360px)", overflowY: "auto", overflowX: "hidden", paddingRight: 4, position: "relative" }}
                 >
                   {homeMessages.map((msg, i) => (
                     <div key={i} style={{ display: "flex", flexDirection: msg.role === 'user' ? "row-reverse" : "row", alignItems: "flex-start", gap: 6, animation: "fadeIn 250ms ease forwards" }}>
