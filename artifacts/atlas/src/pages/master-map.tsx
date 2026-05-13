@@ -653,7 +653,7 @@ export default function MasterMap() {
   const isMobile = window.innerWidth < 768;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "var(--atlas-bg)", fontFamily: "var(--app-font-sans)" }}>
+    <div style={{ position: "fixed", inset: 0, background: "#090806", fontFamily: "var(--app-font-sans)" }}>
       <style>{STYLES}</style>
 
       <canvas
@@ -684,14 +684,14 @@ export default function MasterMap() {
               opacity: hoveredIdx !== null && !isHovered ? 0.28 : 1,
               transition: "opacity 180ms ease",
             }}>
-              <div style={{ fontSize: isHovered ? 11.5 : 10.5, fontWeight: 600, color: isHovered ? "var(--atlas-fg)" : "var(--atlas-fg)", letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "font-size 150ms ease, color 150ms ease" }}>
+              <div style={{ fontSize: isHovered ? 11.5 : 10.5, fontWeight: 600, color: isHovered ? "#E8E5E1" : "rgba(232,229,225,0.90)", letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "font-size 150ms ease, color 150ms ease" }}>
                 {p.name}
               </div>
-              <div style={{ fontSize: 8.5, color: act > 0.6 ? "rgba(201,162,76,0.65)" : "rgba(120,113,108,0.42)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
+              <div style={{ fontSize: 8.5, color: act > 0.6 ? "rgba(201,162,76,0.72)" : "rgba(180,170,160,0.62)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
                 {actLabel(p.updatedAt)}
               </div>
               {(p.entryCount ?? 0) > 0 && (
-                <div style={{ fontSize: 7.5, color: "rgba(201,162,76,0.3)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
+                <div style={{ fontSize: 7.5, color: "rgba(201,162,76,0.52)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
                   {p.entryCount} decisions
                 </div>
               )}

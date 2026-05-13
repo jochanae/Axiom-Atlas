@@ -709,6 +709,7 @@ export function AxiomFlow({
       className="relative h-full w-full overflow-hidden system-map-glow"
       style={{
         borderRadius: compact ? 0 : 8,
+        background: "#0C0A09",
         transition: "box-shadow 1s ease",
         touchAction: "none",
         cursor: dragState.current.dragging ? "grabbing" : "grab",
@@ -965,7 +966,7 @@ export function AxiomFlow({
         position: "absolute", bottom: 10, left: 0, right: 0,
         textAlign: "center", pointerEvents: "none",
         fontSize: 9, letterSpacing: "0.15em",
-        color: "oklch(0.76 0.12 85 / 22%)",
+        color: "rgba(201,162,76,0.52)",
         fontFamily: "var(--app-font-mono)",
       }}>
         TAP NODE · PINCH TO ZOOM · DOUBLE-TAP TO FIT
@@ -1027,7 +1028,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderStyle: "solid",
       borderColor: resolved ? "rgba(212,175,55,0.65)" : "rgba(212,175,55,0.38)",
       bgColor: resolved ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.04)",
-      textColor: resolved ? "#D4AF37" : "var(--atlas-fg)",
+      textColor: resolved ? "#D4AF37" : "rgba(231,229,226,0.88)",
       textDecoration: "none",
       shadow: resolved ? "0 0 12px rgba(212,175,55,0.22)" : "none",
       opacity: 1,
@@ -1100,7 +1101,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
         borderStyle: "solid",
         borderColor: resolved ? "rgba(212,175,55,0.55)" : "rgba(212,175,55,0.28)",
         bgColor: resolved ? "rgba(212,175,55,0.12)" : "rgba(212,175,55,0.04)",
-        textColor: resolved ? "rgba(212,175,55,0.85)" : "var(--atlas-fg)",
+        textColor: resolved ? "rgba(212,175,55,0.85)" : "rgba(231,229,226,0.82)",
         textDecoration: "none",
         shadow: "none",
         opacity: 0.65,
@@ -1117,7 +1118,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderStyle: "solid",
       borderColor: resolved ? "rgba(212,175,55,0.90)" : "rgba(212,175,55,0.55)",
       bgColor: resolved ? "rgba(212,175,55,0.16)" : "rgba(212,175,55,0.06)",
-      textColor: resolved ? "#D4AF37" : "var(--atlas-fg)",
+      textColor: resolved ? "#D4AF37" : "rgba(231,229,226,0.88)",
       textDecoration: "none",
       shadow: resolved ? "0 0 14px rgba(212,175,55,0.28)" : "none",
       opacity: 1,
