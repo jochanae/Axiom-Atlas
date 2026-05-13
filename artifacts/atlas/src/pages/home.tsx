@@ -1769,7 +1769,7 @@ export default function Home() {
 
       {/* ATLAS subheader — full-width bar beneath main header, only when conversation is active */}
       {(homeMessages.length > 0 || isAtlasStreaming) && (
-        <div className="atlas-chat-card-top" style={{ borderRadius: 0, padding: "5px 16px", zIndex: 20, position: "sticky", top: 50 }}>
+        <div className="atlas-chat-card-top" style={{ borderRadius: 0, padding: "5px 16px", zIndex: 20, position: "sticky", top: 50, height: 36, boxSizing: "border-box" }}>
           {/* ATLAS label centered */}
           <span style={{
             position: "absolute", left: "50%", transform: "translateX(-50%)",

@@ -878,7 +878,7 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
           boxShadow: "0 12px 40px rgba(0,0,0,0.82)",
           animation: "picker-in 140ms cubic-bezier(0.22,1,0.36,1) both",
         }}>
-          <div style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.12em", padding: "5px 12px 7px", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "rgba(180,165,145,0.6)", letterSpacing: "0.12em", padding: "5px 12px 7px", textTransform: "uppercase" }}>
             Select Flow
           </div>
           {/* New idea entry — creates a blank project and opens its Flow */}
@@ -904,7 +904,7 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
               <button key={p.id} onClick={() => { setFlowOpen(false); onDive(p.id); }} style={{
                 width: "100%", padding: "8px 12px", background: "transparent", border: "none",
                 cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
-                color: "var(--atlas-fg)", fontSize: 12.5,
+                color: "#D4D0CB", fontSize: 12.5,
                 fontFamily: "var(--app-font-sans)", transition: "background 120ms ease",
               }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.08)")}
