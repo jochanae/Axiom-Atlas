@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const THRESHOLD = 72;
-const MAX_PULL = 110;
+const THRESHOLD = 96;
+const MAX_PULL = 120;
 
 export function usePullToRefresh(
   onRefresh: () => Promise<void> | void,
@@ -11,7 +11,7 @@ export function usePullToRefresh(
   const [distance, setDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const refreshingRef = useRef(false);
-  const pulling = distance > 8;
+  const pulling = distance > 28;
 
   const handleRefresh = useCallback(async () => {
     if (refreshingRef.current) return;
