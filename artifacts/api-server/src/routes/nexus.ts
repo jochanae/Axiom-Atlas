@@ -4,6 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable } from "@workspace/db";
 import { eq, asc, and, inArray, desc, isNull } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
+import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 
 const router: IRouter = Router();
 
@@ -436,6 +437,14 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n--- VISUAL VAULT ---\n${vault.systemNote}\n--- END VISUAL VAULT ---`;
   }
 
+  // ── Live URL capture — screenshot any URLs in the message ─────────────────
+  const detectedUrls = extractPageUrls(message);
+  const urlBlocks = await screenshotUrlsToBlocks(detectedUrls);
+  const urlNote = buildUrlNote(urlBlocks);
+  if (urlNote) {
+    systemPrompt += `\n\n--- LIVE URL CAPTURE ---\n${urlNote}\n--- END LIVE URL CAPTURE ---`;
+  }
+
   // Persist the user message to the Living Thread
   await db.insert(nexusMessagesTable).values({ userId, role: "user", content: message, conversationId: conversationId ?? null });
 
@@ -483,7 +492,19 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       } as VaultBlock);
     }
 
-    // 2. User-attached image (if any)
+    // 2. Live URL screenshots (captured from URLs detected in this message)
+    for (const ub of urlBlocks) {
+      contentParts.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: ub.source.media_type,
+          data: ub.source.data,
+        },
+      } as VaultBlock);
+    }
+
+    // 3. User-attached image (if any)
     if (imageBase64 && imageMimeType) {
       contentParts.push({
         type: "image",
