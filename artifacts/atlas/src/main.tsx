@@ -8,7 +8,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />
     <Toaster
-      theme="dark"
+      theme={document.documentElement.dataset.theme === "parchment" ? "light" : "dark"}
       position="bottom-center"
       offset={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)" }}
       mobileOffset={{
@@ -21,7 +21,7 @@ createRoot(document.getElementById("root")!).render(
         className: "atlas-luxury-toast",
         descriptionClassName: "atlas-luxury-toast-description",
         style: {
-          background: "linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)) padding-box, linear-gradient(135deg, rgba(212,175,55,0.55), rgba(255,255,255,0.08) 42%, rgba(146,64,14,0.42)) border-box",
+          background: "var(--atlas-surface)",
           border: "1px solid transparent",
           color: "var(--atlas-fg, #E7E5E4)",
           backdropFilter: "blur(12px)",
