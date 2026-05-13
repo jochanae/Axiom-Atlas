@@ -812,7 +812,7 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
     <div style={{ position: "absolute", top: 68, right: 14, zIndex: 50 }}>
       {/* Glass pod */}
       <div style={{
-        background: "var(--atlas-surface)",
+        background: "rgba(13,11,9,0.92)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
         border: "1px solid rgba(201,162,76,0.22)",
@@ -871,7 +871,7 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
       {flowOpen && (
         <div style={{
           position: "absolute", top: 0, right: "calc(100% + 8px)",
-          background: "var(--atlas-surface)",
+          background: "rgba(13,11,9,0.96)",
           backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
           border: "1px solid rgba(201,162,76,0.16)", borderRadius: 10,
           padding: "6px 0", minWidth: 188, maxHeight: 320, overflowY: "auto",
