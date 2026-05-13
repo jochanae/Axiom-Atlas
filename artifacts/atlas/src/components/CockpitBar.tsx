@@ -197,7 +197,7 @@ export function CockpitBar({
       )}
 
       {/* Cockpit bar */}
-      <div style={{ position: "relative", flexShrink: 0, height: cockpitH, overflow: "visible", zIndex: 20, paddingBottom: "max(env(safe-area-inset-bottom), 8px)" }}>
+      <div style={{ position: "relative", flexShrink: 0, height: cockpitH, overflow: "visible", zIndex: 20, paddingBottom: "max(env(safe-area-inset-bottom), 8px)", background: "#0D0B09" }}>
 
         {/* SVG arch cutout */}
         <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }} preserveAspectRatio="none" viewBox="0 0 390 60">
