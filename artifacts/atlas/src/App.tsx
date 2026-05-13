@@ -27,6 +27,8 @@ import Admin from "./pages/admin";
 import Dashboard from "./pages/dashboard";
 import ResetPassword from "./pages/reset-password";
 import MasterMap from "./pages/master-map";
+import OnboardingPage from "./pages/onboarding";
+import { getListProjectsQueryKey, useListProjects } from "@workspace/api-client-react";
 
 // ── Global 401 interceptor ────────────────────────────────────────────────────
 // Noisy background endpoints — a single 401 here should never boot the user.
@@ -232,45 +234,71 @@ function PageTransition() {
   );
 }
 
+// ── First-login onboarding redirect ───────────────────────────────────────────
+function OnboardingGate() {
+  const [location, setLocation] = useLocation();
+  const shouldCheck = location !== "/" && !["/landing", "/login", "/reset-password", "/onboarding", "/terms", "/privacy", "/help"].some((path) => location.startsWith(path));
+  const { data: projects, isLoading } = useListProjects({
+    query: { enabled: shouldCheck, queryKey: getListProjectsQueryKey() },
+  });
+
+  useEffect(() => {
+    if (!shouldCheck || isLoading || !projects) return;
+    try {
+      const onboardingComplete = localStorage.getItem("axiom_onboarding_complete");
+      const hasProjects = projects.length > 0;
+      if (!onboardingComplete && !hasProjects) {
+        setLocation("/onboarding", { replace: true });
+      }
+    } catch {}
+  }, [isLoading, location, projects, setLocation, shouldCheck]);
+
+  return null;
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={() => {
-        const [, nav] = useLocation();
-        useEffect(() => {
-          fetch("/api/auth/me", { credentials: "include" })
-            .then(r => r.ok ? r.json() : null)
-            .then(user => nav(user?.id ? "/home" : "/landing", { replace: true }))
-            .catch(() => nav("/landing", { replace: true }));
-        }, []);
-        return null;
-      }} />
-      <Route path="/landing" component={Landing} />
-      <Route path="/login" component={Login} />
-      <Route path="/reset-password" component={ResetPassword} />
-      <Route path="/home" component={Home} />
-      <Route path="/projects" component={Projects} />
-      <Route path="/project/:projectId" component={Workspace} />
-      <Route path="/ledger/:projectId" component={Ledger} />
-      <Route path="/parking" component={ParkingLot} />
-      <Route path="/guard-report" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/compass", { replace: true }), []); return null; }} />
-      <Route path="/entry/:id" component={EntryDetail} />
-      <Route path="/sessions" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/dashboard", { replace: true }), []); return null; }} />
-      <Route path="/think-freely" component={ThinkFreely} />
-      <Route path="/workshop" component={Workshop} />
-      <Route path="/compass" component={ProjectCompass} />
-      <Route path="/terms" component={Terms} />
-      <Route path="/privacy" component={Privacy} />
-      <Route path="/help" component={Help} />
-      <Route path="/vault" component={Vault} />
-      <Route path="/secrets" component={Secrets} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/map" component={MasterMap} />
-      <Route path="/nexus" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/home", { replace: true }), []); return null; }} />
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <OnboardingGate />
+      <Switch>
+        <Route path="/" component={() => {
+          const [, nav] = useLocation();
+          useEffect(() => {
+            fetch("/api/auth/me", { credentials: "include" })
+              .then(r => r.ok ? r.json() : null)
+              .then(user => nav(user?.id ? "/home" : "/landing", { replace: true }))
+              .catch(() => nav("/landing", { replace: true }));
+          }, []);
+          return null;
+        }} />
+        <Route path="/landing" component={Landing} />
+        <Route path="/login" component={Login} />
+        <Route path="/reset-password" component={ResetPassword} />
+        <Route path="/onboarding" component={OnboardingPage} />
+        <Route path="/home" component={Home} />
+        <Route path="/projects" component={Projects} />
+        <Route path="/project/:projectId" component={Workspace} />
+        <Route path="/ledger/:projectId" component={Ledger} />
+        <Route path="/parking" component={ParkingLot} />
+        <Route path="/guard-report" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/compass", { replace: true }), []); return null; }} />
+        <Route path="/entry/:id" component={EntryDetail} />
+        <Route path="/sessions" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/dashboard", { replace: true }), []); return null; }} />
+        <Route path="/think-freely" component={ThinkFreely} />
+        <Route path="/workshop" component={Workshop} />
+        <Route path="/compass" component={ProjectCompass} />
+        <Route path="/terms" component={Terms} />
+        <Route path="/privacy" component={Privacy} />
+        <Route path="/help" component={Help} />
+        <Route path="/vault" component={Vault} />
+        <Route path="/secrets" component={Secrets} />
+        <Route path="/admin" component={Admin} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/map" component={MasterMap} />
+        <Route path="/nexus" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/home", { replace: true }), []); return null; }} />
+        <Route component={NotFound} />
+      </Switch>
+    </>
   );
 }
 

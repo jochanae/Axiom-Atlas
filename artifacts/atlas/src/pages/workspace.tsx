@@ -111,6 +111,7 @@ interface LinkedRepo {
 }
 
 type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal";
+type OnboardingCoachId = "chat" | "ledger" | "flow";
 
 interface ProjectScan {
   projectName: string;
@@ -6163,6 +6164,101 @@ function MobileTabBar({
   );
 }
 
+function WorkspaceOnboardingCoach({
+  isMobile,
+  dismissed,
+  onDismiss,
+}: {
+  isMobile: boolean;
+  dismissed: Record<OnboardingCoachId, boolean>;
+  onDismiss: (id: OnboardingCoachId) => void;
+}) {
+  const marks: Array<{ id: OnboardingCoachId; label: string; text: string }> = [
+    { id: "chat", label: "Chat tab", text: "Talk to Atlas. Describe what you're building." },
+    { id: "ledger", label: "Ledger tab", text: "Every decision you make gets logged here." },
+    { id: "flow", label: "Flow tab", text: "Your thinking becomes a visual map." },
+  ];
+  const visibleMarks = marks.filter((mark) => !dismissed[mark.id]);
+  if (visibleMarks.length === 0) return null;
+
+  const placement: Record<OnboardingCoachId, React.CSSProperties> = isMobile
+    ? {
+        chat: { left: 8, bottom: 78, width: "30%" },
+        ledger: { left: "35%", bottom: 78, width: "30%" },
+        flow: { right: 8, bottom: 78, width: "30%" },
+      }
+    : {
+        chat: { left: "6vw", bottom: 112, width: 260 },
+        ledger: { right: 300, top: 94, width: 260 },
+        flow: { right: 24, top: 94, width: 260 },
+      };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 700, pointerEvents: "none" }}>
+      <div style={{ position: "absolute", inset: 0, background: "var(--atlas-bg)", opacity: 0.72 }} />
+      {visibleMarks.map((mark) => (
+        <div
+          key={mark.id}
+          style={{
+            position: "absolute",
+            ...placement[mark.id],
+            background: "var(--atlas-surface)",
+            border: "1px solid var(--atlas-border)",
+            borderRadius: 12,
+            padding: isMobile ? "10px 9px" : "14px 15px",
+            color: "var(--atlas-fg)",
+            pointerEvents: "auto",
+            boxSizing: "border-box",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0 }} />
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: isMobile ? 9 : 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+              {mark.label}
+            </span>
+          </div>
+          <p style={{ margin: 0, color: "var(--atlas-fg)", fontSize: isMobile ? 11 : 13, lineHeight: 1.45 }}>
+            {mark.text}
+          </p>
+          <button
+            type="button"
+            onClick={() => onDismiss(mark.id)}
+            style={{
+              marginTop: 10,
+              width: "100%",
+              border: "1px solid var(--atlas-gold)",
+              background: "var(--atlas-gold)",
+              color: "var(--atlas-bg)",
+              borderRadius: 999,
+              padding: isMobile ? "7px 8px" : "8px 10px",
+              fontSize: isMobile ? 9 : 10,
+              fontWeight: 800,
+              fontFamily: "var(--app-font-mono)",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+            }}
+          >
+            Got it
+          </button>
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: isMobile ? undefined : "100%",
+              bottom: isMobile ? "100%" : undefined,
+              width: 1,
+              height: 18,
+              background: "var(--atlas-gold)",
+              opacity: 0.8,
+            }}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Workspace ────────────────────────────────────────────────────────────────
 export default function Workspace() {
   const { projectId } = useParams();
@@ -6269,6 +6365,19 @@ export default function Workspace() {
   const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
+  const [onboardingCoachVisible, setOnboardingCoachVisible] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("onboarding") === "true"
+        && !localStorage.getItem("axiom_onboarding_complete");
+    } catch {
+      return false;
+    }
+  });
+  const [onboardingCoachDismissed, setOnboardingCoachDismissed] = useState<Record<OnboardingCoachId, boolean>>({
+    chat: false,
+    ledger: false,
+    flow: false,
+  });
   const [showDrawer, setShowDrawer] = useState(false);
   const [showVault, setShowVault] = useState(false);
   const [showForgeExternal, setShowForgeExternal] = useState(false);
@@ -6294,6 +6403,22 @@ export default function Workspace() {
     try { localStorage.setItem(`atlas-axiom-banner-${id}`, "1"); } catch { /* ignore */ }
     setShowAxiomBanner(false);
   };
+
+  const dismissOnboardingCoach = useCallback((markId: OnboardingCoachId) => {
+    setOnboardingCoachDismissed((prev) => {
+      const next = { ...prev, [markId]: true };
+      if (next.chat && next.ledger && next.flow) {
+        setOnboardingCoachVisible(false);
+        try {
+          localStorage.setItem("axiom_onboarding_complete", "true");
+          const url = new URL(window.location.href);
+          url.searchParams.delete("onboarding");
+          window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+        } catch {}
+      }
+      return next;
+    });
+  }, []);
 
   // Spec → Build handoff modal state
   const [showHandoffModal, setShowHandoffModal] = useState(false);
@@ -8781,6 +8906,14 @@ export default function Workspace() {
           onTabChange={(tab) => setMobileTab(tab)}
           entryCount={entryCount}
           activeCatch={!!activeCatch}
+        />
+      )}
+
+      {onboardingCoachVisible && (
+        <WorkspaceOnboardingCoach
+          isMobile={isMobile}
+          dismissed={onboardingCoachDismissed}
+          onDismiss={dismissOnboardingCoach}
         />
       )}
 
