@@ -571,7 +571,7 @@ export function AccountHubPanel({ onClose, isMobile = false }: { onClose: () => 
                       cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
                       transition: "all 160ms ease",
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.22)"; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "var(--atlas-glass-bg)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.22)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; }}
                   >
                     <LockIcon size={11} />
@@ -677,7 +677,7 @@ export function AccountHubPanel({ onClose, isMobile = false }: { onClose: () => 
                 cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
                 transition: "all 160ms ease",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--atlas-glass-bg)"; e.currentTarget.style.borderColor = "var(--atlas-border)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; }}
             >
               <SignOutIcon />

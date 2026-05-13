@@ -768,7 +768,7 @@ export function AxiomFlow({
             Hand off to Atlas
           </div>
           <div style={{
-            fontSize: 10.5, color: "rgba(231,229,228,0.65)",
+            fontSize: 10.5, color: "var(--atlas-fg)",
             marginBottom: 10, lineHeight: 1.5,
           }}>
             Atlas will start a new chat seeded with this Flow snapshot
@@ -804,7 +804,7 @@ export function AxiomFlow({
                 flex: 1, padding: "7px 10px", borderRadius: 7,
                 background: "transparent",
                 border: "1px solid rgba(120,113,108,0.30)",
-                color: "rgba(231,229,228,0.65)",
+                color: "var(--atlas-fg)",
                 fontFamily: "var(--app-font-mono)",
                 fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em",
                 textTransform: "uppercase", cursor: "pointer",
@@ -933,7 +933,7 @@ export function AxiomFlow({
 
           {/* Strategic pivot question */}
           <div style={{
-            fontSize: 11, color: "rgba(231,229,228,0.72)", lineHeight: 1.6,
+            fontSize: 11, color: "var(--atlas-fg)", lineHeight: 1.6,
             fontStyle: "italic", marginBottom: 12,
             paddingBottom: 10,
             borderBottom: "1px solid rgba(212,175,55,0.10)",
@@ -1027,7 +1027,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderStyle: "solid",
       borderColor: resolved ? "rgba(212,175,55,0.65)" : "rgba(212,175,55,0.38)",
       bgColor: resolved ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.04)",
-      textColor: resolved ? "#D4AF37" : "rgba(231,229,228,0.80)",
+      textColor: resolved ? "#D4AF37" : "var(--atlas-fg)",
       textDecoration: "none",
       shadow: resolved ? "0 0 12px rgba(212,175,55,0.22)" : "none",
       opacity: 1,
@@ -1100,7 +1100,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
         borderStyle: "solid",
         borderColor: resolved ? "rgba(212,175,55,0.55)" : "rgba(212,175,55,0.28)",
         bgColor: resolved ? "rgba(212,175,55,0.12)" : "rgba(212,175,55,0.04)",
-        textColor: resolved ? "rgba(212,175,55,0.85)" : "rgba(231,229,228,0.60)",
+        textColor: resolved ? "rgba(212,175,55,0.85)" : "var(--atlas-fg)",
         textDecoration: "none",
         shadow: "none",
         opacity: 0.65,
@@ -1117,7 +1117,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderStyle: "solid",
       borderColor: resolved ? "rgba(212,175,55,0.90)" : "rgba(212,175,55,0.55)",
       bgColor: resolved ? "rgba(212,175,55,0.16)" : "rgba(212,175,55,0.06)",
-      textColor: resolved ? "#D4AF37" : "rgba(231,229,228,0.87)",
+      textColor: resolved ? "#D4AF37" : "var(--atlas-fg)",
       textDecoration: "none",
       shadow: resolved ? "0 0 14px rgba(212,175,55,0.28)" : "none",
       opacity: 1,
@@ -1167,7 +1167,7 @@ function getNodeVisual(node: ArchNode): NodeVisual {
     size: 56, borderRadius: 14, borderWidth: 1.5,
     borderStyle: "solid", borderColor: "rgba(212,175,55,0.45)",
     bgColor: "rgba(212,175,55,0.06)",
-    textColor: "rgba(231,229,228,0.87)", textDecoration: "none",
+    textColor: "var(--atlas-fg)", textDecoration: "none",
     shadow: "none", opacity: 1, pulse: false, labelSize: 9.5, labelWeight: 500,
   };
 }
