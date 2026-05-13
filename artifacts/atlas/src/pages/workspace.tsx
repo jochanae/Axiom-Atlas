@@ -3712,6 +3712,81 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed, refreshTrigger 
   const [reloadKey, setReloadKey] = useState(0);
   const [savedIndicator, setSavedIndicator] = useState(false);
 
+  // ── Devserver state ──────────────────────────────────────────────────────────
+  type DsStatus = "idle" | "cloning" | "installing" | "starting" | "running" | "error";
+  const [dsStatus, setDsStatus] = useState<DsStatus>("idle");
+  const [dsLogs, setDsLogs] = useState<string[]>([]);
+  const [dsPort, setDsPort] = useState<number | null>(null);
+  const [dsErrorMsg, setDsErrorMsg] = useState<string | null>(null);
+  const [dsStarting, setDsStarting] = useState(false);
+  const dsLogsEndRef = useRef<HTMLDivElement>(null);
+
+  // Poll status while active
+  useEffect(() => {
+    if (previewMode !== "local" || dsStatus === "idle") return;
+    const iv = setInterval(async () => {
+      try {
+        const r = await fetch("/api/devserver/status", { credentials: "include" });
+        if (!r.ok) return;
+        const d = await r.json() as { status: string; port: number | null; logs: string[]; errorMsg: string | null };
+        setDsStatus(d.status as DsStatus);
+        setDsLogs(d.logs);
+        setDsPort(d.port);
+        setDsErrorMsg(d.errorMsg);
+      } catch {}
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [previewMode, dsStatus]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    dsLogsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [dsLogs]);
+
+  const handleDsStart = async () => {
+    if (!linkedRepo) return;
+    setDsStarting(true);
+    setDsLogs([]);
+    setDsErrorMsg(null);
+    const token = project?.githubToken ?? "__server__";
+    try {
+      const r = await fetch("/api/devserver/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-github-token": token },
+        credentials: "include",
+        body: JSON.stringify({ repoFullName: linkedRepo.fullName, branch: linkedRepo.defaultBranch ?? "main" }),
+      });
+      const d = await r.json() as { status?: string; error?: string };
+      if (!r.ok) throw new Error(d.error ?? "Failed to start");
+      setDsStatus((d.status ?? "cloning") as DsStatus);
+    } catch (e) {
+      setDsErrorMsg(e instanceof Error ? e.message : "Start failed");
+      setDsStatus("error");
+    } finally {
+      setDsStarting(false);
+    }
+  };
+
+  const handleDsStop = async () => {
+    await fetch("/api/devserver/stop", { method: "POST", credentials: "include" });
+    setDsStatus("idle");
+    setDsLogs([]);
+    setDsPort(null);
+    setDsErrorMsg(null);
+  };
+
+  const DS_STAGE_LABELS: Record<DsStatus, string> = {
+    idle: "Idle",
+    cloning: "Cloning repo…",
+    installing: "Installing dependencies…",
+    starting: "Starting dev server…",
+    running: "Running",
+    error: "Error",
+  };
+  const DS_STAGE_PROGRESS: Record<DsStatus, number> = {
+    idle: 0, cloning: 20, installing: 50, starting: 80, running: 100, error: 0,
+  };
+
   // Sync external refresh trigger (from push success) into local reloadKey
   const prevRefreshTrigger = useRef(refreshTrigger ?? 0);
   useEffect(() => {
@@ -4269,74 +4344,148 @@ ${t}
       {/* ── StackBlitz mode ── */}
       {previewMode === "local" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {linkedRepo ? (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px", gap: 20 }}>
-              {/* Repo pill */}
-              <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.18)", borderRadius: 20, padding: "5px 12px" }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                  <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", letterSpacing: "0.05em" }}>{linkedRepo.fullName}</span>
+          {!linkedRepo ? (
+            /* ── No repo linked ── */
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" opacity={0.12}>
+                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
+                Link a GitHub repo in the <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Files</strong> tab<br />to run a live dev server here.
               </div>
-
-              {/* Explanation */}
-              <div style={{ textAlign: "center", maxWidth: 260 }}>
-                <p style={{ margin: "0 0 6px", fontSize: 13, color: "var(--atlas-fg)", fontWeight: 500, lineHeight: 1.5 }}>
-                  Open in StackBlitz
-                </p>
-                <p style={{ margin: 0, fontSize: 11, color: "var(--atlas-muted)", lineHeight: 1.7 }}>
-                  Embedded preview is blocked by Chrome for private repos — your login can't reach inside an iframe. Open in a new tab and it works instantly.
-                </p>
+            </div>
+          ) : dsStatus === "running" && dsPort ? (
+            /* ── Running — show proxy iframe ── */
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+              {/* Top bar */}
+              <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8, padding: "5px 10px", borderBottom: "1px solid var(--atlas-border)", background: "var(--atlas-surface)" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "rgba(52,211,153,0.8)", letterSpacing: "0.05em" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "rgba(52,211,153,0.8)", display: "inline-block", boxShadow: "0 0 6px rgba(52,211,153,0.5)" }} />
+                  Live · {linkedRepo.fullName} · :{dsPort}
+                </span>
+                <div style={{ flex: 1 }} />
+                <button
+                  onClick={() => { setReloadKey(k => k + 1); }}
+                  title="Reload preview"
+                  style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px 6px", color: "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", borderRadius: 4, opacity: 0.55, transition: "opacity 140ms" }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = "0.55")}
+                >↺</button>
+                <button
+                  onClick={handleDsStop}
+                  style={{ padding: "3px 10px", borderRadius: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "rgba(239,68,68,0.7)", cursor: "pointer", transition: "all 140ms" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(239,68,68,0.14)"; e.currentTarget.style.color = "rgba(239,68,68,0.95)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = "rgba(239,68,68,0.08)"; e.currentTarget.style.color = "rgba(239,68,68,0.7)"; }}
+                >Stop</button>
               </div>
-
-              {/* Launch buttons */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 240 }}>
-                <a
-                  href={`https://stackblitz.com/github/${linkedRepo.fullName}?view=preview`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                    padding: "11px 16px", borderRadius: 10, textDecoration: "none",
-                    background: "linear-gradient(135deg, rgba(201,162,76,0.18) 0%, rgba(201,162,76,0.08) 100%)",
-                    border: "1px solid rgba(201,162,76,0.35)",
-                    color: "var(--atlas-gold)", fontSize: 12, fontWeight: 600, letterSpacing: "0.04em",
-                    transition: "all 160ms ease",
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.2)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg, rgba(201,162,76,0.18) 0%, rgba(201,162,76,0.08) 100%)"; }}
-                >
-                  ↗ Open Preview
-                </a>
-                <a
-                  href={`https://stackblitz.com/github/${linkedRepo.fullName}?view=editor`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                    padding: "11px 16px", borderRadius: 10, textDecoration: "none",
-                    background: "transparent", border: "1px solid var(--atlas-border)",
-                    color: "var(--atlas-muted)", fontSize: 12, letterSpacing: "0.04em",
-                    transition: "all 160ms ease",
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.25)"; e.currentTarget.style.color = "var(--atlas-fg)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
-                >
-                  ↗ Open Editor
-                </a>
+              <iframe
+                key={`devserver-${reloadKey}`}
+                src="/api/devserver/proxy/"
+                title="Dev server preview"
+                style={{ flex: 1, border: "none", width: "100%", display: "block", background: "#fff" }}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+              />
+            </div>
+          ) : dsStatus === "error" ? (
+            /* ── Error state ── */
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px", gap: 16 }}>
+              <div style={{ padding: "12px 16px", borderRadius: 8, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.25)", maxWidth: 280, width: "100%" }}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: "rgba(239,68,68,0.8)", marginBottom: 4 }}>Dev server error</div>
+                <div style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(239,68,68,0.65)", lineHeight: 1.6 }}>{dsErrorMsg ?? "Unknown error"}</div>
+              </div>
+              {dsLogs.length > 0 && (
+                <div style={{ width: "100%", maxWidth: 320, maxHeight: 120, overflowY: "auto", background: "rgba(12,10,9,0.8)", border: "1px solid var(--atlas-border)", borderRadius: 6, padding: "7px 10px" }} className="scrollbar-none">
+                  {dsLogs.slice(-20).map((l, i) => (
+                    <div key={i} style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", lineHeight: 1.7, opacity: 0.7 }}>{l}</div>
+                  ))}
+                </div>
+              )}
+              <button
+                onClick={handleDsStart}
+                disabled={dsStarting}
+                style={{ padding: "8px 20px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.3)", color: "var(--atlas-gold)", cursor: dsStarting ? "default" : "pointer", opacity: dsStarting ? 0.5 : 1 }}
+              >
+                {dsStarting ? "Starting…" : "Retry →"}
+              </button>
+            </div>
+          ) : dsStatus !== "idle" ? (
+            /* ── Active: cloning / installing / starting ── */
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              {/* Progress header */}
+              <div style={{ flexShrink: 0, padding: "14px 14px 10px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontSize: 10.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", letterSpacing: "0.06em" }}>
+                    {DS_STAGE_LABELS[dsStatus]}
+                  </span>
+                  <button
+                    onClick={handleDsStop}
+                    style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", background: "transparent", border: "none", color: "var(--atlas-muted)", cursor: "pointer", opacity: 0.5, padding: 0 }}
+                  >cancel</button>
+                </div>
+                {/* Progress bar */}
+                <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", borderRadius: 2,
+                    width: `${DS_STAGE_PROGRESS[dsStatus]}%`,
+                    background: "linear-gradient(90deg, var(--atlas-ember), var(--atlas-gold))",
+                    transition: "width 600ms ease",
+                    boxShadow: "0 0 8px -1px var(--atlas-gold)",
+                  }} />
+                </div>
+              </div>
+              {/* Log pane */}
+              <div style={{ flex: 1, overflowY: "auto", padding: "0 12px 12px", margin: "0 2px" }} className="scrollbar-none">
+                <div style={{ background: "rgba(12,10,9,0.7)", border: "1px solid var(--atlas-border)", borderRadius: 7, padding: "10px 12px", minHeight: "100%" }}>
+                  {dsLogs.length === 0 ? (
+                    <div style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.3 }}>Waiting for output…</div>
+                  ) : dsLogs.map((l, i) => (
+                    <div key={i} style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", lineHeight: 1.75, opacity: i < dsLogs.length - 4 ? 0.45 : 0.85 }}>{l}</div>
+                  ))}
+                  <div ref={dsLogsEndRef} />
+                </div>
               </div>
             </div>
           ) : (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 20px", gap: 12 }}>
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" opacity={0.12}>
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="var(--atlas-fg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.8 }}>
-                Link a GitHub repo in the <strong style={{ color: "var(--atlas-gold)", opacity: 0.8, fontWeight: 500 }}>Files</strong> tab<br />to open it in StackBlitz.
+            /* ── Idle — launch screen ── */
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px", gap: 18 }}>
+              {/* Repo pill */}
+              <div style={{ display: "flex", alignItems: "center", gap: 7, background: "rgba(201,162,76,0.07)", border: "1px solid rgba(201,162,76,0.18)", borderRadius: 20, padding: "5px 13px" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-gold)", letterSpacing: "0.04em" }}>{linkedRepo.fullName}</span>
               </div>
-              <div style={{ fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.22, textAlign: "center", lineHeight: 1.7, fontFamily: "var(--app-font-mono)" }}>
-                Runs your full project in the browser —<br />no install, no server needed.
+              {/* Description */}
+              <div style={{ textAlign: "center", maxWidth: 250 }}>
+                <p style={{ margin: "0 0 5px", fontSize: 12.5, color: "var(--atlas-fg)", fontWeight: 500, lineHeight: 1.5 }}>Run dev server</p>
+                <p style={{ margin: 0, fontSize: 10.5, color: "var(--atlas-muted)", lineHeight: 1.7 }}>
+                  Clones your repo, installs dependencies, and runs it live — no StackBlitz login needed. Works with private repos.
+                </p>
               </div>
+              {/* Time note */}
+              <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", borderRadius: 20, background: "rgba(255,255,255,0.03)", border: "1px solid var(--atlas-border)" }}>
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="var(--atlas-muted)" strokeWidth="1.3"/><path d="M8 5v3l2 1.5" stroke="var(--atlas-muted)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.5, letterSpacing: "0.03em" }}>First boot takes ~1–2 min</span>
+              </div>
+              {/* Launch button */}
+              <button
+                onClick={handleDsStart}
+                disabled={dsStarting}
+                style={{
+                  padding: "11px 28px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                  background: dsStarting
+                    ? "rgba(201,162,76,0.15)"
+                    : "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 75%, #6a4a18) 100%)",
+                  color: dsStarting ? "var(--atlas-gold)" : "var(--atlas-bg)",
+                  border: "none", cursor: dsStarting ? "default" : "pointer",
+                  boxShadow: dsStarting ? "none" : "0 0 20px -6px color-mix(in oklab, var(--atlas-gold) 50%, transparent)",
+                  transition: "all 180ms ease",
+                  opacity: dsStarting ? 0.6 : 1,
+                }}
+              >
+                {dsStarting ? "Launching…" : "Launch →"}
+              </button>
             </div>
           )}
         </div>
