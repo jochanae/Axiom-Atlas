@@ -13,7 +13,7 @@ interface CockpitBarProps {
 
 function AxiomLogoSVG() {
   return (
-    <svg viewBox="0 0 512 512" width="44" height="44">
+    <svg viewBox="0 0 512 512" width="58" height="58">
       <defs>
         <radialGradient id="cpg" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor="#5B21B6" stopOpacity="0.35" />
