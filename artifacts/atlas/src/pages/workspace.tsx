@@ -64,6 +64,12 @@ interface FileEdit {
   content: string;
 }
 
+interface LinePatch {
+  path: string;
+  find: string;
+  replace: string;
+}
+
 interface PushRecord {
   id: string;
   path: string;
@@ -85,6 +91,7 @@ interface ChatMessage {
   catchResolved?: boolean;
   fileEdit?: FileEdit;
   fileEdits?: FileEdit[];
+  linePatches?: LinePatch[];
   memoryChips?: MemoryChip[];
   sentAt?: string;
   imageB64?: string;
@@ -750,6 +757,8 @@ function GitHubPushModal({
   const [prError, setPrError] = useState<string | null>(null);
   const [confirmPush, setConfirmPush] = useState(false);
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [typechecking, setTypechecking] = useState(false);
+  const [typecheckResult, setTypecheckResult] = useState<{ errors: Array<{ line: number; col: number; message: string }>; clean: boolean } | null>(null);
 
   const { data: modalProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
   const token = modalProject?.githubToken ?? null;
@@ -1084,8 +1093,50 @@ function GitHubPushModal({
                 ⚠ You're pushing directly to {linkedRepo?.defaultBranch ?? "main"}. This cannot be undone. Tap again to confirm.
               </div>
             )}
+            {typecheckResult && (
+              <div style={{
+                marginBottom: 10, padding: "8px 12px", borderRadius: 6,
+                background: typecheckResult.clean ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.07)",
+                border: `1px solid ${typecheckResult.clean ? "rgba(52,211,153,0.3)" : "rgba(239,68,68,0.3)"}`,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: typecheckResult.clean ? "rgba(52,211,153,0.9)" : "rgba(239,68,68,0.85)", marginBottom: typecheckResult.errors.length > 0 ? 6 : 0 }}>
+                  {typecheckResult.clean ? "✓ No syntax errors detected" : `⚠ ${typecheckResult.errors.length} error${typecheckResult.errors.length !== 1 ? "s" : ""} found`}
+                </div>
+                {typecheckResult.errors.slice(0, 6).map((e, i) => (
+                  <div key={i} style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "rgba(239,68,68,0.75)", lineHeight: 1.6 }}>
+                    <span style={{ opacity: 0.55 }}>L{e.line}:{e.col} </span>{e.message}
+                  </div>
+                ))}
+                {typecheckResult.errors.length > 6 && (
+                  <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", marginTop: 3 }}>
+                    +{typecheckResult.errors.length - 6} more — share with Atlas to fix
+                  </div>
+                )}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button onClick={onClose} style={{ padding: "8px 16px", borderRadius: 6, fontSize: 12, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer" }}>Cancel</button>
+              <button
+                onClick={async () => {
+                  const currentFile = fileEdits[selectedIdx] ?? fileEdits[0];
+                  if (!currentFile || typechecking) return;
+                  setTypechecking(true);
+                  setTypecheckResult(null);
+                  try {
+                    const r = await fetch("/api/github/typecheck", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ content: currentFile.content, path: currentFile.path }),
+                      credentials: "include",
+                    });
+                    if (r.ok) setTypecheckResult(await r.json() as { errors: Array<{ line: number; col: number; message: string }>; clean: boolean });
+                  } catch { /* non-fatal */ } finally { setTypechecking(false); }
+                }}
+                disabled={typechecking}
+                style={{ padding: "8px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.28)", color: "var(--atlas-gold)", cursor: typechecking ? "default" : "pointer", opacity: typechecking ? 0.55 : 1, transition: "opacity 150ms ease" }}
+              >
+                {typechecking ? "Checking…" : "Pre-check →"}
+              </button>
               <button
                 onClick={() => {
                   if (!useNewBranch) {
@@ -1213,6 +1264,145 @@ function ChunkedBubbles({
           style={{ ...textStyle, ...(i < visibleChunks.length - 1 ? { marginBottom: 12 } : {}) }}
         />
       ))}
+    </>
+  );
+}
+
+// ── LinePatchReviewCard ───────────────────────────────────────────────────────
+function LinePatchReviewCard({
+  linePatches,
+  linkedRepo,
+  projectId,
+  onPushSuccess,
+  onPrCreated,
+}: {
+  linePatches: LinePatch[];
+  linkedRepo: LinkedRepo | null;
+  projectId: number;
+  onPushSuccess: (records: PushRecord[]) => void;
+  onPrCreated?: (prUrl: string) => void;
+}) {
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [patchedEdits, setPatchedEdits] = useState<FileEdit[] | null>(null);
+  const [showPushModal, setShowPushModal] = useState(false);
+
+  const { data: project } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
+  const token = project?.githubToken ?? null;
+
+  const pathGroups = useMemo(() => {
+    const groups: Record<string, LinePatch[]> = {};
+    for (const p of linePatches) {
+      if (!groups[p.path]) groups[p.path] = [];
+      groups[p.path].push(p);
+    }
+    return groups;
+  }, [linePatches]);
+
+  const uniquePaths = Object.keys(pathGroups);
+  const patchCount = linePatches.length;
+  const fileCount = uniquePaths.length;
+
+  const handleApply = async () => {
+    if (!linkedRepo) { setError("No repo linked — connect a GitHub repo in the Files tab."); return; }
+    if (!token) { setError("No GitHub token — add your personal token in the Files tab."); return; }
+    setApplying(true);
+    setError(null);
+    try {
+      const edits: FileEdit[] = [];
+      for (const [filePath, patches] of Object.entries(pathGroups)) {
+        const r = await fetch(
+          `/api/github/file?repo=${encodeURIComponent(linkedRepo.fullName)}&path=${encodeURIComponent(filePath)}&branch=${encodeURIComponent(linkedRepo.defaultBranch)}`,
+          { headers: { "x-github-token": token } }
+        );
+        if (!r.ok) throw new Error(`Could not fetch ${filePath.split("/").pop()} (${r.status})`);
+        const data = await r.json() as { content: string };
+        let content = data.content;
+        for (const patch of patches) {
+          const idx = content.indexOf(patch.find);
+          if (idx === -1) throw new Error(
+            `Anchor not found in ${filePath.split("/").pop()}. The file may have changed since Atlas last read it — ask Atlas to re-read the file first.`
+          );
+          content = content.slice(0, idx) + patch.replace + content.slice(idx + patch.find.length);
+        }
+        const ext = filePath.split(".").pop() ?? "";
+        const lang = ["ts", "tsx"].includes(ext) ? "typescript" : ["js", "jsx"].includes(ext) ? "javascript" : ext;
+        edits.push({ path: filePath, language: lang, content });
+      }
+      setPatchedEdits(edits);
+      setShowPushModal(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{
+        marginTop: 12, padding: "11px 14px", borderRadius: 8,
+        background: "rgba(201,162,76,0.05)", border: "1px solid rgba(201,162,76,0.2)",
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+          <div style={{ width: 26, height: 26, borderRadius: 6, flexShrink: 0, background: "rgba(201,162,76,0.12)", border: "1px solid rgba(201,162,76,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+              <circle cx="4.5" cy="4.5" r="2" stroke="var(--atlas-gold)" strokeWidth="1.2" />
+              <circle cx="4.5" cy="11.5" r="2" stroke="var(--atlas-gold)" strokeWidth="1.2" />
+              <path d="M6.2 5.8L14 3M6.2 10.2L14 13M9 8H14" stroke="var(--atlas-gold)" strokeWidth="1.1" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-gold)", marginBottom: 2 }}>
+              {patchCount} patch{patchCount !== 1 ? "es" : ""} ready
+            </div>
+            <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+              {fileCount === 1
+                ? uniquePaths[0]
+                : `${fileCount} files — ${uniquePaths.map(p => p.split("/").pop()).join(", ")}`}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={handleApply}
+          disabled={applying}
+          style={{
+            flexShrink: 0, padding: "6px 13px", borderRadius: 5, fontSize: 11, fontWeight: 600,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+            background: applying
+              ? "rgba(201,162,76,0.25)"
+              : "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)",
+            color: applying ? "var(--atlas-gold)" : "var(--atlas-bg)",
+            border: "none", cursor: applying ? "default" : "pointer",
+            boxShadow: applying ? "none" : "0 0 12px -4px color-mix(in oklab, var(--atlas-gold) 50%, transparent)",
+            transition: "opacity 160ms ease",
+          }}
+        >
+          {applying ? "Applying…" : "Apply & Review →"}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{
+          marginTop: 8, padding: "8px 12px", borderRadius: 6,
+          background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
+          fontSize: 11, color: "rgba(239,68,68,0.85)", fontFamily: "var(--app-font-mono)", lineHeight: 1.55,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {showPushModal && patchedEdits && patchedEdits.length > 0 && (
+        <GitHubPushModal
+          fileEdits={patchedEdits}
+          linkedRepo={linkedRepo}
+          projectId={projectId}
+          onClose={() => setShowPushModal(false)}
+          onPushSuccess={(records) => { onPushSuccess(records); setShowPushModal(false); }}
+          onPrCreated={onPrCreated}
+        />
+      )}
     </>
   );
 }
@@ -1546,6 +1736,16 @@ function AssistantBubble({
               Review &amp; Push →
             </button>
           </div>
+        )}
+
+        {message.linePatches && message.linePatches.length > 0 && (
+          <LinePatchReviewCard
+            linePatches={message.linePatches}
+            linkedRepo={linkedRepo}
+            projectId={projectId}
+            onPushSuccess={onPushSuccess}
+            onPrCreated={onPrCreated}
+          />
         )}
 
         {message.catchPayload && !message.catchResolved && (
@@ -6482,6 +6682,7 @@ export default function Workspace() {
         .then((res) => {
           const cp = res.catchPayload as CatchPayload | null;
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
+          const lps = (res.linePatches ?? []) as LinePatch[];
           const rawChips = (res.memoryChips ?? []) as Array<string | MemoryChip>;
           const normalizedChips: MemoryChip[] = rawChips.map((c) =>
             typeof c === "string" ? { label: c } : c
@@ -6494,6 +6695,7 @@ export default function Workspace() {
             model: res.model ?? wsModel,
             isDeepDive: !!res.isDeepDive,
             ...(fes.length > 0 ? { fileEdits: fes, fileEdit: fes[0] } : {}),
+            ...(lps.length > 0 ? { linePatches: lps } : {}),
             ...(normalizedChips.length > 0 ? { memoryChips: normalizedChips } : {}),
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
             ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),

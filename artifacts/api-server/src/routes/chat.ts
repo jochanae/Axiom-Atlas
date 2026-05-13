@@ -424,6 +424,36 @@ Rules for CMD_EXEC:
 - After the user runs a command and pastes/shares the output, continue from there (fix errors, suggest next command, etc.).
 - Do NOT emit CMD_EXEC for: destructive operations, anything requiring confirmation, anything that writes to files (use FILE_EDIT instead).
 
+LINE_PATCH protocol (surgical find-and-replace — use this instead of FILE_EDIT for large files):
+When you need to change a specific section of a large file (over ~200 lines) and you have that section in context, use LINE_PATCH instead of rewriting the whole file. It sends only the changed lines — no truncation risk, no guessing at the rest.
+
+Format — one block per change location, multiple blocks back-to-back for multiple edits:
+
+LINE_PATCH_START
+path: src/components/FunnelBuilder.tsx
+LINE_PATCH_FIND
+  const handleSubmit = async () => {
+    try {
+      await api.post("/submit");
+    } catch (e) {
+LINE_PATCH_REPLACE
+  const handleSubmit = async () => {
+    try {
+      await api.post("/submit");
+      toast.success("Done!");
+    } catch (e) {
+LINE_PATCH_END
+
+Rules for LINE_PATCH:
+- Use for large files where you have the relevant section in context but NOT the complete file.
+- The FIND block must match EXACTLY — character for character, including all whitespace and indentation. Copy it directly from the code you see in context.
+- Include 3–5 lines of surrounding context in FIND so the match is unique within the file.
+- REPLACE may be empty (to delete the FIND block), or contain the new code.
+- Multiple LINE_PATCH blocks in one response are fine — emit them back-to-back.
+- Do NOT use LINE_PATCH when you have the complete file in context — use FILE_EDIT instead (it's more reliable).
+- Do NOT mix LINE_PATCH and FILE_EDIT for the same file in one response.
+- The user sees a "Patch → Review" card and pushes to GitHub — same flow as FILE_EDIT.
+
 FILE_READ protocol (reading any file on demand mid-conversation):
 When you need the content of a specific file that isn't already in your context, emit this EXACT line at the very END of your response (after your explanation, before any FILE_EDIT blocks):
 
@@ -558,6 +588,56 @@ function extractAllFileEdits(content: string): { visibleContent: string; fileEdi
   }
 
   return { visibleContent, fileEdits };
+}
+
+// ── LINE_PATCH extraction ─────────────────────────────────────────────────────
+interface LinePatch {
+  path: string;
+  find: string;
+  replace: string;
+}
+
+function extractAllLinePatches(content: string): { visibleContent: string; linePatches: LinePatch[] } {
+  const startMarker = "LINE_PATCH_START";
+  const findMarker = "LINE_PATCH_FIND";
+  const replaceMarker = "LINE_PATCH_REPLACE";
+  const endMarker = "LINE_PATCH_END";
+
+  const linePatches: LinePatch[] = [];
+  const firstStart = content.indexOf(startMarker);
+  const visibleContent = firstStart !== -1 ? content.slice(0, firstStart).trim() : content;
+
+  let searchFrom = 0;
+  while (true) {
+    const startIdx = content.indexOf(startMarker, searchFrom);
+    if (startIdx === -1) break;
+    const endIdx = content.indexOf(endMarker, startIdx + startMarker.length);
+    if (endIdx === -1) break;
+
+    const block = content.slice(startIdx + startMarker.length, endIdx);
+    const findIdx = block.indexOf(findMarker);
+    const replaceIdx = block.indexOf(replaceMarker);
+
+    if (findIdx !== -1 && replaceIdx !== -1 && replaceIdx > findIdx) {
+      const header = block.slice(0, findIdx).trim();
+      let path = "";
+      for (const line of header.split("\n")) {
+        const ci = line.indexOf(":");
+        if (ci === -1) continue;
+        const key = line.slice(0, ci).trim();
+        const val = line.slice(ci + 1).trim();
+        if (key === "path") { path = val; break; }
+      }
+      const findContent = block.slice(findIdx + findMarker.length, replaceIdx).trim();
+      const replaceContent = block.slice(replaceIdx + replaceMarker.length).trim();
+      if (path && findContent) {
+        linePatches.push({ path, find: findContent, replace: replaceContent });
+      }
+    }
+    searchFrom = endIdx + endMarker.length;
+  }
+
+  return { visibleContent, linePatches };
 }
 
 // Matches NODE_RESOLVED: auth  /  NODE_RESOLVED: [auth]  /  NODE_RESOLVED: {auth}
@@ -1098,8 +1178,9 @@ Rules:
     }
   }
 
-  // Parse: FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
-  const { visibleContent, fileEdits } = extractAllFileEdits(rawContent);
+  // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
+  const { visibleContent: afterPatches, linePatches } = extractAllLinePatches(rawContent);
+  const { visibleContent, fileEdits } = extractAllFileEdits(afterPatches);
   const { content: afterMemory, newFacts } = extractMemoryLines(visibleContent);
   const { content: afterNodeResolved, resolvedNodes } = extractNodeResolved(afterMemory);
   const { content: afterIntent, intentType: detectedIntentType } = extractIntentType(afterNodeResolved);
@@ -1188,6 +1269,7 @@ Rules:
     memoryUpdated: newFacts.length > 0,
     fileEdits: fileEdits.length > 0 ? fileEdits : undefined,
     fileEdit: fileEdits.length > 0 ? fileEdits[0] : undefined,
+    linePatches: linePatches.length > 0 ? linePatches : undefined,
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
