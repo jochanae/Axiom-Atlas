@@ -2393,6 +2393,15 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Gradient fade — visual bridge from hero to overview */}
+      <div aria-hidden style={{
+        width: "100%", height: 52,
+        marginTop: -52,
+        pointerEvents: "none",
+        position: "relative", zIndex: 5,
+        background: "linear-gradient(to bottom, transparent, var(--atlas-bg))",
+      }} />
+
       {/* Below-the-fold: Recent Activity / Discovery section */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 24px 120px" }}>
         <BelowFoldDashboard
