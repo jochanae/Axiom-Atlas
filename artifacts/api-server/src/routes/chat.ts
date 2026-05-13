@@ -6,6 +6,7 @@ import { db, chatMessagesTable, sessionsTable, projectsTable, secretsTable } fro
 import { eq, sql, and } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
+import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 
@@ -933,6 +934,14 @@ Rules:
     systemPrompt += `\n\n--- VISUAL VAULT ---\n${vault.systemNote}\n--- END VISUAL VAULT ---`;
   }
 
+  // ── Live URL capture — screenshot any URLs in the message ─────────────────
+  const detectedUrls = extractPageUrls(message);
+  const urlBlocks = await screenshotUrlsToBlocks(detectedUrls);
+  const urlNote = buildUrlNote(urlBlocks);
+  if (urlNote) {
+    systemPrompt += `\n\n--- LIVE URL CAPTURE ---\n${urlNote}\n--- END LIVE URL CAPTURE ---`;
+  }
+
   // Fetch secret key names for this project (names only, never values)
   if (userId) {
     try {
@@ -968,7 +977,15 @@ Rules:
     } as ImageBlock);
   }
 
-  // 2. User-attached image (if any)
+  // 2. Live URL screenshots (captured from URLs detected in this message)
+  for (const ub of urlBlocks) {
+    contentParts.push({
+      type: "image",
+      source: { type: "base64", media_type: ub.source.media_type, data: ub.source.data },
+    } as ImageBlock);
+  }
+
+  // 3. User-attached image (if any)
   if (imageData) {
     contentParts.push({
       type: "image",
