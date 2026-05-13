@@ -2,8 +2,8 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { db, chatMessagesTable, sessionsTable, projectsTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { db, chatMessagesTable, sessionsTable, projectsTable, secretsTable } from "@workspace/db";
+import { eq, sql, and } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
 
@@ -931,6 +931,23 @@ Rules:
     : { imageBlocks: [], systemNote: "", hasImages: false };
   if (vault.hasImages) {
     systemPrompt += `\n\n--- VISUAL VAULT ---\n${vault.systemNote}\n--- END VISUAL VAULT ---`;
+  }
+
+  // Fetch secret key names for this project (names only, never values)
+  if (userId) {
+    try {
+      const secrets = await db
+        .select({ label: secretsTable.label })
+        .from(secretsTable)
+        .where(and(
+          eq(secretsTable.userId, userId),
+          eq(secretsTable.projectId, projectId)
+        ));
+      const secretKeys = secrets.map(s => s.label);
+      if (secretKeys.length > 0) {
+        systemPrompt += `\n\n--- SECRETS VAULT (key names only — values are encrypted and never exposed) ---\nThis project has these secrets stored: ${secretKeys.join(", ")}\nWhen a build step requires one of these keys, confirm it's already stored rather than asking the user to find it.`;
+      }
+    } catch { /* secrets unavailable */ }
   }
 
   // ── Build message history for multi-model dispatcher ─────────────────────
