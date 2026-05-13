@@ -2,6 +2,9 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, projectsTable } from "@workspace/db";
 import { eq, and, isNull, isNotNull } from "drizzle-orm";
+import { spawn } from "child_process";
+import { writeFile, mkdir, rm } from "fs/promises";
+import { randomBytes } from "crypto";
 
 const router: IRouter = Router();
 
@@ -464,6 +467,59 @@ router.post("/github/auto-link", async (req, res): Promise<void> => {
   }
 
   res.json({ linked, skipped, tokenBackfilled: tokenUpdates.length });
+});
+
+// POST /api/github/typecheck — syntax-check a proposed file before pushing
+router.post("/github/typecheck", async (req, res): Promise<void> => {
+  const { content, path: filePath } = req.body as { content?: string; path?: string };
+  if (!content || !filePath) { res.status(400).json({ error: "Missing content or path" }); return; }
+
+  const ext = filePath.split(".").pop() ?? "tsx";
+  const validExts = new Set(["ts", "tsx", "js", "jsx"]);
+  if (!validExts.has(ext)) { res.json({ errors: [], clean: true, skipped: true }); return; }
+
+  const tmpId = randomBytes(8).toString("hex");
+  const tmpDir = `/tmp/atlas-tc-${tmpId}`;
+  const tmpFile = `${tmpDir}/check.${ext}`;
+  const tscPath = "/home/runner/workspace/node_modules/.bin/tsc";
+
+  try {
+    await mkdir(tmpDir, { recursive: true });
+    await writeFile(tmpFile, content, "utf-8");
+
+    const output = await new Promise<string>((resolve) => {
+      const proc = spawn(tscPath, [
+        tmpFile,
+        "--noEmit",
+        "--allowJs",
+        "--skipLibCheck",
+        "--noResolve",
+        "--target", "ES2020",
+        "--lib", "ES2020,DOM",
+        "--jsx", "react-jsx",
+        "--strict",
+      ], { env: process.env });
+      let buf = "";
+      proc.stdout.on("data", (d: Buffer) => { buf += d.toString(); });
+      proc.stderr.on("data", (d: Buffer) => { buf += d.toString(); });
+      proc.on("close", () => resolve(buf));
+    });
+
+    const errors = output.split("\n")
+      .filter(line => line.includes("): error TS"))
+      .map(line => {
+        const m = line.match(/\((\d+),(\d+)\):\s+error\s+TS\d+:\s+(.+)/);
+        if (m) return { line: parseInt(m[1] ?? "0"), col: parseInt(m[2] ?? "0"), message: (m[3] ?? line).trim() };
+        return null;
+      })
+      .filter((e): e is { line: number; col: number; message: string } => e !== null);
+
+    res.json({ errors, clean: errors.length === 0 });
+  } catch (e) {
+    res.status(500).json({ error: "Typecheck failed", detail: String(e) });
+  } finally {
+    try { await rm(tmpDir, { recursive: true, force: true }); } catch {}
+  }
 });
 
 export default router;
