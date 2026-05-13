@@ -38,6 +38,7 @@ export default function SecretsPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [selectedProject, setSelectedProject] = useState<string>("all");
 
   // Add form state
   const [addLabel, setAddLabel] = useState("");
@@ -142,10 +143,13 @@ export default function SecretsPage() {
     }
   };
 
+  const projectNames = ["all", ...Array.from(new Set(secrets.map(s => s.projectName || "General")))];
+
   const filtered = secrets.filter(s => {
-    if (!search.trim()) return true;
+    const matchesProject = selectedProject === "all" || (s.projectName || "General") === selectedProject;
+    if (!search.trim()) return matchesProject;
     const q = search.toLowerCase();
-    return s.label.toLowerCase().includes(q) || s.projectName.toLowerCase().includes(q);
+    return matchesProject && (s.label.toLowerCase().includes(q) || s.projectName.toLowerCase().includes(q));
   });
 
   // Group by project
@@ -183,6 +187,27 @@ export default function SecretsPage() {
           </svg>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search secrets…" style={{ background: "transparent", border: "none", outline: "none", ...sans, fontSize: 12, color: "var(--atlas-fg)", width: 120 }} />
         </div>
+        <select
+          value={selectedProject}
+          onChange={e => setSelectedProject(e.target.value)}
+          style={{
+            background: "var(--atlas-surface)",
+            border: "1px solid var(--atlas-border)",
+            borderRadius: 8,
+            padding: "6px 10px",
+            fontSize: 11,
+            fontFamily: "var(--app-font-mono)",
+            color: "var(--atlas-fg)",
+            cursor: "pointer",
+            outline: "none",
+          }}
+        >
+          {projectNames.map(name => (
+            <option key={name} value={name}>
+              {name === "all" ? "All Projects" : name}
+            </option>
+          ))}
+        </select>
         <button
           onClick={() => setShowAdd(v => !v)}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, background: "rgba(201,162,76,0.1)", border: "1px solid rgba(201,162,76,0.25)", color: "var(--atlas-gold)", ...mono, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer" }}
