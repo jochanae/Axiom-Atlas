@@ -1818,7 +1818,8 @@ export default function Home() {
       <div className="atlas-chat-card-top" style={{ borderRadius: 0, padding: "5px 16px", zIndex: 20, position: "sticky", top: 50, height: 36, boxSizing: "border-box" }}>
           {/* ATLAS label centered */}
           <span style={{
-            position: "absolute", left: "50%", transform: "translateX(-50%)",
+            position: "absolute", left: "50%", top: "50%",
+            transform: "translate(-50%, -50%)",
             fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.28em",
             color: "var(--atlas-gold)", opacity: 1, fontWeight: 700,
             textTransform: "uppercase", pointerEvents: "none", whiteSpace: "nowrap",
