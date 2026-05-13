@@ -5,6 +5,7 @@ import { eq, and, isNull, isNotNull } from "drizzle-orm";
 import { spawn } from "child_process";
 import { writeFile, mkdir, rm } from "fs/promises";
 import { randomBytes } from "crypto";
+import * as nodePath from "path";
 
 const router: IRouter = Router();
 
@@ -467,6 +468,30 @@ router.post("/github/auto-link", async (req, res): Promise<void> => {
   }
 
   res.json({ linked, skipped, tokenBackfilled: tokenUpdates.length });
+});
+
+// POST /api/github/apply-local — write proposed file(s) directly to workspace filesystem (triggers Vite HMR)
+router.post("/github/apply-local", async (req, res): Promise<void> => {
+  const { files } = req.body as { files?: Array<{ path: string; content: string }> };
+  if (!files?.length) { res.status(400).json({ error: "Missing files" }); return; }
+
+  const WORKSPACE_ROOT = "/home/runner/workspace";
+  const applied: string[] = [];
+  const needsBuild: boolean[] = [];
+
+  for (const { path: filePath, content } of files) {
+    const resolved = nodePath.resolve(WORKSPACE_ROOT, filePath);
+    if (!resolved.startsWith(WORKSPACE_ROOT + "/")) {
+      res.status(400).json({ error: `Disallowed path: ${filePath}` }); return;
+    }
+    await mkdir(nodePath.dirname(resolved), { recursive: true });
+    await writeFile(resolved, content, "utf-8");
+    applied.push(filePath);
+    needsBuild.push(filePath.startsWith("artifacts/api-server/"));
+  }
+
+  const requiresServerBuild = needsBuild.some(Boolean);
+  res.json({ applied, requiresServerBuild });
 });
 
 // POST /api/github/typecheck — syntax-check a proposed file before pushing
