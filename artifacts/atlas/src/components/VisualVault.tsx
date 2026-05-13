@@ -20,6 +20,9 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [lightbox, setLightbox] = useState<GalleryImage | null>(null);
+  const [urlInput, setUrlInput] = useState("");
+  const [capturing, setCapturing] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchImages = useCallback(async () => {
@@ -99,6 +102,34 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
       toast("Could not delete image");
     }
   }, [lightbox]);
+
+  const handleCapture = useCallback(async () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    const withProtocol = url.startsWith("http") ? url : `https://${url}`;
+    setCaptureError(null);
+    setCapturing(true);
+    try {
+      const res = await fetch("/api/gallery/screenshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ url: withProtocol, projectId: projectId ?? null }),
+      });
+      const data = await res.json() as { image?: GalleryImage; error?: string };
+      if (!res.ok || !data.image) {
+        setCaptureError(data.error ?? "Capture failed — check the URL and try again");
+        return;
+      }
+      setUrlInput("");
+      await fetchImages();
+      toast("Page captured and saved to vault");
+    } catch {
+      setCaptureError("Network error — try again");
+    } finally {
+      setCapturing(false);
+    }
+  }, [urlInput, projectId, fetchImages]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -196,14 +227,69 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
           {/* Upload progress bar */}
           {uploading && (
             <div style={{ height: 2, background: "rgba(201,162,76,0.08)", flexShrink: 0 }}>
-              <div style={{
-                height: "100%",
-                width: `${uploadProgress}%`,
-                background: "var(--atlas-gold)",
-                transition: "width 0.3s ease",
-              }} />
+              <div style={{ height: "100%", width: `${uploadProgress}%`, background: "var(--atlas-gold)", transition: "width 0.3s ease" }} />
             </div>
           )}
+
+          {/* URL capture bar */}
+          <div style={{ padding: "10px 16px 0", flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+              <input
+                type="url"
+                value={urlInput}
+                onChange={e => { setUrlInput(e.target.value); setCaptureError(null); }}
+                onKeyDown={e => e.key === "Enter" && !capturing && handleCapture()}
+                placeholder="Paste a URL to capture full-page screenshot"
+                disabled={capturing}
+                style={{
+                  flex: 1,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(201,162,76,0.2)",
+                  borderRadius: 8,
+                  padding: "8px 11px",
+                  fontSize: 12,
+                  color: "var(--atlas-fg)",
+                  fontFamily: "var(--app-font-mono)",
+                  outline: "none",
+                  opacity: capturing ? 0.6 : 1,
+                }}
+              />
+              <button
+                onClick={handleCapture}
+                disabled={!urlInput.trim() || capturing}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  background: capturing ? "rgba(201,162,76,0.08)" : "rgba(201,162,76,0.15)",
+                  border: "1px solid rgba(201,162,76,0.35)",
+                  color: "var(--atlas-gold)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  fontFamily: "var(--app-font-mono)",
+                  letterSpacing: "0.06em",
+                  cursor: !urlInput.trim() || capturing ? "not-allowed" : "pointer",
+                  opacity: !urlInput.trim() || capturing ? 0.5 : 1,
+                  whiteSpace: "nowrap",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  flexShrink: 0,
+                }}
+              >
+                {capturing ? (
+                  <>
+                    <div style={{ width: 10, height: 10, borderRadius: "50%", border: "1.5px solid rgba(201,162,76,0.3)", borderTopColor: "var(--atlas-gold)", animation: "spin 0.8s linear infinite" }} />
+                    Capturing
+                  </>
+                ) : "Capture"}
+              </button>
+            </div>
+            {captureError && (
+              <div style={{ fontSize: 10, color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)", marginTop: 5, paddingLeft: 2 }}>
+                {captureError}
+              </div>
+            )}
+          </div>
 
           {/* Body */}
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 20px" }}>
