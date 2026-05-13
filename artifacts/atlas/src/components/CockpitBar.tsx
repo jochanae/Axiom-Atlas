@@ -26,6 +26,7 @@ function AxiomLogoSVG() {
         </radialGradient>
       </defs>
       <rect width="512" height="512" rx="90" fill="#0D0B09" />
+      <rect width="512" height="512" rx="90" fill="url(#cpg)" />
       <polygon points="256,110 170,402 212,402 274,172" fill="url(#cgs)" />
       <polygon points="256,110 342,402 300,402 238,172" fill="url(#cgs)" />
       <rect x="180" y="282" width="152" height="34" rx="5" fill="url(#cgs)" />
@@ -209,7 +210,7 @@ export function CockpitBar({
             position: "absolute", top: -28, left: "50%",
             transform: "translateX(-50%)",
             width: 64, height: 64, borderRadius: "50%",
-            background: "#0D0B09", border: "2px solid #D4AF37",
+            background: "var(--atlas-bg)", border: "2px solid #D4AF37",
             display: "flex", alignItems: "center", justifyContent: "center",
             zIndex: 10, cursor: "pointer",
             animation: hasSession ? "axiom-pulse-bar 2s ease-in-out infinite" : "none",

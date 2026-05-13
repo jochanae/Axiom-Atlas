@@ -1850,7 +1850,7 @@ export default function Home() {
             ) : (
               <>
                 {/* Chat action bar */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 2, borderBottom: "1px solid var(--atlas-border)", background: "rgba(12,10,9,0.35)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", paddingRight: 6, height: 26, flexShrink: 0, marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 2, borderBottom: "1px solid var(--atlas-border)", background: "rgba(0,0,0,0.15)", paddingRight: 6, height: 26, flexShrink: 0, marginBottom: 6 }}>
                   {showClearConfirm ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(239,68,68,0.65)", letterSpacing: "0.04em" }}>Clear conversation?</span>
@@ -2066,7 +2066,7 @@ export default function Home() {
           </div>
 
           {/* Input shell */}
-          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px", background: "transparent", border: "none", borderRadius: 0, boxShadow: "none", transition: "box-shadow 600ms ease" }}>
+          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px", boxShadow: ({ strategic: "0 0 0 1.5px rgba(201,162,76,0.4), 0 0 18px rgba(201,162,76,0.12)", audit: "0 0 0 1.5px rgba(239,100,68,0.5), 0 0 18px rgba(239,100,68,0.15)", "deep-dive": "0 0 0 1.5px rgba(99,130,239,0.5), 0 0 18px rgba(99,130,239,0.15)" } as Record<string, string>)[atlasDetectedMode] ?? "none", transition: "box-shadow 600ms ease" }}>
             {/* Hidden file input — uses id so label can trigger it natively on mobile */}
             <input
               ref={fileInputRef}
@@ -2505,7 +2505,7 @@ export default function Home() {
       {/* Scroll-to-latest button — appears when scrolled up in a long conversation */}
       {showScrollBtn && (
         <button
-          onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
+          onClick={() => chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" })}
           style={{
             position: "fixed",
             bottom: 90,
@@ -2623,7 +2623,6 @@ export default function Home() {
               style={{
                 width: 56, height: 56, borderRadius: "50%",
                 border: "2px solid #D4AF37",
-                background: "#0D0B09",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: "pointer", marginTop: -26,
                 animation: "homeAxiomPulse 2.5s ease-in-out infinite",
