@@ -448,11 +448,51 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // Persist the user message to the Living Thread
   await db.insert(nexusMessagesTable).values({ userId, role: "user", content: message, conversationId: conversationId ?? null });
 
+  // Set SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const finishStream = async (rawContent: string) => {
+    // Strip MEMORY_Tn tags from persisted output
+    const { content: visibleContent, memoryUpdated } = extractMemoryLines(rawContent);
+
+    // Detect active mode from Atlas's response
+    const lowerContent = visibleContent.toLowerCase();
+    const detectedMode: string = (() => {
+      const auditSignals = ["broken", "gap", "risk", "fragile", "inconsistent", "conflict", "missing", "dead end", "what's wrong", "fix", "⚠️"];
+      const deepSignals = ["let's go deeper", "specifically", "zoom in", "focused on", "only this", "this one"];
+      const auditScore = auditSignals.filter(s => lowerContent.includes(s)).length;
+      const deepScore = deepSignals.filter(s => lowerContent.includes(s)).length;
+      if (auditScore >= 2) return "audit";
+      if (deepScore >= 2) return "deep-dive";
+      return "strategic";
+    })();
+
+    // Detect if Atlas keeps referencing one project and suggest focus
+    const projectMentions = projects.map(p => ({
+      id: p.id,
+      name: p.name,
+      count: (lowerContent.match(new RegExp(p.name.toLowerCase(), "g")) ?? []).length
+    })).filter(p => p.count >= 2).sort((a, b) => b.count - a.count);
+
+    const focusSuggestion = !focusProjectId && projectMentions.length > 0
+      ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
+      : null;
+
+    // Persist the assistant response to the Living Thread
+    await db.insert(nexusMessagesTable).values({ userId, role: "assistant", content: visibleContent, conversationId: conversationId ?? null });
+
+    res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion })}\n\n`);
+    res.end();
+  };
+
   // Call the selected model
-  let rawContent = "";
   const activeModel = model === "gemini" ? "gemini" : "claude";
 
   if (activeModel === "gemini") {
+    let rawContent = "";
     const combinedText = [
       ...conversationHistory.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`),
       `User: ${message}`,
@@ -472,108 +512,102 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       });
       rawContent = result.text ?? "";
     }
-  } else {
-    // Build user content — plain text or vision block when an image is attached
-    // Vault images are prepended ahead of any user-attached image
-    type VaultBlock = Anthropic.ImageBlockParam;
-    type TextBlock = Anthropic.TextBlockParam;
-
-    const contentParts: Array<VaultBlock | TextBlock> = [];
-
-    // 1. Vault images (project visual context) — injected first so Atlas sees them before the user's message
-    for (const vb of vault.imageBlocks) {
-      contentParts.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: vb.source.media_type,
-          data: vb.source.data,
-        },
-      } as VaultBlock);
-    }
-
-    // 2. Live URL screenshots (captured from URLs detected in this message)
-    for (const ub of urlBlocks) {
-      contentParts.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: ub.source.media_type,
-          data: ub.source.data,
-        },
-      } as VaultBlock);
-    }
-
-    // 3. User-attached image (if any)
-    if (imageBase64 && imageMimeType) {
-      contentParts.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-          data: imageBase64,
-        },
-      } as VaultBlock);
-    }
-
-    // 3. User text
-    contentParts.push({ type: "text", text: message });
-
-    const userContent: Anthropic.MessageParam["content"] =
-      contentParts.length === 1 ? message : contentParts;
-
-    const claudeMessages: Anthropic.MessageParam[] = [
-      ...conversationHistory,
-      { role: "user", content: userContent },
-    ];
-    const aiResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: claudeMessages,
-    });
-    rawContent = aiResponse.content[0]?.type === "text" ? aiResponse.content[0].text : "";
+    res.write(`event: token\ndata: ${JSON.stringify(rawContent)}\n\n`);
+    await finishStream(rawContent);
+    return;
   }
 
-  // Strip MEMORY_Tn tags from visible output
-  const { content: visibleContent, memoryUpdated } = extractMemoryLines(rawContent);
+  // Build user content — plain text or vision block when an image is attached
+  // Vault images are prepended ahead of any user-attached image
+  type VaultBlock = Anthropic.ImageBlockParam;
+  type TextBlock = Anthropic.TextBlockParam;
 
-  // Detect active mode from Atlas's response
-  const lowerContent = visibleContent.toLowerCase();
-  const detectedMode: string = (() => {
-    const auditSignals = ["broken", "gap", "risk", "fragile", "inconsistent", "conflict", "missing", "dead end", "what's wrong", "fix", "⚠️"];
-    const deepSignals = ["let's go deeper", "specifically", "zoom in", "focused on", "only this", "this one"];
-    const auditScore = auditSignals.filter(s => lowerContent.includes(s)).length;
-    const deepScore = deepSignals.filter(s => lowerContent.includes(s)).length;
-    if (auditScore >= 2) return "audit";
-    if (deepScore >= 2) return "deep-dive";
-    return "strategic";
-  })();
+  const contentParts: Array<VaultBlock | TextBlock> = [];
 
-  // Detect if Atlas keeps referencing one project and suggest focus
-  const projectMentions = projects.map(p => ({
-    id: p.id,
-    name: p.name,
-    count: (lowerContent.match(new RegExp(p.name.toLowerCase(), "g")) ?? []).length
-  })).filter(p => p.count >= 2).sort((a, b) => b.count - a.count);
+  // 1. Vault images (project visual context) — injected first so Atlas sees them before the user's message
+  for (const vb of vault.imageBlocks) {
+    contentParts.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: vb.source.media_type,
+        data: vb.source.data,
+      },
+    } as VaultBlock);
+  }
 
-  const focusSuggestion = !focusProjectId && projectMentions.length > 0
-    ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
-    : null;
+  // 2. Live URL screenshots (captured from URLs detected in this message)
+  for (const ub of urlBlocks) {
+    contentParts.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: ub.source.media_type,
+        data: ub.source.data,
+      },
+    } as VaultBlock);
+  }
 
-  // Persist the assistant response to the Living Thread
-  await db.insert(nexusMessagesTable).values({ userId, role: "assistant", content: visibleContent, conversationId: conversationId ?? null });
+  // 3. User-attached image (if any)
+  if (imageBase64 && imageMimeType) {
+    contentParts.push({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+        data: imageBase64,
+      },
+    } as VaultBlock);
+  }
 
-  res.json({
-    response: visibleContent,
-    memoryUpdated,
-    detectedMode,
-    focusSuggestion,
+  // 3. User text
+  contentParts.push({ type: "text", text: message });
+
+  const userContent: Anthropic.MessageParam["content"] =
+    contentParts.length === 1 ? message : contentParts;
+
+  const anthropicMessages: Anthropic.MessageParam[] = [
+    ...conversationHistory,
+    { role: "user", content: userContent },
+  ];
+
+  const stream = anthropic.messages.stream({
+    model: "claude-sonnet-4-5",
+    max_tokens: 1500,
+    system: systemPrompt,
+    messages: anthropicMessages,
   });
+
+  let fullText = "";
+
+  stream.on("text", (text) => {
+    fullText += text;
+    res.write(`event: token\ndata: ${JSON.stringify(text)}\n\n`);
+  });
+
+  stream.on("error", (err) => {
+    res.write(`event: error\ndata: ${JSON.stringify(err.message)}\n\n`);
+    res.end();
+  });
+
+  stream.on("finalMessage", async () => {
+    try {
+      await finishStream(fullText);
+    } catch (err) {
+      req.log.error({ err }, "nexus/chat stream finalization error");
+      res.write(`event: error\ndata: ${JSON.stringify("Atlas ran into an issue. Please try again.")}\n\n`);
+      res.end();
+    }
+  });
+
+  return;
 
   } catch (err) {
     req.log.error({ err }, "nexus/chat error");
-    if (!res.headersSent) {
+    if (res.headersSent && !res.writableEnded) {
+      res.write(`event: error\ndata: ${JSON.stringify("Atlas ran into an issue. Please try again.")}\n\n`);
+      res.end();
+    } else if (!res.headersSent) {
       res.status(500).json({ error: "Atlas ran into an issue. Please try again." });
     }
   }

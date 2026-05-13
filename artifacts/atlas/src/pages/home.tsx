@@ -1201,7 +1201,7 @@ export default function Home() {
   const [showProjectsSheet, setShowProjectsSheet] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; imageUrl?: string; model?: string; intentType?: string | null; isNew?: boolean}>>([]);
+  const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; imageUrl?: string; model?: string; intentType?: string | null; isNew?: boolean; id?: string; streaming?: boolean}>>([]);
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
@@ -1539,21 +1539,47 @@ export default function Home() {
         setAttachedFiles(files);
         return;
       }
-      const data = await res.json() as { reply?: string; message?: string };
-      const replyText = (data as any).response ?? (data as any).reply ?? (data as any).message ?? "";
-      const intentType = (() => {
-        const lower = replyText.toLowerCase();
-        const buildSignals = ["let me build", "here's the code", "here is the code", "i'll implement", "i'll create", "i'll write", "here's a component", "here is a component"];
-        const planSignals = ["here's a plan", "here is a plan", "let's structure", "roadmap", "framework", "here's an outline", "here is an outline", "breakdown"];
-        if (buildSignals.some(s => lower.includes(s))) return "BUILD";
-        if (planSignals.some(s => lower.includes(s))) return "PLAN";
-        return null;
-      })();
-      setHomeMessages(prev => [...prev, { role: 'assistant', content: replyText, model: homeModel, intentType, isNew: true }]);
-      if ((data as any).detectedMode) setAtlasDetectedMode((data as any).detectedMode);
-      if ((data as any).focusSuggestion) setFocusSuggestion((data as any).focusSuggestion);
-      if ((data as any).detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) {
-        setShowHandoff(true);
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let streamedText = "";
+
+      // Add a streaming message bubble immediately
+      const streamingId = Date.now().toString();
+      setHomeMessages(prev => [...prev, { role: 'assistant', content: '', model: homeModel, intentType: null, isNew: true, id: streamingId, streaming: true }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const blocks = buf.split("\n\n");
+        buf = blocks.pop() ?? "";
+        for (const block of blocks) {
+          let evtName = "";
+          let evtData = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event: ")) evtName = line.slice(7).trim();
+            else if (line.startsWith("data: ")) evtData = line.slice(6);
+          }
+          if (!evtData) continue;
+          try {
+            if (evtName === "token") {
+              const token = JSON.parse(evtData) as string;
+              streamedText += token;
+              setHomeMessages(prev => prev.map(m =>
+                (m as any).id === streamingId ? { ...m, content: streamedText } : m
+              ));
+            } else if (evtName === "done") {
+              const meta = JSON.parse(evtData) as { memoryUpdated: boolean; detectedMode: string; focusSuggestion: any };
+              setHomeMessages(prev => prev.map(m =>
+                (m as any).id === streamingId ? { ...m, streaming: false } : m
+              ));
+              if (meta.detectedMode) setAtlasDetectedMode(meta.detectedMode);
+              if (meta.focusSuggestion) setFocusSuggestion(meta.focusSuggestion);
+              if (meta.detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) setShowHandoff(true);
+            }
+          } catch {}
+        }
       }
     } catch {
       toast("Connection error. Your message was not lost — tap send again.");
