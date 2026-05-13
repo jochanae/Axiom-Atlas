@@ -483,7 +483,7 @@ html, body {
   padding: 5px 8px 5px 12px;
   min-height: 32px;
   flex-shrink: 0;
-  border-radius: 0;
+  border-radius: 12px 12px 0 0;
   background: rgba(20, 17, 14, 0.72);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
