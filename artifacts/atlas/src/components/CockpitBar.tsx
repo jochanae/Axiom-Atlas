@@ -210,7 +210,7 @@ export function CockpitBar({
             position: "absolute", top: -28, left: "50%",
             transform: "translateX(-50%)",
             width: 64, height: 64, borderRadius: "50%",
-            background: "var(--atlas-bg)", border: "2px solid #D4AF37",
+            background: "#0D0B09", border: "2px solid #D4AF37",
             display: "flex", alignItems: "center", justifyContent: "center",
             zIndex: 10, cursor: "pointer",
             animation: hasSession ? "axiom-pulse-bar 2s ease-in-out infinite" : "none",
