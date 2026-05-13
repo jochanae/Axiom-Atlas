@@ -6112,6 +6112,8 @@ export default function Workspace() {
   }, [chatPending]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatPanelScrollRef = useRef<HTMLDivElement>(null);
+  const [showWsScrollBtn, setShowWsScrollBtn] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialSent = useRef(false);
@@ -7777,7 +7779,15 @@ export default function Workspace() {
             </div>
           ) : (
           /* ── Chat view ── */
-          <div style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px", position: "relative" }} className="scrollbar-none atlas-chat-timeline">
+          <div
+            ref={chatPanelScrollRef}
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              setShowWsScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
+            }}
+            style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px", position: "relative" }}
+            className="scrollbar-none atlas-chat-timeline"
+          >
             {messages.length === 0 && !chatPending && (
               <div style={{ padding: "52px 20px 32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
                 <>
@@ -7925,6 +7935,34 @@ export default function Workspace() {
             )}
 
             <div ref={bottomRef} />
+
+            {showWsScrollBtn && (
+              <button
+                onClick={() => chatPanelScrollRef.current?.scrollTo({ top: chatPanelScrollRef.current.scrollHeight, behavior: "smooth" })}
+                style={{
+                  position: "sticky",
+                  bottom: 12,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "var(--atlas-surface)",
+                  border: "1px solid var(--atlas-gold)",
+                  borderRadius: 20,
+                  padding: "6px 16px",
+                  color: "var(--atlas-gold)",
+                  fontSize: 12,
+                  fontFamily: "var(--app-font-mono)",
+                  cursor: "pointer",
+                  boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+                  letterSpacing: "0.04em",
+                  zIndex: 20,
+                }}
+              >
+                <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span> latest
+              </button>
+            )}
           </div>
           )} {/* end chat/diff ternary */}
 
