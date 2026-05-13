@@ -68,6 +68,87 @@ router.post("/gallery", async (req, res): Promise<void> => {
   }
 });
 
+// POST /gallery/screenshot — capture a URL as a full-page screenshot → vault
+router.post("/gallery/screenshot", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+    const { url, projectId, label } = req.body as { url: string; projectId?: number | null; label?: string };
+
+    if (!url || !url.startsWith("http")) {
+      res.status(400).json({ error: "Valid URL required (must start with http)" });
+      return;
+    }
+
+    // 1. Call Microlink screenshot API (free, no key needed)
+    const microlinkURL =
+      `https://api.microlink.io/?url=${encodeURIComponent(url)}` +
+      `&screenshot=true&fullPage=true&meta=false&embed=screenshot.url`;
+
+    const mlRes = await fetch(microlinkURL, {
+      headers: { "User-Agent": "Atlas-Vault/1.0" },
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!mlRes.ok) {
+      res.status(502).json({ error: "Screenshot service unavailable — try again shortly" });
+      return;
+    }
+
+    const mlData = await mlRes.json() as {
+      status: string;
+      data?: { screenshot?: { url?: string; type?: string } };
+    };
+
+    const screenshotUrl = mlData?.data?.screenshot?.url;
+    if (!screenshotUrl) {
+      res.status(502).json({ error: "Could not capture screenshot for that URL — check that it's publicly accessible" });
+      return;
+    }
+
+    // 2. Download the screenshot image as a Buffer
+    const imgRes = await fetch(screenshotUrl, { signal: AbortSignal.timeout(20_000) });
+    if (!imgRes.ok) {
+      res.status(502).json({ error: "Failed to download screenshot" });
+      return;
+    }
+    const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+    const contentType = imgRes.headers.get("content-type") || "image/png";
+
+    // 3. Get a presigned PUT URL from GCS (same path as client-upload flow)
+    const uploadURL = await storage.getObjectEntityUploadURL();
+    const objectPath = storage.normalizeObjectEntityPath(uploadURL);
+
+    // 4. PUT the image buffer directly to GCS
+    const putRes = await fetch(uploadURL, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: imgBuffer,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!putRes.ok) {
+      res.status(502).json({ error: "Failed to store screenshot" });
+      return;
+    }
+
+    // 5. Save the DB record
+    const hostname = (() => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } })();
+    const [row] = await db
+      .insert(galleryImagesTable)
+      .values({
+        userId,
+        projectId: projectId ?? null,
+        objectPath,
+        label: label ?? hostname,
+      })
+      .returning();
+
+    res.json({ image: row });
+  } catch (err) {
+    req.log.error({ err }, "gallery screenshot error");
+    res.status(500).json({ error: "Screenshot failed" });
+  }
+});
+
 // DELETE /gallery/:id
 router.delete("/gallery/:id", async (req, res): Promise<void> => {
   try {
