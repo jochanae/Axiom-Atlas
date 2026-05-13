@@ -422,10 +422,42 @@ Rules for CMD_EXEC:
 - Common safe commands: pnpm typecheck, pnpm build, git status, git log --oneline -10, git pull, git diff, ls, cat [file].
 - The user sees a "Run →" button — one tap executes it and streams output back.
 - After the user runs a command and pastes/shares the output, continue from there (fix errors, suggest next command, etc.).
-- Do NOT emit CMD_EXEC for: destructive operations, anything requiring confirmation, anything that writes to files (use FILE_EDIT instead).`;
+- Do NOT emit CMD_EXEC for: destructive operations, anything requiring confirmation, anything that writes to files (use FILE_EDIT instead).
+
+FILE_READ protocol (reading any file on demand mid-conversation):
+When you need the content of a specific file that isn't already in your context, emit this EXACT line at the very END of your response (after your explanation, before any FILE_EDIT blocks):
+
+FILE_READ_REQUEST:{"paths":["src/components/FunnelBuilder.tsx","src/hooks/useAuth.ts"]}
+
+Rules for FILE_READ:
+- Only request files when you genuinely need the content to answer (building, debugging, or editing an existing file).
+- Max 3 paths per request. Use exact paths from the file tree — no guessing.
+- Do NOT request files for planning/conceptual questions where you don't need the implementation.
+- The system fetches them from GitHub automatically and sends you a follow-up with the full content — you will then see the code and can respond with FILE_EDIT or a precise answer.
+- After receiving files you asked for, proceed immediately with your task (build, fix, explain the specific code). Do not ask for permission.
+- If the file tree isn't in context, ask the user to open a workspace with a linked repo first.`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export type MemoryChipRich = { label: string; insight?: string };
+
+/** Extract a FILE_READ_REQUEST from Atlas's response, returning paths + cleaned content */
+function extractFileReadRequest(content: string): { paths: string[]; cleanedContent: string } {
+  const marker = "FILE_READ_REQUEST:";
+  const idx = content.lastIndexOf(marker);
+  if (idx === -1) return { paths: [], cleanedContent: content };
+  const jsonStr = content.slice(idx + marker.length).trim().split("\n")[0]?.trim() ?? "";
+  const cleanedContent = content.slice(0, idx).trim();
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && Array.isArray(parsed.paths)) {
+      const paths = (parsed.paths as unknown[])
+        .filter((p): p is string => typeof p === "string")
+        .slice(0, 3);
+      return { paths, cleanedContent };
+    }
+  } catch { /* malformed JSON — ignore */ }
+  return { paths: [], cleanedContent: content };
+}
 
 function detectMemoryChips(content: string): { content: string; memoryChips: MemoryChipRich[] } {
   const marker = "MEMORY_CHIPS:";
@@ -1016,7 +1048,55 @@ Rules:
     });
   }
 
-  const rawContent = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+  let rawContent = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+
+  // FILE_READ intercept — Atlas requested specific files; fetch them and call model again
+  if (repoData?.fullName && resolvedGithubToken) {
+    const { paths: readPaths, cleanedContent: readCleanedContent } = extractFileReadRequest(rawContent);
+    if (readPaths.length > 0) {
+      try {
+        const fetchedFiles = await Promise.all(
+          readPaths.map(async (fp) => {
+            try {
+              const r = await fetch(
+                `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
+                { headers: ghHeaders(resolvedGithubToken!) }
+              );
+              if (!r.ok) return null;
+              const d = await r.json() as { encoding?: string; content?: string };
+              if (d.encoding !== "base64" || !d.content) return null;
+              const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
+              const lines = fileContent.split("\n");
+              const truncated = lines.length > 600;
+              return {
+                path: fp,
+                content: truncated ? lines.slice(0, 600).join("\n") : fileContent,
+                truncated,
+                lineCount: lines.length,
+              };
+            } catch { return null; }
+          })
+        );
+        const validFiles = fetchedFiles.filter(
+          (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
+        );
+        if (validFiles.length > 0) {
+          const filesSummary = validFiles
+            .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
+            .join("\n\n");
+          const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+            ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+            { role: "assistant", content: readCleanedContent },
+            {
+              role: "user",
+              content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`,
+            },
+          ];
+          rawContent = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+        }
+      } catch { /* Non-fatal — keep rawContent from first call */ }
+    }
+  }
 
   // Parse: FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent, fileEdits } = extractAllFileEdits(rawContent);
