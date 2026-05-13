@@ -1814,14 +1814,13 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ATLAS subheader — full-width bar beneath main header, only when conversation is active */}
-      {(homeMessages.length > 0 || isAtlasStreaming) && (
-        <div className="atlas-chat-card-top" style={{ borderRadius: 0, padding: "5px 16px", zIndex: 20, position: "sticky", top: 50, height: 36, boxSizing: "border-box" }}>
+      {/* ATLAS subheader — always-visible bar beneath main header */}
+      <div className="atlas-chat-card-top" style={{ borderRadius: 0, padding: "5px 16px", zIndex: 20, position: "sticky", top: 50, height: 36, boxSizing: "border-box" }}>
           {/* ATLAS label centered */}
           <span style={{
             position: "absolute", left: "50%", transform: "translateX(-50%)",
             fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em",
-            color: "var(--atlas-gold)", opacity: 0.45, fontWeight: 700,
+            color: "var(--atlas-gold)", opacity: 0.82, fontWeight: 700,
             textTransform: "uppercase", pointerEvents: "none", whiteSpace: "nowrap",
           }}>
             ATLAS
@@ -1850,9 +1849,9 @@ export default function Home() {
                 <button
                   onClick={() => setShowChatMenu(v => !v)}
                   title="More options"
-                  style={{ background: "transparent", border: "none", padding: "4px 6px", cursor: "pointer", color: "var(--atlas-muted)", opacity: 0.4, lineHeight: 1, transition: "opacity 140ms" }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = "0.4")}
+                  style={{ background: "transparent", border: "none", padding: "4px 6px", cursor: "pointer", color: "var(--atlas-muted)", opacity: 0.65, lineHeight: 1, transition: "opacity 140ms" }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = "0.65")}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
@@ -1883,7 +1882,6 @@ export default function Home() {
             )}
           </div>
         </div>
-      )}
 
       {/* First-run overlay — new users with no projects, once per session */}
       {showOverlay && (
