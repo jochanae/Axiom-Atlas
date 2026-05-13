@@ -124,12 +124,24 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 
 // ── Global Pull-to-refresh ────────────────────────────────────────────────────
 function GlobalPTR() {
+  const [location] = useLocation();
   const queryClient = useQueryClient();
+
+  const DISABLE_PTR_ROUTES = [
+    "/project/", // workspace chat — never pull to refresh mid-session
+  ];
+
+  const isPTRDisabled = DISABLE_PTR_ROUTES.some(r => location.startsWith(r));
+
   const { pulling, distance, refreshing, threshold } = usePullToRefresh(
     useCallback(async () => {
       await queryClient.invalidateQueries();
     }, [queryClient]),
+    !isPTRDisabled,
   );
+
+  if (isPTRDisabled) return null;
+
   return (
     <div style={{
       position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
@@ -172,12 +184,14 @@ function PageTransition() {
 
   const show = () => {
     if (timer.current) clearTimeout(timer.current);
-    setOpacity(1);
-    setVisible(true);
     timer.current = setTimeout(() => {
-      setOpacity(0);
-      timer.current = setTimeout(() => setVisible(false), 350);
-    }, 650);
+      setOpacity(1);
+      setVisible(true);
+      timer.current = setTimeout(() => {
+        setOpacity(0);
+        timer.current = setTimeout(() => setVisible(false), 300);
+      }, 400);
+    }, 150);
   };
 
   useEffect(() => {
@@ -205,7 +219,7 @@ function PageTransition() {
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center", gap: 20,
       opacity, transition: opacity === 0 ? "opacity 350ms ease" : "none",
-      pointerEvents: opacity < 0.5 ? "none" : "all",
+      pointerEvents: "none",
     }}>
       <LoadingSpinner size="lg" />
       <p style={{
