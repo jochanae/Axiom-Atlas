@@ -786,7 +786,7 @@ export function AxiomFlow({
             placeholder="Session title"
             style={{
               width: "100%",
-              background: "rgba(12,10,9,0.85)",
+              background: "var(--atlas-surface)",
               border: "1px solid rgba(212,175,55,0.30)",
               borderRadius: 7,
               padding: "7px 10px",
@@ -1308,7 +1308,7 @@ function AnswerCapture({
         rows={3}
         style={{
           width: "100%",
-          background: "rgba(12,10,9,0.85)",
+          background: "var(--atlas-surface)",
           border: "1px solid rgba(212,175,55,0.28)",
           borderRadius: 7,
           padding: "8px 10px",

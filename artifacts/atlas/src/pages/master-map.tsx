@@ -749,7 +749,7 @@ export default function MasterMap() {
               {connections.length} link{connections.length !== 1 ? "s" : ""}
             </div>
           )}
-          <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.38)", letterSpacing: "0.08em" }}>
+          <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.08em" }}>
             {projects.length} satellite{projects.length !== 1 ? "s" : ""}
           </div>
         </div>
@@ -812,7 +812,7 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
     <div style={{ position: "absolute", top: 68, right: 14, zIndex: 50 }}>
       {/* Glass pod */}
       <div style={{
-        background: "rgba(9,8,6,0.84)",
+        background: "var(--atlas-surface)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
         border: "1px solid rgba(201,162,76,0.22)",
@@ -846,11 +846,11 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
           padding: "10px 14px", width: "100%",
           background: flowOpen ? "rgba(201,162,76,0.07)" : "transparent",
           border: "none", cursor: "pointer",
-          color: flowOpen ? "rgba(201,162,76,0.72)" : "rgba(120,113,108,0.52)",
+          color: flowOpen ? "rgba(201,162,76,0.72)" : "var(--atlas-muted)",
           transition: "color 160ms ease, background 160ms ease",
         }}
           onMouseEnter={(e) => { e.currentTarget.style.color = "rgba(201,162,76,0.72)"; }}
-          onMouseLeave={(e) => { if (!flowOpen) e.currentTarget.style.color = "rgba(120,113,108,0.52)"; }}
+          onMouseLeave={(e) => { if (!flowOpen) e.currentTarget.style.color = "var(--atlas-muted)"; }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
             <circle cx="12" cy="12" r="2" />
@@ -871,14 +871,14 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
       {flowOpen && (
         <div style={{
           position: "absolute", top: 0, right: "calc(100% + 8px)",
-          background: "rgba(9,8,6,0.95)",
+          background: "var(--atlas-surface)",
           backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
           border: "1px solid rgba(201,162,76,0.16)", borderRadius: 10,
           padding: "6px 0", minWidth: 188, maxHeight: 320, overflowY: "auto",
           boxShadow: "0 12px 40px rgba(0,0,0,0.82)",
           animation: "picker-in 140ms cubic-bezier(0.22,1,0.36,1) both",
         }}>
-          <div style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.4)", letterSpacing: "0.12em", padding: "5px 12px 7px", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.12em", padding: "5px 12px 7px", textTransform: "uppercase" }}>
             Select Flow
           </div>
           {/* New idea entry — creates a blank project and opens its Flow */}
