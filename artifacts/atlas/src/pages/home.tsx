@@ -2380,9 +2380,16 @@ export default function Home() {
             </div>
           )}
 
+          {/* Gradient fade — clipped to hero, fades bottom into background */}
+          <div aria-hidden style={{
+            position: "absolute", bottom: 0, left: 0, right: 0,
+            height: 56, pointerEvents: "none", zIndex: 1,
+            background: "linear-gradient(to bottom, transparent, var(--atlas-bg))",
+          }} />
+
           {/* Scroll cue — only when no messages, pinned to bottom of hero */}
           {homeMessages.length === 0 && (
-            <div aria-hidden style={{ position: "absolute", bottom: 6, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
+            <div aria-hidden style={{ position: "absolute", bottom: 6, left: 0, right: 0, textAlign: "center", pointerEvents: "none", zIndex: 2 }}>
               <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.28 }}>
                 ↓ scroll for your overview
               </div>
@@ -2392,15 +2399,6 @@ export default function Home() {
 
         </div>
       </div>
-
-      {/* Gradient fade — visual bridge from hero to overview */}
-      <div aria-hidden style={{
-        width: "100%", height: 52,
-        marginTop: -52,
-        pointerEvents: "none",
-        position: "relative", zIndex: 5,
-        background: "linear-gradient(to bottom, transparent, var(--atlas-bg))",
-      }} />
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 24px 120px" }}>
