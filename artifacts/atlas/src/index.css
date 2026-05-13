@@ -381,7 +381,15 @@ html, body {
   padding-top: env(safe-area-inset-top, 0px);
 }
 [data-theme="parchment"] .atlas-app-header {
-  background: #171410;
+  background: var(--atlas-bg);
+  border-bottom: 1px solid rgba(180, 83, 9, 0.14);
+}
+[data-theme="parchment"] .atlas-app-header * {
+  --atlas-surface: #EDE9DF;
+}
+[data-theme="parchment"] .atlas-app-header-row {
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08) !important;
+  border-bottom-color: rgba(180, 83, 9, 0.14) !important;
 }
 
 /* ── Side drawer mobile sizing ──
@@ -501,12 +509,13 @@ html, body {
   animation: atlasChatCardShimmer 4s ease-in-out infinite;
 }
 [data-theme="parchment"] .atlas-chat-card-top {
-  background: rgba(245, 241, 232, 0.82);
+  background: rgba(237, 233, 223, 0.95);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-top: 1px solid rgba(180, 83, 9, 0.20);
-  border-left: 1px solid rgba(180, 83, 9, 0.06);
-  border-right: 1px solid rgba(180, 83, 9, 0.06);
+  border-top: 1px solid rgba(180, 83, 9, 0.22);
+  border-bottom: 1px solid rgba(180, 83, 9, 0.10);
+  border-left: none;
+  border-right: none;
 }
 [data-theme="parchment"] .atlas-chat-card-top::before {
   background: linear-gradient(90deg, transparent 0%, rgba(180,83,9,0.0) 10%, rgba(180,83,9,0.55) 50%, rgba(180,83,9,0.0) 90%, transparent 100%);
