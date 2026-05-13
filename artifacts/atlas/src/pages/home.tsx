@@ -2043,9 +2043,9 @@ export default function Home() {
               multiple
               onChange={(e) => {
                 const incoming = Array.from(e.target.files ?? []);
-                const combined = [...attachedFiles, ...incoming].slice(0, 6);
-                if (incoming.length + attachedFiles.length > 6) {
-                  toast("Max 6 images at a time");
+                const combined = [...attachedFiles, ...incoming].slice(0, 10);
+                if (incoming.length + attachedFiles.length > 10) {
+                  toast("Max 10 images at a time");
                 }
                 setAttachedFiles(combined);
                 e.target.value = "";
