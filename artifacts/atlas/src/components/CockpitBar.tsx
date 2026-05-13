@@ -26,7 +26,6 @@ function AxiomLogoSVG() {
         </radialGradient>
       </defs>
       <rect width="512" height="512" rx="90" fill="#0D0B09" />
-      <rect width="512" height="512" rx="90" fill="url(#cpg)" />
       <polygon points="256,110 170,402 212,402 274,172" fill="url(#cgs)" />
       <polygon points="256,110 342,402 300,402 238,172" fill="url(#cgs)" />
       <rect x="180" y="282" width="152" height="34" rx="5" fill="url(#cgs)" />

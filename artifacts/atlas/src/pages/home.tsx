@@ -1850,7 +1850,7 @@ export default function Home() {
             ) : (
               <>
                 {/* Chat action bar */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 2, borderBottom: "1px solid var(--atlas-border)", background: "transparent", paddingRight: 6, height: 26, flexShrink: 0, marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 2, borderBottom: "1px solid var(--atlas-border)", background: "rgba(12,10,9,0.35)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", paddingRight: 6, height: 26, flexShrink: 0, marginBottom: 6 }}>
                   {showClearConfirm ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(239,68,68,0.65)", letterSpacing: "0.04em" }}>Clear conversation?</span>
@@ -2505,7 +2505,7 @@ export default function Home() {
       {/* Scroll-to-latest button — appears when scrolled up in a long conversation */}
       {showScrollBtn && (
         <button
-          onClick={() => chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" })}
+          onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}
           style={{
             position: "fixed",
             bottom: 90,
