@@ -197,7 +197,7 @@ export function CockpitBar({
       )}
 
       {/* Cockpit bar */}
-      <div style={{ position: "relative", flexShrink: 0, height: cockpitH, overflow: "visible", zIndex: 20, paddingBottom: "max(env(safe-area-inset-bottom), 8px)", background: "#0D0B09" }}>
+      <div style={{ position: "relative", flexShrink: 0, height: cockpitH, overflow: "visible", zIndex: 20, paddingBottom: "max(env(safe-area-inset-bottom), 8px)", background: "var(--atlas-bg)" }}>
 
         {/* SVG arch cutout */}
         <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }} preserveAspectRatio="none" viewBox="0 0 390 60">
@@ -212,7 +212,7 @@ export function CockpitBar({
             position: "absolute", top: -28, left: "50%",
             transform: "translateX(-50%)",
             width: 64, height: 64, borderRadius: "50%",
-            background: "#0D0B09", border: "2px solid #D4AF37",
+            background: "var(--atlas-bg)", border: "2px solid #D4AF37",
             display: "flex", alignItems: "center", justifyContent: "center",
             zIndex: 10, cursor: "pointer",
             animation: hasSession ? "axiom-pulse-bar 2s ease-in-out infinite" : "none",

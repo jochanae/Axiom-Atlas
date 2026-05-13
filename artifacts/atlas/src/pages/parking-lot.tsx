@@ -131,7 +131,7 @@ export default function ParkingLot() {
       {/* Header */}
       <div style={{
         position: "sticky", top: 0, zIndex: 50,
-        background: "rgba(12,10,9,0.94)",
+        background: "var(--atlas-surface)",
         backdropFilter: "blur(14px)",
         WebkitBackdropFilter: "blur(14px)",
         borderBottom: "1px solid var(--atlas-border)",

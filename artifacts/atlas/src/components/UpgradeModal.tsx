@@ -89,7 +89,7 @@ export function UpgradeModal({ onClose, reason = "general" }: Props) {
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 9000,
-        background: "rgba(12,10,9,0.72)",
+        background: "var(--atlas-surface)",
         display: "flex", alignItems: "center", justifyContent: "center",
         padding: "24px 16px",
         backdropFilter: "blur(4px)",

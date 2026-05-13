@@ -142,7 +142,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
       <div
         onClick={onClose}
         style={{
-          position: "fixed", inset: 0, background: "rgba(9,8,6,0.82)",
+          position: "fixed", inset: 0, background: "var(--atlas-bg)",
           zIndex: 900, backdropFilter: "blur(4px)",
         }}
       />
@@ -243,7 +243,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
                 disabled={capturing}
                 style={{
                   flex: 1,
-                  background: "rgba(255,255,255,0.04)",
+                  background: "var(--atlas-glass-bg)",
                   border: "1px solid rgba(201,162,76,0.2)",
                   borderRadius: 8,
                   padding: "8px 11px",
@@ -340,7 +340,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
                     {img.label && (
                       <div style={{
                         position: "absolute", bottom: 0, left: 0, right: 0,
-                        background: "linear-gradient(transparent, rgba(9,8,6,0.85))",
+                        background: "linear-gradient(transparent, var(--atlas-bg))",
                         padding: "12px 6px 5px",
                         fontSize: 9,
                         color: "var(--atlas-fg)",
@@ -356,7 +356,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
                       style={{
                         position: "absolute", top: 4, right: 4,
                         width: 20, height: 20, borderRadius: "50%",
-                        background: "rgba(9,8,6,0.8)",
+                        background: "var(--atlas-bg)",
                         border: "1px solid var(--atlas-fg)",
                         color: "var(--atlas-fg)",
                         fontSize: 11, lineHeight: 1,
@@ -406,7 +406,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
           onClick={() => setLightbox(null)}
           style={{
             position: "fixed", inset: 0, zIndex: 1000,
-            background: "rgba(9,8,6,0.95)",
+            background: "var(--atlas-bg)",
             display: "flex", flexDirection: "column",
             alignItems: "center", justifyContent: "center",
             padding: 20,

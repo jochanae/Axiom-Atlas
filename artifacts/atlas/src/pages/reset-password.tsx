@@ -20,7 +20,7 @@ export default function ResetPassword() {
     width: "100%",
     padding: "11px 14px",
     borderRadius: 9,
-    background: "rgba(12,10,9,0.6)",
+    background: "var(--atlas-surface)",
     border: "1px solid rgba(255,255,255,0.07)",
     color: "var(--atlas-fg)",
     fontSize: 13,

@@ -2184,7 +2184,7 @@ export default function Home() {
                     )}
                     <button
                       onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
-                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
+                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
                     >×</button>
                   </div>
                 ))}
@@ -2849,12 +2849,12 @@ function ProjectsGridSheet({
                   key={p.id}
                   onClick={() => onOpenProject(p.id)}
                   style={{
-                    background: "none", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14,
+                    background: "none", border: "1px solid var(--atlas-glass-bg)", borderRadius: 14,
                     cursor: "pointer", padding: 0, overflow: "hidden", textAlign: "left",
                     transition: "border-color 160ms, transform 120ms",
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(212,175,55,0.3)"; e.currentTarget.style.transform = "scale(1.02)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; e.currentTarget.style.transform = "scale(1)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--atlas-glass-bg)"; e.currentTarget.style.transform = "scale(1)"; }}
                 >
                   {/* Colored thumbnail with subtle grid texture */}
                   <div style={{ height: 90, background: bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>

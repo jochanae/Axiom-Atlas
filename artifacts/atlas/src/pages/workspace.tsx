@@ -998,7 +998,7 @@ function GitHubPushModal({
                   {canRollback && (
                     <div style={{ marginTop: 18 }}>
                       <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.5, marginBottom: 10, lineHeight: 1.6 }}>Something break? Roll back to the original version instantly.</div>
-                      <button onClick={handleRollback} disabled={rollingBack} style={{ padding: "7px 16px", borderRadius: 6, fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", background: rollingBack ? "rgba(255,255,255,0.04)" : "rgba(239,68,68,0.08)", border: `1px solid ${rollingBack ? "var(--atlas-border)" : "rgba(239,68,68,0.25)"}`, color: rollingBack ? "var(--atlas-muted)" : "rgba(252,165,165,0.85)", cursor: rollingBack ? "not-allowed" : "pointer", transition: "all 160ms ease" }}>
+                      <button onClick={handleRollback} disabled={rollingBack} style={{ padding: "7px 16px", borderRadius: 6, fontSize: 11, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", background: rollingBack ? "var(--atlas-glass-bg)" : "rgba(239,68,68,0.08)", border: `1px solid ${rollingBack ? "var(--atlas-border)" : "rgba(239,68,68,0.25)"}`, color: rollingBack ? "var(--atlas-muted)" : "rgba(252,165,165,0.85)", cursor: rollingBack ? "not-allowed" : "pointer", transition: "all 160ms ease" }}>
                         {rollingBack ? "Rolling back…" : `↺ Rollback ${fileEdits.length > 1 ? "all changes" : "this change"}`}
                       </button>
                       {error && <div style={{ marginTop: 8, fontSize: 11, color: "rgba(252,165,165,0.75)" }}>{error}</div>}
@@ -1039,7 +1039,7 @@ function GitHubPushModal({
                   loadingOriginals ? (
                     <div style={{ padding: "12px 0", fontSize: 11, color: "var(--atlas-muted)", opacity: 0.5, fontFamily: "var(--app-font-mono)" }}>Loading original…</div>
                   ) : (
-                    <div style={{ borderRadius: 5, overflow: "hidden", border: "1px solid rgba(255,255,255,0.04)", maxHeight: 280, overflowY: "auto", fontFamily: "var(--app-font-mono)", fontSize: 10.5, lineHeight: 1.55 }}>
+                    <div style={{ borderRadius: 5, overflow: "hidden", border: "1px solid var(--atlas-glass-bg)", maxHeight: 280, overflowY: "auto", fontFamily: "var(--app-font-mono)", fontSize: 10.5, lineHeight: 1.55 }}>
                       {currentOriginal === null && (
                         <div style={{ padding: "5px 10px", fontSize: 10, color: "rgba(134,239,172,0.6)", background: "rgba(134,239,172,0.04)", borderBottom: "1px solid rgba(134,239,172,0.1)" }}>New file</div>
                       )}
@@ -1059,7 +1059,7 @@ function GitHubPushModal({
                     </div>
                   )
                 ) : (
-                  <pre style={{ margin: 0, padding: "10px", background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 5, fontSize: 10.5, fontFamily: "var(--app-font-mono)", lineHeight: 1.6, color: "var(--atlas-fg)", overflowX: "auto", maxHeight: 280, overflowY: "auto", whiteSpace: "pre" }}>{currentFile.content}</pre>
+                  <pre style={{ margin: 0, padding: "10px", background: "rgba(0,0,0,0.35)", border: "1px solid var(--atlas-glass-bg)", borderRadius: 5, fontSize: 10.5, fontFamily: "var(--app-font-mono)", lineHeight: 1.6, color: "var(--atlas-fg)", overflowX: "auto", maxHeight: 280, overflowY: "auto", whiteSpace: "pre" }}>{currentFile.content}</pre>
                 )}
               </div>
 
@@ -1074,14 +1074,14 @@ function GitHubPushModal({
                   ))}
                 </div>
                 {useNewBranch && (
-                  <input value={branchName} onChange={(e) => setBranchName(e.target.value)} placeholder="branch name" style={{ width: "100%", padding: "8px 11px", borderRadius: 6, background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12, fontFamily: "var(--app-font-mono)", outline: "none", boxSizing: "border-box" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")} onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
+                  <input value={branchName} onChange={(e) => setBranchName(e.target.value)} placeholder="branch name" style={{ width: "100%", padding: "8px 11px", borderRadius: 6, background: "var(--atlas-glass-bg)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12, fontFamily: "var(--app-font-mono)", outline: "none", boxSizing: "border-box" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")} onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
                 )}
               </div>
 
               {/* Commit message */}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", marginBottom: 8 }}>COMMIT MESSAGE</div>
-                <input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder="describe the change" style={{ width: "100%", padding: "8px 11px", borderRadius: 6, background: "rgba(0,0,0,0.3)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12, outline: "none", boxSizing: "border-box" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")} onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
+                <input value={commitMsg} onChange={(e) => setCommitMsg(e.target.value)} placeholder="describe the change" style={{ width: "100%", padding: "8px 11px", borderRadius: 6, background: "var(--atlas-glass-bg)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12, outline: "none", boxSizing: "border-box" }} onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)")} onBlur={(e) => (e.currentTarget.style.borderColor = "var(--atlas-border)")} />
               </div>
 
               {!linkedRepo && <div style={{ padding: "9px 12px", borderRadius: 6, marginBottom: 14, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 12, color: "rgba(252,165,165,0.8)" }}>No repo linked. Open the Files tab and link a GitHub repo to this project first.</div>}
@@ -1165,7 +1165,7 @@ function GitHubPushModal({
                   }
                 }}
                 disabled={localApplying}
-                style={{ padding: "8px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: localApplied ? "rgba(52,211,153,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${localApplied ? "rgba(52,211,153,0.3)" : "var(--atlas-border)"}`, color: localApplied ? "rgba(52,211,153,0.8)" : "var(--atlas-muted)", cursor: localApplying ? "default" : "pointer", opacity: localApplying ? 0.55 : 1, transition: "all 150ms ease" }}
+                style={{ padding: "8px 14px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: localApplied ? "rgba(52,211,153,0.1)" : "var(--atlas-glass-bg)", border: `1px solid ${localApplied ? "rgba(52,211,153,0.3)" : "var(--atlas-border)"}`, color: localApplied ? "rgba(52,211,153,0.8)" : "var(--atlas-muted)", cursor: localApplying ? "default" : "pointer", opacity: localApplying ? 0.55 : 1, transition: "all 150ms ease" }}
               >
                 {localApplying ? "Applying…" : localApplied ? "✓ Applied" : "Apply to workspace"}
               </button>
@@ -1819,7 +1819,7 @@ function AssistantBubble({
             style={{
               marginTop: 12, padding: "10px 14px",
               borderRadius: 8,
-              background: "rgba(12,10,9,0.7)",
+              background: "var(--atlas-surface)",
               border: "1px solid rgba(201,162,76,0.22)",
               display: "flex", alignItems: "center", gap: 10,
             }}
@@ -2088,7 +2088,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
           {hasDetails && showDetails && (
             <div style={{
               marginBottom: 12,
-              background: "rgba(12,10,9,0.6)",
+              background: "var(--atlas-surface)",
               border: "1px solid rgba(201,162,76,0.1)",
               borderRadius: 6,
               padding: "10px 12px",
@@ -2468,7 +2468,7 @@ function LedgerTab({
             placeholder="Decision title…"
             style={{
               width: "100%", padding: "8px 10px", borderRadius: 6, marginBottom: 6,
-              background: "rgba(12,10,9,0.6)", border: "1px solid var(--atlas-border)",
+              background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)",
               color: "var(--atlas-fg)", fontSize: 12, outline: "none",
               fontFamily: "var(--app-font-sans)", transition: "border-color 160ms ease",
             }}
@@ -3242,7 +3242,7 @@ function FilesTab({
             autoComplete="off"
             style={{
               width: "100%", padding: "8px 10px", borderRadius: 6,
-              background: "rgba(12,10,9,0.7)",
+              background: "var(--atlas-surface)",
               border: `1px solid ${tokenSaveError ? "rgba(239,68,68,0.5)" : "var(--atlas-border)"}`,
               color: "var(--atlas-fg)", fontSize: 11, fontFamily: "var(--app-font-mono)",
               outline: "none", boxSizing: "border-box",
@@ -4059,7 +4059,7 @@ ${t}
                   placeholder="Paste your deployment URL…"
                   style={{
                     width: "100%", paddingLeft: 26, paddingRight: 8, paddingTop: 5, paddingBottom: 5,
-                    borderRadius: 5, background: "rgba(12,10,9,0.7)",
+                    borderRadius: 5, background: "var(--atlas-surface)",
                     border: "1px solid var(--atlas-border)",
                     color: "var(--atlas-fg)", fontSize: 10.5, ...sMono, outline: "none",
                     transition: "border-color 160ms ease",
@@ -4109,14 +4109,14 @@ ${t}
                   </button>
                 </div>
               ) : linkedRepo && token ? (
-                <button onClick={handleDetect} disabled={detecting} style={{ padding: "4px 10px", borderRadius: 4, fontSize: 9.5, ...sMono, letterSpacing: "0.08em", background: detecting ? "rgba(255,255,255,0.04)" : "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)", color: detecting ? "var(--atlas-muted)" : "var(--atlas-gold)", cursor: detecting ? "not-allowed" : "pointer", flexShrink: 0 }}>
+                <button onClick={handleDetect} disabled={detecting} style={{ padding: "4px 10px", borderRadius: 4, fontSize: 9.5, ...sMono, letterSpacing: "0.08em", background: detecting ? "var(--atlas-glass-bg)" : "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)", color: detecting ? "var(--atlas-muted)" : "var(--atlas-gold)", cursor: detecting ? "not-allowed" : "pointer", flexShrink: 0 }}>
                   {detecting ? "Detecting…" : "Auto-detect URL"}
                 </button>
               ) : (
                 <div style={{ fontSize: 9.5, ...sMono, color: "var(--atlas-muted)", opacity: 0.35 }}>Link a repo in Files to auto-detect URL</div>
               )}
               {liveUrl && (
-                <button onClick={handleSaveToProject} disabled={savedIndicator || updateProject.isPending || !!autoDetected} style={{ marginLeft: "auto", padding: "4px 10px", borderRadius: 4, fontSize: 9.5, ...sMono, letterSpacing: "0.08em", background: (savedIndicator || autoDetected) ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.04)", border: `1px solid ${(savedIndicator || autoDetected) ? "rgba(34,197,94,0.2)" : "var(--atlas-border)"}`, color: (savedIndicator || autoDetected) ? "rgba(134,239,172,0.8)" : "var(--atlas-muted)", cursor: (savedIndicator || autoDetected) ? "default" : "pointer", flexShrink: 0, transition: "all 160ms ease" }}>
+                <button onClick={handleSaveToProject} disabled={savedIndicator || updateProject.isPending || !!autoDetected} style={{ marginLeft: "auto", padding: "4px 10px", borderRadius: 4, fontSize: 9.5, ...sMono, letterSpacing: "0.08em", background: (savedIndicator || autoDetected) ? "rgba(34,197,94,0.08)" : "var(--atlas-glass-bg)", border: `1px solid ${(savedIndicator || autoDetected) ? "rgba(34,197,94,0.2)" : "var(--atlas-border)"}`, color: (savedIndicator || autoDetected) ? "rgba(134,239,172,0.8)" : "var(--atlas-muted)", cursor: (savedIndicator || autoDetected) ? "default" : "pointer", flexShrink: 0, transition: "all 160ms ease" }}>
                   {savedIndicator || autoDetected ? "✓ Saved to project" : project?.previewUrl === liveUrl ? "Saved to project" : "Save to project"}
                 </button>
               )}
@@ -4215,7 +4215,7 @@ ${t}
                   placeholder="Paste HTML, CSS, or any component here…"
                   rows={6}
                   style={{
-                    width: "100%", resize: "vertical", background: "rgba(12,10,9,0.8)",
+                    width: "100%", resize: "vertical", background: "var(--atlas-surface)",
                     border: "1px solid var(--atlas-border)", borderRadius: 6,
                     color: "var(--atlas-fg)", fontSize: 10.5, fontFamily: "var(--app-font-mono)",
                     lineHeight: 1.6, padding: "7px 9px", outline: "none",
@@ -4228,7 +4228,7 @@ ${t}
                   <button
                     onClick={() => { if (sandboxInput.trim()) { setSandboxRendered(buildSrcdoc(sandboxInput)); setSandboxExpanded(false); } }}
                     disabled={!sandboxInput.trim()}
-                    style={{ padding: "5px 12px", borderRadius: 5, background: sandboxInput.trim() ? "var(--atlas-ember)" : "rgba(255,255,255,0.04)", border: "none", color: sandboxInput.trim() ? "var(--atlas-fg)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", cursor: sandboxInput.trim() ? "pointer" : "not-allowed", transition: "all 140ms ease" }}
+                    style={{ padding: "5px 12px", borderRadius: 5, background: sandboxInput.trim() ? "var(--atlas-ember)" : "var(--atlas-glass-bg)", border: "none", color: sandboxInput.trim() ? "var(--atlas-fg)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", cursor: sandboxInput.trim() ? "pointer" : "not-allowed", transition: "all 140ms ease" }}
                   >Render</button>
                   <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", opacity: 0.28 }}>React + HTML · Tailwind included</span>
                 </div>
@@ -4465,7 +4465,7 @@ function MemoryTab({ projectId }: { projectId: number }) {
             autoFocus
             style={{
               width: "100%", height: "100%", minHeight: 200, resize: "none",
-              background: "rgba(12,10,9,0.6)", border: "1px solid rgba(201,162,76,0.25)",
+              background: "var(--atlas-surface)", border: "1px solid rgba(201,162,76,0.25)",
               borderRadius: 6, color: "var(--atlas-fg)", fontSize: 11,
               ...sMono, lineHeight: 1.65, padding: "10px 12px",
               outline: "none", boxSizing: "border-box",
@@ -4543,7 +4543,7 @@ function MapSection({ label, items, color = "var(--atlas-muted)" }: { label: str
         {items.map((item) => (
           <span key={item} style={{
             padding: "3px 8px", borderRadius: 4,
-            background: "rgba(255,255,255,0.04)", border: "1px solid var(--atlas-border)",
+            background: "var(--atlas-glass-bg)", border: "1px solid var(--atlas-border)",
             fontSize: 10.5, fontFamily: "var(--app-font-mono)",
             color, opacity: 0.8,
           }}>
@@ -5167,7 +5167,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                           <span style={{ fontSize: 7, color: "rgba(212,175,55,0.55)", maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-mono)" }}>{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
                         </div>
                       )}
-                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(212,175,55,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>×</button>
+                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(212,175,55,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>×</button>
                     </div>
                   ))}
                 </div>
@@ -5205,7 +5205,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   rows={2}
                   disabled={flowLoading}
                   style={{
-                    flex: 1, resize: "none", background: "rgba(12,10,9,0.85)",
+                    flex: 1, resize: "none", background: "var(--atlas-surface)",
                     border: "1px solid rgba(212,175,55,0.20)", borderRadius: 8,
                     padding: "7px 10px", color: "var(--atlas-fg)", fontSize: 12,
                     lineHeight: 1.5, fontFamily: "inherit", outline: "none",
@@ -5951,7 +5951,7 @@ function TerminalPanel({
       <div style={{
         borderTop: "1px solid var(--atlas-surface)", padding: "9px 13px",
         display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
-        background: "#0C0A09",
+        background: "var(--atlas-bg)",
       }}>
         <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 13, color: "rgba(201,162,76,0.75)", flexShrink: 0 }}>$</span>
         <input
@@ -7527,7 +7527,7 @@ export default function Workspace() {
               ref={projectBtnRef}
               onClick={() => setShowProjectMenu((v) => !v)}
               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, background: "transparent", border: "none", cursor: "pointer", padding: "4px 8px", borderRadius: 8, transition: "background 150ms ease", minWidth: 0, overflow: "hidden", width: "100%" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--atlas-glass-bg)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
             >
               {renaming ? (
@@ -7861,7 +7861,7 @@ export default function Workspace() {
                             <button key={m}
                               onClick={() => handleModeSelect(m)}
                               style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active ? mcc.bg : "transparent", border: "none", padding: "7px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
-                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--atlas-glass-bg)"; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = active ? mcc.bg : "transparent"; }}
                             >
                               <span style={{ width: 7, height: 7, borderRadius: "50%", background: mcc.color, flexShrink: 0 }} />
@@ -7888,7 +7888,7 @@ export default function Workspace() {
                                 setShowStyleMenu(false);
                               }}
                               style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "transparent", border: "none", padding: "7px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
-                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--atlas-glass-bg)"; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                             >
                               <span style={{ width: 7, height: 7, borderRadius: "50%", background: lcc.dot, flexShrink: 0 }} />
@@ -8448,7 +8448,7 @@ export default function Workspace() {
                     )}
                     <button
                       onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
-                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "rgba(9,8,6,0.92)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
+                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
                     >×</button>
                   </div>
                 ))}
