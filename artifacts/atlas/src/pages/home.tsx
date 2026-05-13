@@ -1819,8 +1819,8 @@ export default function Home() {
           {/* ATLAS label centered */}
           <span style={{
             position: "absolute", left: "50%", transform: "translateX(-50%)",
-            fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em",
-            color: "var(--atlas-gold)", opacity: 0.82, fontWeight: 700,
+            fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.28em",
+            color: "var(--atlas-gold)", opacity: 1, fontWeight: 700,
             textTransform: "uppercase", pointerEvents: "none", whiteSpace: "nowrap",
           }}>
             ATLAS
