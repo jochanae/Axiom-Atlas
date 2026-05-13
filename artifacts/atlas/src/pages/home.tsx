@@ -1844,7 +1844,7 @@ export default function Home() {
                 <LoadingSpinner size="sm" color="atlas" />
               </div>
             ) : (
-              <>
+              <div style={{ borderRadius: 12, overflow: "hidden", background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)" }}>
                 {/* Chat card top header — glassmorphism + ATLAS label + three-dot */}
                 <div className="atlas-chat-card-top">
                   {/* ATLAS identity label — centered */}
@@ -2091,7 +2091,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
           </div>
 
