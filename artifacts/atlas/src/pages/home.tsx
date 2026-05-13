@@ -14,6 +14,7 @@ import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { AccountHubPanel } from "../components/AccountHubPanel";
 import { BelowFoldDashboard } from "../components/BelowFoldDashboard";
 import { TheForge } from "../components/TheForge";
+import { VisualVault } from "../components/VisualVault";
 import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
 import { useAuth, useRequireAuth, isSuperAdmin } from "../hooks/useAuth";
@@ -1186,6 +1187,7 @@ export default function Home() {
       }
     }
   }, [attachedFiles]);
+  const [showVault, setShowVault] = useState(false);
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
@@ -1705,8 +1707,28 @@ export default function Home() {
           <InlineTimestamp />
         </div>
 
-        {/* Right side: avatar pair */}
+        {/* Right side: vault + avatar pair */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            title="Visual Vault"
+            onClick={() => setShowVault(true)}
+            style={{
+              width: 28, height: 28, borderRadius: 7,
+              background: "transparent", border: "none",
+              color: "rgba(201,162,76,0.5)", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "color 160ms ease", flexShrink: 0,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(201,162,76,0.5)")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+          </button>
           <div style={{ display: "none" }} />
           {/* Avatar + invite/new-project as overlapping pair (avatar in front) */}
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
@@ -2466,6 +2488,8 @@ export default function Home() {
         onOpenQuickPrompt={() => { setShowDrawer(false); setShowQuickPrompt(true); }}
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
       />
+
+      {showVault && <VisualVault onClose={() => setShowVault(false)} />}
 
       {showQuickPrompt && (
         <TheForge
