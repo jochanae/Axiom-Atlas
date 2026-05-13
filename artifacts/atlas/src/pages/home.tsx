@@ -1820,8 +1820,8 @@ export default function Home() {
           <span style={{
             position: "absolute", left: "50%", top: "50%",
             transform: "translate(-50%, -50%)",
-            fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.28em",
-            color: "var(--atlas-gold)", opacity: 1, fontWeight: 700,
+            fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em",
+            color: "var(--atlas-gold)", opacity: 0.55, fontWeight: 600,
             textTransform: "uppercase", pointerEvents: "none", whiteSpace: "nowrap",
           }}>
             ATLAS
