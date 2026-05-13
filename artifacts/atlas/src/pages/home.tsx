@@ -1655,12 +1655,7 @@ export default function Home() {
 
   return (
     <div
-      ref={chatScrollRef}
       className="atlas-home-bg"
-      onScroll={(e) => {
-        const el = e.currentTarget;
-        setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
-      }}
       style={{
         height: "100vh",
         backgroundColor: "var(--atlas-bg)",
@@ -1918,7 +1913,14 @@ export default function Home() {
                 </div>
 
                 {/* Messages */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: "min(55vh, 360px)", overflowY: "auto", paddingRight: 4 }}>
+                <div
+                  ref={chatScrollRef}
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
+                  }}
+                  style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: "min(55vh, 360px)", overflowY: "auto", paddingRight: 4, position: "relative" }}
+                >
                   {homeMessages.map((msg, i) => (
                     <div key={i} style={{ display: "flex", flexDirection: msg.role === 'user' ? "row-reverse" : "row", alignItems: "flex-start", gap: 6, animation: "fadeIn 250ms ease forwards" }}>
                       {msg.role === 'assistant' ? (
@@ -2018,6 +2020,32 @@ export default function Home() {
                     </div>
                   )}
 
+                  {showScrollBtn && (
+                    <button
+                      onClick={() => chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" })}
+                      style={{
+                        position: "sticky",
+                        bottom: 8,
+                        alignSelf: "center",
+                        zIndex: 10,
+                        background: "var(--atlas-surface)",
+                        border: "1px solid var(--atlas-gold)",
+                        borderRadius: 20,
+                        padding: "6px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        color: "var(--atlas-gold)",
+                        fontSize: 12,
+                        fontFamily: "var(--app-font-mono)",
+                        cursor: "pointer",
+                        boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span> latest
+                    </button>
+                  )}
                   <div ref={messagesEndRef} />
                   {focusSuggestion && !homeFocus && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "rgba(99,130,239,0.08)", border: "1px solid rgba(99,130,239,0.2)", fontSize: 12, color: "rgba(180,190,255,0.85)", fontFamily: "var(--app-font-mono)", marginTop: 4 }}>
@@ -2502,34 +2530,6 @@ export default function Home() {
         />
       )}
 
-      {/* Scroll-to-latest button — appears when scrolled up in a long conversation */}
-      {showScrollBtn && (
-        <button
-          onClick={() => chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" })}
-          style={{
-            position: "fixed",
-            bottom: 90,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 60,
-            background: "var(--atlas-surface)",
-            border: "1px solid var(--atlas-gold)",
-            borderRadius: 20,
-            padding: "6px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            color: "var(--atlas-gold)",
-            fontSize: 12,
-            fontFamily: "var(--app-font-mono)",
-            cursor: "pointer",
-            boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
-            letterSpacing: "0.04em",
-          }}
-        >
-          <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span> latest
-        </button>
-      )}
 
       {showQuickPrompt && (
         <TheForge
