@@ -592,7 +592,7 @@ function HomeContextBar({
   const modeLabel = MODES.find(m => m.id === mode)?.label ?? "Strategic";
   const modeAccent = MODE_ACCENT[mode];
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 0, flexWrap: "wrap", width: "100%", padding: "8px 16px", borderBottom: "1px solid var(--atlas-border)", background: "var(--atlas-glass-bg)" }}>
       <ContextChip
         onClick={onFocusClick}
         icon={

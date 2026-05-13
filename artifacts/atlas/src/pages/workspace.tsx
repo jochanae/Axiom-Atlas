@@ -5809,7 +5809,7 @@ function MobileTabBar({
         right: 0,
         height: 64,
         zIndex: 200,
-        background: "rgba(12,10,9,0.96)",
+        background: "var(--atlas-surface)",
         backdropFilter: "blur(18px)",
         WebkitBackdropFilter: "blur(18px)",
         borderTop: "1px solid rgba(212,175,55,0.12)",
@@ -7685,7 +7685,7 @@ export default function Workspace() {
           }}
         >
           {/* ── Chat / Diff / Terminal tab strip ── */}
-          <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, paddingLeft: 4, background: "rgba(0,0,0,0.15)" }}>
+          <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, paddingLeft: 4, background: "var(--atlas-glass-bg)" }}>
             {(["chat", "diff", "terminal"] as const).map((tab) => {
               const active = leftTab === tab;
               const label = tab === "chat" ? "Chat" : tab === "diff" ? "Diff" : "Terminal";

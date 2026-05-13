@@ -374,7 +374,7 @@ html, body {
 
 /* ── App header (workspace top bar — theme-aware) ── */
 .atlas-app-header {
-  background: rgba(12, 10, 9, 0.92);
+  background: var(--atlas-surface);
   position: relative;
   z-index: 60;
   /* Safe-area padding — respects iOS notch / Dynamic Island / Android status bar */
