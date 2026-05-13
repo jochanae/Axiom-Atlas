@@ -9,8 +9,11 @@
  */
 
 import { db, galleryImagesTable } from "@workspace/db";
+import type { InferSelectModel } from "drizzle-orm";
 import { eq, and, isNull, asc } from "drizzle-orm";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+
+type GalleryRow = InferSelectModel<typeof galleryImagesTable>;
 
 const storage = new ObjectStorageService();
 const MAX_VAULT_IMAGES = 10;
@@ -44,20 +47,38 @@ export async function loadVaultContext(
   const empty: VaultContext = { imageBlocks: [], systemNote: "", hasImages: false };
 
   try {
-    // Fetch images oldest-first so sequential page-flow screenshots read top→bottom
-    const rows = projectId
-      ? await db
-          .select()
-          .from(galleryImagesTable)
-          .where(and(eq(galleryImagesTable.userId, userId), eq(galleryImagesTable.projectId, projectId)))
-          .orderBy(asc(galleryImagesTable.createdAt))
-          .limit(MAX_VAULT_IMAGES)
-      : await db
-          .select()
-          .from(galleryImagesTable)
-          .where(and(eq(galleryImagesTable.userId, userId), isNull(galleryImagesTable.projectId)))
-          .orderBy(asc(galleryImagesTable.createdAt))
-          .limit(MAX_VAULT_IMAGES);
+    // Fetch images oldest-first so sequential page-flow screenshots read top→bottom.
+    // When a project is focused: load project-scoped images first, then fill remaining
+    // slots with global images so uploads to the global vault are always visible too.
+    let rows: GalleryRow[] = [];
+
+    if (projectId) {
+      const projectRows = await db
+        .select()
+        .from(galleryImagesTable)
+        .where(and(eq(galleryImagesTable.userId, userId), eq(galleryImagesTable.projectId, projectId)))
+        .orderBy(asc(galleryImagesTable.createdAt))
+        .limit(MAX_VAULT_IMAGES);
+
+      const remaining = MAX_VAULT_IMAGES - projectRows.length;
+      const globalRows = remaining > 0
+        ? await db
+            .select()
+            .from(galleryImagesTable)
+            .where(and(eq(galleryImagesTable.userId, userId), isNull(galleryImagesTable.projectId)))
+            .orderBy(asc(galleryImagesTable.createdAt))
+            .limit(remaining)
+        : [];
+
+      rows = [...projectRows, ...globalRows];
+    } else {
+      rows = await db
+        .select()
+        .from(galleryImagesTable)
+        .where(and(eq(galleryImagesTable.userId, userId), isNull(galleryImagesTable.projectId)))
+        .orderBy(asc(galleryImagesTable.createdAt))
+        .limit(MAX_VAULT_IMAGES);
+    }
 
     if (rows.length === 0) return empty;
 

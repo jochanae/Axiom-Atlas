@@ -1188,6 +1188,8 @@ export default function Home() {
     }
   }, [attachedFiles]);
   const [showVault, setShowVault] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const [showQuickPrompt, setShowQuickPrompt] = useState(false);
@@ -1653,7 +1655,12 @@ export default function Home() {
 
   return (
     <div
+      ref={chatScrollRef}
       className="atlas-home-bg"
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
+      }}
       style={{
         height: "100vh",
         backgroundColor: "var(--atlas-bg)",
@@ -2488,7 +2495,41 @@ export default function Home() {
         userLabel={(() => { try { const r = localStorage.getItem("atlas-user-profile"); return r ? JSON.parse(r).name || null : null; } catch { return null; } })()}
       />
 
-      {showVault && <VisualVault onClose={() => setShowVault(false)} />}
+      {showVault && (
+        <VisualVault
+          projectId={homeFocus ?? undefined}
+          onClose={() => setShowVault(false)}
+        />
+      )}
+
+      {/* Scroll-to-latest button — appears when scrolled up in a long conversation */}
+      {showScrollBtn && (
+        <button
+          onClick={() => chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight, behavior: "smooth" })}
+          style={{
+            position: "fixed",
+            bottom: 90,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 60,
+            background: "var(--atlas-surface)",
+            border: "1px solid var(--atlas-gold)",
+            borderRadius: 20,
+            padding: "6px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            color: "var(--atlas-gold)",
+            fontSize: 12,
+            fontFamily: "var(--app-font-mono)",
+            cursor: "pointer",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+            letterSpacing: "0.04em",
+          }}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span> latest
+        </button>
+      )}
 
       {showQuickPrompt && (
         <TheForge
