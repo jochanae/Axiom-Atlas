@@ -7040,6 +7040,11 @@ export default function Workspace() {
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
             ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),
           }]);
+          // Auto-switch to Diff tab when Atlas proposes file changes
+          if (fes && fes.length > 0) {
+            setLeftTab("diff");
+            setMobileTab("preview"); // switches to diff view on mobile
+          }
           if (cp) { playCatch(); setActiveCatch(cp); }
           if (normalizedChips.length > 0) {
             setMemoryChips((prev) => {
