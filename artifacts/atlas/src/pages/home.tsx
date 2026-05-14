@@ -1336,6 +1336,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    fetch("/api/nexus/conversations", { credentials: "include" })
+      .then(r => r.ok ? r.json() : { conversations: [] })
+      .then((data: any) => setConversations(data.conversations ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (homeMessages.length === 0) return;
     const container = messagesEndRef.current?.parentElement;
     if (container) {
@@ -1688,14 +1695,16 @@ export default function Home() {
 
         {/* Right side: vault + avatar pair */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button
-            onClick={handleOpenHistory}
-            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: "var(--atlas-muted)" }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
-          </button>
+          {conversations.length > 0 && (
+            <button
+              onClick={handleOpenHistory}
+              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: "var(--atlas-muted)" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </button>
+          )}
           <button
             title="Visual Vault"
             onClick={() => setShowVault(true)}
