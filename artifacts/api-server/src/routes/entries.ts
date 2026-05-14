@@ -58,7 +58,6 @@ router.get("/entries/all", async (req, res): Promise<void> => {
       status: entriesTable.status,
       severity: entriesTable.severity,
       verb: entriesTable.verb,
-      category: entriesTable.category,
       supersedesId: entriesTable.supersedesId,
       lockedAt: entriesTable.lockedAt,
       createdAt: entriesTable.createdAt,
