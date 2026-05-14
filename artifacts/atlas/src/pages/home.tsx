@@ -1883,7 +1883,7 @@ export default function Home() {
           padding: "0 24px",
         }}
       >
-        <div style={{ width: "100%", maxWidth: 560 }}>
+        <div style={{ width: "100%", maxWidth: 560, paddingBottom: 120 }}>
           {/* Hero — fills the viewport above the mobile nav, content vertically centered */}
           <div style={{ minHeight: homeMessages.length > 0 ? 0 : "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: homeMessages.length > 0 ? "flex-start" : "center", position: "relative", paddingBottom: homeMessages.length > 0 ? 0 : 120 }}>
             {/* Atmospheric pulse — behind everything, theme-aware */}
@@ -2412,7 +2412,7 @@ export default function Home() {
       </div>
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 24px 120px" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 24px 160px" }}>
         <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
           <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
           <button
