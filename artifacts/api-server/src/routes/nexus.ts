@@ -13,6 +13,7 @@ const anthropic = new Anthropic({
 });
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
+const MAX_VAULT_B64_SIZE = 1500000;
 
 const NEXUS_SYSTEM_PROMPT = `You are Atlas — the strategic intelligence layer of Axiom, a platform built for founders running multiple products simultaneously.
 
@@ -539,6 +540,12 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
 
   // 1. Vault images (project visual context) — injected first so Atlas sees them before the user's message
   for (const vb of vault.imageBlocks) {
+    // Skip vault images that exceed Claude's dimension limit
+    const vaultImage = { base64: vb.source.data };
+    if (vaultImage.base64 && vaultImage.base64.length > MAX_VAULT_B64_SIZE) {
+      console.warn(`Vault image skipped — too large: ${vaultImage.base64.length} chars`);
+      continue;
+    }
     contentParts.push({
       type: "image",
       source: {
