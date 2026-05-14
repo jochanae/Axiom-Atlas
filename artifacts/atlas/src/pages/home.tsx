@@ -1849,6 +1849,13 @@ export default function Home() {
             ) : (
               <>
                 <button
+                  onClick={() => setShowOverview(v => !v)}
+                  title={showOverview ? "Collapse overview" : "Expand overview"}
+                  style={{ background: "transparent", border: "none", padding: "4px 8px", marginRight: 6, cursor: "pointer", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.72, lineHeight: 1 }}
+                >
+                  {showOverview ? "−" : "+"}
+                </button>
+                <button
                   onClick={() => setShowChatMenu(v => !v)}
                   title="More options"
                   style={{ background: "transparent", border: "none", padding: "4px 6px", cursor: "pointer", color: "var(--atlas-muted)", opacity: 0.65, lineHeight: 1, transition: "opacity 140ms" }}
@@ -2448,16 +2455,6 @@ export default function Home() {
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 24px 120px" }}>
-        <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
-          <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
-          <button
-            onClick={() => setShowOverview(v => !v)}
-            style={{ background: "transparent", border: "none", padding: "4px 8px", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", cursor: "pointer" }}
-          >
-            {showOverview ? "−" : "+"}
-          </button>
-          <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
-        </div>
         {showOverview && (
           <BelowFoldDashboard
             projects={(projects ?? []).map((p: Project) => ({
