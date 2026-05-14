@@ -2458,6 +2458,28 @@ export default function Home() {
           </button>
           <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
         </div>
+        {showOverview && (
+          <BelowFoldDashboard
+            projects={(projects ?? []).map((p: Project) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description,
+              updatedAt: p.createdAt,
+              latestSnapshotScore: p.latestSnapshotScore ?? null,
+            }))}
+            onOpenProject={navigateToProject}
+            onOpenLedger={() => {
+              const p = projects?.[0];
+              if (p) setLocation(`/ledger/${p.id}`);
+            }}
+            onOpenParking={() => setLocation("/parking")}
+            onOpenQuickPrompt={() => setShowQuickPrompt(true)}
+            parkedCount={0}
+            committedCount={0}
+            briefing={briefing}
+            briefingLoading={briefingLoading}
+          />
+        )}
       </div>
 
       {showHistory && (
