@@ -2940,6 +2940,7 @@ function FilesTab({
   const [linkRepoError, setLinkRepoError] = useState<string | null>(null);
   const [selectedRepo, setSelectedRepo] = useState<GhRepo | null>(null);
   const [tree, setTree] = useState<GhTreeNode[]>([]);
+  const [flatFiles, setFlatFiles] = useState<Array<{ path: string; name: string }>>([]);
   const [treeLoading, setTreeLoading] = useState(false);
   const [treeError, setTreeError] = useState<string | null>(null);
   const [repoBranch, setRepoBranch] = useState("main");
@@ -2955,6 +2956,7 @@ function FilesTab({
   const [isUnlinking, setIsUnlinking] = useState(false);
   const autoLoadedRef = useRef(false);
   const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "done" | "error">("idle");
+  const [fileSearch, setFileSearch] = useState("");
 
   const runAutoScan = (repo: GhRepo, token: string) => {
     const scanKey = `atlas-scan-${projectId}`;
@@ -3098,8 +3100,13 @@ function FilesTab({
     try {
       const data = await ghFetch(`/api/github/tree?repo=${encodeURIComponent(repo.fullName)}&branch=${repo.defaultBranch}`) as any;
       setRepoBranch(data.branch);
-      const nodes = buildTree((data.tree as GhTreeItem[]).filter(i => i.type === "blob" || i.type === "tree"));
+      const items = (data.tree as GhTreeItem[]).filter(i => i.type === "blob" || i.type === "tree");
+      const nodes = buildTree(items);
       setTree(nodes);
+      setFlatFiles(items.filter(i => i.type === "blob").map(i => ({
+        path: i.path,
+        name: i.path.split("/").pop() ?? i.path,
+      })));
     } catch (e: any) {
       setTreeError(e.message);
     } finally {
@@ -3613,9 +3620,78 @@ function FilesTab({
               {treeError}
             </div>
           )}
-          {!treeLoading && tree.map((node) => (
-            <GhTreeNodeRow key={node.path} node={node} depth={0} selectedPath={selectedPath} onSelect={loadFile} />
-          ))}
+          {/* Search input */}
+          <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--atlas-border)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "var(--atlas-bg)", border: "1px solid var(--atlas-border)" }}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.5" strokeLinecap="round">
+                <circle cx="6.5" cy="6.5" r="4.5"/><path d="M11 11l2.5 2.5"/>
+              </svg>
+              <input
+                value={fileSearch}
+                onChange={e => setFileSearch(e.target.value)}
+                placeholder="Search files..."
+                style={{
+                  flex: 1, background: "transparent", border: "none", outline: "none",
+                  color: "var(--atlas-fg)", fontSize: 12,
+                  fontFamily: "var(--app-font-sans)",
+                }}
+              />
+              {fileSearch && (
+                <button
+                  onClick={() => setFileSearch("")}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1, padding: 0 }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* File list — search results or tree */}
+          {!treeLoading && (
+            fileSearch.trim() ? (
+              // Flat search results
+              <div style={{ overflowY: "auto", flex: 1 }}>
+                {flatFiles
+                  .filter(f => f.path.toLowerCase().includes(fileSearch.toLowerCase()))
+                  .slice(0, 50)
+                  .map(f => (
+                    <button
+                      key={f.path}
+                      onClick={() => { loadFile(f.path); setFileSearch(""); }}
+                      style={{
+                        width: "100%", textAlign: "left", padding: "8px 14px",
+                        background: selectedPath === f.path ? "rgba(201,162,76,0.06)" : "transparent",
+                        border: "none", cursor: "pointer", display: "flex", flexDirection: "column", gap: 2,
+                        borderBottom: "1px solid var(--atlas-border)",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "rgba(201,162,76,0.04)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = selectedPath === f.path ? "rgba(201,162,76,0.06)" : "transparent")}
+                    >
+                      <span style={{ fontSize: 12, color: "var(--atlas-fg)", fontFamily: "var(--app-font-mono)" }}>
+                        {f.name}
+                      </span>
+                      <span style={{ fontSize: 10, color: "var(--atlas-muted)", opacity: 0.6, fontFamily: "var(--app-font-mono)" }}>
+                        {f.path}
+                      </span>
+                    </button>
+                  ))
+                }
+                {flatFiles.filter(f => f.path.toLowerCase().includes(fileSearch.toLowerCase())).length === 0 && (
+                  <div style={{ padding: "24px 14px", textAlign: "center", color: "var(--atlas-muted)", fontSize: 11, fontFamily: "var(--app-font-mono)" }}>
+                    No files matching "{fileSearch}"
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Normal tree view
+              <div style={{ overflowY: "auto", flex: 1 }}>
+                {tree.map((node) => (
+                  <GhTreeNodeRow key={node.path} node={node} depth={0} selectedPath={selectedPath} onSelect={loadFile} />
+                ))}
+              </div>
+            )
+          )}
         </div>
       )}
 
