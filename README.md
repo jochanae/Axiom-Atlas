@@ -1,6 +1,6 @@
 # Axiom
 
-**A decision enforcement system and strategic thinking partner for founders and builders.**
+**Strategic Thinking Partner for Founders & Builders..**
 
 Axiom is not a general-purpose AI chat tool. It is a system built around a single idea: the decisions you make under pressure are the ones you'll regret. Axiom shows up when you're about to contradict something you already committed to, and makes you explain yourself first.
 
