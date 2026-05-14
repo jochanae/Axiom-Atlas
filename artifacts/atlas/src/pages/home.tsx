@@ -17,6 +17,7 @@ import { TheForge } from "../components/TheForge";
 import { VisualVault } from "../components/VisualVault";
 import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
+import { fileToBase64Safe } from "../lib/image-resize";
 import { useAuth, useRequireAuth, isSuperAdmin } from "../hooks/useAuth";
 import { useSubscription } from "../hooks/useSubscription";
 import { toast } from "sonner";
@@ -1423,36 +1424,6 @@ export default function Home() {
     [input, setLocation]
   );
 
-  // Compress + base64-encode an image file — resizes to max 1200px, JPEG 0.75 quality
-  const compressImage = useCallback((file: File): Promise<{ base64: string; mimeType: string }> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        try {
-          URL.revokeObjectURL(url);
-          const MAX = 1200;
-          let { width, height } = img;
-          if (width > MAX || height > MAX) {
-            if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
-            else { width = Math.round((width * MAX) / height); height = MAX; }
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) { reject(new Error("canvas unavailable")); return; }
-          ctx.drawImage(img, 0, 0, width, height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
-          resolve({ base64: dataUrl.split(",")[1], mimeType: "image/jpeg" });
-        } catch (err) {
-          reject(err);
-        }
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image load failed")); };
-      img.src = url;
-    });
-  }, []);
 
   const handleSubmit = useCallback(async () => {
     const text = input.trim();
@@ -1470,25 +1441,19 @@ export default function Home() {
     const suffix = otherFiles.length > 0 ? `\n[Attached: ${otherFiles.map(f => f.name).join(", ")}]` : "";
     const fullText = text + suffix;
 
-    // Use first image for display preview, compress all for API (Claude handles one at a time — send first)
+    // Use first image for display preview, safe-resize for API (always caps at 7000px — no raw fallback)
     let imageUrl: string | undefined;
     let imageBase64: string | undefined;
     let imageMimeType: string | undefined;
     if (imageFiles.length > 0) {
       imageUrl = URL.createObjectURL(imageFiles[0]);
       try {
-        const compressed = await compressImage(imageFiles[0]);
-        imageBase64 = compressed.base64;
-        imageMimeType = compressed.mimeType;
+        const safe = await fileToBase64Safe(imageFiles[0]);
+        imageBase64 = safe.base64;
+        imageMimeType = safe.mediaType;
       } catch {
-        // Fallback to raw read if canvas fails
-        imageBase64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(",")[1]);
-          reader.onerror = reject;
-          reader.readAsDataURL(imageFiles[0]);
-        });
-        imageMimeType = imageFiles[0].type;
+        // If resize fails entirely, skip the image and continue with text only
+        imageUrl = undefined;
       }
     }
 
@@ -1571,7 +1536,7 @@ export default function Home() {
       setIsSending(false);
       document.body.dataset.voiceActive = "false";
     }
-  }, [input, attachedFiles, isSending, homeModel, homeFocus, projects, activeConversationId, compressImage, homeMessages.length]);
+  }, [input, attachedFiles, isSending, homeModel, homeFocus, projects, activeConversationId, homeMessages.length]);
 
 
   const handleHandoff = useCallback(async () => {
