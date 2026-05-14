@@ -1210,23 +1210,9 @@ export default function Home() {
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [threadLoading, setThreadLoading] = useState(true);
   const [activeConversationId, setActiveConversationId] = useState<string>(() => {
-    try {
-      const stored = localStorage.getItem("atlas-home-conversation-id")
-        || sessionStorage.getItem("atlas-home-conversation-id");
-      if (stored) {
-        try { localStorage.setItem("atlas-home-conversation-id", stored); } catch {}
-        try { sessionStorage.setItem("atlas-home-conversation-id", stored); } catch {}
-        return stored;
-      }
-      const newId = crypto.randomUUID();
-      try { localStorage.setItem("atlas-home-conversation-id", newId); } catch {}
-      try { sessionStorage.setItem("atlas-home-conversation-id", newId); } catch {}
-      return newId;
-    } catch {
-      const newId = crypto.randomUUID();
-      try { sessionStorage.setItem("atlas-home-conversation-id", newId); } catch {}
-      return newId;
-    }
+    const newId = crypto.randomUUID();
+    try { sessionStorage.setItem("atlas-home-conversation-id", newId); } catch {}
+    return newId;
   });
   const [showHistory, setShowHistory] = useState(false);
   const [conversations, setConversations] = useState<Array<{ id: number; title: string; createdAt: string; messageCount: number }>>([]);
@@ -1374,7 +1360,6 @@ export default function Home() {
   }, [homeMessages]);
 
   // Load the active conversation from DB (re-runs when conversationId changes)
-  // If the stored ID returns no messages, auto-recover from the most recent conversation
   useEffect(() => {
     setHomeMessages([]);
     setThreadLoading(true);
@@ -1385,26 +1370,6 @@ export default function Home() {
           setHomeMessages(msgs.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
           return;
         }
-        // Thread came back empty — try to recover the most recent conversation from DB
-        try {
-          const convResp = await fetch("/api/nexus/conversations", { credentials: "include" });
-          if (!convResp.ok) return;
-          const convData = await convResp.json() as { conversations?: Array<{ id: number; messageCount: number }> };
-          const convList = convData.conversations ?? [];
-          if (convList.length === 0) return;
-          const mostRecent = convList[0];
-          // Only auto-recover if it has real content (more than 1 message)
-          if (mostRecent.messageCount < 2) return;
-          const recoverResp = await fetch(`/api/nexus/conversation/${mostRecent.id}`, { credentials: "include" });
-          if (!recoverResp.ok) return;
-          const recoveredData = await recoverResp.json() as { conversation?: { messages?: string } };
-          const recoveredMsgs = recoveredData.conversation?.messages
-            ? JSON.parse(recoveredData.conversation.messages) as Array<{ role: string; content: string }>
-            : [];
-          if (recoveredMsgs.length > 0) {
-            setHomeMessages(recoveredMsgs.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
-          }
-        } catch {}
       })
       .catch(() => {})
       .finally(() => setThreadLoading(false));
