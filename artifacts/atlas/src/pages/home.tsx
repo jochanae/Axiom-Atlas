@@ -2390,14 +2390,30 @@ export default function Home() {
             background: "linear-gradient(to bottom, transparent, var(--atlas-bg))",
           }} />
 
-          {/* Scroll cue — only when no messages, pinned to bottom of hero */}
-          {homeMessages.length === 0 && (
-            <div aria-hidden style={{ position: "absolute", bottom: 6, left: 0, right: 0, textAlign: "center", pointerEvents: "none", zIndex: 2 }}>
-              <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.28 }}>
-                ↓ scroll for your overview
+          {/* Portfolio pulse strip — only when no messages, pinned near bottom of hero */}
+          {homeMessages.length === 0 && projects && projects.length > 0 && (() => {
+            const activeProjects = (projects as Project[]).filter((p: Project) => p.status !== "archived");
+            const focusedProject = homeFocus ? (projects as Project[]).find((p: Project) => p.id === homeFocus) : null;
+            const spotlightName = focusedProject?.name ?? activeProjects[0]?.name ?? null;
+            return (
+              <div aria-hidden style={{ position: "absolute", bottom: 20, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 2 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderRadius: 20, background: "rgba(28,25,23,0.6)", border: "1px solid rgba(201,162,76,0.08)", backdropFilter: "blur(8px)" }}>
+                  {/* Pulse dot */}
+                  <span style={{ position: "relative", width: 6, height: 6, flexShrink: 0 }}>
+                    <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(201,162,76,0.5)", animation: "atlas-pulse 2.4s ease-in-out infinite" }} />
+                    <span style={{ position: "absolute", inset: 1, borderRadius: "50%", background: "var(--atlas-gold)", opacity: 0.9 }} />
+                  </span>
+                  <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.7, whiteSpace: "nowrap" }}>
+                    {activeProjects.length} active
+                    {spotlightName && (
+                      <> &nbsp;·&nbsp; <span style={{ color: "rgba(201,162,76,0.65)" }}>{spotlightName}</span></>
+                    )}
+                    &nbsp;·&nbsp; overview below
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           </div>{/* end hero */}
 
         </div>

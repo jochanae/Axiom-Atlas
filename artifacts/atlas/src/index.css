@@ -70,6 +70,11 @@ html, body {
   50%       { box-shadow: 0 0 20px oklch(0.70 0.15 70 / 70%); }
 }
 
+@keyframes atlas-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50%       { transform: scale(2.2); opacity: 0; }
+}
+
 @keyframes node-resolve-pop {
   0%   { transform: scale(1); }
   50%  { transform: scale(1.08); }
