@@ -5679,6 +5679,7 @@ function RightPanel({
     } catch {}
     return "ledger";
   });
+  const [ledgerSubTab, setLedgerSubTab] = useState<"entries" | "memory">("entries");
 
   useEffect(() => {
     if (forceTab) setTab(forceTab);
@@ -5917,7 +5918,34 @@ function RightPanel({
 
       {/* Tab content */}
       {tab === "ledger" && (
-        <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} pushHistory={pushHistory} onRollbackPush={onRollbackPush} />
+        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+          {/* Sub-tab bar */}
+          <div style={{ display: "flex", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+            {(["entries", "memory"] as const).map(st => (
+              <button
+                key={st}
+                onClick={() => setLedgerSubTab(st)}
+                style={{
+                  flex: 1, padding: "8px 0", background: "transparent", border: "none",
+                  borderBottom: ledgerSubTab === st ? "2px solid var(--atlas-gold)" : "2px solid transparent",
+                  fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+                  textTransform: "uppercase" as const,
+                  color: ledgerSubTab === st ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                  cursor: "pointer", transition: "all 160ms ease",
+                }}
+              >
+                {st === "entries" ? "Ledger" : "Memory"}
+              </button>
+            ))}
+          </div>
+          {/* Sub-tab content */}
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            {ledgerSubTab === "entries"
+              ? <LedgerTab projectId={projectId} entries={entries} activeCatch={activeCatch} pushHistory={pushHistory} onRollbackPush={onRollbackPush} />
+              : <MemoryTab projectId={projectId} />
+            }
+          </div>
+        </div>
       )}
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} />}
