@@ -1817,7 +1817,15 @@ export default function Home() {
 
       {/* ATLAS subheader — always-visible bar beneath main header */}
       <div className="atlas-chat-card-top" style={{ borderRadius: 0, padding: "5px 16px", zIndex: 20, position: "sticky", top: 50, height: 36, boxSizing: "border-box" }}>
-          {/* Three-dot / clear confirm — right side */}
+          <span style={{
+            position: "absolute", left: "50%", top: "50%",
+            transform: "translate(-50%, -50%)",
+            fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em",
+            color: "var(--atlas-gold)", opacity: 0.55, fontWeight: 600,
+            textTransform: "uppercase", pointerEvents: "none", whiteSpace: "nowrap",
+          }}>
+            ATLAS
+          </span>
           <div style={{ marginLeft: "auto", position: "relative" }}>
             {showClearConfirm ? (
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2440,6 +2448,17 @@ export default function Home() {
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 24px 120px" }}>
+        <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
+          <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
+          <button
+            onClick={() => setShowOverview(v => !v)}
+            style={{ background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 999, padding: "4px 12px", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+          >
+            <span>Overview</span>
+            <span style={{ fontSize: 12, lineHeight: 1 }}>{showOverview ? "−" : "+"}</span>
+          </button>
+          <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
+        </div>
         {showOverview && (
           <BelowFoldDashboard
             projects={(projects ?? []).map((p: Project) => ({
