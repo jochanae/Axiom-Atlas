@@ -1551,6 +1551,13 @@ export default function Home() {
               if (meta.detectedMode) setAtlasDetectedMode(meta.detectedMode);
               if (meta.focusSuggestion) setFocusSuggestion(meta.focusSuggestion);
               if (meta.detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) setShowHandoff(true);
+            } else if (evtName === "error") {
+              const errMsg = JSON.parse(evtData) as string;
+              setHomeMessages(prev => prev.map(m =>
+                (m as any).id === streamingId
+                  ? { ...m, content: errMsg || "Something went wrong. Tap send again.", streaming: false }
+                  : m
+              ));
             }
           } catch {}
         }
