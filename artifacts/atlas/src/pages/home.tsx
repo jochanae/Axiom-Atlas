@@ -1817,17 +1817,6 @@ export default function Home() {
 
       {/* ATLAS subheader — always-visible bar beneath main header */}
       <div className="atlas-chat-card-top" style={{ borderRadius: 0, padding: "5px 16px", zIndex: 20, position: "sticky", top: 50, height: 36, boxSizing: "border-box" }}>
-          {/* ATLAS label centered */}
-          <span style={{
-            position: "absolute", left: "50%", top: "50%",
-            transform: "translate(-50%, -50%)",
-            fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.22em",
-            color: "var(--atlas-gold)", opacity: 0.55, fontWeight: 600,
-            textTransform: "uppercase", pointerEvents: "none", whiteSpace: "nowrap",
-          }}>
-            ATLAS
-          </span>
-
           {/* Three-dot / clear confirm — right side */}
           <div style={{ marginLeft: "auto", position: "relative" }}>
             {showClearConfirm ? (
