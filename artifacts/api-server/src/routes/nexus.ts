@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable } from "@workspace/db";
-import { eq, asc, and, inArray, desc, isNull, sql } from "drizzle-orm";
+import { eq, asc, and, inArray, desc, isNull, isNotNull, sql } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 
@@ -263,12 +263,24 @@ router.post("/nexus/conversation/save", async (req, res): Promise<void> => {
 router.get("/nexus/conversations", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const rows = await db
-    .select({ id: conversationsTable.id, title: conversationsTable.title, createdAt: conversationsTable.createdAt, messageCount: sql<number>`jsonb_array_length(${conversationsTable.messages}::jsonb)` })
-    .from(conversationsTable)
-    .where(eq(conversationsTable.userId, userId))
-    .orderBy(desc(conversationsTable.createdAt))
+    .select({
+      id: nexusMessagesTable.conversationId,
+      title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' ORDER BY sub.created_at ASC LIMIT 1)`,
+      createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
+      messageCount: sql<number>`COUNT(*)`,
+    })
+    .from(nexusMessagesTable)
+    .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId)))
+    .groupBy(nexusMessagesTable.conversationId)
+    .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
     .limit(30);
-  res.json({ conversations: rows });
+  const conversations = rows.map(r => ({
+    id: r.id,
+    title: r.title ? r.title.slice(0, 60) : "Conversation",
+    createdAt: r.createdAt,
+    messageCount: Number(r.messageCount),
+  }));
+  res.json({ conversations });
 });
 
 router.get("/nexus/conversation/:id", async (req, res): Promise<void> => {

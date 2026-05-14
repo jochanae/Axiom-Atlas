@@ -1216,7 +1216,7 @@ export default function Home() {
     return newId;
   });
   const [showHistory, setShowHistory] = useState(false);
-  const [conversations, setConversations] = useState<Array<{ id: number; title: string; createdAt: string; messageCount: number }>>([]);
+  const [conversations, setConversations] = useState<Array<{ id: string; title: string; createdAt: string; messageCount: number }>>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
@@ -1596,15 +1596,19 @@ export default function Home() {
     }
   }, []);
 
-  const handleSwitchConversation = useCallback(async (id: number) => {
+  const handleSwitchConversation = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/api/nexus/conversation/${id}`, { credentials: "include" });
-      const data = await res.json();
-      const msgs = JSON.parse(data.conversation.messages) as Array<{ role: "user" | "assistant"; content: string }>;
-      setHomeMessages(msgs);
+      const res = await fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(id)}`, { credentials: "include" });
+      const msgs = await res.json() as Array<{ role: string; content: string }>;
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        setHomeMessages(msgs.map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
+        setActiveConversationId(id);
+        try { localStorage.setItem("atlas-home-conversation-id", id); } catch {}
+        try { sessionStorage.setItem("atlas-home-conversation-id", id); } catch {}
+      }
       setShowHistory(false);
     } catch {}
-  }, []);
+  }, [setActiveConversationId]);
 
   const handleDownloadThread = useCallback(() => {
     if (homeMessages.length === 0) return;
