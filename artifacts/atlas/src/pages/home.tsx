@@ -1696,15 +1696,6 @@ export default function Home() {
         {/* Right side: vault + avatar pair */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
-            onClick={handleOpenHistory}
-            title="Conversation history"
-            style={{ background: "transparent", border: "none", cursor: "pointer", padding: 6, color: "var(--atlas-muted)" }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
-          </button>
-          <button
             title="Visual Vault"
             onClick={() => setShowVault(true)}
             style={{
@@ -2191,6 +2182,24 @@ export default function Home() {
 
             {/* Bottom action bar */}
             <div style={{ display: "flex", alignItems: "center", marginTop: 12, gap: 2 }}>
+              {/* History clock */}
+              <button
+                onClick={handleOpenHistory}
+                title="Conversation history"
+                style={{
+                  width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none",
+                  color: "rgba(120,113,108,0.45)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "color 160ms ease", flexShrink: 0,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </button>
+
               {/* Paperclip — label triggers file input natively; works on mobile Safari */}
               <label
                 htmlFor="home-file-input"
