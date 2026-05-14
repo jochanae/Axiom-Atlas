@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { db, chatMessagesTable, sessionsTable, projectsTable, secretsTable } from "@workspace/db";
+import { db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -1264,6 +1264,26 @@ Rules:
     } catch {
       // Image generation is best-effort; don't fail the chat response
     }
+  }
+
+  // Auto-create ledger entries for resolved nodes
+  if (resolvedNodes.length > 0) {
+    try {
+      await Promise.all(resolvedNodes.map(nodeId =>
+        db.insert(entriesTable).values({
+          projectId,
+          sessionId,
+          title: `${nodeId.charAt(0).toUpperCase() + nodeId.slice(1)} — decided`,
+          summary: "Node resolved during Atlas conversation. Decision committed to map.",
+          details: "Node resolved during Atlas conversation. Decision committed to map.",
+          status: "committed",
+          severity: "committed",
+          mode: "decide",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+      ));
+    } catch { /* non-fatal — map still updates even if ledger write fails */ }
   }
 
   res.json({
