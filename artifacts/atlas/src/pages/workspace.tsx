@@ -233,7 +233,7 @@ function MenuBtn({ icon, label, onClick, badge, disabled, style }: { icon: React
 // ── AtlasLogo ────────────────────────────────────────────────────────────────
 const MODE_LABEL_COLORS: Record<string, string> = {
   THINK: "rgba(147,197,253,0.55)",
-  PLAN:  "rgba(212,175,55,0.38)",
+  PLAN:  "rgba(var(--atlas-gold-rgb),0.38)",
   BUILD: "rgba(74,222,128,0.45)",
 };
 
@@ -1045,7 +1045,7 @@ function GitHubPushModal({
                       )}
                       {diffItems.map((item, idx) => {
                         if (item.type === "ellipsis") {
-                          return <div key={idx} style={{ padding: "3px 10px", background: "rgba(0,0,0,0.2)", color: "rgba(120,113,108,0.4)", fontSize: 9.5, letterSpacing: "0.04em", borderTop: "1px solid rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>···  {item.count} unchanged {item.count === 1 ? "line" : "lines"}</div>;
+                          return <div key={idx} style={{ padding: "3px 10px", background: "rgba(0,0,0,0.2)", color: "rgba(var(--atlas-muted-rgb),0.4)", fontSize: 9.5, letterSpacing: "0.04em", borderTop: "1px solid rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>···  {item.count} unchanged {item.count === 1 ? "line" : "lines"}</div>;
                         }
                         const isAdded = item.type === "added";
                         const isRemoved = item.type === "removed";
@@ -1987,7 +1987,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
         <span style={{ width: 11, height: 11, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, zIndex: 1, boxShadow: "0 0 0 3px rgba(201,162,76,0.1)", display: "inline-block" }} />
         {/* Expand caret */}
         <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
-          style={{ flexShrink: 0, color: "rgba(120,113,108,0.45)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 180ms ease" }}>
+          style={{ flexShrink: 0, color: "rgba(var(--atlas-muted-rgb),0.45)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 180ms ease" }}>
           <path d="M2 4l4 4 4-4" />
         </svg>
         {/* Title */}
@@ -1999,14 +1999,14 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
           {entry.title}
         </Link>
         {/* NOTE badge */}
-        <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.07em", background: "rgba(120,113,108,0.12)", color: "rgba(120,113,108,0.6)", padding: "2px 7px", borderRadius: 4, flexShrink: 0, textTransform: "uppercase" as const }}>
+        <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.07em", background: "rgba(var(--atlas-muted-rgb),0.12)", color: "rgba(var(--atlas-muted-rgb),0.6)", padding: "2px 7px", borderRadius: 4, flexShrink: 0, textTransform: "uppercase" as const }}>
           NOTE
         </span>
       </div>
 
       {/* Source line (collapsed) */}
       {!expanded && (
-        <div style={{ paddingLeft: 20, paddingBottom: 6, fontSize: 10, color: "rgba(120,113,108,0.38)", fontFamily: "var(--app-font-mono)" }}>
+        <div style={{ paddingLeft: 20, paddingBottom: 6, fontSize: 10, color: "rgba(var(--atlas-muted-rgb),0.38)", fontFamily: "var(--app-font-mono)" }}>
           chat message · {timeAgo(entry.createdAt)}
         </div>
       )}
@@ -2016,16 +2016,16 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
         <div style={{ marginLeft: 20, marginBottom: 14, background: "var(--atlas-surface-alt)", border: "1px solid color-mix(in oklab, var(--atlas-gold) 12%, transparent)", borderRadius: 10, padding: "14px 16px" }}>
           {/* Category tags + status badge */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" as const }}>
-            <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "rgba(120,113,108,0.45)", textTransform: "uppercase" as const }}>
+            <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "rgba(var(--atlas-muted-rgb),0.45)", textTransform: "uppercase" as const }}>
               {modeLabel} · {typeLabel}
             </span>
             {entry.buildId && (
-              <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(120,113,108,0.1)", border: "0.5px solid rgba(120,113,108,0.2)", color: "rgba(120,113,108,0.65)", padding: "1px 7px", borderRadius: 10 }}>
+              <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(var(--atlas-muted-rgb),0.1)", border: "0.5px solid rgba(var(--atlas-muted-rgb),0.2)", color: "rgba(var(--atlas-muted-rgb),0.65)", padding: "1px 7px", borderRadius: 10 }}>
                 #{entry.buildId}
               </span>
             )}
             {entry.costOfLesson && (
-              <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "rgba(120,113,108,0.55)" }}>
+              <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "rgba(var(--atlas-muted-rgb),0.55)" }}>
                 cost: {entry.costOfLesson}
               </span>
             )}
@@ -2054,7 +2054,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
           {/* WHAT IT MEANS */}
           {context && (
             <>
-              <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(120,113,108,0.45)", marginBottom: 5 }}>
+              <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(var(--atlas-muted-rgb),0.45)", marginBottom: 5 }}>
                 What it means
               </div>
               <div style={{ fontSize: 12, color: "var(--atlas-muted)", lineHeight: 1.65, marginBottom: 12 }}>
@@ -2073,7 +2073,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
                 cursor: "pointer", padding: 0,
                 display: "flex", alignItems: "center", gap: 4,
                 fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
-                color: "rgba(120,113,108,0.5)", textTransform: "uppercase" as const,
+                color: "rgba(var(--atlas-muted-rgb),0.5)", textTransform: "uppercase" as const,
               }}
             >
               <svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"
@@ -2105,7 +2105,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
               )}
               {entry.touched && entry.touched.length > 0 && (
                 <>
-                  <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(120,113,108,0.45)", marginBottom: 6 }}>
+                  <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(var(--atlas-muted-rgb),0.45)", marginBottom: 6 }}>
                     Touched files
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 3 }}>
@@ -2121,16 +2121,16 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
           )}
 
           {/* Source */}
-          <div style={{ fontSize: 10, color: "rgba(120,113,108,0.35)", fontFamily: "var(--app-font-mono)", marginBottom: 12 }}>
+          <div style={{ fontSize: 10, color: "rgba(var(--atlas-muted-rgb),0.35)", fontFamily: "var(--app-font-mono)", marginBottom: 12 }}>
             chat message · {timeAgo(entry.createdAt)}
           </div>
 
           {/* Actions */}
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={handleResolve} disabled={done || updateEntry.isPending}
-              style={{ flex: 1, padding: "7px", borderRadius: 7, fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "transparent", border: "1px solid rgba(120,113,108,0.22)", color: "var(--atlas-muted)", cursor: done ? "default" : "pointer", transition: "all 150ms ease" }}
-              onMouseEnter={(e) => { if (!done) e.currentTarget.style.borderColor = "rgba(120,113,108,0.5)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(120,113,108,0.22)"; }}
+              style={{ flex: 1, padding: "7px", borderRadius: 7, fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "transparent", border: "1px solid rgba(var(--atlas-muted-rgb),0.22)", color: "var(--atlas-muted)", cursor: done ? "default" : "pointer", transition: "all 150ms ease" }}
+              onMouseEnter={(e) => { if (!done) e.currentTarget.style.borderColor = "rgba(var(--atlas-muted-rgb),0.5)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(var(--atlas-muted-rgb),0.22)"; }}
             >Resolve</button>
             <button onClick={handleCommit} disabled={done || updateEntry.isPending}
               style={{ flex: 1, padding: "7px", borderRadius: 7, fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)", color: "var(--atlas-gold)", cursor: done ? "default" : "pointer", transition: "all 150ms ease" }}
@@ -2320,7 +2320,7 @@ function PushDiffCard({ records, onRollbackAll }: { records: PushRecord[]; onRol
               : ext === "py" ? "#4ade80"
               : ext === "html" ? "#f97316"
               : ext === "sh" || ext === "bash" ? "#86efac"
-              : "rgba(120,113,108,0.65)";
+              : "rgba(var(--atlas-muted-rgb),0.65)";
             const isNew = r.originalContent === null;
             return (
               <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", borderBottom: "1px solid var(--atlas-surface)" }}>
@@ -2595,7 +2595,7 @@ function LedgerTab({
                   Parking Lot
                 </span>
                 {parked.length > 0 && (
-                  <span style={{ fontSize: 10, color: "rgba(120,113,108,0.45)", fontFamily: "var(--app-font-mono)" }}>
+                  <span style={{ fontSize: 10, color: "rgba(var(--atlas-muted-rgb),0.45)", fontFamily: "var(--app-font-mono)" }}>
                     {parked.length} waiting · 0 resolved
                   </span>
                 )}
@@ -2735,7 +2735,7 @@ function FileIcon({ ext }: { ext?: string }) {
     : ext === "js" || ext === "jsx" ? "#fbbf24"
     : ext === "css" ? "#a78bfa"
     : ext === "json" ? "#34d399"
-    : "rgba(120,113,108,0.7)";
+    : "rgba(var(--atlas-muted-rgb),0.7)";
   return (
     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
       <path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke={color} strokeWidth="1.1" />
@@ -3384,16 +3384,16 @@ function FilesTab({
               title="Change GitHub token"
               style={{
                 display: "flex", alignItems: "center", gap: 4,
-                background: "rgba(212,175,55,0.06)",
-                border: "1px solid rgba(212,175,55,0.18)",
+                background: "rgba(var(--atlas-gold-rgb),0.06)",
+                border: "1px solid rgba(var(--atlas-gold-rgb),0.18)",
                 borderRadius: 6, cursor: "pointer",
-                color: "rgba(212,175,55,0.65)", fontSize: 9.5,
+                color: "rgba(var(--atlas-gold-rgb),0.65)", fontSize: 9.5,
                 fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
                 padding: "4px 8px", minHeight: 28,
                 transition: "all 140ms ease",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.12)"; e.currentTarget.style.color = "rgba(212,175,55,0.9)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(212,175,55,0.06)"; e.currentTarget.style.color = "rgba(212,175,55,0.65)"; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--atlas-gold-rgb),0.12)"; e.currentTarget.style.color = "rgba(var(--atlas-gold-rgb),0.9)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--atlas-gold-rgb),0.06)"; e.currentTarget.style.color = "rgba(var(--atlas-gold-rgb),0.65)"; }}
             >
               <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                 <circle cx="5" cy="8" r="2.5" /><path d="M7.5 8h4M10 6v4" />
@@ -3525,7 +3525,7 @@ function FilesTab({
                     )}
                     <span style={{ fontSize: 12, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", fontWeight: isLinked ? 600 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{repo.name}</span>
                     {repo.private && (
-                      <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 3, background: "rgba(120,113,108,0.12)", color: "var(--atlas-muted)", border: "0.5px solid rgba(120,113,108,0.2)", flexShrink: 0 }}>
+                      <span style={{ fontSize: 8, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", padding: "1px 5px", borderRadius: 3, background: "rgba(var(--atlas-muted-rgb),0.12)", color: "var(--atlas-muted)", border: "0.5px solid rgba(var(--atlas-muted-rgb),0.2)", flexShrink: 0 }}>
                         private
                       </span>
                     )}
@@ -4815,7 +4815,7 @@ function MapTab({ projectId }: { projectId: number }) {
             padding: "5px 12px", borderRadius: 5, fontSize: 10, fontWeight: 600,
             ...sMono, letterSpacing: "0.08em",
             background: scanning
-              ? "rgba(120,113,108,0.15)"
+              ? "rgba(var(--atlas-muted-rgb),0.15)"
               : "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)",
             color: scanning ? "var(--atlas-muted)" : "var(--atlas-bg)",
             border: "none", cursor: scanning ? "not-allowed" : "pointer",
@@ -5098,7 +5098,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       <div style={{
         height: 1, flexShrink: 0,
-        background: "linear-gradient(to right, transparent 0%, rgba(212,175,55,0.18) 20%, rgba(212,175,55,0.38) 50%, rgba(212,175,55,0.18) 80%, transparent 100%)",
+        background: "linear-gradient(to right, transparent 0%, rgba(var(--atlas-gold-rgb),0.18) 20%, rgba(var(--atlas-gold-rgb),0.38) 50%, rgba(var(--atlas-gold-rgb),0.18) 80%, transparent 100%)",
       }} />
 
       {/* Map area — Axiom Flow (strategic) + System Map (architecture readiness)
@@ -5134,7 +5134,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
         {!isMobile && (
           <div style={{
             flexShrink: 0, height: 180, position: "relative", overflow: "hidden",
-            borderTop: "1px solid rgba(212,175,55,0.12)",
+            borderTop: "1px solid rgba(var(--atlas-gold-rgb),0.12)",
           }}>
             <SystemMap
               projectId={projectId}
@@ -5153,12 +5153,12 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "4px 12px",
-        background: "oklch(0.11 0.01 60)",
-        borderTop: "1px solid rgba(212,175,55,0.08)",
+        background: "var(--atlas-flow-pane-bg)",
+        borderTop: "1px solid rgba(var(--atlas-gold-rgb),0.08)",
         flexShrink: 0,
       }}>
         <span style={{
-          color: "rgba(212,175,55,0.35)", fontSize: 10,
+          color: "rgba(var(--atlas-gold-rgb),0.35)", fontSize: 10,
           fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
           userSelect: "none",
         }}>
@@ -5169,9 +5169,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
           <button
             onClick={() => { setChatFullscreen(false); setShowChat(v => !v); }}
             style={{
-              background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.28)",
+              background: "rgba(var(--atlas-gold-rgb),0.07)", border: "1px solid rgba(var(--atlas-gold-rgb),0.28)",
               borderRadius: 5, padding: "2px 9px", cursor: "pointer",
-              color: "rgba(212,175,55,0.78)", fontSize: 9,
+              color: "rgba(var(--atlas-gold-rgb),0.78)", fontSize: 9,
               fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
             }}>
             {showChat ? "⛶ Map full" : "⊠ Show both"}
@@ -5181,10 +5181,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
             <button
               onClick={() => setChatFullscreen(v => !v)}
               style={{
-                background: chatFullscreen ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.07)",
-                border: `1px solid ${chatFullscreen ? "rgba(212,175,55,0.5)" : "rgba(212,175,55,0.28)"}`,
+                background: chatFullscreen ? "rgba(var(--atlas-gold-rgb),0.14)" : "rgba(var(--atlas-gold-rgb),0.07)",
+                border: `1px solid ${chatFullscreen ? "rgba(var(--atlas-gold-rgb),0.5)" : "rgba(var(--atlas-gold-rgb),0.28)"}`,
                 borderRadius: 5, padding: "2px 9px", cursor: "pointer",
-                color: "rgba(212,175,55,0.78)", fontSize: 9,
+                color: "rgba(var(--atlas-gold-rgb),0.78)", fontSize: 9,
                 fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
               }}>
               {chatFullscreen ? "⊠ Show map" : "⛶ Chat full"}
@@ -5195,18 +5195,18 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
 
       {/* INTENT CAPTURE */}
       {showChat && (
-        <div style={{ flex: 1, minHeight: 190, overflow: "hidden", display: "flex", flexDirection: "column", background: "oklch(0.11 0.01 60)" }}>
+        <div style={{ flex: 1, minHeight: 190, overflow: "hidden", display: "flex", flexDirection: "column", background: "var(--atlas-flow-pane-bg)" }}>
           <style>{`@keyframes intent-dot-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.85)}}`}</style>
 
           {/* Tab switcher — FLOW CHAT | INTENT */}
-          <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "5px 14px 4px", flexShrink: 0, borderBottom: "1px solid rgba(212,175,55,0.08)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 0, padding: "5px 14px 4px", flexShrink: 0, borderBottom: "1px solid rgba(var(--atlas-gold-rgb),0.08)" }}>
             <button
               onClick={() => setFlowChatTab("flow")}
               style={{
-                background: flowChatTab === "flow" ? "rgba(212,175,55,0.12)" : "transparent",
-                border: "none", borderBottom: flowChatTab === "flow" ? "2px solid rgba(212,175,55,0.7)" : "2px solid transparent",
+                background: flowChatTab === "flow" ? "rgba(var(--atlas-gold-rgb),0.12)" : "transparent",
+                border: "none", borderBottom: flowChatTab === "flow" ? "2px solid rgba(var(--atlas-gold-rgb),0.7)" : "2px solid transparent",
                 padding: "3px 10px 4px", cursor: "pointer",
-                color: flowChatTab === "flow" ? "#D4AF37" : "rgba(120,113,108,0.55)",
+                color: flowChatTab === "flow" ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.55)",
                 fontSize: 9, fontWeight: 700, letterSpacing: "0.12em",
                 fontFamily: "var(--app-font-mono)", textTransform: "uppercase",
                 transition: "all 180ms ease",
@@ -5215,10 +5215,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
             <button
               onClick={() => setFlowChatTab("intent")}
               style={{
-                background: flowChatTab === "intent" ? "rgba(212,175,55,0.12)" : "transparent",
-                border: "none", borderBottom: flowChatTab === "intent" ? "2px solid rgba(212,175,55,0.7)" : "2px solid transparent",
+                background: flowChatTab === "intent" ? "rgba(var(--atlas-gold-rgb),0.12)" : "transparent",
+                border: "none", borderBottom: flowChatTab === "intent" ? "2px solid rgba(var(--atlas-gold-rgb),0.7)" : "2px solid transparent",
                 padding: "3px 10px 4px", cursor: "pointer",
-                color: flowChatTab === "intent" ? "#D4AF37" : "rgba(120,113,108,0.55)",
+                color: flowChatTab === "intent" ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.55)",
                 fontSize: 9, fontWeight: 700, letterSpacing: "0.12em",
                 fontFamily: "var(--app-font-mono)", textTransform: "uppercase",
                 transition: "all 180ms ease",
@@ -5244,7 +5244,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                     height: "100%", gap: 6, opacity: 0.45,
                   }}>
                     <span style={{ fontSize: 18 }}>⬡</span>
-                    <span style={{ fontSize: 10, color: "rgba(120,113,108,0.8)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", textAlign: "center", lineHeight: 1.5 }}>
+                    <span style={{ fontSize: 10, color: "rgba(var(--atlas-muted-rgb),0.8)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", textAlign: "center", lineHeight: 1.5 }}>
                       Talk to Atlas.<br />Nodes appear on the canvas as you plan.
                     </span>
                   </div>
@@ -5254,11 +5254,11 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                     alignSelf: m.role === "user" ? "flex-end" : "flex-start",
                     maxWidth: "86%",
                     background: m.role === "user"
-                      ? "rgba(212,175,55,0.12)"
+                      ? "rgba(var(--atlas-gold-rgb),0.12)"
                       : "var(--atlas-surface)",
                     border: m.role === "user"
-                      ? "1px solid rgba(212,175,55,0.28)"
-                      : "1px solid rgba(212,175,55,0.10)",
+                      ? "1px solid rgba(var(--atlas-gold-rgb),0.28)"
+                      : "1px solid rgba(var(--atlas-gold-rgb),0.10)",
                     borderRadius: m.role === "user" ? "10px 10px 2px 10px" : "10px 10px 10px 2px",
                     padding: "7px 10px",
                     fontSize: 12, lineHeight: 1.55,
@@ -5273,7 +5273,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   <div style={{
                     alignSelf: "flex-start",
                     background: "var(--atlas-surface)",
-                    border: "1px solid rgba(212,175,55,0.10)",
+                    border: "1px solid rgba(var(--atlas-gold-rgb),0.10)",
                     borderRadius: "10px 10px 10px 2px",
                     padding: "8px 12px",
                     display: "flex", gap: 4, alignItems: "center",
@@ -5281,7 +5281,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                     {[0, 1, 2].map(d => (
                       <div key={d} style={{
                         width: 5, height: 5, borderRadius: "50%",
-                        background: "rgba(212,175,55,0.6)",
+                        background: "rgba(var(--atlas-gold-rgb),0.6)",
                         animation: `intent-dot-pulse 1.2s ease-in-out ${d * 0.2}s infinite`,
                       }} />
                     ))}
@@ -5309,14 +5309,14 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   {flowAttachedFiles.map((file, idx) => (
                     <div key={idx} style={{ position: "relative", flexShrink: 0 }}>
                       {file.type.startsWith("image/") ? (
-                        <img src={URL.createObjectURL(file)} alt={file.name} style={{ width: 46, height: 46, borderRadius: 6, objectFit: "cover", border: "1px solid rgba(212,175,55,0.25)", display: "block" }} />
+                        <img src={URL.createObjectURL(file)} alt={file.name} style={{ width: 46, height: 46, borderRadius: 6, objectFit: "cover", border: "1px solid rgba(var(--atlas-gold-rgb),0.25)", display: "block" }} />
                       ) : (
-                        <div style={{ width: 46, height: 46, borderRadius: 6, background: "rgba(212,175,55,0.07)", border: "1px solid rgba(212,175,55,0.2)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, overflow: "hidden" }}>
-                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(212,175,55,0.6)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                          <span style={{ fontSize: 7, color: "rgba(212,175,55,0.55)", maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-mono)" }}>{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
+                        <div style={{ width: 46, height: 46, borderRadius: 6, background: "rgba(var(--atlas-gold-rgb),0.07)", border: "1px solid rgba(var(--atlas-gold-rgb),0.2)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, overflow: "hidden" }}>
+                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="rgba(var(--atlas-gold-rgb),0.6)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          <span style={{ fontSize: 7, color: "rgba(var(--atlas-gold-rgb),0.55)", maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-mono)" }}>{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
                         </div>
                       )}
-                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(212,175,55,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>×</button>
+                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(var(--atlas-gold-rgb),0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>×</button>
                     </div>
                   ))}
                 </div>
@@ -5325,7 +5325,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
               {/* Input row */}
               <div style={{
                 display: "flex", gap: 6, alignItems: "flex-end",
-                paddingTop: 6, borderTop: "1px solid rgba(212,175,55,0.07)",
+                paddingTop: 6, borderTop: "1px solid rgba(var(--atlas-gold-rgb),0.07)",
                 flexShrink: 0,
               }}>
                 {/* Paperclip button */}
@@ -5335,12 +5335,12 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   style={{
                     width: 28, height: 28, flexShrink: 0, borderRadius: 7,
                     background: "transparent", border: "none",
-                    color: flowAttachedFiles.length > 0 ? "#D4AF37" : "rgba(120,113,108,0.4)",
+                    color: flowAttachedFiles.length > 0 ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.4)",
                     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                     transition: "color 160ms ease",
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.color = "#D4AF37")}
-                  onMouseLeave={e => { if (!flowAttachedFiles.length) e.currentTarget.style.color = "rgba(120,113,108,0.4)"; }}
+                  onMouseEnter={e => (e.currentTarget.style.color = "var(--atlas-gold)")}
+                  onMouseLeave={e => { if (!flowAttachedFiles.length) e.currentTarget.style.color = "rgba(var(--atlas-muted-rgb),0.4)"; }}
                 >
                   <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </button>
@@ -5355,7 +5355,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   disabled={flowLoading}
                   style={{
                     flex: 1, resize: "none", background: "var(--atlas-surface)",
-                    border: "1px solid rgba(212,175,55,0.20)", borderRadius: 8,
+                    border: "1px solid rgba(var(--atlas-gold-rgb),0.20)", borderRadius: 8,
                     padding: "7px 10px", color: "var(--atlas-fg)", fontSize: 12,
                     lineHeight: 1.5, fontFamily: "inherit", outline: "none",
                     opacity: flowLoading ? 0.6 : 1,
@@ -5366,11 +5366,11 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   disabled={!flowInput.trim() || flowLoading}
                   style={{
                     width: 32, height: 32, flexShrink: 0, borderRadius: 8,
-                    background: flowInput.trim() && !flowLoading ? "rgba(212,175,55,0.18)" : "transparent",
-                    border: `1px solid ${flowInput.trim() && !flowLoading ? "rgba(212,175,55,0.45)" : "rgba(120,113,108,0.2)"}`,
+                    background: flowInput.trim() && !flowLoading ? "rgba(var(--atlas-gold-rgb),0.18)" : "transparent",
+                    border: `1px solid ${flowInput.trim() && !flowLoading ? "rgba(var(--atlas-gold-rgb),0.45)" : "rgba(var(--atlas-muted-rgb),0.2)"}`,
                     cursor: flowInput.trim() && !flowLoading ? "pointer" : "not-allowed",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    color: flowInput.trim() && !flowLoading ? "#D4AF37" : "rgba(120,113,108,0.3)",
+                    color: flowInput.trim() && !flowLoading ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.3)",
                     transition: "all 180ms ease",
                   }}
                 >
@@ -5387,15 +5387,15 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
           <div style={{ flex: 1, minHeight: 0, overflow: "hidden", padding: "0 14px 12px" }}>
             <div style={{
               height: "100%", display: "flex", flexDirection: "column",
-              background: "rgba(20,18,14,0.92)",
-              border: "1px solid rgba(212,175,55,0.16)",
+              background: "rgba(var(--atlas-surface-rgb),0.92)",
+              border: "1px solid rgba(var(--atlas-gold-rgb),0.16)",
               borderRadius: 12, overflow: "hidden",
             }}>
               {/* Card header — platform badge + signal selector + add button, all in one row */}
               <div style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "7px 10px 6px",
-                borderBottom: "1px solid rgba(212,175,55,0.07)",
+                borderBottom: "1px solid rgba(var(--atlas-gold-rgb),0.07)",
                 flexShrink: 0,
               }}>
                 {/* Platform badge — translucent pill, color keyed to detected system */}
@@ -5407,15 +5407,15 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   const color  = isReplit  ? "oklch(0.74 0.18 150)"
                                : isCursor  ? "oklch(0.74 0.18 240)"
                                : isLovable ? "oklch(0.74 0.20 300)"
-                               : "rgba(212,175,55,0.78)";
+                               : "rgba(var(--atlas-gold-rgb),0.78)";
                   const bg     = isReplit  ? "oklch(0.28 0.12 150 / 28%)"
                                : isCursor  ? "oklch(0.28 0.12 240 / 28%)"
                                : isLovable ? "oklch(0.28 0.12 300 / 28%)"
-                               : "rgba(212,175,55,0.10)";
+                               : "rgba(var(--atlas-gold-rgb),0.10)";
                   const border = isReplit  ? "oklch(0.55 0.18 150 / 50%)"
                                : isCursor  ? "oklch(0.55 0.18 240 / 50%)"
                                : isLovable ? "oklch(0.55 0.20 300 / 50%)"
-                               : "rgba(212,175,55,0.30)";
+                               : "rgba(var(--atlas-gold-rgb),0.30)";
                   return (
                     <span style={{
                       fontSize: 9, fontWeight: 700, color,
@@ -5434,9 +5434,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   onChange={e => setActiveSignalIdx(Number(e.target.value))}
                   style={{
                     flex: 1, minWidth: 0, background: "transparent",
-                    border: "1px solid rgba(212,175,55,0.13)",
+                    border: "1px solid rgba(var(--atlas-gold-rgb),0.13)",
                     borderRadius: 5, padding: "3px 6px",
-                    color: "rgba(212,175,55,0.65)", fontSize: 9.5,
+                    color: "rgba(var(--atlas-gold-rgb),0.65)", fontSize: 9.5,
                     fontFamily: "var(--app-font-mono)", cursor: "pointer",
                   }}>
                   {signals.map((s, i) => (
@@ -5461,10 +5461,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                 <button
                   onClick={addSignal}
                   style={{
-                    background: signalAdded ? "rgba(212,175,55,0.22)" : "rgba(212,175,55,0.09)",
-                    border: `1px solid ${signalAdded ? "rgba(212,175,55,0.7)" : "rgba(212,175,55,0.3)"}`,
+                    background: signalAdded ? "rgba(var(--atlas-gold-rgb),0.22)" : "rgba(var(--atlas-gold-rgb),0.09)",
+                    border: `1px solid ${signalAdded ? "rgba(var(--atlas-gold-rgb),0.7)" : "rgba(var(--atlas-gold-rgb),0.3)"}`,
                     borderRadius: 6, padding: "3px 9px", cursor: "pointer", flexShrink: 0,
-                    color: "#D4AF37", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.04em",
+                    color: "var(--atlas-gold)", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.04em",
                     fontFamily: "var(--app-font-mono)", transition: "all 300ms",
                   }}>
                   {signalAdded ? "✓" : "+ Signal"}
@@ -5490,16 +5490,16 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
               <div style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 padding: "7px 14px",
-                borderTop: "1px solid rgba(212,175,55,0.05)",
+                borderTop: "1px solid rgba(var(--atlas-gold-rgb),0.05)",
                 flexShrink: 0,
               }}>
-                <button style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.45)", padding: 4 }}>
+                <button style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.45)", padding: 4 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
                   </svg>
                 </button>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.45)", padding: 4 }}>
+                  <button style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.45)", padding: 4 }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
                     </svg>
@@ -5508,11 +5508,11 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                     onClick={handleSend}
                     style={{
                       width: 30, height: 30, borderRadius: 8,
-                      background: sentFlash ? "rgba(212,175,55,0.28)" : intent.trim() ? "rgba(212,175,55,0.14)" : "transparent",
-                      border: `1px solid ${sentFlash ? "rgba(212,175,55,0.7)" : intent.trim() ? "rgba(212,175,55,0.38)" : "rgba(120,113,108,0.22)"}`,
+                      background: sentFlash ? "rgba(var(--atlas-gold-rgb),0.28)" : intent.trim() ? "rgba(var(--atlas-gold-rgb),0.14)" : "transparent",
+                      border: `1px solid ${sentFlash ? "rgba(var(--atlas-gold-rgb),0.7)" : intent.trim() ? "rgba(var(--atlas-gold-rgb),0.38)" : "rgba(var(--atlas-muted-rgb),0.22)"}`,
                       cursor: "pointer",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      color: sentFlash ? "#D4AF37" : intent.trim() ? "#D4AF37" : "rgba(120,113,108,0.32)",
+                      color: sentFlash ? "var(--atlas-gold)" : intent.trim() ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.32)",
                       transition: "all 200ms",
                       fontSize: sentFlash ? 13 : undefined,
                       fontWeight: sentFlash ? 700 : undefined,
@@ -5556,9 +5556,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
             style={{
               display: "flex", alignItems: "center", gap: 5,
               padding: "8px 14px", borderRadius: 10,
-              background: "rgba(212,175,55,0.08)",
-              border: "1px solid rgba(212,175,55,0.22)",
-              color: "#D4AF37", fontSize: 11, fontWeight: 700,
+              background: "rgba(var(--atlas-gold-rgb),0.08)",
+              border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
+              color: "var(--atlas-gold)", fontSize: 11, fontWeight: 700,
               letterSpacing: "0.06em", cursor: "pointer",
             }}
           >
@@ -5580,10 +5580,10 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "8px 12px", borderRadius: 10,
                 background: handoverPending
-                  ? "rgba(120,113,108,0.1)"
+                  ? "rgba(var(--atlas-muted-rgb),0.1)"
                   : "rgba(146,64,14,0.22)",
-                border: `1px solid ${handoverPending ? "rgba(120,113,108,0.35)" : "rgba(146,64,14,0.65)"}`,
-                color: handoverPending ? "rgba(120,113,108,0.7)" : "rgba(230,150,90,0.95)",
+                border: `1px solid ${handoverPending ? "rgba(var(--atlas-muted-rgb),0.35)" : "rgba(146,64,14,0.65)"}`,
+                color: handoverPending ? "rgba(var(--atlas-muted-rgb),0.7)" : "rgba(230,150,90,0.95)",
                 fontSize: 11, fontWeight: 700,
                 letterSpacing: "0.06em",
                 fontFamily: "var(--app-font-mono)",
@@ -5804,7 +5804,7 @@ function RightPanel({
                 <span
                   style={{
                     padding: "1px 4px", borderRadius: 3,
-                    background: active ? "rgba(201,162,76,0.15)" : "rgba(120,113,108,0.15)",
+                    background: active ? "rgba(201,162,76,0.15)" : "rgba(var(--atlas-muted-rgb),0.15)",
                     fontSize: 8.5,
                   }}
                 >
@@ -5839,15 +5839,15 @@ function RightPanel({
                 padding: "5px 11px",
                 borderRadius: 5,
                 background: !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
-                  ? "rgba(120,113,108,0.15)"
+                  ? "rgba(var(--atlas-muted-rgb),0.15)"
                   : "rgba(146,64,14,0.22)",
                 border: `1px solid ${
                   !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
-                    ? "rgba(120,113,108,0.35)"
+                    ? "rgba(var(--atlas-muted-rgb),0.35)"
                     : "rgba(146,64,14,0.65)"
                 }`,
                 color: !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
-                  ? "rgba(120,113,108,0.7)"
+                  ? "rgba(var(--atlas-muted-rgb),0.7)"
                   : "rgba(230,150,90,0.95)",
                 fontFamily: "var(--app-font-mono)",
                 fontSize: 9.5,
@@ -6067,7 +6067,7 @@ function TerminalPanel({
   const colorFor = (kind: TerminalLine["kind"]) => {
     if (kind === "input") return "rgba(201,162,76,0.92)";
     if (kind === "stderr") return "rgba(252,165,100,0.88)";
-    if (kind === "system") return "rgba(120,113,108,0.65)";
+    if (kind === "system") return "rgba(var(--atlas-muted-rgb),0.65)";
     if (kind === "error") return "rgba(252,100,100,0.88)";
     return "var(--atlas-fg)";
   };
@@ -6089,7 +6089,7 @@ function TerminalPanel({
           </div>
         ))}
         {running && (
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3, color: "rgba(120,113,108,0.6)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3, color: "rgba(var(--atlas-muted-rgb),0.6)" }}>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "rgba(201,162,76,0.55)", display: "inline-block", animation: "atlas-pulse 1.2s ease-in-out infinite" }} />
             running…
           </div>
@@ -6228,7 +6228,7 @@ function MobileTabBar({
         background: "var(--atlas-surface)",
         backdropFilter: "blur(18px)",
         WebkitBackdropFilter: "blur(18px)",
-        borderTop: "1px solid rgba(212,175,55,0.12)",
+        borderTop: "1px solid rgba(var(--atlas-gold-rgb),0.12)",
         display: "flex",
         alignItems: "stretch",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
@@ -7556,7 +7556,7 @@ export default function Workspace() {
         <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "0.04em" }}>Project not found.</div>
         <button
           onClick={() => setLocation("/home")}
-          style={{ padding: "10px 24px", borderRadius: 9, cursor: "pointer", background: "linear-gradient(180deg, #D4AF37 0%, #B8942A 100%)", border: "1px solid rgba(212,175,55,0.4)", color: "#0C0A09", fontSize: 11, fontWeight: 700, fontFamily: "var(--app-font-mono)", letterSpacing: "0.14em", textTransform: "uppercase" }}
+          style={{ padding: "10px 24px", borderRadius: 9, cursor: "pointer", background: "linear-gradient(180deg, var(--atlas-gold) 0%, #B8942A 100%)", border: "1px solid rgba(var(--atlas-gold-rgb),0.4)", color: "#0C0A09", fontSize: 11, fontWeight: 700, fontFamily: "var(--app-font-mono)", letterSpacing: "0.14em", textTransform: "uppercase" }}
         >
           Go home
         </button>
@@ -7621,7 +7621,7 @@ export default function Workspace() {
       {/* ── Header ── */}
       <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(16px)" }}>
         {/* Row 1: logo | project name (centered) | mode + P + avatar */}
-        <div className="atlas-app-header-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 14px", borderBottom: "1px solid rgba(212,175,55,0.12)", boxShadow: "0 1px 28px rgba(0,0,0,0.45)" }}>
+        <div className="atlas-app-header-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 14px", borderBottom: "1px solid rgba(var(--atlas-gold-rgb),0.12)", boxShadow: "0 1px 28px rgba(0,0,0,0.45)" }}>
 
           {/* Left: drawer button + Atlas logo + Trust Mode */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -7720,13 +7720,13 @@ export default function Workspace() {
                 <>
                   {/* Title row: status dot + name */}
                   <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, overflow: "hidden", width: "100%" }}>
-                    <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 6, height: 6, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(120,113,108,0.4)", flexShrink: 0, display: "inline-block" }} />
+                    <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 6, height: 6, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(var(--atlas-muted-rgb),0.4)", flexShrink: 0, display: "inline-block" }} />
                     <span style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.92, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
                       {project?.name ?? "…"}
                     </span>
                   </span>
                   {/* Chevron on its own line, centered below */}
-                  <svg width="10" height="6" viewBox="0 0 12 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "rgba(120,113,108,0.45)", flexShrink: 0 }}>
+                  <svg width="10" height="6" viewBox="0 0 12 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "rgba(var(--atlas-muted-rgb),0.45)", flexShrink: 0 }}>
                     <path d="M1 1l5 5 5-5" />
                   </svg>
                 </>
@@ -7951,7 +7951,7 @@ export default function Workspace() {
                 </span>
                 <span style={{
                   width: 6, height: 6, borderRadius: "50%",
-                  background: blendedReadiness > 0 ? "var(--atlas-gold)" : "rgba(120,113,108,0.4)",
+                  background: blendedReadiness > 0 ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.4)",
                   flexShrink: 0, display: "inline-block",
                   boxShadow: blendedReadiness > 0 ? "0 0 5px rgba(201,162,76,0.6)" : "none",
                 }} />
@@ -8123,13 +8123,13 @@ export default function Workspace() {
                         display: "flex", alignItems: "flex-start", gap: 10,
                         padding: "10px 12px", borderRadius: 9,
                         background: selected ? "rgba(74,222,128,0.07)" : "rgba(255,255,255,0.025)",
-                        border: `1px solid ${selected ? "rgba(74,222,128,0.3)" : "rgba(120,113,108,0.15)"}`,
+                        border: `1px solid ${selected ? "rgba(74,222,128,0.3)" : "rgba(var(--atlas-muted-rgb),0.15)"}`,
                         cursor: "pointer", textAlign: "left" as const, transition: "all 140ms ease",
                       }}
                     >
                       <span style={{
                         width: 14, height: 14, borderRadius: 4, flexShrink: 0, marginTop: 1,
-                        border: `1.5px solid ${selected ? "#4ade80" : "rgba(120,113,108,0.4)"}`,
+                        border: `1.5px solid ${selected ? "#4ade80" : "rgba(var(--atlas-muted-rgb),0.4)"}`,
                         background: selected ? "#4ade80" : "transparent",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         transition: "all 140ms ease",
@@ -8164,7 +8164,7 @@ export default function Workspace() {
                   onClick={skipAndBuild}
                   style={{
                     padding: "11px 16px", borderRadius: 9, cursor: "pointer",
-                    background: "transparent", border: "1px solid rgba(120,113,108,0.2)",
+                    background: "transparent", border: "1px solid rgba(var(--atlas-muted-rgb),0.2)",
                     color: "var(--atlas-muted)", fontSize: 11, fontFamily: "var(--app-font-mono)",
                     fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" as const,
                     opacity: 0.7,
@@ -8337,7 +8337,7 @@ export default function Workspace() {
                     <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 6, letterSpacing: "-0.01em", textAlign: "center" }}>
                       {project ? project.name : "Ready."}
                     </div>
-                    <div style={{ fontSize: 12, color: "rgba(120,113,108,0.4)", marginBottom: 28, textAlign: "center" }}>
+                    <div style={{ fontSize: 12, color: "rgba(var(--atlas-muted-rgb),0.4)", marginBottom: 28, textAlign: "center" }}>
                       What are we working through today?
                     </div>
                   </>
@@ -8516,7 +8516,7 @@ export default function Workspace() {
           {/* Ledger status bar */}
           <div className="atlas-ledger-bar">
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: entryCount > 0 ? "var(--atlas-gold)" : "rgba(200,190,185,0.45)", flexShrink: 0, display: "inline-block", boxShadow: entryCount > 0 ? "0 0 6px rgba(201,162,76,0.45)" : "none", transition: "all 400ms ease" }} />
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: entryCount > 0 ? "rgba(212,175,55,0.82)" : "rgba(200,190,185,0.6)", transition: "color 400ms ease" }}>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: entryCount > 0 ? "rgba(var(--atlas-gold-rgb),0.82)" : "rgba(200,190,185,0.6)", transition: "color 400ms ease" }}>
               [{entryCount}] Ledger Entries
             </span>
             <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(200,190,185,0.5)" }}>·</span>
@@ -8810,10 +8810,10 @@ export default function Workspace() {
                           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                         >
                           <div style={{ fontSize: 11.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", fontWeight: 500 }}>{f.label}</div>
-                          <div style={{ fontSize: 9.5, color: "rgba(120,113,108,0.55)", marginTop: 1 }}>{f.hint}</div>
+                          <div style={{ fontSize: 9.5, color: "rgba(var(--atlas-muted-rgb),0.55)", marginTop: 1 }}>{f.hint}</div>
                         </button>
                       ))}
-                      <div style={{ fontSize: 9, padding: "4px 10px 2px", color: "rgba(120,113,108,0.35)", borderTop: "1px solid rgba(56,189,248,0.06)", marginTop: 4 }}>
+                      <div style={{ fontSize: 9, padding: "4px 10px 2px", color: "rgba(var(--atlas-muted-rgb),0.35)", borderTop: "1px solid rgba(56,189,248,0.06)", marginTop: 4 }}>
                         File loads into context · next message only
                       </div>
                     </div>
@@ -8840,7 +8840,7 @@ export default function Workspace() {
                     onMouseEnter={e => { e.currentTarget.style.background = "rgba(201,162,76,0.07)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.32)"; }}
                     onMouseLeave={e => { e.currentTarget.style.background = "var(--atlas-surface)"; e.currentTarget.style.borderColor = "var(--atlas-surface)"; }}
                   >
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="rgba(120,113,108,0.7)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="rgba(var(--atlas-muted-rgb),0.7)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="8" cy="8" r="6" />
                       <path d="M5.5 8.5L7 10l3-4" />
                     </svg>
@@ -9130,7 +9130,7 @@ export default function Workspace() {
             <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
               <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Model</span>
-              <button onClick={() => setShowWsModelSheet(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+              <button onClick={() => setShowWsModelSheet(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
             </div>
             <div style={{ padding: "0 14px" }}>
               {([
@@ -9159,7 +9159,7 @@ export default function Workspace() {
                     border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "var(--atlas-surface)"}`,
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
-                    color: m.available ? "rgba(201,162,76,0.85)" : "rgba(120,113,108,0.4)",
+                    color: m.available ? "rgba(201,162,76,0.85)" : "rgba(var(--atlas-muted-rgb),0.4)",
                     letterSpacing: "0.02em",
                   }}>
                     {m.icon}
@@ -9168,7 +9168,7 @@ export default function Workspace() {
                     <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", display: "flex", alignItems: "center", gap: 6 }}>
                       {m.label}
                       {!m.available && (
-                        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", letterSpacing: "0.1em", opacity: 0.55, border: "1px solid rgba(120,113,108,0.2)", borderRadius: 3, padding: "1px 4px" }}>KEY NEEDED</span>
+                        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", letterSpacing: "0.1em", opacity: 0.55, border: "1px solid rgba(var(--atlas-muted-rgb),0.2)", borderRadius: 3, padding: "1px 4px" }}>KEY NEEDED</span>
                       )}
                     </div>
                     <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", marginTop: 2, opacity: m.available ? 0.7 : 0.4 }}>{m.sub}</div>

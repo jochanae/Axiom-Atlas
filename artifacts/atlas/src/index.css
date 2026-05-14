@@ -171,8 +171,21 @@ html, body {
   border-color: var(--atlas-border) !important;
 }
 
+:root {
+  --atlas-gold-rgb: 212, 175, 55;
+  --atlas-bg-rgb: 13, 11, 9;
+  --atlas-surface-rgb: 20, 18, 14;
+  --atlas-muted-rgb: 120, 113, 108;
+  --atlas-flow-pane-bg: oklch(0.11 0.01 60);
+}
+
 [data-theme="parchment"] {
   color-scheme: light;
+  --atlas-gold-rgb: 180, 83, 9;
+  --atlas-bg-rgb: 245, 241, 232;
+  --atlas-surface-rgb: 237, 233, 223;
+  --atlas-muted-rgb: 107, 94, 82;
+  --atlas-flow-pane-bg: #EDE9DF;
 
   /* Home page theme overrides */
   --atlas-home-atmosphere: radial-gradient(circle, rgba(180,83,9,0.10) 0%, rgba(201,162,76,0.04) 45%, transparent 70%);
