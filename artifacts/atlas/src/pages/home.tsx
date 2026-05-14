@@ -1955,9 +1955,9 @@ export default function Home() {
               <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
                 <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
                 <div style={{ fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.8 }}>
-                  Your Overview
+                  ATLAS
                 </div>
-                <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
+                <div style={{ flex: 1, height: 1, background: "transparent" }} />
               </div>
             {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? (
               <div style={{ display: "flex", justifyContent: "center", marginTop: 10, opacity: 0.7, animation: "fadeIn 600ms ease forwards" }}>
