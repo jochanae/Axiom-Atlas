@@ -6535,7 +6535,8 @@ export default function Workspace() {
   const { playSend, playCatch, playCommit, playPark, playNavigate } = useSound();
   const [memoryChips, setMemoryChips] = useState<MemoryChip[]>([]);
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
-  const [leftTab, setLeftTab] = useState<"chat" | "diff" | "terminal">("chat");
+  const [leftTab, setLeftTab] = useState<"chat" | "diff">("chat");
+  const [diffSubTab, setDiffSubTab] = useState<"diff" | "terminal">("diff");
   const [sessionPrUrl, setSessionPrUrl] = useState<string | null>(null);
   const [rightOpen, setRightOpen] = useState(() =>
     new URLSearchParams(window.location.search).get("view") === "flow"
@@ -7477,7 +7478,8 @@ export default function Workspace() {
   const [pendingTerminalCommand, setPendingTerminalCommand] = useState<string | null>(null);
   const handleRunCommand = useCallback((command: string) => {
     setPendingTerminalCommand(command);
-    setLeftTab("terminal");
+    setLeftTab("diff");
+    setDiffSubTab("terminal");
   }, []);
 
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -8031,6 +8033,47 @@ export default function Workspace() {
               onClick={focusSystemMap}
               trend={readinessTrend}
             />
+            {sessionPrUrl ? (
+              <a
+                href={sessionPrUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="View Pull Request"
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  padding: "4px 8px", borderRadius: 6,
+                  background: "rgba(134,239,172,0.08)",
+                  border: "1px solid rgba(134,239,172,0.25)",
+                  color: "rgba(134,239,172,0.85)",
+                  fontSize: 10, fontFamily: "var(--app-font-mono)",
+                  textDecoration: "none", letterSpacing: "0.06em",
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
+                </svg>
+                PR
+              </a>
+            ) : pushHistory.length > 0 ? (
+              <button
+                onClick={() => setLeftTab("diff")}
+                title="Open Pull Request"
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  padding: "4px 8px", borderRadius: 6,
+                  background: "rgba(201,162,76,0.06)",
+                  border: "1px solid rgba(201,162,76,0.2)",
+                  color: "var(--atlas-gold)",
+                  fontSize: 10, fontFamily: "var(--app-font-mono)",
+                  cursor: "pointer", letterSpacing: "0.06em",
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M7.177 3.073L9.573.677A.25.25 0 0110 .854v4.792a.25.25 0 01-.427.177L7.177 3.427a.25.25 0 010-.354zM3.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122v5.256a2.251 2.251 0 11-1.5 0V5.372A2.25 2.25 0 011.5 3.25zM11 2.5h-1V4h1a1 1 0 011 1v5.628a2.251 2.251 0 101.5 0V5A2.5 2.5 0 0011 2.5zm1 10.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0zM3.75 12a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
+                </svg>
+                PR
+              </button>
+            ) : null}
 
             {/* Readiness score pill — only shown in mobile map mode (replaces the ring hidden in center) */}
             {isMobile && mobileTab === "map" && (
@@ -8330,11 +8373,11 @@ export default function Workspace() {
             overflow: "hidden",
           }}
         >
-          {/* ── Chat / Diff / Terminal tab strip ── */}
+          {/* ── Chat / Diff tab strip ── */}
           <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, paddingLeft: 4, background: "var(--atlas-glass-bg)" }}>
-            {(["chat", "diff", "terminal"] as const).map((tab) => {
+            {(["chat", "diff"] as const).map((tab) => {
               const active = leftTab === tab;
-              const label = tab === "chat" ? "Chat" : tab === "diff" ? "Diff" : "Terminal";
+              const label = tab === "chat" ? "Chat" : "Diff";
               const badge = tab === "diff" && pushHistory.length > 0 ? pushHistory.length : undefined;
               return (
                 <button
@@ -8385,43 +8428,61 @@ export default function Workspace() {
             )}
           </div>
 
-          {/* ── Terminal view (when leftTab === "terminal") ── */}
-          {leftTab === "terminal" ? (
-            <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-              <TerminalPanel
-                pendingCommand={pendingTerminalCommand}
-                onCommandConsumed={() => setPendingTerminalCommand(null)}
-                onCommandComplete={handleTerminalComplete}
-              />
-            </div>
-          ) : leftTab === "diff" ? (
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }} className="scrollbar-none">
-              {pushHistory.length === 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8, paddingBottom: 40 }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinecap="round" style={{ opacity: 0.25 }}>
-                    <path d="M9 1H3a1 1 0 00-1 1v18a1 1 0 001 1h18a1 1 0 001-1V9L13 1z"/><path d="M13 1v8h8"/><path d="M8 13h8M8 17h5"/>
-                  </svg>
-                  <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.65 }}>
-                    No code changes this session yet.<br />
-                    <span style={{ fontSize: 10.5 }}>Push files from a Build response to see diffs here.</span>
+          {leftTab === "diff" ? (
+            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <div style={{ display: "flex", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+                {(["diff", "terminal"] as const).map(st => (
+                  <button
+                    key={st}
+                    onClick={() => setDiffSubTab(st)}
+                    style={{
+                      flex: 1, padding: "7px 0",
+                      background: "transparent", border: "none",
+                      borderBottom: diffSubTab === st ? "2px solid var(--atlas-gold)" : "2px solid transparent",
+                      fontSize: 10, fontFamily: "var(--app-font-mono)",
+                      letterSpacing: "0.1em", textTransform: "uppercase" as const,
+                      color: diffSubTab === st ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                      cursor: "pointer", transition: "all 160ms ease",
+                    }}
+                  >
+                    {st === "diff" ? "Diff" : "Terminal"}
+                  </button>
+                ))}
+              </div>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                {diffSubTab === "diff" ? (
+                  <div style={{ flex: 1, height: "100%", overflowY: "auto", padding: "16px 14px" }} className="scrollbar-none">
+                    {pushHistory.length === 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8, paddingBottom: 40 }}>
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinecap="round" style={{ opacity: 0.25 }}>
+                          <path d="M9 1H3a1 1 0 00-1 1v18a1 1 0 001 1h18a1 1 0 001-1V9L13 1z"/><path d="M13 1v8h8"/><path d="M8 13h8M8 17h5"/>
+                        </svg>
+                        <div style={{ fontSize: 12, color: "var(--atlas-muted)", opacity: 0.4, textAlign: "center", lineHeight: 1.65 }}>
+                          No code changes this session yet.<br />
+                          <span style={{ fontSize: 10.5 }}>Push files from a Build response to see diffs here.</span>
+                        </div>
+                      </div>
+                    ) : (() => {
+                      const groups: PushRecord[][] = [];
+                      const seen = new Map<string, PushRecord[]>();
+                      for (const r of [...pushHistory].reverse()) {
+                        const key = r.commitUrl || r.id;
+                        if (!seen.has(key)) { seen.set(key, []); groups.push(seen.get(key)!); }
+                        seen.get(key)!.push(r);
+                      }
+                      return groups.map((group) => (
+                        <PushDiffCard
+                          key={group[0].commitUrl || group[0].id}
+                          records={group}
+                          onRollbackAll={async () => { for (const r of group) await handleRollbackPush(r); }}
+                        />
+                      ));
+                    })()}
                   </div>
-                </div>
-              ) : (() => {
-                const groups: PushRecord[][] = [];
-                const seen = new Map<string, PushRecord[]>();
-                for (const r of [...pushHistory].reverse()) {
-                  const key = r.commitUrl || r.id;
-                  if (!seen.has(key)) { seen.set(key, []); groups.push(seen.get(key)!); }
-                  seen.get(key)!.push(r);
-                }
-                return groups.map((group) => (
-                  <PushDiffCard
-                    key={group[0].commitUrl || group[0].id}
-                    records={group}
-                    onRollbackAll={async () => { for (const r of group) await handleRollbackPush(r); }}
-                  />
-                ));
-              })()}
+                ) : (
+                  <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={() => setPendingTerminalCommand(null)} onCommandComplete={handleTerminalComplete} />
+                )}
+              </div>
             </div>
           ) : (
           /* ── Chat view ── */
