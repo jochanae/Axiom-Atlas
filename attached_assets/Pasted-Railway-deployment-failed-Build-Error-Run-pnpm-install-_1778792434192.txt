@@ -1,0 +1,34 @@
+Railway deployment failed — Build Error
+
+Run `pnpm install --no-frozen-lockfile` locally and commit the updated `pnpm-lock.yaml` to fix this. The build failed because the `overrides` configuration in `pnpm-workspace.yaml` is out of sync with `pnpm-lock.yaml`, causing `pnpm install --frozen-lockfile` to exit with an error. This is a recurring issue that has affected multiple recent deployments and predates the latest commit.
+
+Repository: https://github.com/jochanae/Axiom-Atlas
+Branch: main · Commit: 5485b43 — Update description in README.md
+Deployment ID: d5575139-6698-41e1-be50-99495320a240
+Service ID: cfdfe2ce-aacd-47b9-a573-857f441d5044
+Environment ID: 2fc71304-a747-4eab-bf25-22feed3316b0
+
+---
+
+## Problem
+The @workspace/api-server service (REPO, RAILPACK builder) fails at the BUILD_IMAGE stage. The build log shows:
+
+```
+ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+Update your lockfile using "pnpm install --no-frozen-lockfile"
+```
+
+Railpack auto-detected pnpm and runs `pnpm install --frozen-lockfile --prefer-offline`. The SNAPSHOT_CODE stage succeeded; BUILD_IMAGE failed. This same error has caused multiple consecutive deployment failures (bd878c2c, 591e4569, 498221ae, and others).
+
+## Diagnosis
+The `overrides` section in `pnpm-workspace.yaml` has been modified — it contains extensive platform-specific package exclusions for esbuild, rollup, lightningcss, @tailwindcss/oxide, @expo/ngrok-bin, and version overrides for lodash, path-to-regexp, and @esbuild-kit/esm-loader — but `pnpm-lock.yaml` was not regenerated to reflect these changes. When pnpm runs with `--frozen-lockfile`, it compares the current workspace config against the lockfile's stored config hash and refuses to install when they differ. The triggering commit only changed README.md, confirming the mismatch predates this deployment. No commits have been pushed to main since the failure, so the issue is unresolved.
+
+## Fix
+This requires a local action and cannot be implemented via file edits alone:
+
+1. Clone the repository and checkout `main`
+2. Run `pnpm install --no-frozen-lockfile` in the repo root
+3. Commit the updated `pnpm-lock.yaml`
+4. Push to `main`
+
+This regenerates the lockfile to match the current `overrides` configuration, allowing `pnpm install --frozen-lockfile` to succeed in subsequent builds.
