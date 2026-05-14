@@ -2454,7 +2454,7 @@ export default function Home() {
             onClick={() => setShowOverview(v => !v)}
             style={{ background: "transparent", border: "none", padding: "4px 8px", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", cursor: "pointer" }}
           >
-            Your Overview {showOverview ? "−" : "+"}
+            {showOverview ? "−" : "+"}
           </button>
           <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
         </div>
