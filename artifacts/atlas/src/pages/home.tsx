@@ -1233,7 +1233,6 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
-  const [showOverview, setShowOverview] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isFree } = useSubscription();
 
@@ -2448,38 +2447,26 @@ export default function Home() {
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 24px 120px" }}>
-        <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
-          <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
-          <button
-            onClick={() => setShowOverview(v => !v)}
-            style={{ background: "transparent", border: "none", padding: "4px 8px", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", cursor: "pointer" }}
-          >
-            {showOverview ? "−" : "+"}
-          </button>
-          <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
-        </div>
-        {showOverview && (
-          <BelowFoldDashboard
-            projects={(projects ?? []).map((p: Project) => ({
-              id: p.id,
-              name: p.name,
-              description: p.description,
-              updatedAt: p.createdAt,
-              latestSnapshotScore: p.latestSnapshotScore ?? null,
-            }))}
-            onOpenProject={navigateToProject}
-            onOpenLedger={() => {
-              const p = projects?.[0];
-              if (p) setLocation(`/ledger/${p.id}`);
-            }}
-            onOpenParking={() => setLocation("/parking")}
-            onOpenQuickPrompt={() => setShowQuickPrompt(true)}
-            parkedCount={0}
-            committedCount={0}
-            briefing={briefing}
-            briefingLoading={briefingLoading}
-          />
-        )}
+        <BelowFoldDashboard
+          projects={(projects ?? []).map((p: Project) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            updatedAt: p.createdAt,
+            latestSnapshotScore: p.latestSnapshotScore ?? null,
+          }))}
+          onOpenProject={navigateToProject}
+          onOpenLedger={() => {
+            const p = projects?.[0];
+            if (p) setLocation(`/ledger/${p.id}`);
+          }}
+          onOpenParking={() => setLocation("/parking")}
+          onOpenQuickPrompt={() => setShowQuickPrompt(true)}
+          parkedCount={0}
+          committedCount={0}
+          briefing={briefing}
+          briefingLoading={briefingLoading}
+        />
       </div>
 
       {showHistory && (
