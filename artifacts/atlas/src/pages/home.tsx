@@ -1951,7 +1951,7 @@ export default function Home() {
           )}
 
           {/* Chat thread */}
-          <div style={{ margin: "18px 0 26px", minHeight: 60 }}>
+          <div style={{ margin: homeMessages.length > 0 ? "6px 0 26px" : "18px 0 26px", minHeight: 60 }}>
             {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? (
               <div style={{ display: "flex", justifyContent: "center", marginTop: 10, opacity: 0.7, animation: "fadeIn 600ms ease forwards" }}>
                 <LoadingSpinner size="sm" color="atlas" />
