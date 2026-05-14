@@ -1933,9 +1933,9 @@ export default function Home() {
                           </div>
                           {/* Bubble */}
                           <div style={{
-                            padding: "10px 13px", borderRadius: "4px 12px 12px 12px",
-                            background: "var(--atlas-surface)",
-                            border: "0.5px solid var(--atlas-surface)",
+                            padding: "4px 0",
+                            background: "transparent",
+                            border: "none",
                             fontSize: 13, lineHeight: 1.65, color: "var(--atlas-fg)",
                             fontFamily: "var(--app-font-sans)",
                           }}>
