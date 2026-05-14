@@ -279,6 +279,7 @@ function Router() {
         <Route path="/home" component={Home} />
         <Route path="/projects" component={Projects} />
         <Route path="/project/:projectId" component={Workspace} />
+        <Route path="/ledger" component={Ledger} />
         <Route path="/ledger/:projectId" component={Ledger} />
         <Route path="/parking" component={ParkingLot} />
         <Route path="/guard-report" component={() => { const [,nav] = useLocation(); useEffect(() => nav("/compass", { replace: true }), []); return null; }} />
