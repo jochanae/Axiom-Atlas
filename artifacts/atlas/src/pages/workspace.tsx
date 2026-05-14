@@ -21,6 +21,7 @@ import { CapsuleTag } from "../components/CapsuleTag";
 import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { useThemeMode } from "@/lib/theme";
+import { fileToBase64Safe } from "@/lib/image-resize";
 import type { ZipEntry } from "../components/ZipImport";
 import {
   useGetProject,
@@ -5012,12 +5013,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
           history: flowMessages.map(m => ({ role: m.role, content: m.content })),
           projectMap: nodeContext,
           mode: "plan",
-          ...(imageFile ? await new Promise<{ imageBase64: string; imageMediaType: string }>(resolve => {
-            const reader = new FileReader();
-            reader.onload = () => resolve({ imageBase64: (reader.result as string).split(",")[1], imageMediaType: imageFile.type });
-            reader.onerror = () => resolve({ imageBase64: "", imageMediaType: "" });
-            reader.readAsDataURL(imageFile);
-          }) : {}),
+          ...(imageFile ? await fileToBase64Safe(imageFile).then(r => ({ imageBase64: r.base64, imageMediaType: r.mediaType })).catch(() => ({ imageBase64: "", imageMediaType: "" })) : {}),
         }),
       }).then(r => r.ok ? r.json() : Promise.reject(r.status));
       const incoming = (res.flowNodes ?? []) as ArchNode[];
@@ -7260,14 +7256,9 @@ export default function Workspace() {
     const fullText = text + suffix;
 
     if (imageFile) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.split(",")[1];
-        doSend(fullText, sessionId, current, undefined, { base64, mediaType: imageFile.type });
-      };
-      reader.onerror = () => doSend(fullText, sessionId, current);
-      reader.readAsDataURL(imageFile);
+      fileToBase64Safe(imageFile)
+        .then(({ base64, mediaType }) => doSend(fullText, sessionId, current, undefined, { base64, mediaType }))
+        .catch(() => doSend(fullText, sessionId, current));
     } else {
       doSend(fullText, sessionId, current);
     }
