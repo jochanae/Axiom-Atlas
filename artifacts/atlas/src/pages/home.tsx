@@ -1919,7 +1919,7 @@ export default function Home() {
             )}
 
             {/* Chat thread */}
-            <div style={{ margin: homeMessages.length > 0 ? "6px 0 26px" : "18px 0 26px", minHeight: 60 }}>
+            <div style={{ margin: homeMessages.length > 0 ? "6px 0 26px" : "18px 0 26px", minHeight: homeMessages.length > 0 ? 60 : 0 }}>
               <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
                 <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
               </div>
