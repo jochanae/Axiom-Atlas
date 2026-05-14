@@ -22,7 +22,7 @@ function AxiomLogoSVG() {
           </radialGradient>
           <radialGradient id="cgs" cx="50%" cy="40%" r="50%">
             <stop offset="0%" stopColor="#F5D97A" />
-            <stop offset="50%" stopColor="#D4AF37" />
+            <stop offset="50%" stopColor="var(--atlas-gold)" />
             <stop offset="100%" stopColor="#A07820" />
           </radialGradient>
         </defs>
@@ -97,8 +97,8 @@ export function CockpitBar({
     <>
       <style>{`
         @keyframes axiom-pulse-bar {
-          0%, 100% { box-shadow: 0 0 20px rgba(212,175,55,0.3), 0 4px 12px rgba(0,0,0,0.5); }
-          50%       { box-shadow: 0 0 35px rgba(212,175,55,0.6), 0 4px 12px rgba(0,0,0,0.5); }
+          0%, 100% { box-shadow: 0 0 20px rgba(var(--atlas-gold-rgb),0.3), 0 4px 12px rgba(0,0,0,0.5); }
+          50%       { box-shadow: 0 0 35px rgba(var(--atlas-gold-rgb),0.6), 0 4px 12px rgba(0,0,0,0.5); }
         }
         @keyframes slideUpCb {
           from { transform: translateY(20px); opacity: 0; }
@@ -112,16 +112,16 @@ export function CockpitBar({
 
       {/* Readiness strip */}
       {showReadinessStrip && (
-        <div style={{ width: "100%", background: "rgba(13,11,9,0.97)", flexShrink: 0 }}>
+        <div style={{ width: "100%", background: "rgba(var(--atlas-bg-rgb),0.97)", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "flex-start", padding: "3px 14px 2px" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.06em" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--atlas-gold)", letterSpacing: "0.06em" }}>
               {readinessScore}%
             </span>
           </div>
-          <div style={{ height: 3, width: "100%", background: "rgba(212,175,55,0.12)" }}>
+          <div style={{ height: 3, width: "100%", background: "rgba(var(--atlas-gold-rgb),0.12)" }}>
             <div style={{
               height: "100%", width: `${readinessScore}%`,
-              background: "#D4AF37", transition: "width 700ms ease",
+              background: "var(--atlas-gold)", transition: "width 700ms ease",
             }} />
           </div>
         </div>
@@ -136,19 +136,19 @@ export function CockpitBar({
             bottom: cockpitH,
             transform: "translateX(-50%)",
             width: "min(90vw, 360px)",
-            background: "rgba(20,18,14,0.98)",
-            border: "1px solid rgba(212,175,55,0.3)",
+            background: "rgba(var(--atlas-surface-rgb),0.98)",
+            border: "1px solid rgba(var(--atlas-gold-rgb),0.3)",
             borderRadius: "12px 12px 0 0",
             padding: "20px 20px 16px",
             animation: "slideUpHelp 200ms ease",
           }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: "#D4AF37", marginBottom: 8 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--atlas-gold)", marginBottom: 8 }}>
               What is Axiom Flow?
             </p>
             <p style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.6, marginBottom: 16 }}>
               Axiom Flow is your strategic execution map. Each node represents a key element of your mission. Tap any node to answer its pivot question and mark it resolved as you make progress.
             </p>
-            <p style={{ fontSize: 10, fontWeight: 700, color: "#D4AF37", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: "var(--atlas-gold)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>
               Node Types
             </p>
             <ul style={{ fontSize: 12, color: "#9ca3af", listStyle: "none", padding: 0, margin: "0 0 16px", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -166,7 +166,7 @@ export function CockpitBar({
               ))}
             </ul>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button onClick={() => setShowHelp(false)} style={{ background: "#D4AF37", border: "none", borderRadius: 8, padding: "7px 18px", fontSize: 12, fontWeight: 700, color: "#0D0B09", cursor: "pointer" }}>
+              <button onClick={() => setShowHelp(false)} style={{ background: "var(--atlas-gold)", border: "none", borderRadius: 8, padding: "7px 18px", fontSize: 12, fontWeight: 700, color: "#0D0B09", cursor: "pointer" }}>
                 Got it
               </button>
             </div>
@@ -178,14 +178,14 @@ export function CockpitBar({
       {showExport && (
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 40, background: "var(--atlas-glass-bg)", backdropFilter: "blur(4px)" }} onClick={() => setShowExport(false)} />
-          <div style={{ position: "fixed", left: 0, right: 0, zIndex: 50, bottom: cockpitH, background: "rgba(13,11,9,0.99)", border: "1px solid rgba(212,175,55,0.35)", borderRadius: "16px 16px 0 0", padding: "20px 20px 24px", animation: "slideUpCb 220ms ease" }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: "#D4AF37", marginBottom: 4 }}>Export Blueprint</p>
+          <div style={{ position: "fixed", left: 0, right: 0, zIndex: 50, bottom: cockpitH, background: "rgba(var(--atlas-bg-rgb),0.99)", border: "1px solid rgba(var(--atlas-gold-rgb),0.35)", borderRadius: "16px 16px 0 0", padding: "20px 20px 24px", animation: "slideUpCb 220ms ease" }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--atlas-gold)", marginBottom: 4 }}>Export Blueprint</p>
             <p style={{ fontSize: 11, color: "#6b7280", marginBottom: 20 }}>Copy or download your Axiom Flow map.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <button onClick={handleExportCopy} style={{ width: "100%", borderRadius: 12, padding: "14px 0", fontSize: 13, fontWeight: 700, background: copied ? "rgba(212,175,55,0.15)" : "#D4AF37", color: copied ? "#D4AF37" : "#0D0B09", border: copied ? "1px solid rgba(212,175,55,0.4)" : "none", cursor: "pointer" }}>
+              <button onClick={handleExportCopy} style={{ width: "100%", borderRadius: 12, padding: "14px 0", fontSize: 13, fontWeight: 700, background: copied ? "rgba(var(--atlas-gold-rgb),0.15)" : "var(--atlas-gold)", color: copied ? "var(--atlas-gold)" : "#0D0B09", border: copied ? "1px solid rgba(var(--atlas-gold-rgb),0.4)" : "none", cursor: "pointer" }}>
                 {copied ? "✓ Copied" : "Copy to Clipboard"}
               </button>
-              <button onClick={handleDownload} style={{ width: "100%", borderRadius: 12, padding: "12px 0", fontSize: 13, fontWeight: 600, background: "transparent", border: "1px solid rgba(212,175,55,0.4)", color: downloaded ? "#D4AF37" : "rgba(255,255,255,0.8)", cursor: "pointer" }}>
+              <button onClick={handleDownload} style={{ width: "100%", borderRadius: 12, padding: "12px 0", fontSize: 13, fontWeight: 600, background: "transparent", border: "1px solid rgba(var(--atlas-gold-rgb),0.4)", color: downloaded ? "var(--atlas-gold)" : "rgba(255,255,255,0.8)", cursor: "pointer" }}>
                 {downloaded ? "✓ Downloaded" : "Download as TXT"}
               </button>
               <button onClick={() => setShowExport(false)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", fontSize: 12, cursor: "pointer", padding: "8px 0" }}>
@@ -201,8 +201,8 @@ export function CockpitBar({
 
         {/* SVG arch cutout */}
         <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }} preserveAspectRatio="none" viewBox="0 0 390 60">
-          <path d="M0,0 L148,0 C163,0 172,22 195,22 C218,22 227,0 242,0 L390,0 L390,60 L0,60 Z" fill="rgba(13,11,9,0.97)" />
-          <path d="M0,0.5 L148,0.5 C163,0.5 172,22 195,22 C218,22 227,0.5 242,0.5 L390,0.5" fill="none" stroke="rgba(212,175,55,0.22)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          <path d="M0,0 L148,0 C163,0 172,22 195,22 C218,22 227,0 242,0 L390,0 L390,60 L0,60 Z" fill="rgba(var(--atlas-bg-rgb),0.97)" />
+          <path d="M0,0.5 L148,0.5 C163,0.5 172,22 195,22 C218,22 227,0.5 242,0.5 L390,0.5" fill="none" stroke="rgba(var(--atlas-gold-rgb),0.22)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
         </svg>
 
         {/* Raised A button — center → opens The Forge */}
@@ -212,11 +212,11 @@ export function CockpitBar({
             position: "absolute", top: -28, left: "50%",
             transform: "translateX(-50%)",
             width: 64, height: 64, borderRadius: "50%",
-            background: "var(--atlas-bg)", border: "2px solid #D4AF37",
+            background: "var(--atlas-bg)", border: "2px solid var(--atlas-gold)",
             display: "flex", alignItems: "center", justifyContent: "center",
             zIndex: 10, cursor: "pointer",
             animation: hasSession ? "axiom-pulse-bar 2s ease-in-out infinite" : "none",
-            boxShadow: "0 0 20px rgba(212,175,55,0.3), 0 4px 12px rgba(0,0,0,0.5)",
+            boxShadow: "0 0 20px rgba(var(--atlas-gold-rgb),0.3), 0 4px 12px rgba(0,0,0,0.5)",
           }}
           onClick={() => onAxiomOpen?.()}
         >
@@ -224,7 +224,7 @@ export function CockpitBar({
         </button>
 
         {/* FORGE label */}
-        <span style={{ position: "absolute", top: 38, left: "50%", transform: "translateX(-50%)", fontSize: 9, letterSpacing: "0.12em", color: "#D4AF37", fontWeight: 700, whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none" }}>
+        <span style={{ position: "absolute", top: 38, left: "50%", transform: "translateX(-50%)", fontSize: 9, letterSpacing: "0.12em", color: "var(--atlas-gold)", fontWeight: 700, whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none" }}>
           FORGE
         </span>
 
@@ -234,7 +234,7 @@ export function CockpitBar({
             <button
               onClick={() => setShowHelp(v => !v)}
               title="Help"
-              style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid rgba(212,175,55,0.4)", background: "transparent", color: "#D4AF37", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+              style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid rgba(var(--atlas-gold-rgb),0.4)", background: "transparent", color: "var(--atlas-gold)", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
             >
               ?
             </button>
@@ -247,14 +247,14 @@ export function CockpitBar({
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <button
                 onClick={onHomeNav}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: "rgba(212,175,55,0.1)", border: "1px solid rgba(212,175,55,0.25)", color: "#D4AF37", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: "rgba(var(--atlas-gold-rgb),0.1)", border: "1px solid rgba(var(--atlas-gold-rgb),0.25)", color: "var(--atlas-gold)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}
               >
                 ← Home
               </button>
               <button
                 onClick={() => setShowExport(true)}
                 title="Export Blueprint"
-                style={{ display: "flex", alignItems: "center", background: "transparent", border: "1px solid rgba(212,175,55,0.4)", borderRadius: 8, padding: "7px 9px", color: "#D4AF37", cursor: "pointer" }}
+                style={{ display: "flex", alignItems: "center", background: "transparent", border: "1px solid rgba(var(--atlas-gold-rgb),0.4)", borderRadius: 8, padding: "7px 9px", color: "var(--atlas-gold)", cursor: "pointer" }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
