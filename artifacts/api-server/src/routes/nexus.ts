@@ -585,7 +585,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   ];
 
   const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 1500,
     system: systemPrompt,
     messages: anthropicMessages,
