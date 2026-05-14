@@ -1787,6 +1787,7 @@ export default function Home() {
       </div>
 
       {/* ATLAS subheader — always-visible bar beneath main header */}
+      {homeMessages.length > 0 && (
       <div className="atlas-chat-card-top" style={{ borderRadius: 0, padding: "5px 16px", zIndex: 20, position: "sticky", top: 50, height: 36, boxSizing: "border-box" }}>
           <span style={{
             position: "absolute", left: "50%", top: "50%",
@@ -1852,6 +1853,7 @@ export default function Home() {
             )}
           </div>
         </div>
+      )}
 
       {/* First-run overlay — new users with no projects, once per session */}
       {showOverlay && (
