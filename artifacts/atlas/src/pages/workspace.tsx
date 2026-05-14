@@ -20,6 +20,7 @@ import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
 import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
+import { useThemeMode } from "@/lib/theme";
 import type { ZipEntry } from "../components/ZipImport";
 import {
   useGetProject,
@@ -5051,6 +5052,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
     setActiveSignalIdx(i => Math.max(0, i - 1));
   };
   const platform = detectPlatform();
+  const themeMode = useThemeMode();
   const { data: activeProject } = useGetProject(projectId ?? 0, {
     query: { enabled: !!projectId, queryKey: getGetProjectQueryKey(projectId ?? 0) },
   });
@@ -5404,17 +5406,18 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   const isReplit  = p === "replit";
                   const isCursor  = p === "cursor";
                   const isLovable = p === "lovable";
-                  const color  = isReplit  ? "oklch(0.74 0.18 150)"
-                               : isCursor  ? "oklch(0.74 0.18 240)"
-                               : isLovable ? "oklch(0.74 0.20 300)"
+                  const isParchment = themeMode === "parchment";
+                  const color  = isReplit  ? (isParchment ? "oklch(0.42 0.16 150)" : "oklch(0.74 0.18 150)")
+                               : isCursor  ? (isParchment ? "oklch(0.42 0.16 240)" : "oklch(0.74 0.18 240)")
+                               : isLovable ? (isParchment ? "oklch(0.42 0.18 300)" : "oklch(0.74 0.20 300)")
                                : "rgba(var(--atlas-gold-rgb),0.78)";
-                  const bg     = isReplit  ? "oklch(0.28 0.12 150 / 28%)"
-                               : isCursor  ? "oklch(0.28 0.12 240 / 28%)"
-                               : isLovable ? "oklch(0.28 0.12 300 / 28%)"
+                  const bg     = isReplit  ? (isParchment ? "oklch(0.88 0.08 150 / 55%)" : "oklch(0.28 0.12 150 / 28%)")
+                               : isCursor  ? (isParchment ? "oklch(0.88 0.08 240 / 55%)" : "oklch(0.28 0.12 240 / 28%)")
+                               : isLovable ? (isParchment ? "oklch(0.88 0.10 300 / 55%)" : "oklch(0.28 0.12 300 / 28%)")
                                : "rgba(var(--atlas-gold-rgb),0.10)";
-                  const border = isReplit  ? "oklch(0.55 0.18 150 / 50%)"
-                               : isCursor  ? "oklch(0.55 0.18 240 / 50%)"
-                               : isLovable ? "oklch(0.55 0.20 300 / 50%)"
+                  const border = isReplit  ? (isParchment ? "oklch(0.50 0.16 150 / 60%)" : "oklch(0.55 0.18 150 / 50%)")
+                               : isCursor  ? (isParchment ? "oklch(0.50 0.16 240 / 60%)" : "oklch(0.55 0.18 240 / 50%)")
+                               : isLovable ? (isParchment ? "oklch(0.50 0.18 300 / 60%)" : "oklch(0.55 0.20 300 / 50%)")
                                : "rgba(var(--atlas-gold-rgb),0.30)";
                   return (
                     <span style={{
