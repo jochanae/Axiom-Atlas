@@ -9,6 +9,7 @@ import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
+const MAX_VAULT_B64_SIZE = 1500000;
 
 const openaiClient = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -1083,6 +1084,12 @@ Rules:
 
   // 1. Vault images first (visual context Atlas should have before reading the message)
   for (const vb of vault.imageBlocks) {
+    // Skip vault images that exceed Claude's dimension limit
+    const vaultImage = { base64: vb.source.data };
+    if (vaultImage.base64 && vaultImage.base64.length > MAX_VAULT_B64_SIZE) {
+      console.warn(`Vault image skipped — too large: ${vaultImage.base64.length} chars`);
+      continue;
+    }
     contentParts.push({
       type: "image",
       source: { type: "base64", media_type: vb.source.media_type, data: vb.source.data },

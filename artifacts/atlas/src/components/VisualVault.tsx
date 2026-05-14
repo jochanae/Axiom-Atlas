@@ -14,6 +14,38 @@ interface VisualVaultProps {
   onClose: () => void;
 }
 
+function compressVaultImage(source: Blob): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(source);
+    img.onload = () => {
+      try {
+        URL.revokeObjectURL(url);
+        const MAX = 800;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("canvas unavailable")); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) { reject(new Error("compression failed")); return; }
+          resolve(blob);
+        }, "image/jpeg", 0.75);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image load failed")); };
+    img.src = url;
+  });
+}
+
 export function VisualVault({ projectId, onClose }: VisualVaultProps) {
   const [images, setImages] = useState<GalleryImage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +75,39 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
 
   useEffect(() => { fetchImages(); }, [fetchImages]);
 
+  const saveCompressedImage = useCallback(async (source: Blob, name: string, label: string) => {
+    const compressed = await compressVaultImage(source);
+    const uploadName = `${name.replace(/\.[^/.]+$/, "") || "vault-image"}.jpg`;
+
+    const urlRes = await fetch("/api/gallery/request-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name: uploadName, size: compressed.size, contentType: "image/jpeg" }),
+    });
+    if (!urlRes.ok) throw new Error("URL request failed");
+    const { uploadURL, objectPath } = await urlRes.json() as { uploadURL: string; objectPath: string };
+
+    const uploadRes = await fetch(uploadURL, {
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+      body: compressed,
+    });
+    if (!uploadRes.ok) throw new Error("Upload failed");
+
+    const saveRes = await fetch("/api/gallery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        objectPath,
+        label,
+        projectId: projectId ?? null,
+      }),
+    });
+    if (!saveRes.ok) throw new Error("Save failed");
+  }, [projectId]);
+
   const handleFiles = useCallback(async (files: File[]) => {
     const images = files.filter(f => f.type.startsWith("image/")).slice(0, 10);
     if (!images.length) { toast("Select image files to upload"); return; }
@@ -51,36 +116,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
     let done = 0;
     for (const file of images) {
       try {
-        // Step 1: get presigned URL
-        const urlRes = await fetch("/api/gallery/request-url", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
-        });
-        if (!urlRes.ok) throw new Error("URL request failed");
-        const { uploadURL, objectPath } = await urlRes.json() as { uploadURL: string; objectPath: string };
-
-        // Step 2: upload directly to GCS
-        const uploadRes = await fetch(uploadURL, {
-          method: "PUT",
-          headers: { "Content-Type": file.type },
-          body: file,
-        });
-        if (!uploadRes.ok) throw new Error("Upload failed");
-
-        // Step 3: save record
-        const saveRes = await fetch("/api/gallery", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            objectPath,
-            label: file.name.replace(/\.[^/.]+$/, ""),
-            projectId: projectId ?? null,
-          }),
-        });
-        if (!saveRes.ok) throw new Error("Save failed");
+        await saveCompressedImage(file, file.name, file.name.replace(/\.[^/.]+$/, ""));
         done++;
         setUploadProgress(Math.round((done / images.length) * 100));
       } catch {
@@ -91,7 +127,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
     setUploading(false);
     setUploadProgress(0);
     if (done > 0) toast(`${done} image${done > 1 ? "s" : ""} saved to vault`);
-  }, [projectId, fetchImages]);
+  }, [fetchImages, saveCompressedImage]);
 
   const handleDelete = useCallback(async (id: number) => {
     try {
@@ -110,17 +146,27 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
     setCaptureError(null);
     setCapturing(true);
     try {
-      const res = await fetch("/api/gallery/screenshot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ url: withProtocol, projectId: projectId ?? null }),
-      });
-      const data = await res.json() as { image?: GalleryImage; error?: string };
-      if (!res.ok || !data.image) {
+      const microlinkURL =
+        `https://api.microlink.io/?url=${encodeURIComponent(withProtocol)}` +
+        `&screenshot=true&fullPage=true&meta=false&embed=screenshot.url`;
+      const res = await fetch(microlinkURL);
+      const data = await res.json() as {
+        status?: string;
+        data?: { screenshot?: { url?: string } };
+        error?: string;
+      };
+      const screenshotUrl = data?.data?.screenshot?.url;
+      if (!res.ok || !screenshotUrl) {
         setCaptureError(data.error ?? "Capture failed — check the URL and try again");
         return;
       }
+      const imgRes = await fetch(screenshotUrl);
+      if (!imgRes.ok) {
+        setCaptureError("Failed to download screenshot");
+        return;
+      }
+      const hostname = (() => { try { return new URL(withProtocol).hostname.replace(/^www\./, ""); } catch { return "Captured page"; } })();
+      await saveCompressedImage(await imgRes.blob(), `${hostname}.jpg`, hostname);
       setUrlInput("");
       await fetchImages();
       toast("Page captured and saved to vault");
@@ -129,7 +175,7 @@ export function VisualVault({ projectId, onClose }: VisualVaultProps) {
     } finally {
       setCapturing(false);
     }
-  }, [urlInput, projectId, fetchImages]);
+  }, [urlInput, fetchImages, saveCompressedImage]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
