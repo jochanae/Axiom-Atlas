@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { toast } from "sonner";
 import { useParams, useLocation, useSearch, Link } from "wouter";
 import { buildReopenChain } from "../components/EntryCard";
 import {
@@ -259,6 +260,50 @@ export default function Ledger() {
           )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Copy all */}
+            <button
+              onClick={() => {
+                const text = filtered.map(e =>
+                  `[${(e as any).projectName ?? ""}] ${e.title}${e.summary ? "\n" + e.summary : ""}`
+                ).join("\n\n");
+                navigator.clipboard.writeText(text).catch(() => {});
+                toast("Copied to clipboard");
+              }}
+              style={{ background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", cursor: "pointer", letterSpacing: "0.06em" }}
+            >
+              COPY ALL
+            </button>
+
+            {/* Export markdown */}
+            <button
+              onClick={() => {
+                const lines = [`# Decision Ledger\n_${new Date().toLocaleDateString()}_\n`];
+                const byProject: Record<string, typeof filtered> = {};
+                for (const e of filtered) {
+                  const name = (e as any).projectName ?? "General";
+                  if (!byProject[name]) byProject[name] = [];
+                  byProject[name].push(e);
+                }
+                for (const [proj, entries] of Object.entries(byProject)) {
+                  lines.push(`## ${proj}`);
+                  for (const e of entries) {
+                    lines.push(`- **${e.title}**${e.summary ? " — " + e.summary : ""}`);
+                  }
+                  lines.push("");
+                }
+                const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `axiom-ledger-${new Date().toISOString().slice(0, 10)}.md`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              style={{ background: "transparent", border: "1px solid var(--atlas-border)", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", cursor: "pointer", letterSpacing: "0.06em" }}
+            >
+              EXPORT
+            </button>
+
             <button
               onClick={() => setSearchOpen((v) => !v)}
               aria-label="Search ledger"
