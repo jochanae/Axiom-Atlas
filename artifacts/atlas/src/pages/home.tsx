@@ -1233,6 +1233,7 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
+  const [showOverview, setShowOverview] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isFree } = useSubscription();
 
@@ -1923,35 +1924,34 @@ export default function Home() {
         <div style={{ width: "100%", maxWidth: 560 }}>
           {/* Hero — fills the viewport above the mobile nav, content vertically centered */}
           <div style={{ minHeight: homeMessages.length > 0 ? 0 : "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: homeMessages.length > 0 ? "flex-start" : "center", position: "relative", paddingBottom: homeMessages.length > 0 ? 0 : 120 }}>
+            {/* Atmospheric pulse — behind everything, theme-aware */}
+            <div className="atlas-home-atmosphere" style={{
+              position: "absolute",
+              top: "38%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "110%",
+              height: 340,
+              filter: "blur(28px)",
+              pointerEvents: "none",
+              animation: "homePurpleAtmosphere 7s ease-in-out infinite",
+              zIndex: 0,
+            }} />
 
-          {/* Atmospheric pulse — behind everything, theme-aware */}
-          <div className="atlas-home-atmosphere" style={{
-            position: "absolute",
-            top: "38%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "110%",
-            height: 340,
-            filter: "blur(28px)",
-            pointerEvents: "none",
-            animation: "homePurpleAtmosphere 7s ease-in-out infinite",
-            zIndex: 0,
-          }} />
+            {/* Greeting */}
+            {homeMessages.length === 0 && (
+              <div style={{ textAlign: "center", marginBottom: 24, marginTop: 32, position: "relative", zIndex: 1 }}>
+                <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
+                  Where were we.
+                </h1>
+                <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
+                  I'm here. What's on your mind?
+                </p>
+              </div>
+            )}
 
-          {/* Greeting */}
-          {homeMessages.length === 0 && (
-            <div style={{ textAlign: "center", marginBottom: 24, marginTop: 32, position: "relative", zIndex: 1 }}>
-              <h1 style={{ fontSize: 30, fontWeight: 300, color: "var(--atlas-fg)", letterSpacing: "-0.025em", lineHeight: 1.2, opacity: 0.85, margin: "0 0 10px" }}>
-                Where were we.
-              </h1>
-              <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
-                I'm here. What's on your mind?
-              </p>
-            </div>
-          )}
-
-          {/* Chat thread */}
-          <div style={{ margin: homeMessages.length > 0 ? "6px 0 26px" : "18px 0 26px", minHeight: 60 }}>
+            {/* Chat thread */}
+            <div style={{ margin: homeMessages.length > 0 ? "6px 0 26px" : "18px 0 26px", minHeight: 60 }}>
             {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? (
               <div style={{ display: "flex", justifyContent: "center", marginTop: 10, opacity: 0.7, animation: "fadeIn 600ms ease forwards" }}>
                 <LoadingSpinner size="sm" color="atlas" />
@@ -2447,27 +2447,39 @@ export default function Home() {
       </div>
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 24px 120px" }}>
-        <BelowFoldDashboard
-          projects={(projects ?? []).map((p: Project) => ({
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            updatedAt: p.createdAt,
-            latestSnapshotScore: p.latestSnapshotScore ?? null,
-          }))}
-          onOpenProject={navigateToProject}
-          onOpenLedger={() => {
-            const p = projects?.[0];
-            if (p) setLocation(`/ledger/${p.id}`);
-          }}
-          onOpenParking={() => setLocation("/parking")}
-          onOpenQuickPrompt={() => setShowQuickPrompt(true)}
-          parkedCount={0}
-          committedCount={0}
-          briefing={briefing}
-          briefingLoading={briefingLoading}
-        />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 24px 120px" }}>
+        <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
+          <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
+          <button
+            onClick={() => setShowOverview(v => !v)}
+            style={{ background: "transparent", border: "none", padding: "4px 8px", fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", cursor: "pointer" }}
+          >
+            Your Overview {showOverview ? "−" : "+"}
+          </button>
+          <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
+        </div>
+        {showOverview && (
+          <BelowFoldDashboard
+            projects={(projects ?? []).map((p: Project) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description,
+              updatedAt: p.createdAt,
+              latestSnapshotScore: p.latestSnapshotScore ?? null,
+            }))}
+            onOpenProject={navigateToProject}
+            onOpenLedger={() => {
+              const p = projects?.[0];
+              if (p) setLocation(`/ledger/${p.id}`);
+            }}
+            onOpenParking={() => setLocation("/parking")}
+            onOpenQuickPrompt={() => setShowQuickPrompt(true)}
+            parkedCount={0}
+            committedCount={0}
+            briefing={briefing}
+            briefingLoading={briefingLoading}
+          />
+        )}
       </div>
 
       {showHistory && (
