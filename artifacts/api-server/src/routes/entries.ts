@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { db, entriesTable, projectsTable } from "@workspace/db";
 import {
   CreateEntryBody,
@@ -43,6 +43,38 @@ async function entryBelongsToUser(entryId: number, userId: number): Promise<bool
     .limit(1);
   return rows.length > 0;
 }
+
+// GET /api/entries/all — all committed entries for the user across all projects
+router.get("/entries/all", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const rows = await db
+    .select({
+      id: entriesTable.id,
+      projectId: entriesTable.projectId,
+      projectName: projectsTable.name,
+      title: entriesTable.title,
+      summary: entriesTable.summary,
+      details: entriesTable.details,
+      status: entriesTable.status,
+      severity: entriesTable.severity,
+      verb: entriesTable.verb,
+      category: entriesTable.category,
+      supersedesId: entriesTable.supersedesId,
+      lockedAt: entriesTable.lockedAt,
+      createdAt: entriesTable.createdAt,
+      updatedAt: entriesTable.updatedAt,
+    })
+    .from(entriesTable)
+    .innerJoin(projectsTable, eq(entriesTable.projectId, projectsTable.id))
+    .where(eq(projectsTable.userId, userId))
+    .orderBy(desc(entriesTable.createdAt));
+  res.json(rows.map(e => ({
+    ...e,
+    createdAt: e.createdAt.toISOString(),
+    updatedAt: e.updatedAt.toISOString(),
+    lockedAt: e.lockedAt ? e.lockedAt.toISOString() : null,
+  })));
+});
 
 router.get("/projects/:projectId/entries", async (req, res): Promise<void> => {
   const params = ListEntriesParams.safeParse(req.params);

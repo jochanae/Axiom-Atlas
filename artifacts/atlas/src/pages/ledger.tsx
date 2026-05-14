@@ -75,7 +75,8 @@ type DateFilter = "all" | "today" | "week" | "month";
 
 export default function Ledger() {
   const { projectId: projectIdStr } = useParams<{ projectId: string }>();
-  const projectId = Number(projectIdStr);
+  const projectId = Number(projectIdStr) || null;
+  const isAllProjects = !projectId;
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 
@@ -91,9 +92,24 @@ export default function Ledger() {
   const [verbFilter, setVerbFilter] = useState<VerbFilter>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [allEntries, setAllEntries] = useState<(Entry & { projectName?: string })[]>([]);
+  const [allEntriesLoading, setAllEntriesLoading] = useState(false);
 
   const search = useSearch();
-  const { data: entries = [], isLoading } = useListEntries(projectId, {}, { query: { enabled: !!projectId, queryKey: getListEntriesQueryKey(projectId) } });
+  const { data: projectEntries = [], isLoading: projectEntriesLoading } = useListEntries(projectId ?? 0, {}, { query: { enabled: !!projectId, queryKey: getListEntriesQueryKey(projectId ?? 0) } });
+
+  useEffect(() => {
+    if (!isAllProjects) return;
+    setAllEntriesLoading(true);
+    fetch("/api/entries/all", { credentials: "include" })
+      .then(r => r.ok ? r.json() : [])
+      .then((data: (Entry & { projectName?: string })[]) => setAllEntries(data))
+      .catch(() => setAllEntries([]))
+      .finally(() => setAllEntriesLoading(false));
+  }, [isAllProjects]);
+
+  const entries = isAllProjects ? allEntries : projectEntries;
+  const isLoading = isAllProjects ? allEntriesLoading : projectEntriesLoading;
   // Full lookup for walking supersedesId chains in EntryRow
   const allEntriesById = useMemo(() => new Map(entries.map((e: Entry) => [e.id, e])), [entries]);
   const { data: projects = [] } = useListProjects();
@@ -116,7 +132,7 @@ export default function Ledger() {
   }, [isLoading, entries.length, search]);
 
   const invalidate = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(projectId) });
+    queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(projectId ?? 0) });
   }, [queryClient, projectId]);
 
   const updateEntry = useUpdateEntry({ mutation: { onSuccess: invalidate } });
@@ -249,12 +265,13 @@ export default function Ledger() {
           </div>
 
           {/* Project switcher */}
-          {projects.length > 1 && (
+          {projects.length > 0 && (
             <select
-              value={projectId}
-              onChange={(e) => setLocation(`/ledger/${e.target.value}`)}
+              value={projectId ?? ""}
+              onChange={(e) => e.target.value ? setLocation(`/ledger/${e.target.value}`) : setLocation("/ledger")}
               style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 10px", fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted-text)", outline: "none", cursor: "pointer", marginRight: 8 }}
             >
+              <option value="">All Projects</option>
               {projects.map((p: Project) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           )}
