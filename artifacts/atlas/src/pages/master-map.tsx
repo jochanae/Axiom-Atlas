@@ -2,6 +2,114 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import * as THREE from "three";
 import { haptics } from "@/lib/haptics";
+import { useThemeMode, type ThemeMode } from "@/lib/theme";
+
+// ── Theme palette for the 3D scene + HUD ─────────────────────────────────────
+type ScenePalette = {
+  sceneBg: number;
+  fog: number;
+  ambient: number;
+  goldLight: number;
+  fillLight: number;
+  rimLight: number;
+  star: number;
+  starOpacityScale: number;
+  nexBody: number;
+  nexEmissive: number;
+  nexWire: number;
+  nexRing: number;
+  spoke: number;
+  tracer: number;
+  // CSS strings
+  pageBg: string;
+  headerBg: string;
+  headerBorder: string;
+  goldText: string;
+  goldTextStrong: string;
+  mutedText: string;
+  labelText: string;
+  hintText: string;
+  panelBg: string;
+  panelBorder: string;
+  panelShadow: string;
+  pickerBg: string;
+  pickerBorder: string;
+  pickerShadow: string;
+  pickerItemText: string;
+  warpBloom: string;
+  warpConic: string;
+};
+
+function paletteFor(theme: ThemeMode): ScenePalette {
+  if (theme === "parchment") {
+    return {
+      sceneBg: 0xF5F1E8,
+      fog: 0xF5F1E8,
+      ambient: 0xE4E0D6,
+      goldLight: 0xB45309,
+      fillLight: 0xC9A24C,
+      rimLight: 0x92400E,
+      star: 0xB45309,
+      starOpacityScale: 0.55,
+      nexBody: 0xEDE9DF,
+      nexEmissive: 0xB45309,
+      nexWire: 0xB45309,
+      nexRing: 0xB45309,
+      spoke: 0x92400E,
+      tracer: 0xB45309,
+      pageBg: "#F5F1E8",
+      headerBg: "rgba(245,241,232,0.88)",
+      headerBorder: "rgba(180,83,9,0.18)",
+      goldText: "rgba(146,64,14,0.7)",
+      goldTextStrong: "rgba(146,64,14,0.95)",
+      mutedText: "rgba(107,94,82,0.72)",
+      labelText: "rgba(26,23,20,0.92)",
+      hintText: "rgba(146,64,14,0.32)",
+      panelBg: "rgba(245,241,232,0.92)",
+      panelBorder: "rgba(180,83,9,0.22)",
+      panelShadow: "0 8px 32px rgba(146,64,14,0.18), 0 0 0 0.5px rgba(146,64,14,0.08)",
+      pickerBg: "rgba(245,241,232,0.97)",
+      pickerBorder: "rgba(180,83,9,0.22)",
+      pickerShadow: "0 12px 40px rgba(146,64,14,0.22)",
+      pickerItemText: "#3A2D1F",
+      warpBloom: "radial-gradient(ellipse 55% 55% at 50% 50%, rgba(180,83,9,0.22) 0%, transparent 65%)",
+      warpConic: "repeating-conic-gradient(rgba(180,83,9,0.05) 0deg 1.5deg, transparent 1.5deg 20deg)",
+    };
+  }
+  return {
+    sceneBg: 0x090806,
+    fog: 0x090806,
+    ambient: 0x1a1208,
+    goldLight: 0xC9A24C,
+    fillLight: 0x6040a0,
+    rimLight: 0x402010,
+    star: 0xC9A24C,
+    starOpacityScale: 1,
+    nexBody: 0x0D0A06,
+    nexEmissive: 0xC9A24C,
+    nexWire: 0xC9A24C,
+    nexRing: 0xC9A24C,
+    spoke: 0xC9A24C,
+    tracer: 0xC9A24C,
+    pageBg: "#090806",
+    headerBg: "var(--atlas-bg)",
+    headerBorder: "rgba(201,162,76,0.07)",
+    goldText: "rgba(201,162,76,0.7)",
+    goldTextStrong: "rgba(201,162,76,0.92)",
+    mutedText: "var(--atlas-muted)",
+    labelText: "rgba(232,229,225,0.90)",
+    hintText: "rgba(201,162,76,0.13)",
+    panelBg: "rgba(13,11,9,0.92)",
+    panelBorder: "rgba(201,162,76,0.22)",
+    panelShadow: "0 8px 32px rgba(0,0,0,0.72), 0 0 0 0.5px rgba(0,0,0,0.5)",
+    pickerBg: "rgba(13,11,9,0.96)",
+    pickerBorder: "rgba(201,162,76,0.16)",
+    pickerShadow: "0 12px 40px rgba(0,0,0,0.82)",
+    pickerItemText: "#D4D0CB",
+    warpBloom: "radial-gradient(ellipse 55% 55% at 50% 50%, rgba(201,162,76,0.18) 0%, transparent 65%)",
+    warpConic: "repeating-conic-gradient(rgba(201,162,76,0.035) 0deg 1.5deg, transparent 1.5deg 20deg)",
+  };
+}
 
 const BASE_URL = (import.meta as any).env?.BASE_URL?.replace?.(/\/$/, "") ?? "";
 const POLL_INTERVAL = 30_000;
@@ -72,6 +180,8 @@ async function fetchAll(): Promise<{ nexus: Project | null; list: Project[] }> {
 
 export default function MasterMap() {
   const [, setLocation] = useLocation();
+  const theme = useThemeMode();
+  const palette = paletteFor(theme);
   const [projects, setProjects] = useState<Project[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,25 +281,25 @@ export default function MasterMap() {
 
     // Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x090806);
-    scene.fog = new THREE.FogExp2(0x090806, 0.00075);
+    scene.background = new THREE.Color(palette.sceneBg);
+    scene.fog = new THREE.FogExp2(palette.fog, 0.00075);
 
     // Camera
     const camera = new THREE.PerspectiveCamera(52, W / H, 0.1, 2000);
     camera.position.set(0, 0, CAM_Z);
 
     // ── Lights ────────────────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0x1a1208, 2.5));
+    scene.add(new THREE.AmbientLight(palette.ambient, theme === "parchment" ? 3.2 : 2.5));
 
-    const goldLight = new THREE.PointLight(0xC9A24C, 8, 800);
+    const goldLight = new THREE.PointLight(palette.goldLight, 8, 800);
     goldLight.position.set(0, 0, 0);
     scene.add(goldLight);
 
-    const fillLight = new THREE.PointLight(0x6040a0, 2.5, 700);
+    const fillLight = new THREE.PointLight(palette.fillLight, 2.5, 700);
     fillLight.position.set(-200, 300, 200);
     scene.add(fillLight);
 
-    const rimLight = new THREE.PointLight(0x402010, 2.0, 600);
+    const rimLight = new THREE.PointLight(palette.rimLight, 2.0, 600);
     rimLight.position.set(100, -200, -150);
     scene.add(rimLight);
 
@@ -203,7 +313,7 @@ export default function MasterMap() {
         pos[i*3+2] = (Math.random() - 0.5) * 400 + z;
       }
       geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xC9A24C, size, transparent: true, opacity }));
+      const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: palette.star, size, transparent: true, opacity: opacity * palette.starOpacityScale }));
       scene.add(pts);
       return pts;
     };
@@ -214,8 +324,8 @@ export default function MasterMap() {
     // ── Nexium — faceted icosahedron diamond ──────────────────────────────
     const nexIco = new THREE.IcosahedronGeometry(NEXIUM_R, 1);
     const nexMat = new THREE.MeshPhysicalMaterial({
-      color: 0x0D0A06,
-      emissive: 0xC9A24C,
+      color: palette.nexBody,
+      emissive: palette.nexEmissive,
       emissiveIntensity: 0.55,
       roughness: 0.12,
       metalness: 0.85,
@@ -229,14 +339,14 @@ export default function MasterMap() {
     // Nexium wireframe cage
     const nexWire = new THREE.Mesh(
       new THREE.IcosahedronGeometry(NEXIUM_R * 1.12, 1),
-      new THREE.MeshBasicMaterial({ color: 0xC9A24C, wireframe: true, transparent: true, opacity: 0.12 }),
+      new THREE.MeshBasicMaterial({ color: palette.nexWire, wireframe: true, transparent: true, opacity: theme === "parchment" ? 0.28 : 0.12 }),
     );
     scene.add(nexWire);
 
     // Nexium orbit ring
     const nexRingMesh = new THREE.Mesh(
       new THREE.TorusGeometry(NEXIUM_R * 1.55, 1.2, 8, 80),
-      new THREE.MeshBasicMaterial({ color: 0xC9A24C, transparent: true, opacity: 0.28 }),
+      new THREE.MeshBasicMaterial({ color: palette.nexRing, transparent: true, opacity: theme === "parchment" ? 0.42 : 0.28 }),
     );
     nexRingMesh.rotation.x = Math.PI / 2.8;
     scene.add(nexRingMesh);
@@ -297,13 +407,13 @@ export default function MasterMap() {
         new Float32Array([0, 0, 0, positions[i].x, positions[i].y, positions[i].z]), 3,
       ));
       scene.add(new THREE.Line(geo, new THREE.LineBasicMaterial({
-        color: 0xC9A24C, transparent: true, opacity: 0.08 + act * 0.22,
+        color: palette.spoke, transparent: true, opacity: (theme === "parchment" ? 0.18 : 0.08) + act * 0.22,
       })));
 
       // Tracer bead — pulses outward from Nexium
       const tracerMesh = new THREE.Mesh(
         new THREE.SphereGeometry(2.2, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xC9A24C, transparent: true, opacity: 0 }),
+        new THREE.MeshBasicMaterial({ color: palette.tracer, transparent: true, opacity: 0 }),
       );
       scene.add(tracerMesh);
       spokeTracers.push({
@@ -648,12 +758,12 @@ export default function MasterMap() {
       ro.disconnect();
       renderer.dispose();
     };
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isMobile = window.innerWidth < 768;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#090806", fontFamily: "var(--app-font-sans)" }}>
+    <div style={{ position: "fixed", inset: 0, background: palette.pageBg, fontFamily: "var(--app-font-sans)" }}>
       <style>{STYLES}</style>
 
       <canvas
@@ -667,7 +777,7 @@ export default function MasterMap() {
         transform: "translate(-50%, calc(-50% + 58px))",
         textAlign: "center", pointerEvents: "none", zIndex: 5,
       }}>
-        <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.22em", color: "rgba(201,162,76,0.55)", fontFamily: "var(--app-font-mono)", textTransform: "uppercase" }}>
+        <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.22em", color: palette.goldText, fontFamily: "var(--app-font-mono)", textTransform: "uppercase" }}>
           SOURCE
         </div>
       </div>
@@ -684,14 +794,14 @@ export default function MasterMap() {
               opacity: hoveredIdx !== null && !isHovered ? 0.28 : 1,
               transition: "opacity 180ms ease",
             }}>
-              <div style={{ fontSize: isHovered ? 11.5 : 10.5, fontWeight: 600, color: isHovered ? "#E8E5E1" : "rgba(232,229,225,0.90)", letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "font-size 150ms ease, color 150ms ease" }}>
+              <div style={{ fontSize: isHovered ? 11.5 : 10.5, fontWeight: 600, color: isHovered ? (theme === "parchment" ? "#1A1714" : "#E8E5E1") : palette.labelText, letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "font-size 150ms ease, color 150ms ease" }}>
                 {p.name}
               </div>
-              <div style={{ fontSize: 8.5, color: act > 0.6 ? "rgba(201,162,76,0.72)" : "rgba(180,170,160,0.62)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
+              <div style={{ fontSize: 8.5, color: act > 0.6 ? palette.goldText : palette.mutedText, fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
                 {actLabel(p.updatedAt)}
               </div>
               {(p.entryCount ?? 0) > 0 && (
-                <div style={{ fontSize: 7.5, color: "rgba(201,162,76,0.52)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>
+                <div style={{ fontSize: 7.5, color: palette.goldText, fontFamily: "var(--app-font-mono)", marginTop: 1, opacity: 0.75 }}>
                   {p.entryCount} decisions
                 </div>
               )}
@@ -704,16 +814,16 @@ export default function MasterMap() {
       {warping && (
         <div style={{
           position: "absolute", inset: 0, zIndex: 90, pointerEvents: "none",
-          background: "var(--atlas-bg)", animation: "warp-dark 900ms cubic-bezier(0.4,0,1,1) both",
+          background: palette.pageBg, animation: "warp-dark 900ms cubic-bezier(0.4,0,1,1) both",
         }}>
           <div style={{
             position: "absolute", inset: 0,
-            background: "radial-gradient(ellipse 55% 55% at 50% 50%, rgba(201,162,76,0.18) 0%, transparent 65%)",
+            background: palette.warpBloom,
             animation: "warp-bloom 900ms ease both",
           }} />
           <div style={{
             position: "absolute", inset: 0,
-            background: "repeating-conic-gradient(rgba(201,162,76,0.035) 0deg 1.5deg, transparent 1.5deg 20deg)",
+            background: palette.warpConic,
             animation: "warp-conic 900ms ease both",
           }} />
         </div>
@@ -723,33 +833,33 @@ export default function MasterMap() {
       <div style={{
         position: "absolute", top: 0, left: 0, right: 0, zIndex: 20,
         display: "flex", alignItems: "center", gap: 10, padding: "12px 16px 10px",
-        borderBottom: "1px solid rgba(201,162,76,0.07)",
-        background: "var(--atlas-bg)", backdropFilter: "blur(16px)",
+        borderBottom: `1px solid ${palette.headerBorder}`,
+        background: palette.headerBg, backdropFilter: "blur(16px)",
       }}>
         <button onClick={() => setLocation("/nexus")} style={{
-          width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(201,162,76,0.18)",
-          background: "rgba(201,162,76,0.06)", display: "flex", alignItems: "center",
-          justifyContent: "center", cursor: "pointer", color: "rgba(201,162,76,0.7)", flexShrink: 0,
+          width: 32, height: 32, borderRadius: 8, border: `1px solid ${palette.panelBorder}`,
+          background: theme === "parchment" ? "rgba(180,83,9,0.08)" : "rgba(201,162,76,0.06)", display: "flex", alignItems: "center",
+          justifyContent: "center", cursor: "pointer", color: palette.goldText, flexShrink: 0,
         }}>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10 13L5 8l5-5" />
           </svg>
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(201,162,76,0.45)", fontFamily: "var(--app-font-mono)" }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: palette.mutedText, fontFamily: "var(--app-font-mono)" }}>
             Axiom · Satellite View
           </div>
-          <div style={{ fontSize: 14.5, fontWeight: 600, color: "rgba(201,162,76,0.92)", letterSpacing: "0.01em", lineHeight: 1.2 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: palette.goldTextStrong, letterSpacing: "0.01em", lineHeight: 1.2 }}>
             Master Map
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
           {connections.length > 0 && (
-            <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.35)", letterSpacing: "0.08em" }}>
+            <div style={{ fontSize: 8.5, fontFamily: "var(--app-font-mono)", color: palette.mutedText, letterSpacing: "0.08em" }}>
               {connections.length} link{connections.length !== 1 ? "s" : ""}
             </div>
           )}
-          <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "var(--atlas-muted)", letterSpacing: "0.08em" }}>
+          <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: palette.mutedText, letterSpacing: "0.08em" }}>
             {projects.length} satellite{projects.length !== 1 ? "s" : ""}
           </div>
         </div>
@@ -757,7 +867,7 @@ export default function MasterMap() {
 
       {loading && (
         <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", zIndex: 10 }}>
-          <div style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.35)", letterSpacing: "0.1em" }}>
+          <div style={{ fontSize: 11, fontFamily: "var(--app-font-mono)", color: palette.mutedText, letterSpacing: "0.1em" }}>
             Initializing constellation…
           </div>
         </div>
@@ -767,6 +877,7 @@ export default function MasterMap() {
       {!loading && (
         <ViewKey
           allProjects={projects}
+          palette={palette}
           onRecenter={() => recenterFnRef.current?.()}
           onDive={(id) => warpFnRef.current?.(id)}
           onNewIdea={async () => {
@@ -789,7 +900,7 @@ export default function MasterMap() {
         position: "absolute", bottom: 14, left: 0, right: 0, textAlign: "center",
         pointerEvents: "none", zIndex: 10,
         fontSize: 8, letterSpacing: "0.18em", textTransform: "uppercase",
-        color: "rgba(201,162,76,0.13)", fontFamily: "var(--app-font-mono)",
+        color: palette.hintText, fontFamily: "var(--app-font-mono)",
       }}>
         {isMobile ? "Tap node · Drag to pan · Pinch to zoom" : "Tap node · Drag to pan · Scroll to zoom"}
       </div>
@@ -799,41 +910,47 @@ export default function MasterMap() {
 
 // ── ViewKey HUD ───────────────────────────────────────────────────────────────
 
-function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
+function ViewKey({ allProjects, palette, onRecenter, onDive, onNewIdea }: {
   allProjects: Project[];
+  palette: ScenePalette;
   onRecenter: () => void;
   onDive: (id: number) => void;
   onNewIdea: () => void;
 }) {
   const [flowOpen, setFlowOpen] = useState(false);
   const allNodes = [...allProjects];
+  const goldSoft = palette.goldText;
+  const goldStrong = palette.goldTextStrong;
+  const tintBg = palette.pickerItemText.startsWith("#3") ? "rgba(180,83,9,0.10)" : "rgba(201,162,76,0.11)";
+  const tintBgHover = palette.pickerItemText.startsWith("#3") ? "rgba(180,83,9,0.18)" : "rgba(201,162,76,0.18)";
+  const tintBorder = palette.pickerItemText.startsWith("#3") ? "rgba(180,83,9,0.18)" : "rgba(201,162,76,0.14)";
 
   return (
     <div style={{ position: "absolute", top: 68, right: 14, zIndex: 50 }}>
       {/* Glass pod */}
       <div style={{
-        background: "rgba(13,11,9,0.92)",
+        background: palette.panelBg,
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
-        border: "1px solid rgba(201,162,76,0.22)",
+        border: `1px solid ${palette.panelBorder}`,
         borderRadius: 12,
         overflow: "hidden",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.72), 0 0 0 0.5px rgba(0,0,0,0.5)",
+        boxShadow: palette.panelShadow,
       }}>
         {/* SATELLITE — active, re-centers camera */}
         <button onClick={onRecenter} style={{
           display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
           padding: "10px 14px", width: "100%",
-          background: "rgba(201,162,76,0.11)",
-          border: "none", borderBottom: "1px solid rgba(201,162,76,0.14)",
-          cursor: "pointer", color: "rgba(201,162,76,0.92)",
+          background: tintBg,
+          border: "none", borderBottom: `1px solid ${tintBorder}`,
+          cursor: "pointer", color: goldStrong,
           transition: "background 150ms ease",
         }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.18)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.11)")}
+          onMouseEnter={(e) => (e.currentTarget.style.background = tintBgHover)}
+          onMouseLeave={(e) => (e.currentTarget.style.background = tintBg)}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-            <circle cx="12" cy="12" r="3" fill="rgba(201,162,76,0.28)" />
+            <circle cx="12" cy="12" r="3" fill="currentColor" fillOpacity="0.28" />
             <circle cx="12" cy="12" r="7" />
             <circle cx="12" cy="12" r="11" />
           </svg>
@@ -844,13 +961,13 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
         <button onClick={() => setFlowOpen(v => !v)} style={{
           display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
           padding: "10px 14px", width: "100%",
-          background: flowOpen ? "rgba(201,162,76,0.07)" : "transparent",
+          background: flowOpen ? tintBg : "transparent",
           border: "none", cursor: "pointer",
-          color: flowOpen ? "rgba(201,162,76,0.72)" : "var(--atlas-muted)",
+          color: flowOpen ? goldSoft : palette.mutedText,
           transition: "color 160ms ease, background 160ms ease",
         }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "rgba(201,162,76,0.72)"; }}
-          onMouseLeave={(e) => { if (!flowOpen) e.currentTarget.style.color = "var(--atlas-muted)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = goldSoft; }}
+          onMouseLeave={(e) => { if (!flowOpen) e.currentTarget.style.color = palette.mutedText; }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
             <circle cx="12" cy="12" r="2" />
@@ -871,26 +988,26 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
       {flowOpen && (
         <div style={{
           position: "absolute", top: 0, right: "calc(100% + 8px)",
-          background: "rgba(13,11,9,0.96)",
+          background: palette.pickerBg,
           backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
-          border: "1px solid rgba(201,162,76,0.16)", borderRadius: 10,
+          border: `1px solid ${palette.pickerBorder}`, borderRadius: 10,
           padding: "6px 0", minWidth: 188, maxHeight: 320, overflowY: "auto",
-          boxShadow: "0 12px 40px rgba(0,0,0,0.82)",
+          boxShadow: palette.pickerShadow,
           animation: "picker-in 140ms cubic-bezier(0.22,1,0.36,1) both",
         }}>
-          <div style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: "rgba(180,165,145,0.6)", letterSpacing: "0.12em", padding: "5px 12px 7px", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 7.5, fontFamily: "var(--app-font-mono)", color: palette.mutedText, letterSpacing: "0.12em", padding: "5px 12px 7px", textTransform: "uppercase" }}>
             Select Flow
           </div>
           {/* New idea entry — creates a blank project and opens its Flow */}
           <button onClick={() => { setFlowOpen(false); onNewIdea(); }} style={{
             width: "100%", padding: "8px 12px", background: "transparent", border: "none",
-            borderBottom: "1px solid rgba(201,162,76,0.1)",
+            borderBottom: `1px solid ${tintBorder}`,
             cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
-            color: "rgba(201,162,76,0.65)", fontSize: 12.5,
+            color: goldSoft, fontSize: 12.5,
             fontFamily: "var(--app-font-sans)", transition: "background 120ms ease",
             marginBottom: 2,
           }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.07)")}
+            onMouseEnter={(e) => (e.currentTarget.style.background = tintBg)}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ flexShrink: 0, opacity: 0.8 }}>
@@ -904,10 +1021,10 @@ function ViewKey({ allProjects, onRecenter, onDive, onNewIdea }: {
               <button key={p.id} onClick={() => { setFlowOpen(false); onDive(p.id); }} style={{
                 width: "100%", padding: "8px 12px", background: "transparent", border: "none",
                 cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", gap: 8,
-                color: "#D4D0CB", fontSize: 12.5,
+                color: palette.pickerItemText, fontSize: 12.5,
                 fontFamily: "var(--app-font-sans)", transition: "background 120ms ease",
               }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(201,162,76,0.08)")}
+                onMouseEnter={(e) => (e.currentTarget.style.background = tintBg)}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: `hsl(${hue},55%,55%)`, flexShrink: 0 }} />

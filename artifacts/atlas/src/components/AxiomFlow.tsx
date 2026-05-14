@@ -2,6 +2,94 @@ import { toast } from "sonner";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { haptics } from "@/lib/haptics";
 import { sounds } from "@/lib/sounds";
+import { useThemeMode, type ThemeMode } from "@/lib/theme";
+
+// ── Theme palette for the Flow canvas (parchment / obsidian) ────────────────
+type FlowPalette = {
+  // background + grid
+  rootBg: string;
+  dotGrid: string;
+  // text + accents
+  goldText: string;        // strong gold/cognac for headings/icons
+  goldSoft: string;        // 0.55–0.7 alpha
+  goldRgb: string;         // "212,175,55" or "180,83,9"
+  emberRgb: string;        // for blockers
+  emberText: string;
+  decisionRgb: string;     // for decision nodes
+  decisionText: string;
+  decisionTextResolved: string;
+  fgRgb: string;           // body text triple
+  fgText: string;
+  mutedRgb: string;
+  mutedText: string;
+  // panels
+  panelBg: string;
+  panelBorder: string;
+  panelShadow: string;
+  inputBg: string;
+  // edges
+  edgeDim: string;
+  edgeGold: string;
+  // toasts
+  toastBg: string;
+  toastBorder: string;
+  toastText: string;
+};
+
+function flowPaletteFor(theme: ThemeMode): FlowPalette {
+  if (theme === "parchment") {
+    return {
+      rootBg: "#F5F1E8",
+      dotGrid: "rgba(146,64,14,0.18)",
+      goldText: "#92400E",
+      goldSoft: "rgba(146,64,14,0.7)",
+      goldRgb: "180,83,9",
+      emberRgb: "146,64,14",
+      emberText: "rgba(146,64,14,0.92)",
+      decisionRgb: "146,64,14",
+      decisionText: "rgba(146,64,14,0.92)",
+      decisionTextResolved: "rgba(146,64,14,0.75)",
+      fgRgb: "26,23,20",
+      fgText: "#1A1714",
+      mutedRgb: "107,94,82",
+      mutedText: "rgba(107,94,82,0.85)",
+      panelBg: "rgba(245,241,232,0.97)",
+      panelBorder: "rgba(180,83,9,0.40)",
+      panelShadow: "0 10px 32px rgba(146,64,14,0.18)",
+      inputBg: "#EDE9DF",
+      edgeDim: "rgba(107,94,82,0.45)",
+      edgeGold: "rgba(180,83,9,0.65)",
+      toastBg: "#F5F1E8",
+      toastBorder: "rgba(180,83,9,0.45)",
+      toastText: "#92400E",
+    };
+  }
+  return {
+    rootBg: "#0C0A09",
+    dotGrid: "oklch(0.30 0.01 60 / 30%)",
+    goldText: "#D4AF37",
+    goldSoft: "rgba(201,162,76,0.7)",
+    goldRgb: "212,175,55",
+    emberRgb: "239,100,60",
+    emberText: "rgba(239,120,80,0.90)",
+    decisionRgb: "196,82,26",
+    decisionText: "rgba(230,130,80,0.90)",
+    decisionTextResolved: "rgba(196,82,26,0.75)",
+    fgRgb: "231,229,226",
+    fgText: "#E7E5E4",
+    mutedRgb: "120,113,108",
+    mutedText: "rgba(120,113,108,0.7)",
+    panelBg: "rgba(20,18,14,0.97)",
+    panelBorder: "rgba(212,175,55,0.45)",
+    panelShadow: "0 10px 32px rgba(0,0,0,0.7)",
+    inputBg: "var(--atlas-surface)",
+    edgeDim: "oklch(0.35 0.01 60 / 50%)",
+    edgeGold: "rgba(212,175,55,0.6)",
+    toastBg: "oklch(0.15 0.01 60)",
+    toastBorder: "oklch(0.76 0.12 85 / 30%)",
+    toastText: "#D4AF37",
+  };
+}
 
 export type FlowNodeMeta = "must" | "should" | "could" | "wont";
 
@@ -204,6 +292,14 @@ const EDGE_FLOW_STYLE = `
   0%, 100% { box-shadow: 0 0 10px rgba(212,175,55,0.30); }
   50%      { box-shadow: 0 0 22px rgba(212,175,55,0.60); }
 }
+@keyframes gold-pulse-parchment {
+  0%, 100% { box-shadow: 0 0 10px rgba(180,83,9,0.32); }
+  50%      { box-shadow: 0 0 22px rgba(180,83,9,0.55); }
+}
+@keyframes amber-pulse-parchment {
+  0%, 100% { box-shadow: 0 0 6px rgba(146,64,14,0.18); }
+  50%      { box-shadow: 0 0 14px rgba(146,64,14,0.38); }
+}
 `;
 
 const ZOOM_MIN = 0.4;
@@ -361,6 +457,8 @@ export function AxiomFlow({
   // Prefer the workspace-provided breakpoint; fall back to a local snapshot
   // only when AxiomFlow is rendered standalone (e.g. legacy contexts).
   const isMobile = isMobileProp ?? (typeof window !== "undefined" && window.innerWidth < 768);
+  const theme = useThemeMode();
+  const palette = flowPaletteFor(theme);
   const [nodes, setNodes] = useState<ArchNode[]>(() => loadNodes(storageKey));
   const [edges, setEdges] = useState<ArchEdge[]>(() => loadEdges(storageKey));
 
@@ -525,7 +623,7 @@ export function AxiomFlow({
     fitMap();
     toast("View Reset", {
       duration: 1000,
-      style: { color: "#D4AF37", background: "oklch(0.15 0.01 60)", border: "1px solid oklch(0.76 0.12 85 / 30%)" },
+      style: { color: palette.toastText, background: palette.toastBg, border: `1px solid ${palette.toastBorder}` },
     });
   }, [fitMap]);
 
@@ -632,9 +730,9 @@ export function AxiomFlow({
     toast(`${lockedLabel || "Node"} defined`, {
       duration: 1600,
       style: {
-        color: "#0D0B09",
-        background: "#D4AF37",
-        border: "1px solid rgba(201,162,76,0.6)",
+        color: theme === "parchment" ? "#F5F1E8" : "#0D0B09",
+        background: palette.goldText,
+        border: `1px solid rgba(${palette.goldRgb},0.6)`,
         fontWeight: 700,
         letterSpacing: "0.04em",
       },
@@ -709,7 +807,7 @@ export function AxiomFlow({
       className="relative h-full w-full overflow-hidden system-map-glow"
       style={{
         borderRadius: compact ? 0 : 8,
-        background: "#0C0A09",
+        background: palette.rootBg,
         transition: "box-shadow 1s ease",
         touchAction: "none",
         cursor: dragState.current.dragging ? "grabbing" : "grab",
@@ -729,7 +827,7 @@ export function AxiomFlow({
 
       {/* Dot grid */}
       <div className="absolute inset-0" style={{
-        backgroundImage: `radial-gradient(circle at 1px 1px, oklch(0.30 0.01 60 / 30%) 1px, transparent 0)`,
+        backgroundImage: `radial-gradient(circle at 1px 1px, ${palette.dotGrid} 1px, transparent 0)`,
         backgroundSize: "40px 40px",
       }} />
 
@@ -753,23 +851,23 @@ export function AxiomFlow({
             transform: "translateX(-50%)",
             width: 320,
             maxWidth: "calc(100% - 24px)",
-            background: "rgba(20,18,14,0.98)",
-            border: "1px solid rgba(212,175,55,0.45)",
+            background: palette.panelBg,
+            border: `1px solid ${palette.panelBorder}`,
             borderRadius: 12,
             padding: 14,
-            boxShadow: "0 10px 32px rgba(0,0,0,0.7)",
+            boxShadow: palette.panelShadow,
             backdropFilter: "blur(8px)",
           }}
         >
           <div style={{
             fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em",
-            color: "#D4AF37", fontFamily: "var(--app-font-mono)",
+            color: palette.goldText, fontFamily: "var(--app-font-mono)",
             textTransform: "uppercase", marginBottom: 8,
           }}>
             Hand off to Atlas
           </div>
           <div style={{
-            fontSize: 10.5, color: "var(--atlas-fg)",
+            fontSize: 10.5, color: palette.fgText,
             marginBottom: 10, lineHeight: 1.5,
           }}>
             Atlas will start a new chat seeded with this Flow snapshot
@@ -786,11 +884,11 @@ export function AxiomFlow({
             placeholder="Session title"
             style={{
               width: "100%",
-              background: "var(--atlas-surface)",
-              border: "1px solid rgba(212,175,55,0.30)",
+              background: palette.inputBg,
+              border: `1px solid rgba(${palette.goldRgb},0.30)`,
               borderRadius: 7,
               padding: "7px 10px",
-              color: "var(--atlas-fg, #E7E5E4)",
+              color: palette.fgText,
               fontSize: 11.5,
               fontFamily: "inherit",
               outline: "none",
@@ -804,8 +902,8 @@ export function AxiomFlow({
               style={{
                 flex: 1, padding: "7px 10px", borderRadius: 7,
                 background: "transparent",
-                border: "1px solid rgba(120,113,108,0.30)",
-                color: "var(--atlas-fg)",
+                border: `1px solid rgba(${palette.mutedRgb},0.30)`,
+                color: palette.fgText,
                 fontFamily: "var(--app-font-mono)",
                 fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em",
                 textTransform: "uppercase", cursor: "pointer",
@@ -818,9 +916,9 @@ export function AxiomFlow({
               disabled={!!handoverPending}
               style={{
                 flex: 2, padding: "7px 10px", borderRadius: 7,
-                background: "rgba(212,175,55,0.20)",
-                border: "1px solid rgba(212,175,55,0.60)",
-                color: "#D4AF37",
+                background: `rgba(${palette.goldRgb},0.20)`,
+                border: `1px solid rgba(${palette.goldRgb},0.60)`,
+                color: palette.goldText,
                 fontFamily: "var(--app-font-mono)",
                 fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em",
                 textTransform: "uppercase",
@@ -855,7 +953,7 @@ export function AxiomFlow({
                 key={edge.id}
                 x1={fromNode.x} y1={fromNode.y}
                 x2={toNode.x} y2={toNode.y}
-                stroke={bothResolved ? "rgba(212,175,55,0.6)" : "oklch(0.35 0.01 60 / 50%)"}
+                stroke={bothResolved ? palette.edgeGold : palette.edgeDim}
                 strokeWidth={bothResolved ? strokeWidth + 0.5 : strokeWidth}
                 strokeDasharray={bothResolved ? "4 4" : "6 4"}
                 style={bothResolved ? { animation: "edge-flow 1.5s linear infinite" } : undefined}
@@ -877,6 +975,7 @@ export function AxiomFlow({
               newlyAdded={newlyAddedIds.has(node.id)}
               goalX={goalX}
               goalY={goalY}
+              palette={palette}
             />
           );
         })}
@@ -888,10 +987,10 @@ export function AxiomFlow({
           style={{
             position: "absolute", left: cardLeft, top: cardTop,
             width: CARD_W, zIndex: 50,
-            background: "rgba(20, 18, 14, 0.97)",
-            border: "1px solid rgba(212, 175, 55, 0.38)",
+            background: palette.panelBg,
+            border: `1px solid ${palette.panelBorder}`,
             borderRadius: 10, padding: 13,
-            boxShadow: "0 4px 24px rgba(0,0,0,0.65)",
+            boxShadow: palette.panelShadow,
             pointerEvents: "auto",
           }}
           onClick={e => e.stopPropagation()}
@@ -900,32 +999,32 @@ export function AxiomFlow({
             onClick={e => { e.stopPropagation(); setActiveCardNodeId(null); }}
             style={{
               position: "absolute", top: 6, right: 8,
-              color: "#9ca3af", background: "none", border: "none",
+              color: palette.mutedText, background: "none", border: "none",
               cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px",
             }}
           >✕</button>
 
           {/* Node label + type badge */}
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#D4AF37", marginBottom: 4, paddingRight: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: palette.goldText, marginBottom: 4, paddingRight: 24 }}>
             {activeCardNode.label}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-            <span style={{ fontSize: 9, color: "rgba(120,113,108,0.7)", fontFamily: "var(--app-font-mono)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            <span style={{ fontSize: 9, color: palette.mutedText, fontFamily: "var(--app-font-mono)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
               {activeCardNode.type}
             </span>
             {activeCardNode.meta && (
               <span style={{
                 fontSize: 9, fontWeight: 700, letterSpacing: "0.08em",
                 padding: "1px 6px", borderRadius: 4,
-                background: activeCardNode.meta === "must" ? "rgba(212,175,55,0.22)"
-                  : activeCardNode.meta === "should" ? "rgba(212,175,55,0.10)"
-                  : "rgba(120,113,108,0.10)",
-                color: activeCardNode.meta === "must" ? "#D4AF37"
-                  : activeCardNode.meta === "should" ? "rgba(212,175,55,0.75)"
-                  : "rgba(120,113,108,0.6)",
-                border: `1px solid ${activeCardNode.meta === "must" ? "rgba(212,175,55,0.4)"
-                  : activeCardNode.meta === "should" ? "rgba(212,175,55,0.22)"
-                  : "rgba(120,113,108,0.2)"}`,
+                background: activeCardNode.meta === "must" ? `rgba(${palette.goldRgb},0.22)`
+                  : activeCardNode.meta === "should" ? `rgba(${palette.goldRgb},0.10)`
+                  : `rgba(${palette.mutedRgb},0.10)`,
+                color: activeCardNode.meta === "must" ? palette.goldText
+                  : activeCardNode.meta === "should" ? `rgba(${palette.goldRgb},0.75)`
+                  : palette.mutedText,
+                border: `1px solid ${activeCardNode.meta === "must" ? `rgba(${palette.goldRgb},0.4)`
+                  : activeCardNode.meta === "should" ? `rgba(${palette.goldRgb},0.22)`
+                  : `rgba(${palette.mutedRgb},0.2)`}`,
               }}>
                 {activeCardNode.meta.toUpperCase()}
               </span>
@@ -934,10 +1033,10 @@ export function AxiomFlow({
 
           {/* Strategic pivot question */}
           <div style={{
-            fontSize: 11, color: "var(--atlas-fg)", lineHeight: 1.6,
+            fontSize: 11, color: palette.fgText, lineHeight: 1.6,
             fontStyle: "italic", marginBottom: 12,
             paddingBottom: 10,
-            borderBottom: "1px solid rgba(212,175,55,0.10)",
+            borderBottom: `1px solid rgba(${palette.goldRgb},0.10)`,
           }}>
             {getPivotQuestion(activeCardNode)}
           </div>
@@ -945,7 +1044,7 @@ export function AxiomFlow({
           {/* Details if present */}
           {activeCardNode.details && (
             <div style={{
-              fontSize: 11, color: "rgba(229,231,235,0.75)", lineHeight: 1.6,
+              fontSize: 11, color: `rgba(${palette.fgRgb},0.75)`, lineHeight: 1.6,
               maxHeight: 80, overflowY: "auto", marginBottom: 10,
             }}>
               {activeCardNode.details}
@@ -957,6 +1056,7 @@ export function AxiomFlow({
             key={activeCardNode.id}
             node={activeCardNode}
             onLockIn={(answer) => handleLockInAnswer(activeCardNode.id, answer)}
+            palette={palette}
           />
         </div>
       )}
@@ -966,7 +1066,7 @@ export function AxiomFlow({
         position: "absolute", bottom: 10, left: 0, right: 0,
         textAlign: "center", pointerEvents: "none",
         fontSize: 9, letterSpacing: "0.15em",
-        color: "rgba(201,162,76,0.52)",
+        color: theme === "parchment" ? "rgba(146,64,14,0.55)" : "rgba(201,162,76,0.52)",
         fontFamily: "var(--app-font-mono)",
       }}>
         TAP NODE · PINCH TO ZOOM · DOUBLE-TAP TO FIT
@@ -992,7 +1092,15 @@ interface NodeVisual {
   labelWeight: number;
 }
 
-function getNodeVisual(node: ArchNode): NodeVisual {
+function getNodeVisual(node: ArchNode, palette: FlowPalette): NodeVisual {
+  const G = palette.goldRgb;
+  const E = palette.emberRgb;
+  const D = palette.decisionRgb;
+  const F = palette.fgRgb;
+  const M = palette.mutedRgb;
+  const goldText = palette.goldText;
+  const fgSoft = `rgba(${F},0.88)`;
+  const fgSofter = `rgba(${F},0.82)`;
   // "defined" = a strategicAnswer is locked in. This is the ONLY signal of a
   // resolved/answered node — `node.resolved` is now strictly derived from the
   // presence of an answer. Defined nodes earn the gold treatment + gold pulse;
@@ -1007,12 +1115,12 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderRadius: "50%",
       borderWidth: 2,
       borderStyle: "solid",
-      borderColor: resolved ? "rgba(212,175,55,0.95)" : "rgba(212,175,55,0.65)",
-      bgColor: resolved ? "rgba(212,175,55,0.18)" : "rgba(212,175,55,0.06)",
-      textColor: "#D4AF37",
+      borderColor: resolved ? `rgba(${G},0.95)` : `rgba(${G},0.65)`,
+      bgColor: resolved ? `rgba(${G},0.18)` : `rgba(${G},0.06)`,
+      textColor: goldText,
       textDecoration: "none",
-      shadow: resolved ? "0 0 24px rgba(212,175,55,0.45), 0 0 8px rgba(212,175,55,0.25)"
-        : "0 0 14px rgba(212,175,55,0.22)",
+      shadow: resolved ? `0 0 24px rgba(${G},0.45), 0 0 8px rgba(${G},0.25)`
+        : `0 0 14px rgba(${G},0.22)`,
       opacity: 1,
       pulse: !resolved,
       labelSize: 11,
@@ -1026,11 +1134,11 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderRadius: 14,
       borderWidth: 1.5,
       borderStyle: "solid",
-      borderColor: resolved ? "rgba(212,175,55,0.65)" : "rgba(212,175,55,0.38)",
-      bgColor: resolved ? "rgba(212,175,55,0.14)" : "rgba(212,175,55,0.04)",
-      textColor: resolved ? "#D4AF37" : "rgba(231,229,226,0.88)",
+      borderColor: resolved ? `rgba(${G},0.65)` : `rgba(${G},0.38)`,
+      bgColor: resolved ? `rgba(${G},0.14)` : `rgba(${G},0.04)`,
+      textColor: resolved ? goldText : fgSoft,
       textDecoration: "none",
-      shadow: resolved ? "0 0 12px rgba(212,175,55,0.22)" : "none",
+      shadow: resolved ? `0 0 12px rgba(${G},0.22)` : "none",
       opacity: 1,
       pulse: !resolved,
       labelSize: 9.5,
@@ -1046,11 +1154,11 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderRadius: 4,
       borderWidth: 1.5,
       borderStyle: "solid",
-      borderColor: "rgba(239,100,60,0.65)",
-      bgColor: "rgba(239,100,60,0.07)",
-      textColor: "rgba(239,120,80,0.90)",
+      borderColor: `rgba(${E},0.65)`,
+      bgColor: `rgba(${E},0.07)`,
+      textColor: palette.emberText,
       textDecoration: "none",
-      shadow: "0 0 10px rgba(239,100,60,0.20)",
+      shadow: `0 0 10px rgba(${E},0.20)`,
       opacity: 1,
       pulse: false,
       labelSize: 9.5,
@@ -1065,9 +1173,9 @@ function getNodeVisual(node: ArchNode): NodeVisual {
         borderRadius: 14,
         borderWidth: 1,
         borderStyle: "solid",
-        borderColor: "rgba(120,113,108,0.22)",
+        borderColor: `rgba(${M},0.22)`,
         bgColor: "transparent",
-        textColor: "rgba(120,113,108,0.45)",
+        textColor: `rgba(${M},0.45)`,
         textDecoration: "line-through",
         shadow: "none",
         opacity: 0.35,
@@ -1082,9 +1190,9 @@ function getNodeVisual(node: ArchNode): NodeVisual {
         borderRadius: 14,
         borderWidth: 1,
         borderStyle: "dashed",
-        borderColor: resolved ? "rgba(212,175,55,0.40)" : "rgba(120,113,108,0.40)",
+        borderColor: resolved ? `rgba(${G},0.40)` : `rgba(${M},0.40)`,
         bgColor: "transparent",
-        textColor: resolved ? "rgba(212,175,55,0.65)" : "rgba(120,113,108,0.55)",
+        textColor: resolved ? `rgba(${G},0.65)` : `rgba(${M},0.55)`,
         textDecoration: "none",
         shadow: "none",
         opacity: resolved ? 0.85 : 0.70,
@@ -1099,9 +1207,9 @@ function getNodeVisual(node: ArchNode): NodeVisual {
         borderRadius: 14,
         borderWidth: 1.5,
         borderStyle: "solid",
-        borderColor: resolved ? "rgba(212,175,55,0.55)" : "rgba(212,175,55,0.28)",
-        bgColor: resolved ? "rgba(212,175,55,0.12)" : "rgba(212,175,55,0.04)",
-        textColor: resolved ? "rgba(212,175,55,0.85)" : "rgba(231,229,226,0.82)",
+        borderColor: resolved ? `rgba(${G},0.55)` : `rgba(${G},0.28)`,
+        bgColor: resolved ? `rgba(${G},0.12)` : `rgba(${G},0.04)`,
+        textColor: resolved ? `rgba(${G},0.85)` : fgSofter,
         textDecoration: "none",
         shadow: "none",
         opacity: 0.65,
@@ -1116,11 +1224,11 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderRadius: 14,
       borderWidth: 2,
       borderStyle: "solid",
-      borderColor: resolved ? "rgba(212,175,55,0.90)" : "rgba(212,175,55,0.55)",
-      bgColor: resolved ? "rgba(212,175,55,0.16)" : "rgba(212,175,55,0.06)",
-      textColor: resolved ? "#D4AF37" : "rgba(231,229,226,0.88)",
+      borderColor: resolved ? `rgba(${G},0.90)` : `rgba(${G},0.55)`,
+      bgColor: resolved ? `rgba(${G},0.16)` : `rgba(${G},0.06)`,
+      textColor: resolved ? goldText : fgSoft,
       textDecoration: "none",
-      shadow: resolved ? "0 0 14px rgba(212,175,55,0.28)" : "none",
+      shadow: resolved ? `0 0 14px rgba(${G},0.28)` : "none",
       opacity: 1,
       pulse: !resolved,
       labelSize: 9.5,
@@ -1134,11 +1242,11 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderRadius: 14,
       borderWidth: 1.5,
       borderStyle: "solid",
-      borderColor: resolved ? "rgba(196,82,26,0.50)" : "rgba(196,82,26,0.70)",
-      bgColor: resolved ? "rgba(196,82,26,0.10)" : "rgba(196,82,26,0.06)",
-      textColor: resolved ? "rgba(196,82,26,0.75)" : "rgba(230,130,80,0.90)",
+      borderColor: resolved ? `rgba(${D},0.50)` : `rgba(${D},0.70)`,
+      bgColor: resolved ? `rgba(${D},0.10)` : `rgba(${D},0.06)`,
+      textColor: resolved ? palette.decisionTextResolved : palette.decisionText,
       textDecoration: "none",
-      shadow: resolved ? "none" : "0 0 10px rgba(196,82,26,0.18)",
+      shadow: resolved ? "none" : `0 0 10px rgba(${D},0.18)`,
       opacity: 1,
       pulse: !resolved,
       labelSize: 9.5,
@@ -1152,9 +1260,9 @@ function getNodeVisual(node: ArchNode): NodeVisual {
       borderRadius: 20,
       borderWidth: 1,
       borderStyle: "solid",
-      borderColor: resolved ? "rgba(212,175,55,0.45)" : "rgba(212,175,55,0.22)",
-      bgColor: resolved ? "rgba(212,175,55,0.10)" : "rgba(212,175,55,0.04)",
-      textColor: resolved ? "rgba(212,175,55,0.75)" : "rgba(120,113,108,0.65)",
+      borderColor: resolved ? `rgba(${G},0.45)` : `rgba(${G},0.22)`,
+      bgColor: resolved ? `rgba(${G},0.10)` : `rgba(${G},0.04)`,
+      textColor: resolved ? `rgba(${G},0.75)` : `rgba(${M},0.65)`,
       textDecoration: "none",
       shadow: "none",
       opacity: resolved ? 1 : 0.75,
@@ -1166,9 +1274,9 @@ function getNodeVisual(node: ArchNode): NodeVisual {
 
   return {
     size: 56, borderRadius: 14, borderWidth: 1.5,
-    borderStyle: "solid", borderColor: "rgba(212,175,55,0.45)",
-    bgColor: "rgba(212,175,55,0.06)",
-    textColor: "var(--atlas-fg)", textDecoration: "none",
+    borderStyle: "solid", borderColor: `rgba(${G},0.45)`,
+    bgColor: `rgba(${G},0.06)`,
+    textColor: palette.fgText, textDecoration: "none",
     shadow: "none", opacity: 1, pulse: false, labelSize: 9.5, labelWeight: 500,
   };
 }
@@ -1179,16 +1287,21 @@ function FlowNodeComponent({
   newlyAdded = false,
   goalX = 300,
   goalY = 250,
+  palette,
 }: {
   node: ArchNode;
   onFocus: (id: string, e: React.MouseEvent | React.TouchEvent) => void;
   newlyAdded?: boolean;
   goalX?: number;
   goalY?: number;
+  palette: FlowPalette;
 }) {
-  const v = getNodeVisual(node);
+  const v = getNodeVisual(node, palette);
   const icon = getNodeIcon(node);
   const defined = isNodeDefined(node);
+  const isParchment = palette.rootBg === "#F5F1E8";
+  const goldPulseName = isParchment ? "gold-pulse-parchment" : "gold-pulse";
+  const amberPulseName = isParchment ? "amber-pulse-parchment" : "amber-pulse";
 
   // Center-origin fly-in: translate from goal position to node position
   const flyDx = newlyAdded ? `${goalX - node.x}px` : "0px";
@@ -1226,8 +1339,8 @@ function FlowNodeComponent({
         animation: node.type === "blocker"
           ? undefined
           : defined
-            ? "gold-pulse 2.4s ease-in-out infinite"
-            : v.pulse ? "amber-pulse 2s ease-in-out infinite" : undefined,
+            ? `${goldPulseName} 2.4s ease-in-out infinite`
+            : v.pulse ? `${amberPulseName} 2s ease-in-out infinite` : undefined,
       }}>
         {icon}
       </div>
@@ -1249,7 +1362,7 @@ function FlowNodeComponent({
           fontSize: 7.5,
           fontWeight: 700,
           letterSpacing: "0.18em",
-          color: "rgba(212,175,55,0.78)",
+          color: `rgba(${palette.goldRgb},0.78)`,
           fontFamily: "var(--app-font-mono)",
           textTransform: "uppercase",
           marginTop: -2,
@@ -1265,9 +1378,11 @@ function FlowNodeComponent({
 function AnswerCapture({
   node,
   onLockIn,
+  palette,
 }: {
   node: ArchNode;
   onLockIn: (answer: string) => void;
+  palette: FlowPalette;
 }) {
   const [draft, setDraft] = useState<string>(node.strategicAnswer ?? "");
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -1288,7 +1403,7 @@ function AnswerCapture({
       {defined && (
         <div style={{
           fontSize: 8.5, fontWeight: 700, letterSpacing: "0.18em",
-          color: "rgba(212,175,55,0.85)", fontFamily: "var(--app-font-mono)",
+          color: `rgba(${palette.goldRgb},0.85)`, fontFamily: "var(--app-font-mono)",
           marginBottom: 6,
         }}>
           ◆ DEFINED — EDIT TO REPLACE
@@ -1308,11 +1423,11 @@ function AnswerCapture({
         rows={3}
         style={{
           width: "100%",
-          background: "var(--atlas-surface)",
-          border: "1px solid rgba(212,175,55,0.28)",
+          background: palette.inputBg,
+          border: `1px solid rgba(${palette.goldRgb},0.28)`,
           borderRadius: 7,
           padding: "8px 10px",
-          color: "var(--atlas-fg, #E7E5E4)",
+          color: palette.fgText,
           fontSize: 11.5,
           lineHeight: 1.5,
           fontFamily: "inherit",
@@ -1327,9 +1442,9 @@ function AnswerCapture({
         disabled={!canSubmit}
         style={{
           width: "100%", padding: "8px 10px", borderRadius: 7,
-          background: canSubmit ? "rgba(212,175,55,0.20)" : "rgba(120,113,108,0.08)",
-          border: `1px solid ${canSubmit ? "rgba(212,175,55,0.55)" : "rgba(120,113,108,0.22)"}`,
-          color: canSubmit ? "#D4AF37" : "rgba(120,113,108,0.55)",
+          background: canSubmit ? `rgba(${palette.goldRgb},0.20)` : `rgba(${palette.mutedRgb},0.08)`,
+          border: `1px solid ${canSubmit ? `rgba(${palette.goldRgb},0.55)` : `rgba(${palette.mutedRgb},0.22)`}`,
+          color: canSubmit ? palette.goldText : `rgba(${palette.mutedRgb},0.55)`,
           fontSize: 11, fontWeight: 700,
           cursor: canSubmit ? "pointer" : "not-allowed",
           fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
