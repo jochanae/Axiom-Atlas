@@ -1,5 +1,8 @@
 [build]
-buildCommand = "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/api-server build"
+buildCommand = "pnpm --filter @workspace/api-server build"
 
 [deploy]
 startCommand = "pnpm --filter @workspace/api-server start"
+
+[variables]
+RAILPACK_INSTALL_CMD = "pnpm install --no-frozen-lockfile"
