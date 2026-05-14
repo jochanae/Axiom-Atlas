@@ -326,12 +326,12 @@ export default function MasterMap() {
     const nexMat = new THREE.MeshPhysicalMaterial({
       color: palette.nexBody,
       emissive: palette.nexEmissive,
-      emissiveIntensity: 0.55,
-      roughness: 0.12,
-      metalness: 0.85,
-      clearcoat: 1.0,
+      emissiveIntensity: theme === "parchment" ? 0.18 : 0.55,
+      roughness: theme === "parchment" ? 0.55 : 0.12,
+      metalness: theme === "parchment" ? 0.05 : 0.85,
+      clearcoat: theme === "parchment" ? 0.3 : 1.0,
       clearcoatRoughness: 0.08,
-      reflectivity: 1.0,
+      reflectivity: theme === "parchment" ? 0.3 : 1.0,
     });
     const nexMesh = new THREE.Mesh(nexIco, nexMat);
     scene.add(nexMesh);
