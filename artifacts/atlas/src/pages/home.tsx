@@ -1920,7 +1920,7 @@ export default function Home() {
       >
         <div style={{ width: "100%", maxWidth: 560 }}>
           {/* Hero — fills the viewport above the mobile nav, content vertically centered */}
-          <div style={{ minHeight: "calc(100svh - 50px - 36px - 96px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: homeMessages.length > 0 ? "flex-start" : "center", position: "relative", paddingBottom: homeMessages.length > 0 ? "calc(96px + env(safe-area-inset-bottom, 0px))" : 120 }}>
+          <div style={{ minHeight: homeMessages.length > 0 ? 0 : "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: homeMessages.length > 0 ? "flex-start" : "center", position: "relative", paddingBottom: homeMessages.length > 0 ? 0 : 120 }}>
             {/* Atmospheric pulse — behind everything, theme-aware */}
             <div className="atlas-home-atmosphere" style={{
               position: "absolute",
@@ -2144,7 +2144,7 @@ export default function Home() {
           </div>
 
           {/* Input shell */}
-          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px", boxShadow: ({ strategic: "0 0 0 1.5px rgba(201,162,76,0.4), 0 0 18px rgba(201,162,76,0.12)", audit: "0 0 0 1.5px rgba(239,100,68,0.5), 0 0 18px rgba(239,100,68,0.15)", "deep-dive": "0 0 0 1.5px rgba(99,130,239,0.5), 0 0 18px rgba(99,130,239,0.15)" } as Record<string, string>)[atlasDetectedMode] ?? "none", transition: "box-shadow 600ms ease", marginTop: homeMessages.length > 0 ? "auto" : undefined }}>
+          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px", boxShadow: ({ strategic: "0 0 0 1.5px rgba(201,162,76,0.4), 0 0 18px rgba(201,162,76,0.12)", audit: "0 0 0 1.5px rgba(239,100,68,0.5), 0 0 18px rgba(239,100,68,0.15)", "deep-dive": "0 0 0 1.5px rgba(99,130,239,0.5), 0 0 18px rgba(99,130,239,0.15)" } as Record<string, string>)[atlasDetectedMode] ?? "none", transition: "box-shadow 600ms ease" }}>
             {/* Hidden file input — uses id so label can trigger it natively on mobile */}
             <input
               ref={fileInputRef}
