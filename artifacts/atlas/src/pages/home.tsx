@@ -1849,13 +1849,6 @@ export default function Home() {
             ) : (
               <>
                 <button
-                  onClick={() => setShowOverview(v => !v)}
-                  title={showOverview ? "Collapse overview" : "Expand overview"}
-                  style={{ background: "transparent", border: "none", padding: "4px 8px", marginRight: 6, cursor: "pointer", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.72, lineHeight: 1 }}
-                >
-                  {showOverview ? "−" : "+"}
-                </button>
-                <button
                   onClick={() => setShowChatMenu(v => !v)}
                   title="More options"
                   style={{ background: "transparent", border: "none", padding: "4px 6px", cursor: "pointer", color: "var(--atlas-muted)", opacity: 0.65, lineHeight: 1, transition: "opacity 140ms" }}
@@ -1959,6 +1952,13 @@ export default function Home() {
 
             {/* Chat thread */}
             <div style={{ margin: homeMessages.length > 0 ? "6px 0 26px" : "18px 0 26px", minHeight: 60 }}>
+              <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
+                <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
+                <div style={{ fontSize: 10, letterSpacing: "0.22em", textTransform: "uppercase", color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.8 }}>
+                  Your Overview
+                </div>
+                <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
+              </div>
             {homeMessages.length === 0 && !isAtlasStreaming && !threadLoading ? (
               <div style={{ display: "flex", justifyContent: "center", marginTop: 10, opacity: 0.7, animation: "fadeIn 600ms ease forwards" }}>
                 <LoadingSpinner size="sm" color="atlas" />
