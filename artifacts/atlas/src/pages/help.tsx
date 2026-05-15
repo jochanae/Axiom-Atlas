@@ -20,7 +20,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What is the Parking Lot?",
-    a: "The Parking Lot holds ideas and decisions that aren't ready to commit to yet. You can park something from a catch card or manually from the Ledger. Parked items can be resumed (moved back to chat), committed directly, or deleted.",
+    a: "The Parking Lot holds ideas and decisions that aren't ready to commit to yet. You can park something from a log card or manually from the Ledger. Parked items can be resumed (moved back to chat), committed directly, or deleted.",
   },
   {
     q: "What is the Home space?",

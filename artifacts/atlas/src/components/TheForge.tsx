@@ -529,7 +529,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           value={promptDesc}
           onChange={e => setPromptDesc(e.target.value)}
           placeholder={isCursor
-            ? "e.g. Add a dismiss button to the catch card that clears it without logging a decision. It should appear in the top-right corner."
+            ? "e.g. Add a dismiss button to the decision log card that clears it without logging. It should appear in the top-right corner."
             : "e.g. Add a settings panel to the workspace that lets users update their name and avatar. It should slide in from the right and auto-save on blur."}
           rows={isMobile ? 4 : 5}
           style={{
@@ -775,7 +775,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
                     type="text"
                     value={filePath}
                     onChange={e => setFilePath(e.target.value)}
-                    placeholder="e.g. artifacts/atlas/src/components/CatchCard.tsx"
+                    placeholder="e.g. artifacts/atlas/src/components/DecisionLogCard.tsx"
                     style={{
                       width: "100%", borderRadius: 8,
                       border: "1px solid rgba(212,175,55,0.18)",
