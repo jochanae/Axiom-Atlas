@@ -366,7 +366,7 @@ function HandoffSection() {
           opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(12px)",
         }}>
           The handoff is the moment that changes everything. Your spec doesn't stay behind in a doc.
-          It walks into the workspace with you — committed, permanent, enforced.
+          It walks into the workspace with you — committed, permanent, alive.
         </p>
 
         <div className="relative">
