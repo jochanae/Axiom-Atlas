@@ -1972,70 +1972,71 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Center hint — hidden on tiny screens */}
+              {/* Center hint — hidden on tiny screens; sits inline (auto-margin on right group handles spacing) */}
               {!isTinyScreen && (
-                <div style={{ flex: 1, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-                  <span style={{
-                    fontFamily: "var(--app-font-mono)", fontSize: 10.5,
-                    letterSpacing: "0.05em", color: "rgba(120,113,108,0.3)",
-                    userSelect: "none",
-                  }}>
-                    type / for shortcuts
-                  </span>
-                </div>
+                <span style={{
+                  fontFamily: "var(--app-font-mono)", fontSize: 10.5,
+                  letterSpacing: "0.05em", color: "rgba(120,113,108,0.3)",
+                  userSelect: "none", pointerEvents: "none",
+                }}>
+                  type / for shortcuts
+                </span>
               )}
 
-              {/* Mic + waveform */}
-              <button
-                title={isListening ? "Stop listening" : "Voice input"}
-                onClick={toggleVoice}
-                style={{
-                  height: 32, borderRadius: 8, border: "none",
-                  background: isListening ? "rgba(201,162,76,0.08)" : "transparent",
-                  color: isListening ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
-                  padding: "0 8px", transition: "color 160ms ease, background 160ms ease", flexShrink: 0,
-                }}
-                onMouseEnter={(e) => { if (!isListening) e.currentTarget.style.color = "var(--atlas-fg)"; }}
-                onMouseLeave={(e) => { if (!isListening) e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="9" y="2" width="6" height="11" rx="3" />
-                  <path d="M5 10a7 7 0 0014 0" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
-                <div className="atlas-waveform" style={{ color: "var(--atlas-gold)" }}>
-                  <span /><span /><span />
-                </div>
-              </button>
-
-              {/* Send */}
-              <button
-                className="atlas-send-btn"
-                onClick={handleSubmit}
-                disabled={isLoading}
-                style={{
-                  width: 40, height: 40, flexShrink: 0,
-                  background: hasInput && !isLoading ? "var(--atlas-ember)" : "var(--atlas-surface-alt)",
-                  border: hasInput ? "none" : "1px solid var(--atlas-border)",
-                  boxShadow: hasInput && !isLoading ? "0 0 18px -3px rgba(146,64,14,0.55)" : "none",
-                  opacity: isLoading ? 0.5 : 1,
-                }}
-              >
-                {isLoading ? (
-                  <LoadingSpinner size="sm" color="ember" />
-                ) : (
-                  <svg viewBox="0 0 20 20" width={13} height={13}
-                    fill={hasInput ? "var(--atlas-fg)" : "none"}
-                    stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
-                    strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
-                  >
-                    <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
-                    <path d="M17 3 9.5 11.5" />
+              {/* Mic + Send — pinned to right via auto left margin */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
+                {/* Mic + waveform */}
+                <button
+                  title={isListening ? "Stop listening" : "Voice input"}
+                  onClick={toggleVoice}
+                  style={{
+                    height: 32, borderRadius: 8, border: "none",
+                    background: isListening ? "rgba(201,162,76,0.08)" : "transparent",
+                    color: isListening ? "var(--atlas-gold)" : "rgba(120,113,108,0.45)", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                    padding: "0 8px", transition: "color 160ms ease, background 160ms ease", flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => { if (!isListening) e.currentTarget.style.color = "var(--atlas-fg)"; }}
+                  onMouseLeave={(e) => { if (!isListening) e.currentTarget.style.color = "rgba(120,113,108,0.45)"; }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="2" width="6" height="11" rx="3" />
+                    <path d="M5 10a7 7 0 0014 0" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
                   </svg>
-                )}
-              </button>
+                  <div className="atlas-waveform" style={{ color: "var(--atlas-gold)" }}>
+                    <span /><span /><span />
+                  </div>
+                </button>
+
+                {/* Send */}
+                <button
+                  className="atlas-send-btn"
+                  onClick={handleSubmit}
+                  disabled={isLoading}
+                  style={{
+                    width: 40, height: 40, flexShrink: 0,
+                    background: hasInput && !isLoading ? "var(--atlas-ember)" : "var(--atlas-surface-alt)",
+                    border: hasInput ? "none" : "1px solid var(--atlas-border)",
+                    boxShadow: hasInput && !isLoading ? "0 0 18px -3px rgba(146,64,14,0.55)" : "none",
+                    opacity: isLoading ? 0.5 : 1,
+                  }}
+                >
+                  {isLoading ? (
+                    <LoadingSpinner size="sm" color="ember" />
+                  ) : (
+                    <svg viewBox="0 0 20 20" width={13} height={13}
+                      fill={hasInput ? "var(--atlas-fg)" : "none"}
+                      stroke={hasInput ? "var(--atlas-fg)" : "var(--atlas-muted)"}
+                      strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
+                    >
+                      <path d="M2.5 10L17 3 13 17l-3.5-5.5z" />
+                      <path d="M17 3 9.5 11.5" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
