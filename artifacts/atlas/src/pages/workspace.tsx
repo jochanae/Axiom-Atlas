@@ -5070,7 +5070,7 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile, onOpenForge }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean; onOpenForge?: () => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
@@ -5221,6 +5221,32 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
       <div style={{ position: "relative", flex: chatFullscreen ? "0 0 0" : showChat ? "0 0 auto" : 1, height: chatFullscreen ? 0 : showChat ? "min(54%, calc(100% - 316px))" : undefined, minHeight: chatFullscreen ? 0 : showChat ? 200 : 0, overflow: "hidden", display: "flex", flexDirection: "column", transition: "flex 350ms ease" }}>
         {/* Axiom Flow canvas */}
         <div style={{ flex: 1, minHeight: 0, position: "relative", overflow: "hidden" }}>
+          {/* Empty map nudge — show Forge prompt when canvas has no nodes yet */}
+          {nodes.length === 0 && onOpenForge && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
+              <button
+                onClick={onOpenForge}
+                style={{
+                  pointerEvents: "auto", display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 6,
+                  padding: "14px 20px", borderRadius: 12, cursor: "pointer",
+                  background: "rgba(var(--atlas-gold-rgb),0.06)",
+                  border: "1px dashed rgba(var(--atlas-gold-rgb),0.3)",
+                  color: "rgba(var(--atlas-gold-rgb),0.6)",
+                  backdropFilter: "blur(4px)",
+                  transition: "all 200ms ease",
+                }}
+              >
+                <svg width={18} height={18} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}>
+                  <path d="M9 2L3 8.5l2.5 2.5L12 4.5 9 2z" />
+                  <path d="M5.5 11L2 14.5" />
+                  <path d="M11 3.5L13 5.5" />
+                </svg>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" as const }}>
+                  Forge — populate from a transcript
+                </span>
+              </button>
+            </div>
+          )}
           <AxiomFlow
             projectId={projectId}
             onReadinessChange={setReadinessScore}
@@ -5751,6 +5777,7 @@ function RightPanel({
   onTerminalCommandConsumed,
   onCommandComplete,
   wsLens,
+  onOpenForge,
 }: {
   projectId: number;
   entries: Entry[];
@@ -5786,6 +5813,7 @@ function RightPanel({
   onTerminalCommandConsumed?: () => void;
   onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
   wsLens?: WorkspaceLens;
+  onOpenForge?: () => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -6075,7 +6103,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} />}
       {tab === "terminal" && (wsLens === "build" || wsLens === "scenario") && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} scenarioLens={wsLens === "scenario"} />}
     </div>
   );
@@ -8859,6 +8887,32 @@ export default function Workspace() {
             }}
           />
 
+          {/* Forge shortcut — visible on Chat tab only */}
+          {leftTab === "chat" && (
+            <div style={{ padding: "0 14px 8px", flexShrink: 0 }}>
+              <button
+                onClick={() => setShowForgeExternal(true)}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                  padding: "6px 12px", borderRadius: 8, cursor: "pointer",
+                  background: "rgba(var(--atlas-gold-rgb),0.07)",
+                  border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
+                  color: "rgba(var(--atlas-gold-rgb),0.85)",
+                  fontFamily: "var(--app-font-mono)", fontSize: 9.5,
+                  letterSpacing: "0.1em", textTransform: "uppercase" as const,
+                  transition: "all 160ms ease",
+                }}
+              >
+                <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 2L3 8.5l2.5 2.5L12 4.5 9 2z" />
+                  <path d="M5.5 11L2 14.5" />
+                  <path d="M11 3.5L13 5.5" />
+                </svg>
+                Forge — Extract strategy from a doc or transcript
+              </button>
+            </div>
+          )}
+
           {/* Input — hidden when Terminal tab is active (terminal has its own input row) */}
           {leftTab !== "terminal" && <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
             {/* Hidden file input — handles both images and ZIP files */}
@@ -9371,6 +9425,7 @@ export default function Workspace() {
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
                 onCommandComplete={handleTerminalComplete}
                 wsLens={wsLens}
+                onOpenForge={() => setShowForgeExternal(true)}
               />
             </div>
           </>
@@ -9444,6 +9499,7 @@ export default function Workspace() {
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
                 onCommandComplete={handleTerminalComplete}
                 wsLens={wsLens}
+                onOpenForge={() => setShowForgeExternal(true)}
               />
             </div>
           </div>
