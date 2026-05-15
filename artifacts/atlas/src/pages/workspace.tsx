@@ -5793,6 +5793,13 @@ function RightPanel({
     if (forceTab) setTab(forceTab);
   }, [forceTab]);
 
+  // Auto-fallback terminal tab when lens changes to one that hides it
+  useEffect(() => {
+    if (wsLens !== "build" && wsLens !== "scenario" && tab === "terminal") {
+      setTab("ledger");
+    }
+  }, [wsLens, tab]);
+
   const tabs: { id: RightTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     {
       id: "ledger",
@@ -8957,7 +8964,8 @@ export default function Workspace() {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       if (firstRunInput.trim() && sessionId) {
-                        doSend(firstRunInput.trim(), sessionId, messages);
+                        const initCtx = `[WORKSPACE INIT] The user just described what they are building. Use this to immediately initialize project memory with PROJECT_MEMORY: tags (MEMORY_T1 for the core idea, MEMORY_T4 for stack/context if mentioned). Then greet them, confirm you've captured it, and suggest linking their GitHub repo in the Files tab to unlock code-aware features.`;
+                        doSend(firstRunInput.trim(), sessionId, messages, initCtx);
                         setFirstRunDismissed(true);
                         setFirstRunInput("");
                       }
@@ -8972,21 +8980,30 @@ export default function Workspace() {
                     outline: "none",
                   }}
                 />
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-                  <button onClick={() => setFirstRunDismissed(true)} style={{ background: "none", border: "1px solid var(--atlas-border)", borderRadius: 7, color: "var(--atlas-muted)", fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>Skip</button>
-                  <button
-                    onClick={() => {
-                      if (firstRunInput.trim() && sessionId) {
-                        doSend(firstRunInput.trim(), sessionId, messages);
-                        setFirstRunDismissed(true);
-                        setFirstRunInput("");
-                      }
-                    }}
-                    disabled={!firstRunInput.trim()}
-                    style={{ background: "var(--atlas-ember)", border: "none", borderRadius: 7, color: "#fff", fontSize: 12, fontWeight: 600, padding: "5px 14px", cursor: "pointer", opacity: firstRunInput.trim() ? 1 : 0.4 }}
-                  >
-                    Start →
-                  </button>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 10, gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--atlas-muted)", opacity: 0.6 }}>
+                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22" />
+                    </svg>
+                    Link a repo in <strong style={{ color: "var(--atlas-gold)", fontWeight: 500, opacity: 0.8 }}>Files</strong> to unlock code features
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => setFirstRunDismissed(true)} style={{ background: "none", border: "1px solid var(--atlas-border)", borderRadius: 7, color: "var(--atlas-muted)", fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>Skip</button>
+                    <button
+                      onClick={() => {
+                        if (firstRunInput.trim() && sessionId) {
+                          const initCtx = `[WORKSPACE INIT] The user just described what they are building. Use this to immediately initialize project memory with PROJECT_MEMORY: tags (MEMORY_T1 for the core idea, MEMORY_T4 for stack/context if mentioned). Then greet them, confirm you've captured it, and suggest linking their GitHub repo in the Files tab to unlock code-aware features.`;
+                          doSend(firstRunInput.trim(), sessionId, messages, initCtx);
+                          setFirstRunDismissed(true);
+                          setFirstRunInput("");
+                        }
+                      }}
+                      disabled={!firstRunInput.trim() || !sessionId}
+                      style={{ background: "var(--atlas-ember)", border: "none", borderRadius: 7, color: "#fff", fontSize: 12, fontWeight: 600, padding: "5px 14px", cursor: (firstRunInput.trim() && sessionId) ? "pointer" : "not-allowed", opacity: (firstRunInput.trim() && sessionId) ? 1 : 0.4 }}
+                    >
+                      Start →
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
