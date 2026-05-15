@@ -125,7 +125,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 
 
 // ── Page Transition Spinner ───────────────────────────────────────────────────
-const SKIP_TRANSITION = ["/", "/landing", "/login", "/reset-password"];
+const SKIP_TRANSITION = ["/landing", "/login", "/reset-password"];
 
 function PageTransition() {
   const [location] = useLocation();
@@ -215,10 +215,13 @@ function Router() {
         <Route path="/" component={() => {
           const [, nav] = useLocation();
           useEffect(() => {
-            fetch("/api/auth/me", { credentials: "include" })
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 4000);
+            fetch("/api/auth/me", { credentials: "include", signal: controller.signal })
               .then(r => r.ok ? r.json() : null)
               .then(user => nav(user?.id ? "/home" : "/landing", { replace: true }))
-              .catch(() => nav("/landing", { replace: true }));
+              .catch(() => nav("/landing", { replace: true }))
+              .finally(() => clearTimeout(timeout));
           }, []);
           return null;
         }} />
