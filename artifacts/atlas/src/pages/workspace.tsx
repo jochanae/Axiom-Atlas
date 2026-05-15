@@ -6093,7 +6093,7 @@ const TERMINAL_DANGER_PATTERNS: { pattern: RegExp; warning: string }[] = [
 
 const TERMINAL_SUCCESS_EXPLANATIONS: { pattern: RegExp; explanation: string }[] = [
   { pattern: /^git\s+status(?:\s|$)/, explanation: "[ATLAS] Shows current branch, staged changes, and untracked files." },
-  { pattern: /^git\s+push(?:\s|$)/, explanation: "[ATLAS] Changes pushed to GitHub. Vercel will redeploy automatically." },
+  { pattern: /^git\s+push(?:\s|$)/, explanation: "[ATLAS] Changes pushed to GitHub. Replit will pick up the latest commit." },
   { pattern: /^git\s+commit(?:\s|$)/, explanation: "[ATLAS] Snapshot saved to local git history." },
   { pattern: /^git\s+pull(?:\s|$)/, explanation: "[ATLAS] Latest changes pulled from GitHub into your local branch." },
   { pattern: /^ls(?:\s|$)/, explanation: "[ATLAS] Lists files and folders in the current directory." },
@@ -6123,7 +6123,7 @@ function TerminalPanel({
   const [lines, setLines] = useState<TerminalLine[]>([
     { text: scenarioLens ? "SCENARIO Terminal  —  explain mode (no execution)" : "Atlas Terminal  —  ready", kind: "system" },
     { text: scenarioLens ? "Commands are NOT executed. Atlas will explain what each command would do." : "Type a command or ask Atlas in Chat to run one for you.", kind: "system" },
-    ...(scenarioLens ? [] : [{ text: "Type  help  to see common commands.", kind: "system" as const }]),
+    ...(scenarioLens ? [] : [{ text: "Type  help  or  clear  to get started.", kind: "system" as const }]),
   ]);
   const [running, setRunning] = useState(false);
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
@@ -6140,9 +6140,22 @@ function TerminalPanel({
     ]);
   }, []);
 
+  const welcomeLines = useCallback((): TerminalLine[] => [
+    { text: scenarioLens ? "SCENARIO Terminal  —  explain mode (no execution)" : "Atlas Terminal  —  ready", kind: "system" },
+    { text: scenarioLens ? "Commands are NOT executed. Atlas will explain what each command would do." : "Type a command or ask Atlas in Chat to run one for you.", kind: "system" },
+    ...(scenarioLens ? [] : [{ text: "Type  help  or  clear  to get started.", kind: "system" as const }]),
+  ], [scenarioLens]);
+
   const runCommand = useCallback(async (cmd: string) => {
     const trimmed = cmd.trim();
     if (!trimmed || running) return;
+
+    // Built-in: clear / cls
+    if (trimmed === "clear" || trimmed === "cls") {
+      setLines(welcomeLines());
+      return;
+    }
+
     setRunning(true);
     setCmdHistory((h) => [trimmed, ...h.slice(0, 49)]);
     setHistIdx(-1);
@@ -6296,9 +6309,22 @@ function TerminalPanel({
         }}
       >
         {lines.map((ln, i) => (
-          <div key={i} style={{ color: colorFor(ln.kind), whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-            {ln.text}
-          </div>
+          i === 0 && !scenarioLens && ln.text.includes("ready") ? (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, color: colorFor(ln.kind), whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+                background: "#4ade80",
+                boxShadow: "0 0 5px rgba(74,222,128,0.7)",
+                display: "inline-block",
+                animation: "atlas-pulse 2.4s ease-in-out infinite",
+              }} />
+              {ln.text}
+            </div>
+          ) : (
+            <div key={i} style={{ color: colorFor(ln.kind), whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+              {ln.text}
+            </div>
+          )
         ))}
         {running && (
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 3, color: "rgba(var(--atlas-muted-rgb),0.6)" }}>
