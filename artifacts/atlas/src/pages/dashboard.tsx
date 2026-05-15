@@ -191,9 +191,9 @@ export default function Dashboard() {
             <StatCard index={2} label="Active Projects" value={stats.activeProjects} sub="sessions this week" accent="#818CF8" />
             <StatCard
               index={3}
-              label="Violations"
+              label="Overrides"
               value={stats.violations}
-              sub={stats.violations === 0 ? "clean ledger" : "decisions broken"}
+              sub={stats.violations === 0 ? "clean ledger" : "direction shifted"}
               accent={stats.violations > 0 ? "var(--atlas-ember)" : "#6EE7B7"}
             />
           </div>
@@ -371,7 +371,7 @@ export default function Dashboard() {
                             {p.name}
                           </div>
                           <div style={{ fontSize: 10, color: "var(--atlas-muted)", opacity: 0.55, marginTop: 1, fontFamily: "var(--app-font-mono)" }}>
-                            {p.committed} committed{p.violations > 0 ? ` · ${p.violations} violations` : " · clean"}
+                            {p.committed} committed{p.violations > 0 ? ` · ${p.violations} overrides` : " · clean"}
                           </div>
                         </div>
                         <div style={{ textAlign: "right", flexShrink: 0 }}>

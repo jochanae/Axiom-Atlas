@@ -197,7 +197,7 @@ function ProjectHealthCard({
           {violations > 0 && (
             <>
               <HealthDivider />
-              <HealthStat value={violations} label="violations" color="var(--atlas-ember)" />
+              <HealthStat value={violations} label="overrides" color="var(--atlas-ember)" />
             </>
           )}
           {topModes.length > 0 && (
