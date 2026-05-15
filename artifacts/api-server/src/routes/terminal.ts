@@ -136,6 +136,10 @@ router.post("/terminal/explain", requireAuth, async (req: Request, res: Response
     res.status(400).json({ error: "Missing command" });
     return;
   }
+  if (command.trim().length > 500) {
+    res.status(400).json({ error: "Command too long (max 500 characters)" });
+    return;
+  }
   const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   try {

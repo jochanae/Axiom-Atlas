@@ -8939,7 +8939,7 @@ export default function Workspace() {
             )}
 
             {/* ── First-run onboarding overlay ── */}
-            {!firstRunDismissed && !sessionsLoading && messages.length === 0 && (entries?.length ?? 0) === 0 && !linkedRepo && (
+            {!firstRunDismissed && !sessionsLoading && !projectLoading && sessions !== undefined && messages.length === 0 && (sessions.length === 0) && (entries?.length ?? 0) === 0 && !linkedRepo && (
               <div style={{
                 marginBottom: 12, borderRadius: 12, background: "rgba(201,162,76,0.05)",
                 border: "1px solid rgba(201,162,76,0.18)", padding: "16px 16px 14px",
