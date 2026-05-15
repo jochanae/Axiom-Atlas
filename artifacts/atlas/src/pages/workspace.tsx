@@ -20,6 +20,7 @@ import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
 import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
+import { Eye, TerminalSquare } from "lucide-react";
 import { useThemeMode } from "@/lib/theme";
 import { fileToBase64Safe } from "@/lib/image-resize";
 import type { ZipEntry } from "../components/ZipImport";
@@ -6033,7 +6034,31 @@ function RightPanel({
 }
 
 // ── TerminalPanel ─────────────────────────────────────────────────────────────
-type TerminalLine = { text: string; kind: "input" | "output" | "stderr" | "system" | "error" };
+type TerminalLine = { text: string; kind: "input" | "output" | "stderr" | "system" | "error" | "warning" | "commentary" };
+
+const TERMINAL_DANGER_PATTERNS: { pattern: RegExp; warning: string }[] = [
+  { pattern: /(?:^|\s)git\s+reset\s+--hard(?:\s|$)/, warning: "This will permanently discard all uncommitted changes." },
+  { pattern: /(?:^|\s)git\s+push(?=.*(?:^|\s)(?:--force|-f)(?:\s|$))/, warning: "This will overwrite remote history. This cannot be undone." },
+  { pattern: /(?:^|\s)rm\s+-rf(?:\s|$)/, warning: "This will permanently delete files." },
+  { pattern: /(?:^|\s)git\s+clean\s+-fd(?:\s|$)/, warning: "This will delete all untracked files." },
+];
+
+const TERMINAL_SUCCESS_EXPLANATIONS: { pattern: RegExp; explanation: string }[] = [
+  { pattern: /^git\s+status(?:\s|$)/, explanation: "[ATLAS] Shows current branch, staged changes, and untracked files." },
+  { pattern: /^git\s+push(?:\s|$)/, explanation: "[ATLAS] Changes pushed to GitHub. Vercel will redeploy automatically." },
+  { pattern: /^git\s+commit(?:\s|$)/, explanation: "[ATLAS] Snapshot saved to local git history." },
+  { pattern: /^git\s+pull(?:\s|$)/, explanation: "[ATLAS] Latest changes pulled from GitHub into your local branch." },
+  { pattern: /^ls(?:\s|$)/, explanation: "[ATLAS] Lists files and folders in the current directory." },
+  { pattern: /^pwd(?:\s|$)/, explanation: "[ATLAS] Shows your current location in the file system." },
+];
+
+function getTerminalWarning(command: string) {
+  return TERMINAL_DANGER_PATTERNS.find(({ pattern }) => pattern.test(command))?.warning;
+}
+
+function getTerminalSuccessExplanation(command: string) {
+  return TERMINAL_SUCCESS_EXPLANATIONS.find(({ pattern }) => pattern.test(command))?.explanation;
+}
 
 function TerminalPanel({
   pendingCommand,
@@ -6071,6 +6096,8 @@ function TerminalPanel({
     setCmdHistory((h) => [trimmed, ...h.slice(0, 49)]);
     setHistIdx(-1);
     addLine(`$ ${trimmed}`, "input");
+    const warning = getTerminalWarning(trimmed);
+    if (warning) addLine(`[ATLAS WARNING] ${warning}`, "warning");
 
     const outputChunks: string[] = [];
     let finalExitCode: number | null = null;
@@ -6124,6 +6151,11 @@ function TerminalPanel({
       addLine(`Error: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
 
+    if (finalExitCode === 0) {
+      const explanation = getTerminalSuccessExplanation(trimmed);
+      if (explanation) addLine(explanation, "commentary");
+    }
+
     setRunning(false);
 
     if (fromAtlasRef.current && onCommandComplete) {
@@ -6172,6 +6204,8 @@ function TerminalPanel({
     if (kind === "stderr") return "rgba(252,165,100,0.88)";
     if (kind === "system") return "rgba(var(--atlas-muted-rgb),0.65)";
     if (kind === "error") return "rgba(252,100,100,0.88)";
+    if (kind === "warning") return "var(--atlas-gold)";
+    if (kind === "commentary") return "var(--muted-foreground)";
     return "var(--atlas-fg)";
   };
 
@@ -6535,8 +6569,7 @@ export default function Workspace() {
   const { playSend, playCatch, playCommit, playPark, playNavigate } = useSound();
   const [memoryChips, setMemoryChips] = useState<MemoryChip[]>([]);
   const [pushHistory, setPushHistory] = useState<PushRecord[]>([]);
-  const [leftTab, setLeftTab] = useState<"chat" | "diff">("chat");
-  const [diffSubTab, setDiffSubTab] = useState<"diff" | "terminal">("diff");
+  const [leftTab, setLeftTab] = useState<"chat" | "diff" | "terminal">("chat");
   const [sessionPrUrl, setSessionPrUrl] = useState<string | null>(null);
   const [rightOpen, setRightOpen] = useState(() =>
     new URLSearchParams(window.location.search).get("view") === "flow"
@@ -7462,9 +7495,7 @@ export default function Workspace() {
   const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : undefined
   );
-  const [sandboxCode, setSandboxCode] = useState<string | null>(null);
-  const handlePreviewCode = useCallback((code: string) => {
-    setSandboxCode(code);
+  const openPreviewPanel = useCallback(() => {
     if (isMobile) {
       setMobileTab("preview");
       setRightOpen(true);
@@ -7472,14 +7503,17 @@ export default function Workspace() {
       setDesktopForceTab("preview");
       setTimeout(() => setDesktopForceTab(undefined), 120);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMobile]);
+  const [sandboxCode, setSandboxCode] = useState<string | null>(null);
+  const handlePreviewCode = useCallback((code: string) => {
+    setSandboxCode(code);
+    openPreviewPanel();
+  }, [openPreviewPanel]);
 
   const [pendingTerminalCommand, setPendingTerminalCommand] = useState<string | null>(null);
   const handleRunCommand = useCallback((command: string) => {
     setPendingTerminalCommand(command);
-    setLeftTab("diff");
-    setDiffSubTab("terminal");
+    setLeftTab("terminal");
   }, []);
 
   const messagesRef = useRef<ChatMessage[]>([]);
@@ -8207,6 +8241,25 @@ export default function Workspace() {
             {/* Parking Lot removed from header — lives in the Projects Drawer (Navigate → Parking Lot) */}
 
 
+            {!isMobile && (
+              <button
+                title="Open Preview"
+                onClick={openPreviewPanel}
+                style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  background: "transparent", border: "none",
+                  color: "var(--atlas-muted)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "color 160ms ease, opacity 160ms ease", flexShrink: 0,
+                  opacity: 0.65,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "var(--atlas-gold)"; e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--atlas-muted)"; e.currentTarget.style.opacity = "0.65"; }}
+              >
+                <Eye size={15} strokeWidth={1.7} />
+              </button>
+            )}
+
             {/* Avatar only — New Project moved to Projects Drawer (+ next to Projects heading) */}
             <UserMenuDropdown onOpenProfile={() => setShowProfile(true)} />
           </div>
@@ -8373,11 +8426,11 @@ export default function Workspace() {
             overflow: "hidden",
           }}
         >
-          {/* ── Chat / Diff tab strip ── */}
+          {/* ── Chat / Diff / Terminal tab strip ── */}
           <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, paddingLeft: 4, background: "var(--atlas-glass-bg)" }}>
-            {(["chat", "diff"] as const).map((tab) => {
+            {(["chat", "diff", "terminal"] as const).map((tab) => {
               const active = leftTab === tab;
-              const label = tab === "chat" ? "Chat" : "Diff";
+              const label = tab === "chat" ? "Chat" : tab === "diff" ? "Diff" : "Terminal";
               const badge = tab === "diff" && pushHistory.length > 0 ? pushHistory.length : undefined;
               return (
                 <button
@@ -8395,6 +8448,7 @@ export default function Workspace() {
                   onMouseEnter={(e) => { if (!active) e.currentTarget.style.opacity = "0.9"; }}
                   onMouseLeave={(e) => { if (!active) e.currentTarget.style.opacity = "0.6"; }}
                 >
+                  {tab === "terminal" && <TerminalSquare size={13} strokeWidth={1.7} />}
                   {label}
                   {badge !== undefined && (
                     <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", background: "rgba(201,162,76,0.15)", border: "1px solid rgba(201,162,76,0.3)", color: "var(--atlas-gold)", padding: "0 4px", borderRadius: 8, lineHeight: "15px" }}>
@@ -8429,29 +8483,7 @@ export default function Workspace() {
           </div>
 
           {leftTab === "diff" ? (
-            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-              <div style={{ display: "flex", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
-                {(["diff", "terminal"] as const).map(st => (
-                  <button
-                    key={st}
-                    onClick={() => setDiffSubTab(st)}
-                    style={{
-                      flex: 1, padding: "7px 0",
-                      background: "transparent", border: "none",
-                      borderBottom: diffSubTab === st ? "2px solid var(--atlas-gold)" : "2px solid transparent",
-                      fontSize: 10, fontFamily: "var(--app-font-mono)",
-                      letterSpacing: "0.1em", textTransform: "uppercase" as const,
-                      color: diffSubTab === st ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                      cursor: "pointer", transition: "all 160ms ease",
-                    }}
-                  >
-                    {st === "diff" ? "Diff" : "Terminal"}
-                  </button>
-                ))}
-              </div>
-              <div style={{ flex: 1, overflow: "hidden" }}>
-                {diffSubTab === "diff" ? (
-                  <div style={{ flex: 1, height: "100%", overflowY: "auto", padding: "16px 14px" }} className="scrollbar-none">
+            <div style={{ flex: 1, height: "100%", overflowY: "auto", padding: "16px 14px" }} className="scrollbar-none">
                     {pushHistory.length === 0 ? (
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8, paddingBottom: 40 }}>
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.2" strokeLinecap="round" style={{ opacity: 0.25 }}>
@@ -8478,12 +8510,9 @@ export default function Workspace() {
                         />
                       ));
                     })()}
-                  </div>
-                ) : (
-                  <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={() => setPendingTerminalCommand(null)} onCommandComplete={handleTerminalComplete} />
-                )}
-              </div>
             </div>
+          ) : leftTab === "terminal" ? (
+            <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={() => setPendingTerminalCommand(null)} onCommandComplete={handleTerminalComplete} />
           ) : (
           /* ── Chat view ── */
           <div
