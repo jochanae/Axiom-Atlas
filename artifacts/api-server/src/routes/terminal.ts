@@ -129,4 +129,30 @@ router.get("/terminal/history", requireAuth, (_req, res): void => {
   res.json({ history: [...history].reverse() });
 });
 
+// POST /api/terminal/explain — scenario mode: explain what a command WOULD do without executing
+router.post("/terminal/explain", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { command } = req.body as { command?: string };
+  if (!command?.trim()) {
+    res.status(400).json({ error: "Missing command" });
+    return;
+  }
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  try {
+    const msg = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 512,
+      messages: [{
+        role: "user",
+        content: `You are in SCENARIO mode — a safe what-if simulation. Explain in 2–4 plain-English sentences what this shell command WOULD do if executed in a Node/pnpm monorepo project root. Do NOT execute it. Focus on: what files/processes would be affected, what the expected output would be, and any risk or side effect worth knowing. Be specific.\n\nCommand: \`${command.trim()}\``,
+      }],
+    });
+    const text = msg.content.filter(b => b.type === "text").map(b => (b as { type: "text"; text: string }).text).join("").trim();
+    res.json({ explanation: text });
+  } catch (err: unknown) {
+    logger.error({ err }, "terminal/explain error");
+    res.status(500).json({ error: "Could not generate explanation" });
+  }
+});
+
 export default router;

@@ -1495,6 +1495,7 @@ function AssistantBubble({
   onPreviewCode,
   onPrCreated,
   onRunCommand,
+  onExtractToForge,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -1510,6 +1511,7 @@ function AssistantBubble({
   onPreviewCode?: (code: string) => void;
   onPrCreated?: (prUrl: string) => void;
   onRunCommand?: (command: string) => void;
+  onExtractToForge?: (content: string) => void;
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
@@ -1927,6 +1929,20 @@ function AssistantBubble({
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="1" y="2" width="12" height="9" rx="1.5" />
                 <path d="M5 5.5l2 2-2 2M8.5 9.5h1.5" />
+              </svg>
+            </button>
+          )}
+          {/* Extract to Forge — surfaces on structured/lengthy responses */}
+          {onExtractToForge && message.content.length > 200 && (
+            <button
+              className="atlas-icon-action"
+              title="Extract to Forge"
+              onClick={() => onExtractToForge(message.content)}
+              style={{ opacity: hov ? 0.85 : 0.32 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 1v8M4 6l3 3 3-3" />
+                <path d="M2 10v1.5A1.5 1.5 0 003.5 13h7a1.5 1.5 0 001.5-1.5V10" />
               </svg>
             </button>
           )}
@@ -3895,9 +3911,6 @@ function PreviewTab({ projectId, sandboxCode, onSandboxConsumed, refreshTrigger 
   const [autoDetected, setAutoDetected] = useState<{ url: string; platform: string } | null>(null);
   const autoDetectTriedRef = useRef<string | null>(null);
 
-  // ── StackBlitz embed state ───────────────────────────────────────────────────
-  const [sbView, setSbView] = useState<"editor" | "preview">("preview");
-
   const { data: previewProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
   const linkedRepo = (() => { try { return previewProject?.linkedRepo ? JSON.parse(previewProject.linkedRepo) as { fullName: string; defaultBranch?: string } : null; } catch { return null; } })();
   const token = previewProject?.githubToken ?? null;
@@ -4554,7 +4567,7 @@ ${t}
               <div style={{ textAlign: "center", maxWidth: 250 }}>
                 <p style={{ margin: "0 0 5px", fontSize: 12.5, color: "var(--atlas-fg)", fontWeight: 500, lineHeight: 1.5 }}>Run dev server</p>
                 <p style={{ margin: 0, fontSize: 10.5, color: "var(--atlas-muted)", lineHeight: 1.7 }}>
-                  Clones your repo, installs dependencies, and runs it live — no StackBlitz login needed. Works with private repos.
+                  Clones your repo, installs dependencies, and runs it live. Works with private repos.
                 </p>
               </div>
               {/* Time note */}
@@ -6080,15 +6093,17 @@ function TerminalPanel({
   pendingCommand,
   onCommandConsumed,
   onCommandComplete,
+  scenarioLens,
 }: {
   pendingCommand?: string | null;
   onCommandConsumed?: () => void;
   onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
+  scenarioLens?: boolean;
 }) {
   const [input, setInput] = useState("");
   const [lines, setLines] = useState<TerminalLine[]>([
-    { text: "Atlas Terminal  —  /home/runner/workspace", kind: "system" },
-    { text: "Type a command or tap Run on an Atlas suggestion.", kind: "system" },
+    { text: scenarioLens ? "SCENARIO Terminal  —  explain mode (no execution)" : "Atlas Terminal  —  /home/runner/workspace", kind: "system" },
+    { text: scenarioLens ? "Commands are NOT executed. Atlas will explain what each command would do." : "Type a command or tap Run on an Atlas suggestion.", kind: "system" },
   ]);
   const [running, setRunning] = useState(false);
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);
@@ -6112,6 +6127,30 @@ function TerminalPanel({
     setCmdHistory((h) => [trimmed, ...h.slice(0, 49)]);
     setHistIdx(-1);
     addLine(`$ ${trimmed}`, "input");
+
+    // SCENARIO mode — explain rather than execute
+    if (scenarioLens) {
+      addLine("[SCENARIO] Asking Atlas what this command would do…", "system");
+      try {
+        const r = await fetch("/api/terminal/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ command: trimmed }),
+          credentials: "include",
+        });
+        const data = await r.json() as { explanation?: string; error?: string };
+        if (data.explanation) {
+          addLine(`[ATLAS EXPLAINS] ${data.explanation}`, "commentary");
+        } else {
+          addLine(`Error: ${data.error ?? "Could not generate explanation"}`, "error");
+        }
+      } catch (err) {
+        addLine(`Error: ${err instanceof Error ? err.message : String(err)}`, "error");
+      }
+      setRunning(false);
+      return;
+    }
+
     const warning = getTerminalWarning(trimmed);
     if (warning) addLine(`[ATLAS WARNING] ${warning}`, "warning");
 
@@ -6181,7 +6220,7 @@ function TerminalPanel({
       }
     }
     fromAtlasRef.current = false;
-  }, [running, addLine, onCommandComplete]);
+  }, [running, addLine, onCommandComplete, scenarioLens]);
 
   useEffect(() => {
     if (pendingCommand) {
@@ -6725,6 +6764,9 @@ export default function Workspace() {
   const [showDrawer, setShowDrawer] = useState(false);
   const [showVault, setShowVault] = useState(false);
   const [showForgeExternal, setShowForgeExternal] = useState(false);
+  const [forgePreloadContent, setForgePreloadContent] = useState<string | undefined>(undefined);
+  const [firstRunDismissed, setFirstRunDismissed] = useState(false);
+  const [firstRunInput, setFirstRunInput] = useState("");
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -8536,7 +8578,7 @@ export default function Workspace() {
         >
           {/* ── Chat / Diff / Terminal tab strip ── */}
           <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, paddingLeft: 4, background: "var(--atlas-glass-bg)" }}>
-            {(["chat", "diff", "terminal"] as const).map((tab) => {
+            {(["chat", "diff", "terminal"] as const).filter(tab => tab !== "terminal" || wsLens === "build" || wsLens === "scenario").map((tab) => {
               const active = leftTab === tab;
               const label = tab === "chat" ? "Chat" : tab === "diff" ? "Diff" : "Terminal";
               const badge = tab === "diff" && pushHistory.length > 0 ? pushHistory.length : undefined;
@@ -8620,7 +8662,7 @@ export default function Workspace() {
                     })()}
             </div>
           ) : leftTab === "terminal" ? (
-            <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={() => setPendingTerminalCommand(null)} onCommandComplete={handleTerminalComplete} />
+            <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={() => setPendingTerminalCommand(null)} onCommandComplete={handleTerminalComplete} scenarioLens={wsLens === "scenario"} />
           ) : (
           /* ── Chat view ── */
           <div
@@ -8702,6 +8744,7 @@ export default function Workspace() {
                   onPreviewCode={handlePreviewCode}
                   onRunCommand={handleRunCommand}
                   onPrCreated={(url) => { setSessionPrUrl(url); setLeftTab("diff"); }}
+                  onExtractToForge={(content) => { setForgePreloadContent(content); setShowForgeExternal(true); }}
                   onPushSuccess={(records) => {
                     setPushHistory((prev) => {
                       const next = [...prev, ...records].slice(-20);
@@ -8877,6 +8920,66 @@ export default function Workspace() {
                 onDeselectAll={() => setAllZip(false)}
                 onClear={clearZip}
               />
+            )}
+
+            {/* ── First-run onboarding overlay ── */}
+            {!firstRunDismissed && !sessionsLoading && messages.length === 0 && (entries?.length ?? 0) === 0 && (
+              <div style={{
+                marginBottom: 12, borderRadius: 12, background: "rgba(201,162,76,0.05)",
+                border: "1px solid rgba(201,162,76,0.18)", padding: "16px 16px 14px",
+                flexShrink: 0,
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--atlas-gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.85 }}>
+                      <circle cx="8" cy="8" r="7" /><path d="M8 5v4M8 11.5v.5" />
+                    </svg>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--atlas-gold)", letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.9 }}>New workspace</span>
+                  </div>
+                  <button onClick={() => setFirstRunDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", padding: "2px 4px", lineHeight: 1, fontSize: 16, opacity: 0.5 }}>×</button>
+                </div>
+                <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--atlas-fg)", lineHeight: 1.6, opacity: 0.8 }}>
+                  What are you building?
+                </p>
+                <textarea
+                  value={firstRunInput}
+                  onChange={e => setFirstRunInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (firstRunInput.trim() && sessionId) {
+                        doSend(firstRunInput.trim(), sessionId, messages);
+                        setFirstRunDismissed(true);
+                        setFirstRunInput("");
+                      }
+                    }
+                  }}
+                  placeholder="e.g. A SaaS to let agencies manage client portals…"
+                  rows={2}
+                  style={{
+                    width: "100%", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(201,162,76,0.18)",
+                    borderRadius: 8, color: "var(--atlas-fg)", fontSize: 13, fontFamily: "var(--app-font-sans)",
+                    lineHeight: 1.6, padding: "8px 11px", resize: "none", boxSizing: "border-box",
+                    outline: "none",
+                  }}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+                  <button onClick={() => setFirstRunDismissed(true)} style={{ background: "none", border: "1px solid var(--atlas-border)", borderRadius: 7, color: "var(--atlas-muted)", fontSize: 12, padding: "5px 12px", cursor: "pointer" }}>Skip</button>
+                  <button
+                    onClick={() => {
+                      if (firstRunInput.trim() && sessionId) {
+                        doSend(firstRunInput.trim(), sessionId, messages);
+                        setFirstRunDismissed(true);
+                        setFirstRunInput("");
+                      }
+                    }}
+                    disabled={!firstRunInput.trim()}
+                    style={{ background: "var(--atlas-ember)", border: "none", borderRadius: 7, color: "#fff", fontSize: 12, fontWeight: 600, padding: "5px 14px", cursor: "pointer", opacity: firstRunInput.trim() ? 1 : 0.4 }}
+                  >
+                    Start →
+                  </button>
+                </div>
+              </div>
             )}
 
             {/* Attachment preview strip */}
@@ -9401,7 +9504,12 @@ export default function Workspace() {
       )}
 
       {showForgeExternal && (
-        <TheForge onClose={() => setShowForgeExternal(false)} />
+        <TheForge
+          projectId={id}
+          preloadContent={forgePreloadContent}
+          onClose={() => { setShowForgeExternal(false); setForgePreloadContent(undefined); }}
+          onNodesReady={() => { setShowForgeExternal(false); setForgePreloadContent(undefined); }}
+        />
       )}
 
       {/* Projects Drawer */}
