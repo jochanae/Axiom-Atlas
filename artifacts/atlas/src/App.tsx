@@ -125,7 +125,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
 
 
 // ── Page Transition Spinner ───────────────────────────────────────────────────
-const SKIP_TRANSITION = ["/landing", "/login", "/reset-password"];
+const SKIP_TRANSITION = ["/", "/landing", "/login", "/reset-password"];
 
 function PageTransition() {
   const [location] = useLocation();
