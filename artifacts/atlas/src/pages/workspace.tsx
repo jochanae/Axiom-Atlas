@@ -2207,7 +2207,7 @@ function LedgerEntry({ entry }: { entry: Entry }) {
                 {entry.title}
               </Link>
               {committed && <CapsuleTag severity="committed" size="xs">LOCKED</CapsuleTag>}
-              {entry.deviation && <CapsuleTag severity="blocker" size="xs">DEVIATION</CapsuleTag>}
+              {entry.deviation && <CapsuleTag severity="blocker" size="xs">SHIFTED</CapsuleTag>}
             </div>
           </div>
         </div>

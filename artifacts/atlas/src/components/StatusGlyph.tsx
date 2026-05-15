@@ -11,7 +11,7 @@ const severityColor: Record<Severity, string> = {
 };
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
-  blocker:   "Blocker",
+  blocker:   "Flagged",
   parked:    "Parked",
   committed: "Committed",
   neutral:   "Note",
