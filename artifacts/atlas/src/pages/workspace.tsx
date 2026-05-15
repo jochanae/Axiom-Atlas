@@ -6690,7 +6690,7 @@ export default function Workspace() {
   const [detectedLens, setDetectedLens] = useState<WorkspaceLens | null>(null);
   const scenarioStartIdxRef = useRef<number>(-1);
   const [showScenarioPrompt, setShowScenarioPrompt] = useState(false);
-  const sendCtxRef = useRef({ wsLens: "flow" as WorkspaceLens, wsModel: "claude", projectLens: "builder" as "builder" | "strategist" | "reviewer" | "teacher", projectMode: "THINK" as "THINK" | "PLAN" | "BUILD" });
+  const sendCtxRef = useRef({ wsLens: "flow" as WorkspaceLens, wsModel: "claude" });
   const [pendingLensSwitch, setPendingLensSwitch] = useState<WorkspaceLens | null>(null);
   const [scenarioBuffer, setScenarioBuffer] = useState<Array<{ role: string; content: string }>>([]);
   const [showWsModelSheet, setShowWsModelSheet] = useState(false);
@@ -6702,26 +6702,18 @@ export default function Workspace() {
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [switchToExpanded, setSwitchToExpanded] = useState(false);
   const projectBtnRef = useRef<HTMLButtonElement>(null);
-  const styleBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
-  const [showStyleMenu, setShowStyleMenu] = useState(false);
   // Close portaled header dropdowns on scroll/resize so they don't float off their anchors.
   useEffect(() => {
-    if (!showProjectMenu && !showStyleMenu) return;
-    const close = () => { setShowProjectMenu(false); setShowStyleMenu(false); };
+    if (!showProjectMenu) return;
+    const close = () => { setShowProjectMenu(false); };
     window.addEventListener("scroll", close, true);
     window.addEventListener("resize", close);
     return () => {
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [showProjectMenu, showStyleMenu]);
-  const [projectMode, setProjectMode] = useState<"THINK" | "PLAN" | "BUILD">(() => {
-    try { return (localStorage.getItem(`atlas-mode-${id}`) as "THINK" | "PLAN" | "BUILD") || "THINK"; } catch { return "THINK"; }
-  });
-  const [projectLens, setProjectLens] = useState<"builder" | "strategist" | "reviewer" | "teacher">(() => {
-    try { return (localStorage.getItem(`atlas-lens-${id}`) as "builder" | "strategist" | "reviewer" | "teacher") || "builder"; } catch { return "builder"; }
-  });
+  }, [showProjectMenu]);
 
   const setWsLens = useCallback((newLens: WorkspaceLens) => {
     const currentMessages = messages;
@@ -6827,33 +6819,6 @@ export default function Workspace() {
   const [handoffSelected, setHandoffSelected] = useState<Set<number>>(new Set());
 
 
-  // Intercept mode switch to BUILD — if there are PLAN messages, show the handoff modal
-  const handleModeSelect = (m: "THINK" | "PLAN" | "BUILD") => {
-    if (m === "BUILD" && projectMode !== "BUILD") {
-      const planMsgs = messages.filter(msg => msg.role === "assistant" && msg.intentType === "PLAN" && msg.content.trim().length > 0);
-      if (planMsgs.length > 0) {
-        // Pre-select all PLAN messages
-        setHandoffSelected(new Set(planMsgs.map((_, i) => i)));
-        setShowHandoffModal(true);
-        setShowStyleMenu(false);
-        return;
-      }
-    }
-    setProjectMode(m);
-    try { localStorage.setItem(`atlas-mode-${id}`, m); } catch {}
-    setShowStyleMenu(false);
-  };
-
-  // Auto-set BUILD mode when arriving via external handoff (Axiom, Compani, etc.)
-  useEffect(() => {
-    try {
-      const src = new URLSearchParams(window.location.search).get("source");
-      if (src) {
-        setProjectMode("BUILD");
-        localStorage.setItem(`atlas-mode-${id}`, "BUILD");
-      }
-    } catch { /* ignore */ }
-  }, [id]);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameEscapeRef = useRef(false);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
@@ -7212,7 +7177,7 @@ export default function Workspace() {
   }, [sessions, sessionsLoading, id]);
 
   // Always-current ref so doSend doesn't capture stale state
-  sendCtxRef.current = { wsLens, wsModel, projectLens, projectMode };
+  sendCtxRef.current = { wsLens, wsModel };
 
   const doSend = useCallback(
     (text: string, sid: number, currentMessages: ChatMessage[], ctx?: string | null, imageData?: { base64: string; mediaType: string }) => {
@@ -7256,8 +7221,6 @@ export default function Workspace() {
         projectId: id,
         message: text,
         model: lensCtx.wsModel,
-        mode: lensCtx.projectMode.toLowerCase(),
-        lens: lensCtx.projectLens,
         workspaceLens: lensCtx.wsLens,
         scenarioMode: isScenario,
         history,
@@ -7355,7 +7318,7 @@ export default function Workspace() {
         })
         .finally(() => { setChatPending(false); abortControllerRef.current = null; });
     },
-    [entries, id, fileContext, projectMode]
+    [entries, id, fileContext]
   );
 
   const handleStop = useCallback(() => {
@@ -7798,8 +7761,6 @@ export default function Workspace() {
   const [zipName, setZipName] = useState("");
   const [zipTruncated, setZipTruncated] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const zipInputRef = useRef<HTMLInputElement>(null);
-
   const processZip = useCallback(async (file: File) => {
     try {
       const { entries: parsed, truncated } = await parseZip(file);
@@ -8304,106 +8265,6 @@ export default function Workspace() {
               </button>
             )}
 
-            {/* Combined Workflow + Atlas Style pill — hidden in mobile map mode */}
-            {!(isMobile && mobileTab === "map") && (() => {
-              const lensConfig = {
-                builder:    { color: "var(--atlas-fg)",  dot: "var(--atlas-fg)", label: "Builder",    desc: "Direct · Code-first · Ship it" },
-                strategist: { color: "rgba(201,162,76,0.85)",  dot: "rgba(201,162,76,0.85)",  label: "Strategist", desc: "Big picture · Priorities · Risk" },
-                reviewer:   { color: "rgba(239,100,68,0.85)",  dot: "rgba(239,100,68,0.85)",  label: "Reviewer",   desc: "Critical · Find gaps · Stress-test" },
-                teacher:    { color: "rgba(99,200,150,0.85)",  dot: "rgba(99,200,150,0.85)",  label: "Teacher",    desc: "Explain everything · No jargon" },
-              };
-              const modeConfig = {
-                THINK: { color: "#93c5fd", bg: "rgba(96,165,250,0.1)", border: "rgba(96,165,250,0.35)", desc: "Strategy & advice — no code",
-                  icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.6-1.4 4.9-3.5 6.2V17a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1v-1.8C6.4 13.9 5 11.6 5 9a7 7 0 0 1 7-7z" /></svg> },
-                PLAN:  { color: "var(--atlas-gold)", bg: "rgba(201,162,76,0.1)", border: "rgba(201,162,76,0.35)", desc: "Structure & outlines",
-                  icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
-                BUILD: { color: "#4ade80", bg: "rgba(74,222,128,0.1)", border: "rgba(74,222,128,0.35)", desc: "Writes code → push to GitHub",
-                  icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> },
-              };
-              const mc = modeConfig[projectMode];
-              const lc = lensConfig[projectLens];
-              return (
-                <div style={{ position: "relative" }}>
-                  <button
-                    ref={styleBtnRef}
-                    onClick={() => { setShowStyleMenu(v => !v); setShowProjectMenu(false); setShowViewMenu(false); }}
-                    title={`${projectMode} · ${lc.label} — tap to change`}
-                    style={{ display: "flex", alignItems: "center", gap: 4, background: mc.bg, border: `1px solid ${mc.border}`, borderRadius: 7, padding: "5px 8px", cursor: "pointer", color: mc.color, flexShrink: 0, transition: "all 180ms ease" }}
-                  >
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: mc.color, flexShrink: 0, display: "inline-block" }} />
-                    {mc.icon}
-                    {!isMobile && <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.1em" }}>{projectMode}</span>}
-                    <span style={{ width: 4, height: 4, borderRadius: "50%", background: lc.dot, flexShrink: 0, display: "inline-block", opacity: 0.75, marginLeft: 1 }} />
-                  </button>
-                  {showStyleMenu && createPortal(
-                    <>
-                      <div onClick={() => setShowStyleMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
-                      <div
-                        className="atlas-popover"
-                        style={{
-                          position: "fixed",
-                          top: (styleBtnRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
-                          right: Math.max(8, window.innerWidth - (styleBtnRef.current?.getBoundingClientRect().right ?? 0)),
-                          zIndex: 9999, minWidth: 232,
-                        }}
-                      >
-                        {/* Section: Workflow */}
-                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.6, padding: "6px 12px 5px" }}>Workflow</div>
-                        {(["THINK", "PLAN", "BUILD"] as const).map((m) => {
-                          const mcc = modeConfig[m];
-                          const active = projectMode === m;
-                          return (
-                            <button key={m}
-                              onClick={() => handleModeSelect(m)}
-                              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: active ? mcc.bg : "transparent", border: "none", padding: "7px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
-                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--atlas-glass-bg)"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = active ? mcc.bg : "transparent"; }}
-                            >
-                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: mcc.color, flexShrink: 0 }} />
-                              <span style={{ flex: 1, textAlign: "left" }}>
-                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? mcc.color : "var(--atlas-fg)" }}>{m}</span>
-                                <span style={{ display: "block", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.75, marginTop: 1 }}>{mcc.desc}</span>
-                              </span>
-                              {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={mcc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
-                            </button>
-                          );
-                        })}
-                        {/* Divider */}
-                        <div style={{ height: 1, background: "rgba(255,255,255,0.05)", margin: "5px 12px" }} />
-                        {/* Section: Atlas Style */}
-                        <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.6, padding: "5px 12px 5px" }}>Atlas Style</div>
-                        {(["builder", "strategist", "reviewer", "teacher"] as const).map((l) => {
-                          const lcc = lensConfig[l];
-                          const active = projectLens === l;
-                          return (
-                            <button key={l}
-                              onClick={() => {
-                                setProjectLens(l);
-                                try { localStorage.setItem(`atlas-lens-${id}`, l); } catch {}
-                                setShowStyleMenu(false);
-                              }}
-                              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "transparent", border: "none", padding: "7px 12px", borderRadius: 7, cursor: "pointer", transition: "background 120ms" }}
-                              onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = "var(--atlas-glass-bg)"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
-                            >
-                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: lcc.dot, flexShrink: 0 }} />
-                              <span style={{ flex: 1, textAlign: "left" }}>
-                                <span style={{ display: "block", fontSize: 11, fontFamily: "var(--app-font-mono)", fontWeight: 700, letterSpacing: "0.08em", color: active ? lcc.color : "var(--atlas-fg)" }}>{lcc.label.toUpperCase()}</span>
-                                <span style={{ display: "block", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.75, marginTop: 1 }}>{lcc.desc}</span>
-                              </span>
-                              {active && <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke={lcc.color} strokeWidth="2.2" strokeLinecap="round"><path d="M3 8l4 4 6-7" /></svg>}
-                            </button>
-                          );
-                        })}
-                        <div style={{ height: 5 }} />
-                      </div>
-                    </>,
-                    document.body
-                  )}
-                </div>
-              );
-            })()}
-
             {/* Parking Lot removed from header — lives in the Projects Drawer (Navigate → Parking Lot) */}
 
 
@@ -8443,13 +8304,9 @@ export default function Workspace() {
             await createEntry.mutateAsync({ projectId: id, data: { title: summary.slice(0, 80), summary, status: "committed", severity: "committed", mode: "plan", sessionId: sessionId ?? undefined } }).catch(() => {});
           }
           setShowHandoffModal(false);
-          setProjectMode("BUILD");
-          try { localStorage.setItem(`atlas-mode-${id}`, "BUILD"); } catch {}
         };
         const skipAndBuild = () => {
           setShowHandoffModal(false);
-          setProjectMode("BUILD");
-          try { localStorage.setItem(`atlas-mode-${id}`, "BUILD"); } catch {}
         };
         return createPortal(
           <>
@@ -8897,30 +8754,20 @@ export default function Workspace() {
 
           {/* Input */}
           <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
-            {/* Hidden file input — id used by label for native mobile trigger */}
+            {/* Hidden file input — handles both images and ZIP files */}
             <input
               ref={fileInputRef}
               id="ws-file-input"
               type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
+              accept="image/jpeg,image/png,image/gif,image/webp,.zip,application/zip"
               style={{ position: "absolute", width: "1px", height: "1px", opacity: 0, pointerEvents: "none", overflow: "hidden" }}
               multiple
-              onChange={(e) => {
-                const incoming = Array.from(e.target.files ?? []).slice(0, 10);
-                setAttachedFiles(prev => [...prev, ...incoming].slice(0, 10));
-                e.target.value = "";
-              }}
-            />
-            {/* Hidden ZIP input */}
-            <input
-              ref={zipInputRef}
-              id="ws-zip-input"
-              type="file"
-              accept=".zip,application/zip"
-              style={{ position: "absolute", width: "1px", height: "1px", opacity: 0, pointerEvents: "none", overflow: "hidden" }}
               onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (file) await processZip(file);
+                const files = Array.from(e.target.files ?? []);
+                const zipFile = files.find(f => f.name.endsWith(".zip") || f.type === "application/zip");
+                const imgFiles = files.filter(f => !f.name.endsWith(".zip") && f.type !== "application/zip");
+                if (zipFile) await processZip(zipFile);
+                if (imgFiles.length > 0) setAttachedFiles(prev => [...prev, ...imgFiles].slice(0, 10));
                 e.target.value = "";
               }}
             />
@@ -9055,7 +8902,7 @@ export default function Workspace() {
                       fontFamily: "var(--app-font-sans)",
                     }}
                   >
-                    {projectMode === "PLAN" ? "What should we structure…" : projectMode === "BUILD" ? "What needs to be built or fixed…" : "Say it plainly…"}
+                    {wsLens === "build" ? "What needs to be built or fixed…" : wsLens === "look" ? "What visual change do you need…" : wsLens === "scenario" ? "What if…" : "Say it plainly…"}
                   </div>
                 )}
                 <textarea
@@ -9079,39 +8926,19 @@ export default function Workspace() {
                 <div style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
                   <label
                     htmlFor="ws-file-input"
-                    title="Attach image"
+                    title="Attach image or project ZIP"
                     style={{
                       width: 30, height: 30, borderRadius: 7,
-                      background: "transparent",
-                      color: attachedFiles.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                      background: (attachedFiles.length > 0 || zipFiles.length > 0) ? "rgba(201,162,76,0.08)" : "transparent",
+                      border: (attachedFiles.length > 0 || zipFiles.length > 0) ? "1px solid rgba(201,162,76,0.2)" : "1px solid transparent",
+                      color: (attachedFiles.length > 0 || zipFiles.length > 0) ? "var(--atlas-gold)" : "var(--atlas-muted)",
                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                      opacity: attachedFiles.length > 0 ? 1 : 0.4, transition: "opacity 160ms ease",
+                      opacity: (attachedFiles.length > 0 || zipFiles.length > 0) ? 1 : 0.4, transition: "all 160ms ease",
                       flexShrink: 0, userSelect: "none",
                     }}
                   >
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                       <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </label>
-
-                  {/* ZIP import button */}
-                  <label
-                    htmlFor="ws-zip-input"
-                    title="Load project ZIP into context"
-                    style={{
-                      width: 30, height: 30, borderRadius: 7,
-                      background: zipFiles.length > 0 ? "rgba(201,162,76,0.1)" : "transparent",
-                      border: zipFiles.length > 0 ? "1px solid rgba(201,162,76,0.25)" : "1px solid transparent",
-                      color: zipFiles.length > 0 ? "var(--atlas-gold)" : "var(--atlas-muted)",
-                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                      opacity: zipFiles.length > 0 ? 1 : 0.4, transition: "all 160ms ease",
-                      flexShrink: 0, userSelect: "none",
-                    }}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
-                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                      <line x1="12" y1="22.08" x2="12" y2="12" />
                     </svg>
                   </label>
 
