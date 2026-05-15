@@ -865,6 +865,12 @@ export default function Home() {
   }, [attachedFiles]);
   const [showVault, setShowVault] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [isTinyScreen, setIsTinyScreen] = useState(() => window.innerWidth < 390);
+  useEffect(() => {
+    const handler = () => setIsTinyScreen(window.innerWidth < 390);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
@@ -1350,33 +1356,37 @@ export default function Home() {
           <AtlasLogo />
         </div>
 
-        {/* Center: timestamp absolutely centered */}
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none" }}>
-          <InlineTimestamp />
-        </div>
+        {/* Center: timestamp — hidden on tiny screens to avoid overlap */}
+        {!isTinyScreen && (
+          <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none" }}>
+            <InlineTimestamp />
+          </div>
+        )}
 
-        {/* Right side: vault + avatar pair */}
+        {/* Right side: vault (hidden on tiny — lives in input bar) + avatar pair */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button
-            title="Visual Vault"
-            onClick={() => setShowVault(true)}
-            style={{
-              width: 28, height: 28, borderRadius: 7,
-              background: "transparent", border: "none",
-              color: "rgba(201,162,76,0.5)", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "color 160ms ease", flexShrink: 0,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(201,162,76,0.5)")}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" rx="1"/>
-              <rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-          </button>
+          {!isTinyScreen && (
+            <button
+              title="Visual Vault"
+              onClick={() => setShowVault(true)}
+              style={{
+                width: 28, height: 28, borderRadius: 7,
+                background: "transparent", border: "none",
+                color: "rgba(201,162,76,0.5)", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "color 160ms ease", flexShrink: 0,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(201,162,76,0.5)")}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
+            </button>
+          )}
           <div style={{ display: "none" }} />
           {/* Avatar + invite/new-project as overlapping pair (avatar in front) */}
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
@@ -1861,6 +1871,29 @@ export default function Home() {
                 </svg>
               </label>
 
+              {/* Vault — shown in input bar only on tiny screens */}
+              {isTinyScreen && (
+                <button
+                  title="Visual Vault"
+                  onClick={() => setShowVault(true)}
+                  style={{
+                    width: 32, height: 32, borderRadius: 8, background: "transparent", border: "none",
+                    color: "rgba(120,113,108,0.45)", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "color 160ms ease", flexShrink: 0,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(120,113,108,0.45)")}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/>
+                    <rect x="14" y="14" width="7" height="7" rx="1"/>
+                  </svg>
+                </button>
+              )}
+
               {/* Deep Dive button */}
               <div style={{ position: "relative", flexShrink: 0 }}>
                 <button
@@ -1939,16 +1972,18 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Center hint */}
-              <div style={{ flex: 1, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
-                <span style={{
-                  fontFamily: "var(--app-font-mono)", fontSize: 10.5,
-                  letterSpacing: "0.05em", color: "rgba(120,113,108,0.3)",
-                  userSelect: "none",
-                }}>
-                  type / for shortcuts
-                </span>
-              </div>
+              {/* Center hint — hidden on tiny screens */}
+              {!isTinyScreen && (
+                <div style={{ flex: 1, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+                  <span style={{
+                    fontFamily: "var(--app-font-mono)", fontSize: 10.5,
+                    letterSpacing: "0.05em", color: "rgba(120,113,108,0.3)",
+                    userSelect: "none",
+                  }}>
+                    type / for shortcuts
+                  </span>
+                </div>
+              )}
 
               {/* Mic + waveform */}
               <button
