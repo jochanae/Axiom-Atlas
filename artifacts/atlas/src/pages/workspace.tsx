@@ -7878,18 +7878,18 @@ export default function Workspace() {
             >
               <AtlasLogo small />
             </button>
-            {/* Trust Mode — moved to left; icon-only on mobile */}
+            {/* Autopilot toggle — lightning bolt both states */}
             <button
               onClick={() => {
                 if (trustMode === "review") {
-                  const confirmed = window.confirm("AUTO mode: Atlas will push file changes without showing you the diff first. Continue?");
+                  const confirmed = window.confirm("Turn on Autopilot?\n\nAtlas can apply iterative changes continuously during this session. Diffs may be grouped instead of shown individually. You can turn it off anytime — git history stays recoverable.");
                   if (!confirmed) return;
                   setTrustMode("auto");
                 } else {
                   setTrustMode("review");
                 }
               }}
-              title={trustMode === "auto" ? "AUTO: changes push without review — tap to switch to REVIEW" : "REVIEW: you approve every diff — tap to switch to AUTO"}
+              title={trustMode === "auto" ? "Autopilot ON — Atlas applies changes continuously. Tap to turn off." : "Autopilot OFF — you review every diff. Tap to turn on."}
               style={{
                 display: "flex", alignItems: "center", gap: isMobile ? 0 : 5,
                 padding: isMobile ? "5px 7px" : "4px 10px",
@@ -7901,19 +7901,11 @@ export default function Workspace() {
                 transition: "all 300ms ease", flexShrink: 0,
               }}
             >
-              {trustMode === "auto" ? (
-                /* Lightning bolt — AUTO */
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                </svg>
-              ) : (
-                /* Eye — REVIEW */
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              )}
-              {!isMobile && <span>{trustMode === "auto" ? "AUTO" : "REVIEW"}</span>}
+              {/* Lightning bolt — both states, intensity signals on/off */}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ opacity: trustMode === "auto" ? 1 : 0.55 }}>
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+              {!isMobile && <span>{trustMode === "auto" ? "Autopilot ON" : "Autopilot OFF"}</span>}
             </button>
           </div>
 
