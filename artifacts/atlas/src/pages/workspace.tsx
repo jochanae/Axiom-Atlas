@@ -6745,6 +6745,13 @@ export default function Workspace() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [wsLens]);
 
+  // Auto-fallback terminal tab when switching to lenses that don't support it
+  useEffect(() => {
+    if (wsLens !== "build" && wsLens !== "scenario" && leftTab === "terminal") {
+      setLeftTab("chat");
+    }
+  }, [wsLens, leftTab]);
+
   const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
@@ -8923,7 +8930,7 @@ export default function Workspace() {
             )}
 
             {/* ── First-run onboarding overlay ── */}
-            {!firstRunDismissed && !sessionsLoading && messages.length === 0 && (entries?.length ?? 0) === 0 && (
+            {!firstRunDismissed && !sessionsLoading && messages.length === 0 && (entries?.length ?? 0) === 0 && !linkedRepo && (
               <div style={{
                 marginBottom: 12, borderRadius: 12, background: "rgba(201,162,76,0.05)",
                 border: "1px solid rgba(201,162,76,0.18)", padding: "16px 16px 14px",
@@ -9508,7 +9515,25 @@ export default function Workspace() {
           projectId={id}
           preloadContent={forgePreloadContent}
           onClose={() => { setShowForgeExternal(false); setForgePreloadContent(undefined); }}
-          onNodesReady={() => { setShowForgeExternal(false); setForgePreloadContent(undefined); }}
+          onNodesReady={(nodes) => {
+            nodes.forEach((node) => {
+              createEntry.mutate(
+                {
+                  projectId: id,
+                  data: {
+                    title: node.label,
+                    summary: (node as { details?: string }).details ?? "",
+                    status: "committed",
+                    severity: "committed",
+                    mode: "decide",
+                  },
+                },
+                { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); } }
+              );
+            });
+            setShowForgeExternal(false);
+            setForgePreloadContent(undefined);
+          }}
         />
       )}
 
