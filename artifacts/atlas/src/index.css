@@ -492,7 +492,7 @@ html, body {
 }
 .atlas-send-btn:disabled { cursor: default; }
 
-/* ── Decision catch card ── */
+/* ── Decision log card ── */
 .atlas-catch-card {
   border-radius: 10px;
   border: 1px solid color-mix(in oklab, #92400E 40%, #252220);
@@ -555,7 +555,7 @@ html, body {
   background: var(--atlas-bg) !important;
 }
 
-/* ── Decision catch card (parchment-aware) ── */
+/* ── Decision log card (parchment-aware) ── */
 [data-theme="parchment"] .atlas-catch-card {
   border-color: rgba(139,69,19,0.30);
   background: linear-gradient(180deg, rgba(139,69,19,0.06) 0%, transparent 100%);

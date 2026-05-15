@@ -511,123 +511,6 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
 // ── HomeContextBar ────────────────────────────────────────────────────────────
 type HomeRepo = { fullName: string; name: string; defaultBranch: string };
 
-const MODELS = [
-  { id: "claude",  label: "Claude",  sub: "Nuance & Strategy",  available: true },
-  { id: "gemini",  label: "Gemini",  sub: "Long Context & Speed", available: true },
-];
-
-const MODES = [
-  {
-    id: "strategic",
-    label: "Strategic",
-    sub: "Wide-lens · Connect dots across the portfolio",
-    description: "Default mode. Atlas sees all your projects simultaneously and thinks at the portfolio level.",
-  },
-  {
-    id: "audit",
-    label: "Audit",
-    sub: "Critical · What's working vs. what's not",
-    description: "Atlas gets direct and hard-nosed. Stress-tests assumptions, flags gaps, and won't soften the assessment.",
-  },
-  {
-    id: "deep-dive",
-    label: "Deep Dive",
-    sub: "Focused · Go deep on one thing",
-    description: "Atlas locks onto the topic you raise and explores it thoroughly — trade-offs, edge cases, implications.",
-  },
-];
-
-function ContextChip({
-  icon, label, onClick, dim, accent,
-}: { icon: React.ReactNode; label: string; onClick: () => void; dim?: boolean; accent?: string }) {
-  const [hov, setHov] = useState(false);
-  const borderColor = accent
-    ? hov ? accent.replace("0.15", "0.5") : accent.replace("0.15", "0.3")
-    : hov ? "rgba(201,162,76,0.32)" : "var(--atlas-surface)";
-  const bg = accent
-    ? hov ? accent.replace("0.15", "0.2") : accent
-    : hov ? "rgba(201,162,76,0.07)" : "var(--atlas-surface)";
-  const textColor = accent
-    ? hov ? accent.replace("0.15", "0.95") : accent.replace("0.15", "0.85")
-    : hov ? "rgba(201,162,76,0.9)" : "var(--atlas-fg)";
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 5,
-        padding: "5px 9px", borderRadius: 20,
-        background: bg, border: `1px solid ${borderColor}`,
-        cursor: "pointer", transition: "all 160ms ease",
-        opacity: dim ? 0.45 : 1,
-      }}
-    >
-      <span style={{ color: accent ? accent.replace("0.15", "0.7") : "rgba(120,113,108,0.7)", lineHeight: 0, flexShrink: 0 }}>{icon}</span>
-      <span style={{
-        fontFamily: "var(--app-font-mono)", fontSize: 10.5,
-        color: textColor,
-        letterSpacing: "0.03em", whiteSpace: "nowrap",
-        maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis",
-        transition: "color 160ms ease",
-      }}>{label}</span>
-      <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ opacity: 0.4, flexShrink: 0 }}>
-        <path d="M1.5 3L4 5.5L6.5 3" stroke="var(--atlas-fg)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </button>
-  );
-}
-
-const MODE_ACCENT: Record<string, string | undefined> = {
-  audit: "rgba(239,100,68,0.15)",
-  "deep-dive": "rgba(99,130,239,0.15)",
-};
-
-function HomeContextBar({
-  focusLabel, model, mode, onFocusClick, onModelClick, onModeClick,
-}: {
-  focusLabel: string; model: string; mode: string;
-  onFocusClick: () => void; onModelClick: () => void; onModeClick: () => void;
-}) {
-  const modelLabel = MODELS.find(m => m.id === model)?.label ?? "Claude";
-  const modeLabel = MODES.find(m => m.id === mode)?.label ?? "Strategic";
-  const modeAccent = MODE_ACCENT[mode];
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 0, flexWrap: "wrap", width: "100%", padding: "8px 16px", borderBottom: "1px solid var(--atlas-border)", background: "var(--atlas-glass-bg)" }}>
-      <ContextChip
-        onClick={onFocusClick}
-        icon={
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/>
-          </svg>
-        }
-        label={focusLabel}
-      />
-      <div style={{ width: 1, height: 14, background: "var(--atlas-surface)", flexShrink: 0 }} />
-      <ContextChip
-        onClick={onModeClick}
-        accent={modeAccent}
-        icon={
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 4h12M4 8h8M6 12h4"/>
-          </svg>
-        }
-        label={modeLabel}
-      />
-      <div style={{ width: 1, height: 14, background: "var(--atlas-surface)", flexShrink: 0 }} />
-      <ContextChip
-        onClick={onModelClick}
-        icon={
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="8" cy="8" r="6"/><path d="M5.5 8.5L7 10l3-4"/>
-          </svg>
-        }
-        label={modelLabel}
-      />
-    </div>
-  );
-}
-
 // ── RepoSearchSheet ────────────────────────────────────────────────────────────
 function RepoSearchSheet({
   current, onSelect, onClose,
@@ -833,213 +716,6 @@ function BranchPickerSheet({
   );
 }
 
-// ── ModePickerSheet ──────────────────────────────────────────────────────────
-function ModePickerSheet({ current, onSelect, onClose }: {
-  current: string; onSelect: (m: string) => void; onClose: () => void;
-}) {
-  const modeIcons: Record<string, React.ReactNode> = {
-    "strategic": (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/>
-      </svg>
-    ),
-    "audit": (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M8 2v4M8 10v4M2 8h4M10 8h4"/><circle cx="8" cy="8" r="2"/>
-      </svg>
-    ),
-    "deep-dive": (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2 4h12M4 8h8M6 12h4"/>
-      </svg>
-    ),
-  };
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
-      <div style={{
-        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
-        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
-        borderTop: "1px solid rgba(201,162,76,0.18)",
-        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
-        paddingBottom: 32,
-      }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
-          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
-            Mode
-          </span>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
-        </div>
-        <div style={{ padding: "0 14px" }}>
-          {MODES.map(m => (
-            <button
-              key={m.id}
-              onClick={() => { onSelect(m.id); onClose(); }}
-              style={{
-                width: "100%", textAlign: "left", padding: "12px 12px", borderRadius: 8,
-                background: current === m.id ? "rgba(201,162,76,0.06)" : "transparent",
-                border: `1px solid ${current === m.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
-                cursor: "pointer",
-                display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 2,
-                transition: "all 140ms ease",
-              }}
-            >
-              <div style={{
-                width: 32, height: 32, borderRadius: 8, flexShrink: 0, marginTop: 1,
-                background: "rgba(201,162,76,0.08)",
-                border: "1px solid rgba(201,162,76,0.2)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: "rgba(201,162,76,0.75)",
-              }}>
-                {modeIcons[m.id]}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", marginBottom: 2 }}>
-                  {m.label}
-                </div>
-                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", opacity: 0.7 }}>{m.sub}</div>
-                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 11, color: "var(--atlas-muted)", marginTop: 4, lineHeight: 1.5, opacity: 0.6 }}>{m.description}</div>
-              </div>
-              {current === m.id && (
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ marginTop: 4, flexShrink: 0 }}>
-                  <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── ModelPickerSheet ──────────────────────────────────────────────────────────
-function ModelPickerSheet({ current, onSelect, onClose }: {
-  current: string; onSelect: (m: string) => void; onClose: () => void;
-}) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
-      <div style={{
-        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
-        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
-        borderTop: "1px solid rgba(201,162,76,0.18)",
-        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
-        paddingBottom: 32,
-      }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
-          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
-            Model
-          </span>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
-        </div>
-        <div style={{ padding: "0 14px" }}>
-          {MODELS.map(m => (
-            <button
-              key={m.id}
-              disabled={!m.available}
-              onClick={() => { if (m.available) { onSelect(m.id); onClose(); } }}
-              style={{
-                width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 8,
-                background: current === m.id ? "rgba(201,162,76,0.06)" : "transparent",
-                border: `1px solid ${current === m.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
-                cursor: m.available ? "pointer" : "default",
-                display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
-                opacity: m.available ? 1 : 0.32,
-                transition: "all 140ms ease",
-              }}
-            >
-              <div style={{
-                width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-                background: m.available ? "rgba(201,162,76,0.1)" : "var(--atlas-surface)",
-                border: `1px solid ${m.available ? "rgba(201,162,76,0.25)" : "var(--atlas-surface)"}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontFamily: "var(--app-font-mono)", fontSize: 9, fontWeight: 700,
-                color: m.available ? "rgba(201,162,76,0.85)" : "rgba(120,113,108,0.4)",
-              }}>
-                {m.id === "claude" ? "C" : "Ge"}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", display: "flex", alignItems: "center", gap: 6 }}>
-                  {m.label}
-                  {!m.available && (
-                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", letterSpacing: "0.1em", opacity: 0.55, border: "1px solid rgba(120,113,108,0.2)", borderRadius: 3, padding: "1px 4px" }}>KEY NEEDED</span>
-                  )}
-                </div>
-                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", marginTop: 2, opacity: m.available ? 0.7 : 0.4 }}>{m.sub}</div>
-              </div>
-              {current === m.id && (
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </button>
-          ))}
-          <div style={{ margin: "12px 0 4px", padding: "8px 12px", background: "rgba(201,162,76,0.04)", borderRadius: 6, border: "1px solid rgba(201,162,76,0.1)" }}>
-            <p style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.07em", margin: 0, lineHeight: 1.6 }}>
-              In workspace: type <span style={{ color: "rgba(201,162,76,0.7)" }}>/deep [topic]</span> for a structured Gemini research card.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FocusPickerSheet({ current, projects, onSelect, onClose }: {
-  current: number | null;
-  projects: Array<{ id: number; name: string }>;
-  onSelect: (id: number | null) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
-      <div style={{
-        position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
-        background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
-        borderTop: "1px solid rgba(201,162,76,0.18)",
-        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)", paddingBottom: 32,
-      }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
-          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Focus</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(120,113,108,0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
-        </div>
-        <div style={{ paddingTop: 4 }}>
-          <div style={{ padding: "0 14px 16px", overflowY: "auto", maxHeight: "60dvh" }}>
-            {[{ id: null, name: "All Projects", sub: "Global view across everything" }, ...projects.map(p => ({ id: p.id as number | null, name: p.name, sub: "Zoom in on this project" }))].map(item => (
-              <button
-                key={item.id ?? "all"}
-                onClick={() => { onSelect(item.id); onClose(); }}
-                style={{
-                  width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 8,
-                  background: current === item.id ? "rgba(201,162,76,0.06)" : "transparent",
-                  border: `1px solid ${current === item.id ? "rgba(201,162,76,0.22)" : "transparent"}`,
-                  cursor: "pointer", display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
-                  transition: "all 140ms ease",
-                }}
-              >
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.id === null ? "rgba(201,162,76,0.5)" : "rgba(120,113,108,0.4)", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>{item.name}</div>
-                  <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.7, marginTop: 1 }}>{item.sub}</div>
-                </div>
-                {current === item.id && (
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 
 // ── First-run overlay ────────────────────────────────────────────────────────
@@ -1224,27 +900,12 @@ export default function Home() {
   const { isFree } = useSubscription();
 
   // ── Home context: repo / branch / model ────────────────────────────────────
-  const [homeFocus, setHomeFocus] = useState<number | null>(() => {
-    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).focusId ?? null) : null; } catch { return null; }
-  });
-  const [showFocusSheet, setShowFocusSheet] = useState(false);
-  const [homeModel, setHomeModel] = useState<string>(() => {
-    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).model ?? "claude") : "claude"; } catch { return "claude"; }
-  });
-  const [showModelSheet, setShowModelSheet] = useState(false);
-  const [homeMode, setHomeMode] = useState<string>(() => {
-    try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).mode ?? "strategic") : "strategic"; } catch { return "strategic"; }
-  });
-  const [showModeSheet, setShowModeSheet] = useState(false);
-  const [atlasDetectedMode, setAtlasDetectedMode] = useState<string>("strategic");
-  const [focusSuggestion, setFocusSuggestion] = useState<{ projectId: number; projectName: string } | null>(null);
+  const [homeFocus] = useState<number | null>(null);
+  const [homeModel] = useState<string>("claude");
+  const [homeMode] = useState<string>("strategic");
   const [showHandoff, setShowHandoff] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
 
-  // Persist context to localStorage whenever it changes
-  useEffect(() => {
-    try { localStorage.setItem("atlas-home-context", JSON.stringify({ focusId: homeFocus, model: homeModel, mode: homeMode })); } catch {}
-  }, [homeFocus, homeModel, homeMode]);
 
   // Cycle pending phrases while Atlas is generating
   useEffect(() => {
@@ -1520,8 +1181,6 @@ export default function Home() {
               setHomeMessages(prev => prev.map(m =>
                 (m as any).id === streamingId ? { ...m, streaming: false } : m
               ));
-              if (meta.detectedMode) setAtlasDetectedMode(meta.detectedMode);
-              if (meta.focusSuggestion) setFocusSuggestion(meta.focusSuggestion);
               if (meta.detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) setShowHandoff(true);
             } else if (evtName === "error") {
               const errMsg = JSON.parse(evtData) as string;
@@ -2040,23 +1699,6 @@ export default function Home() {
                     </button>
                   )}
                   <div ref={messagesEndRef} />
-                  {focusSuggestion && !homeFocus && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "rgba(99,130,239,0.08)", border: "1px solid rgba(99,130,239,0.2)", fontSize: 12, color: "rgba(180,190,255,0.85)", fontFamily: "var(--app-font-mono)", marginTop: 4 }}>
-                      <span>Looks like we're deep on {focusSuggestion.projectName}. Focus there?</span>
-                      <button
-                        onClick={() => { setHomeFocus(focusSuggestion.projectId); setFocusSuggestion(null); }}
-                        style={{ background: "rgba(99,130,239,0.15)", border: "1px solid rgba(99,130,239,0.3)", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: "rgba(180,190,255,0.9)", cursor: "pointer", fontFamily: "var(--app-font-mono)" }}
-                      >
-                        Focus {focusSuggestion.projectName}
-                      </button>
-                      <button
-                        onClick={() => setFocusSuggestion(null)}
-                        style={{ background: "transparent", border: "none", fontSize: 13, color: "var(--atlas-muted)", cursor: "pointer", padding: "0 4px" }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
 
                   {showHandoff && homeMessages.length >= 2 && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(201,162,76,0.06)", border: "1px solid rgba(201,162,76,0.22)", marginTop: 4, animation: "fadeIn 300ms ease forwards" }}>
@@ -2087,7 +1729,7 @@ export default function Home() {
           </div>
 
           {/* Input shell */}
-          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px", boxShadow: ({ strategic: "0 0 0 1.5px rgba(201,162,76,0.4), 0 0 18px rgba(201,162,76,0.12)", audit: "0 0 0 1.5px rgba(239,100,68,0.5), 0 0 18px rgba(239,100,68,0.15)", "deep-dive": "0 0 0 1.5px rgba(99,130,239,0.5), 0 0 18px rgba(99,130,239,0.15)" } as Record<string, string>)[atlasDetectedMode] ?? "none", transition: "box-shadow 600ms ease" }}>
+          <div className="atlas-input-shell" style={{ padding: "18px 20px 14px" }}>
             {/* Hidden file input — uses id so label can trigger it natively on mobile */}
             <input
               ref={fileInputRef}
@@ -2363,15 +2005,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Repo / Branch / Model context bar */}
-          <HomeContextBar
-            focusLabel={homeFocus ? (projects?.find(p => p.id === homeFocus)?.name ?? "Project") : "All Projects"}
-            model={homeModel}
-            mode={homeMode}
-            onFocusClick={() => setShowFocusSheet(true)}
-            onModeClick={() => setShowModeSheet(true)}
-            onModelClick={() => setShowModelSheet(true)}
-          />
 
           {/* Inline create error */}
           {createError && (
@@ -2506,28 +2139,6 @@ export default function Home() {
       {showProfile && <AccountHubPanel onClose={() => setShowProfile(false)} />}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} reason="project_limit" />}
 
-      {showFocusSheet && (
-        <FocusPickerSheet
-          current={homeFocus}
-          projects={(projects ?? []).map(p => ({ id: p.id, name: p.name }))}
-          onSelect={setHomeFocus}
-          onClose={() => setShowFocusSheet(false)}
-        />
-      )}
-      {showModeSheet && (
-        <ModePickerSheet
-          current={homeMode}
-          onSelect={setHomeMode}
-          onClose={() => setShowModeSheet(false)}
-        />
-      )}
-      {showModelSheet && (
-        <ModelPickerSheet
-          current={homeModel}
-          onSelect={setHomeModel}
-          onClose={() => setShowModelSheet(false)}
-        />
-      )}
 
       {showProjectsSheet && (
         <ProjectsGridSheet

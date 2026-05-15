@@ -8,15 +8,15 @@ const sans: CSSProperties = { fontFamily: "var(--app-font-sans)" };
 const FAQS: { q: string; a: string }[] = [
   {
     q: "What is Axiom?",
-    a: "Axiom is a decision enforcement and strategic thinking partner for founders and builders. It helps you track the commitments you make, catch you when you're about to contradict yourself, and maintain a permanent record of every choice that shapes your projects.",
+    a: "Axiom is a strategic thinking partner for founders and builders. It helps you track the commitments you make, notice when you're moving in a different direction, and maintain a permanent record of every choice that shapes your projects.",
   },
   {
-    q: "What is the Decision Catch Engine?",
-    a: "When you say something in the chat that contradicts a committed decision, Axiom intercepts with a structured catch card. It shows you the tension, lets you proceed anyway (with a reason logged), or adjust your direction. Every override is recorded in your Decision Ledger so you can see your reasoning over time.",
+    q: "What is the Decision Log?",
+    a: "When you say something in chat that pulls against a committed decision, Atlas surfaces a log card. It shows you the tension quietly, lets you proceed with a reason noted, or adjust your direction. Every logged override lives in your Decision Ledger so you can trace your reasoning over time.",
   },
   {
     q: "What is the Decision Ledger?",
-    a: "The Ledger is a live record of all committed decisions for a project. Entries are categorized as Committed (locked in), In Tension (flagged by a catch), or Overridden (consciously changed). You can view the full Ledger from the workspace right panel, or navigate to it directly from the side menu.",
+    a: "The Ledger is a live record of all committed decisions for a project. Entries are categorized as Committed (locked in), In Tension (flagged when direction shifts), or Overridden (consciously changed). You can view the full Ledger from the workspace right panel, or navigate to it directly from the side menu.",
   },
   {
     q: "What is the Parking Lot?",
@@ -24,7 +24,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What is the Home space?",
-    a: "The Home space is your global strategic layer — where you think across all your projects at once without being locked into any single one. Atlas lives here and has visibility across your entire portfolio. It generates a briefing on load summarising where things stand, maintains a persistent conversation thread across sessions, and lets you zoom into a specific project using the Focus chip. Access it from the bottom nav or the Atlas card in the side drawer.",
+    a: "The Home space is your global strategic layer — where you think across all your projects at once without being locked into any single one. Atlas lives here and has visibility across your entire portfolio. It generates a briefing on load summarising where things stand, and maintains a persistent conversation thread across sessions. Access it from the bottom nav or the Atlas card in the side drawer.",
   },
   {
     q: "How does Atlas remember things between sessions?",
@@ -44,7 +44,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "What is Think Freely?",
-    a: "Think Freely is a scratchpad mode — a space to write without Atlas's decision enforcement active. It's useful for brainstorming, drafting, or thinking out loud before you're ready to commit to anything.",
+    a: "Think Freely is a scratchpad mode — a space to write without Atlas in the loop. It's useful for brainstorming, drafting, or thinking out loud before you're ready to commit to anything.",
   },
   {
     q: "What is the Guard Report?",
