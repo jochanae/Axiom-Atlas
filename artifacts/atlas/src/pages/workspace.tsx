@@ -6642,6 +6642,7 @@ export default function Workspace() {
   const [detectedLens, setDetectedLens] = useState<WorkspaceLens | null>(null);
   const scenarioStartIdxRef = useRef<number>(-1);
   const [showScenarioPrompt, setShowScenarioPrompt] = useState(false);
+  const sendCtxRef = useRef({ wsLens: "flow" as WorkspaceLens, wsModel: "claude", projectLens: "builder" as "builder" | "strategist" | "reviewer" | "teacher", projectMode: "THINK" as "THINK" | "PLAN" | "BUILD" });
   const [pendingLensSwitch, setPendingLensSwitch] = useState<WorkspaceLens | null>(null);
   const [scenarioBuffer, setScenarioBuffer] = useState<Array<{ role: string; content: string }>>([]);
   const [showWsModelSheet, setShowWsModelSheet] = useState(false);
@@ -7140,6 +7141,9 @@ export default function Workspace() {
     }
   }, [sessions, sessionsLoading, id]);
 
+  // Always-current ref so doSend doesn't capture stale state
+  sendCtxRef.current = { wsLens, wsModel, projectLens, projectMode };
+
   const doSend = useCallback(
     (text: string, sid: number, currentMessages: ChatMessage[], ctx?: string | null, imageData?: { base64: string; mediaType: string }) => {
       const userMsg: ChatMessage = { role: "user", content: text, sentAt: new Date().toISOString() };
@@ -7174,15 +7178,17 @@ export default function Workspace() {
         }
       } catch { /* non-fatal */ }
 
-      const isScenario = wsLens === "scenario";
+      // Read from always-current ref so stale closure never sends wrong lens/model
+      const lensCtx = sendCtxRef.current;
+      const isScenario = lensCtx.wsLens === "scenario";
       const body = {
         sessionId: sid,
         projectId: id,
         message: text,
-        model: wsModel,
-        mode: projectMode.toLowerCase(),
-        lens: projectLens,
-        workspaceLens: wsLens,
+        model: lensCtx.wsModel,
+        mode: lensCtx.projectMode.toLowerCase(),
+        lens: lensCtx.projectLens,
+        workspaceLens: lensCtx.wsLens,
         scenarioMode: isScenario,
         history,
         entries: ledgerEntries,
