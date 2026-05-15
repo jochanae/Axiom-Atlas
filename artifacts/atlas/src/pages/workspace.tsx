@@ -6643,6 +6643,7 @@ export default function Workspace() {
   const scenarioStartIdxRef = useRef<number>(-1);
   const [showScenarioPrompt, setShowScenarioPrompt] = useState(false);
   const [pendingLensSwitch, setPendingLensSwitch] = useState<WorkspaceLens | null>(null);
+  const [scenarioBuffer, setScenarioBuffer] = useState<Array<{ role: string; content: string }>>([]);
   const [showWsModelSheet, setShowWsModelSheet] = useState(false);
   const [rightFullscreen, setRightFullscreen] = useState(false);
   const [showSrcPicker, setShowSrcPicker] = useState(false);
@@ -7173,6 +7174,7 @@ export default function Workspace() {
         }
       } catch { /* non-fatal */ }
 
+      const isScenario = wsLens === "scenario";
       const body = {
         sessionId: sid,
         projectId: id,
@@ -7181,6 +7183,7 @@ export default function Workspace() {
         mode: projectMode.toLowerCase(),
         lens: projectLens,
         workspaceLens: wsLens,
+        scenarioMode: isScenario,
         history,
         entries: ledgerEntries,
         ...(activeCtx ? { fileContext: activeCtx } : {}),
@@ -7234,6 +7237,14 @@ export default function Workspace() {
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
             ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),
           }]);
+          // Capture scenario messages in isolated buffer (not persisted to DB)
+          if (isScenario) {
+            setScenarioBuffer(prev => [
+              ...prev,
+              { role: "user", content: text },
+              { role: "assistant", content: res.content ?? "" },
+            ]);
+          }
           // Auto-switch to Diff tab when Atlas proposes file changes
           if (fes && fes.length > 0) {
             setLeftTab("diff");
@@ -8877,8 +8888,8 @@ export default function Workspace() {
               className="atlas-input-shell"
               style={{
                 padding: "13px 15px",
-                borderColor: LENS_CONFIG[wsLens].borderColor,
-                boxShadow: `0 4px 24px rgba(0,0,0,0.28), 0 0 14px -8px ${LENS_CONFIG[wsLens].glowColor}`,
+                borderColor: LENS_CONFIG[detectedLens ?? wsLens].borderColor,
+                boxShadow: `0 4px 24px rgba(0,0,0,0.28), 0 0 14px -8px ${LENS_CONFIG[detectedLens ?? wsLens].glowColor}`,
                 transition: "border-color 220ms ease, box-shadow 220ms ease",
                 ...(wsLens === "scenario" ? { background: "rgba(120,113,108,0.04)" } : {}),
               }}
@@ -9553,7 +9564,18 @@ export default function Workspace() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <button
-                onClick={() => {
+                onClick={async () => {
+                  // Keep: persist buffered scenario messages to session DB
+                  if (scenarioBuffer.length > 0 && sessionId) {
+                    try {
+                      await fetch("/api/chat/scenario-keep", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ sessionId, messages: scenarioBuffer }),
+                      });
+                    } catch { /* non-fatal — messages stay in client state */ }
+                  }
+                  setScenarioBuffer([]);
                   if (pendingLensSwitch) {
                     setWsLensRaw(pendingLensSwitch);
                     setDetectedLens(null);
@@ -9572,9 +9594,11 @@ export default function Workspace() {
               </button>
               <button
                 onClick={() => {
+                  // Discard: remove scenario messages from client state (already not in DB)
                   if (scenarioStartIdxRef.current >= 0) {
                     setMessages(prev => prev.slice(0, scenarioStartIdxRef.current));
                   }
+                  setScenarioBuffer([]);
                   if (pendingLensSwitch) {
                     setWsLensRaw(pendingLensSwitch);
                     setDetectedLens(null);
