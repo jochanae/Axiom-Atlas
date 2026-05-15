@@ -282,7 +282,7 @@ function AtlasLogo({ small, mode }: { small?: boolean; mode?: "THINK" | "PLAN" |
   );
 }
 
-// ── DecisionCatchCard ────────────────────────────────────────────────────────
+// ── DecisionLogCard ────────────────────────────────────────────────────────
 function DecisionCatchCard({
   payload,
   projectId,
@@ -324,7 +324,7 @@ function DecisionCatchCard({
   return (
     <div
       role="alert"
-      aria-label="Decision Catch"
+      aria-label="Decision Log"
       className="atlas-catch-card atlas-bubble-in"
       style={{ padding: "10px 12px", marginTop: 8 }}
     >

@@ -80,7 +80,7 @@ export default function Privacy() {
           <p style={{ marginBottom: 12 }}>We use your data to:</p>
           <ul style={{ paddingLeft: 20, display: "flex", flexDirection: "column", gap: 6 }}>
             <li>Provide and improve the Atlas service</li>
-            <li>Power the AI features, including the Decision Catch Engine</li>
+            <li>Power the AI features, including the Decision Log</li>
             <li>Maintain your decision history and session continuity</li>
             <li>Send you service-related communications (no marketing without consent)</li>
             <li>Diagnose technical issues and improve reliability</li>

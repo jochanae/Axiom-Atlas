@@ -85,7 +85,7 @@ export default function Terms() {
         </Section>
 
         <Section title="06 // AI Features">
-          Atlas uses large language models to provide strategic guidance and decision catch functionality. AI responses are generated automatically and may occasionally be incorrect or incomplete. You are responsible for verifying any AI-generated output before acting on it. We do not guarantee the accuracy, reliability, or suitability of AI responses for any particular purpose.
+          Atlas uses large language models to provide strategic guidance and decision logging functionality. AI responses are generated automatically and may occasionally be incorrect or incomplete. You are responsible for verifying any AI-generated output before acting on it. We do not guarantee the accuracy, reliability, or suitability of AI responses for any particular purpose.
         </Section>
 
         <Section title="07 // Subscription & Payments">
