@@ -1246,8 +1246,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     if (allChips.length >= 6) break;
   }
 
-  // Persist updated memory to DB
-  if (newFacts.length > 0 || retrievedIds.length > 0) {
+  // Persist updated memory to DB — skipped in scenario mode (no commitment)
+  if (!isScenarioMode && (newFacts.length > 0 || retrievedIds.length > 0)) {
     const updatedStore = newFacts.length > 0
       ? appendMemoryFacts(store, newFacts, now)
       : store;
@@ -1305,8 +1305,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     }
   }
 
-  // Auto-create ledger entries for resolved nodes
-  if (resolvedNodes.length > 0) {
+  // Auto-create ledger entries for resolved nodes — skipped in scenario mode
+  if (!isScenarioMode && resolvedNodes.length > 0) {
     try {
       await Promise.all(resolvedNodes.map(nodeId =>
         db.insert(entriesTable).values({
