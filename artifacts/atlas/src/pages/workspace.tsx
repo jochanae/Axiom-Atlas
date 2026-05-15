@@ -189,6 +189,16 @@ function useIsMobile() {
   return mobile;
 }
 
+function useIsTinyScreen() {
+  const [tiny, setTiny] = useState(() => window.innerWidth < 390);
+  useEffect(() => {
+    const handler = () => setTiny(window.innerWidth < 390);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return tiny;
+}
+
 // ── useVoiceInput ─────────────────────────────────────────────────────────────
 function useVoiceInput(onTranscript: (text: string) => void) {
   const [listening, setListening] = useState(false);
@@ -6617,6 +6627,7 @@ export default function Workspace() {
   const id = Number(projectId);
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
+  const isTinyScreen = useIsTinyScreen();
   useRequireAuth();
 
   const [input, setInput] = useState("");
@@ -8139,13 +8150,13 @@ export default function Workspace() {
 
           {/* Right: vault + % score + mode + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            {/* Lens chip */}
+            {/* Lens chip — dot-only on tiny screens */}
             <button
               title={`Lens: ${LENS_CONFIG[wsLens].sub}`}
               onClick={() => setShowLensPicker(true)}
               style={{
                 display: "flex", alignItems: "center", gap: 4,
-                padding: "3px 8px", borderRadius: 20,
+                padding: isTinyScreen ? "5px 6px" : "3px 8px", borderRadius: 20,
                 background: "transparent",
                 border: `1px solid ${detectedLens ? LENS_CONFIG[detectedLens].borderColor : "rgba(var(--atlas-muted-rgb),0.2)"}`,
                 cursor: "pointer", transition: "all 180ms ease", flexShrink: 0,
@@ -8154,31 +8165,36 @@ export default function Workspace() {
               onMouseLeave={e => { e.currentTarget.style.borderColor = detectedLens ? LENS_CONFIG[detectedLens].borderColor : "rgba(var(--atlas-muted-rgb),0.2)"; e.currentTarget.style.background = "transparent"; }}
             >
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: detectedLens ? LENS_CONFIG[detectedLens].color : LENS_CONFIG[wsLens].color, flexShrink: 0, transition: "background 220ms ease" }} />
-              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: detectedLens ? LENS_CONFIG[detectedLens].color : LENS_CONFIG[wsLens].color, letterSpacing: "0.08em", transition: "color 220ms ease", whiteSpace: "nowrap" }}>
-                {LENS_CONFIG[wsLens].label}{detectedLens ? ` → ${LENS_CONFIG[detectedLens].label}` : ""}
-              </span>
+              {!isTinyScreen && (
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: detectedLens ? LENS_CONFIG[detectedLens].color : LENS_CONFIG[wsLens].color, letterSpacing: "0.08em", transition: "color 220ms ease", whiteSpace: "nowrap" }}>
+                  {LENS_CONFIG[wsLens].label}{detectedLens ? ` → ${LENS_CONFIG[detectedLens].label}` : ""}
+                </span>
+              )}
             </button>
 
-            <button
-              title="Visual Vault"
-              onClick={() => setShowVault(true)}
-              style={{
-                width: 28, height: 28, borderRadius: 7,
-                background: "transparent", border: "none",
-                color: "rgba(201,162,76,0.45)", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "color 160ms ease", flexShrink: 0,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(201,162,76,0.45)")}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" rx="1"/>
-                <rect x="14" y="3" width="7" height="7" rx="1"/>
-                <rect x="3" y="14" width="7" height="7" rx="1"/>
-                <rect x="14" y="14" width="7" height="7" rx="1"/>
-              </svg>
-            </button>
+            {/* Vault — hidden from header on tiny screens (moved to input bar) */}
+            {!isTinyScreen && (
+              <button
+                title="Visual Vault"
+                onClick={() => setShowVault(true)}
+                style={{
+                  width: 28, height: 28, borderRadius: 7,
+                  background: "transparent", border: "none",
+                  color: "rgba(201,162,76,0.45)", cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "color 160ms ease", flexShrink: 0,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--atlas-gold)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(201,162,76,0.45)")}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/>
+                  <rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/>
+                  <rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+              </button>
+            )}
             <ReadinessRing
               archScore={mapReadiness}
               decisionsScore={healthPct}
@@ -8915,7 +8931,7 @@ export default function Workspace() {
               </div>
 
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
-                {/* Left: paperclip + wrench (read Atlas source) */}
+                {/* Left: paperclip + vault (tiny screens) + wrench (read Atlas source) */}
                 <div style={{ display: "flex", alignItems: "center", gap: 4, position: "relative" }}>
                   <label
                     htmlFor="ws-file-input"
@@ -8934,6 +8950,30 @@ export default function Workspace() {
                       <path d="M13 7.5l-5.5 5.5a4 4 0 01-5.66-5.66l6-6a2.5 2.5 0 013.54 3.54l-6 6a1 1 0 01-1.42-1.42l5.5-5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </label>
+
+                  {/* Vault — shown in input bar only on tiny screens */}
+                  {isTinyScreen && (
+                    <button
+                      title="Visual Vault"
+                      onClick={() => setShowVault(true)}
+                      style={{
+                        width: 30, height: 30, borderRadius: 7,
+                        background: "transparent", border: "1px solid transparent",
+                        color: "var(--atlas-muted)", cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        opacity: 0.4, transition: "all 160ms ease", flexShrink: 0,
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = "var(--atlas-gold)"; e.currentTarget.style.opacity = "1"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--atlas-muted)"; e.currentTarget.style.opacity = "0.4"; }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/>
+                        <rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <rect x="14" y="14" width="7" height="7" rx="1"/>
+                      </svg>
+                    </button>
+                  )}
 
                   {/* Wrench — read Atlas source into context */}
                   <button
