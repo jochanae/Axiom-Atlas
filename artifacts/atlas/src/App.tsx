@@ -1,7 +1,6 @@
-import { useEffect, useCallback, useRef, useState, Component, type ReactNode } from "react";
+import { useEffect, useRef, useState, Component, type ReactNode } from "react";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { usePullToRefresh } from "./hooks/usePullToRefresh";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LoadingSpinner } from "./components/ui/loading-spinner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -124,57 +123,6 @@ class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryStat
   }
 }
 
-// ── Global Pull-to-refresh ────────────────────────────────────────────────────
-function GlobalPTR() {
-  const [location] = useLocation();
-  const queryClient = useQueryClient();
-
-  const DISABLE_PTR_ROUTES = [
-    "/project/", // workspace chat — never pull to refresh mid-session
-    "/landing",  // landing page needs native scroll
-    "/login",    // login page needs native scroll
-  ];
-
-  const isPTRDisabled = DISABLE_PTR_ROUTES.some(r => location.startsWith(r));
-
-  const { pulling, distance, refreshing, threshold } = usePullToRefresh(
-    useCallback(async () => {
-      await queryClient.invalidateQueries();
-    }, [queryClient]),
-    !isPTRDisabled,
-  );
-
-  if (isPTRDisabled) return null;
-
-  return (
-    <div style={{
-      position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      height: 48, pointerEvents: "none",
-      transform: `translateY(${Math.min(distance - 48, 0)}px)`,
-      transition: pulling ? "none" : "transform 320ms ease, opacity 320ms ease",
-      opacity: refreshing ? 1 : Math.min(distance / threshold, 1),
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 8,
-        background: "rgba(28,25,23,0.92)", border: "1px solid rgba(201,162,76,0.25)",
-        borderRadius: 20, padding: "5px 12px",
-        backdropFilter: "blur(12px)", boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-      }}>
-        <div style={{
-          width: 14, height: 14, borderRadius: "50%",
-          border: "1.5px solid rgba(201,162,76,0.2)",
-          borderTopColor: "rgba(201,162,76,0.8)",
-          animation: refreshing ? "spin 0.8s linear infinite" : "none",
-          transform: refreshing ? undefined : `rotate(${(distance / threshold) * 270}deg)`,
-        }} />
-        <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.7)", letterSpacing: "0.1em" }}>
-          {refreshing ? "Refreshing…" : distance >= threshold ? "Release" : "Pull to refresh"}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 // ── Page Transition Spinner ───────────────────────────────────────────────────
 const SKIP_TRANSITION = ["/landing", "/login", "/reset-password"];
@@ -319,7 +267,6 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <GlobalPTR />
         <ErrorBoundary>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <PageTransition />
