@@ -6694,6 +6694,18 @@ export default function Workspace() {
     if (cfg.model) setWsModel(cfg.model);
     setShowLensPicker(false);
   }, [wsLens, messages, id]);
+
+  // Warn on page-leave if an unsaved scenario is in progress
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (wsLens === "scenario" && scenarioStartIdxRef.current >= 0) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [wsLens]);
+
   const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
@@ -7221,6 +7233,9 @@ export default function Workspace() {
                 setDetectedLens(drifted);
               }
               res.content = res.content.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
+            } else {
+              // No drift token — clear any stale indicator so suggestion doesn't linger
+              setDetectedLens(null);
             }
           }
           const cp = res.catchPayload as CatchPayload | null;
