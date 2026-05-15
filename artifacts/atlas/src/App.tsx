@@ -131,6 +131,8 @@ function GlobalPTR() {
 
   const DISABLE_PTR_ROUTES = [
     "/project/", // workspace chat — never pull to refresh mid-session
+    "/landing",  // landing page needs native scroll
+    "/login",    // login page needs native scroll
   ];
 
   const isPTRDisabled = DISABLE_PTR_ROUTES.some(r => location.startsWith(r));
