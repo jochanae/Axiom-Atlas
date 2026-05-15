@@ -7217,7 +7217,7 @@ export default function Workspace() {
             const driftMatch = res.content.match(/LENS_DRIFT:\s*(flow|build|look|scenario)/i);
             if (driftMatch) {
               const drifted = driftMatch[1].toLowerCase() as WorkspaceLens;
-              if (drifted !== wsLens) {
+              if (drifted !== sendCtxRef.current.wsLens) {
                 setDetectedLens(drifted);
               }
               res.content = res.content.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
