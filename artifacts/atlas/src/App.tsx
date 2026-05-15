@@ -129,8 +129,8 @@ const SKIP_TRANSITION = ["/landing", "/login", "/reset-password"];
 
 function PageTransition() {
   const [location] = useLocation();
-  const [visible, setVisible] = useState(true);
-  const [opacity, setOpacity] = useState(1);
+  const [visible, setVisible] = useState(false);
+  const [opacity, setOpacity] = useState(0);
   const prevLocation = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
