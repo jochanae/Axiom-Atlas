@@ -6111,8 +6111,9 @@ function TerminalPanel({
 }) {
   const [input, setInput] = useState("");
   const [lines, setLines] = useState<TerminalLine[]>([
-    { text: scenarioLens ? "SCENARIO Terminal  —  explain mode (no execution)" : "Atlas Terminal  —  /home/runner/workspace", kind: "system" },
-    { text: scenarioLens ? "Commands are NOT executed. Atlas will explain what each command would do." : "Type a command or tap Run on an Atlas suggestion.", kind: "system" },
+    { text: scenarioLens ? "SCENARIO Terminal  —  explain mode (no execution)" : "Atlas Terminal  —  ready", kind: "system" },
+    { text: scenarioLens ? "Commands are NOT executed. Atlas will explain what each command would do." : "Type a command or ask Atlas in Chat to run one for you.", kind: "system" },
+    ...(scenarioLens ? [] : [{ text: "Type  help  to see common commands.", kind: "system" as const }]),
   ]);
   const [running, setRunning] = useState(false);
   const [cmdHistory, setCmdHistory] = useState<string[]>([]);

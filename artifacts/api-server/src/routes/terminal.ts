@@ -5,7 +5,7 @@ import { requireAuth } from "./auth";
 
 const router: IRouter = Router();
 
-const WORK_DIR = "/home/runner/workspace";
+const WORK_DIR = process.env.GIT_WORK_DIR ?? process.env.HOME ?? "/home/runner/workspace";
 const MAX_HISTORY = 60;
 const MAX_CMD_LENGTH = 2000;
 
@@ -59,6 +59,29 @@ router.post("/terminal/exec", requireAuth, (req: Request, res: Response): void =
     return;
   }
 
+  if (command.trim().toLowerCase() === "help") {
+    res.json({
+      output: `COMMON COMMANDS
+───────────────────────────────
+git status      see what changed in your repo
+git push        send changes to GitHub → triggers deploy
+git pull        get latest changes from GitHub
+git log         see recent commits
+git diff        see exact line changes
+ls              list files in this folder
+pwd             show current location
+cat <file>      read a file's contents
+
+ATLAS COMMANDS
+───────────────────────────────
+Ask Atlas in Chat and it can suggest
+commands to run here automatically.
+Type any command above to get started.`,
+      exitCode: 0,
+    });
+    return;
+  }
+
   const danger = isDangerous(command);
   if (danger) {
     res.status(403).json({ error: danger });
@@ -82,9 +105,25 @@ router.post("/terminal/exec", requireAuth, (req: Request, res: Response): void =
 
   const outputChunks: string[] = [];
 
+  const gitToken = process.env.GITHUB_TOKEN ?? "";
+  const gitUser = process.env.GIT_USER_NAME ?? "jochanae";
+  const gitEmail = process.env.GIT_USER_EMAIL ?? "jochanae@gmail.com";
+
   const proc = spawn("bash", ["-c", command], {
     cwd: WORK_DIR,
-    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", TERM: "dumb" },
+    env: {
+      ...process.env,
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
+      TERM: "dumb",
+      GIT_AUTHOR_NAME: gitUser,
+      GIT_AUTHOR_EMAIL: gitEmail,
+      GIT_COMMITTER_NAME: gitUser,
+      GIT_COMMITTER_EMAIL: gitEmail,
+      GIT_ASKPASS: "echo",
+      GIT_TERMINAL_PROMPT: "0",
+      GITHUB_TOKEN: gitToken,
+    },
   });
 
   proc.stdout?.on("data", (chunk: Buffer) => {
