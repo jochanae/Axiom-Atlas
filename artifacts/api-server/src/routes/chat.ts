@@ -825,6 +825,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     mode?: string;
     lens?: string;
     workspaceLens?: string;
+    scenarioMode?: boolean;
     history?: Array<{ role: string; content: string }>;
     entries?: Array<{ id: number; title: string; status: string }>;
     fileContext?: string;
@@ -835,6 +836,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   };
 
   const isFlowMode = !!body.flowMode;
+  const isScenarioMode = !!body.scenarioMode;
 
   if ((!body.sessionId && !isFlowMode) || !body.projectId || !body.message) {
     res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
@@ -1161,7 +1163,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     { role: "user", content: userContent },
   ];
 
-  if (!isFlowMode) {
+  if (!isFlowMode && !isScenarioMode) {
     await db.insert(chatMessagesTable).values({
       sessionId,
       role: "user",
@@ -1260,7 +1262,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   const displayContent = isFlowMode ? flowStripped : finalContent;
 
   let savedMsgId: number | undefined;
-  if (!isFlowMode) {
+  if (!isFlowMode && !isScenarioMode) {
     const [savedMsg] = await db
       .insert(chatMessagesTable)
       .values({
@@ -1337,6 +1339,27 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
     ...(imageB64 ? { imageB64, imageMimeType } : {}),
   });
+});
+
+// ── Scenario keep — persist buffered scenario messages to session DB ──────────
+router.post("/scenario-keep", async (req, res): Promise<void> => {
+  const { sessionId, messages: msgs } = req.body as {
+    sessionId: number;
+    messages: Array<{ role: string; content: string }>;
+  };
+  if (!sessionId || !Array.isArray(msgs) || msgs.length === 0) {
+    res.status(400).json({ error: "Missing sessionId or messages" });
+    return;
+  }
+  const validMsgs = msgs
+    .filter(m => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+    .slice(0, 100);
+  if (validMsgs.length === 0) { res.json({ saved: 0 }); return; }
+  await db.insert(chatMessagesTable).values(
+    validMsgs.map(m => ({ sessionId, role: m.role as "user" | "assistant", content: m.content, intentType: null }))
+  );
+  await db.update(sessionsTable).set({ messageCount: sql`${sessionsTable.messageCount} + ${validMsgs.length}` }).where(eq(sessionsTable.id, sessionId));
+  res.json({ saved: validMsgs.length });
 });
 
 // ── Quick Prompt generation ───────────────────────────────────────────────────
