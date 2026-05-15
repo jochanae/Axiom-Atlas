@@ -824,6 +824,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     model?: string;
     mode?: string;
     lens?: string;
+    workspaceLens?: string;
     history?: Array<{ role: string; content: string }>;
     entries?: Array<{ id: number; title: string; status: string }>;
     fileContext?: string;
@@ -1015,13 +1016,47 @@ Rules:
 --- END FLOW ARCHITECT ---`;
   }
 
-  // Lens-specific instructions — shape Atlas's response style for this project
+  // Workspace lens — new four-lens system (FLOW / BUILD / LOOK / SCENARIO)
+  const workspaceLens = (body.workspaceLens ?? "flow").toLowerCase();
+  const workspaceLensInstructions: Record<string, string> = {
+    flow: `\n\n--- LENS: FLOW ---
+You are in FLOW lens. This means:
+• Think deeply. Explore concepts before reaching conclusions. Ask clarifying questions when the path is unclear.
+• Help the user see around corners — surface implications, dependencies, and second-order effects.
+• Prefer discussion and reasoning over code. Write code only if the user asks for it explicitly.
+• Be a strategic thinking partner. Challenge assumptions gently.
+• If the user's message is strongly about writing/pushing code, end your response with: LENS_DRIFT: build`,
+    build: `\n\n--- LENS: BUILD ---
+You are in BUILD lens. This means:
+• Code-first. Every answer that involves code must be production-ready and complete.
+• Use FILE_EDIT blocks for all code changes. No partial snippets.
+• Be surgical — know what to change and why. Explain concisely before the FILE_EDIT.
+• GitHub push is enabled — your output goes directly to the repo.
+• If the user is clearly exploring concepts or asking "what if" questions with no code intent, end your response with: LENS_DRIFT: flow`,
+    look: `\n\n--- LENS: LOOK ---
+You are in LOOK lens. This means:
+• Visual and UI-first thinking. Every answer is about what the user sees and feels.
+• Think in CSS custom properties, Framer Motion, transitions, color systems, spacing rhythm, and typography.
+• Use FILE_EDIT blocks for visual changes. No unstyled utility code — everything must look intentional.
+• Reference the project's design tokens (--atlas-bg, --atlas-gold, --atlas-ember, etc.) when applicable.
+• If the conversation shifts away from visual/CSS/animation topics, end your response with: LENS_DRIFT: build`,
+    scenario: `\n\n--- LENS: SCENARIO ---
+You are in SCENARIO lens. This is exploratory "what if" territory. No commitments.
+• Think freely and speculatively. Explore possibilities without locking anything in.
+• Explicitly frame your answers as explorations, not recommendations.
+• No FILE_EDIT blocks unless the user says "write it anyway" or similar override.
+• Don't reference project decisions as constraints — in scenario mode, everything is on the table.
+• If the scenario has clearly evolved into something the user wants to commit to, end your response with: LENS_DRIFT: build`,
+  };
+  systemPrompt += workspaceLensInstructions[workspaceLens] ?? workspaceLensInstructions.flow;
+
+  // Legacy project-level lens — style modifier (builder/strategist/reviewer/teacher)
   const activeLens = (body.lens ?? "builder").toLowerCase();
   const lensInstructions: Record<string, string> = {
-    builder: `\n\n--- LENS: BUILDER ---\nDefault lens. Be direct, action-oriented, and code-first. Prioritize shipping over theorizing. When something can be built, build it. When something can be fixed, fix it. Keep explanations tight — show don't tell.`,
-    strategist: `\n\n--- LENS: STRATEGIST ---\nZoom out. Your job is to help the user think about the big picture for this project — positioning, priorities, sequencing, risks. Before answering any tactical question, check if there's a strategic implication worth surfacing. Think like a co-founder who's read the whole roadmap, not a developer looking at the next ticket.`,
-    reviewer: `\n\n--- LENS: REVIEWER ---\nBe critical. Your job is to stress-test this project — find gaps, weak assumptions, inconsistencies, and risks. Lead with what's fragile or missing before validating what's working. Ask hard questions. Don't soften the assessment. Think like a rigorous technical co-founder doing due diligence.`,
-    teacher: `\n\n--- LENS: TEACHER ---\nExplain everything. Your job is to help the user deeply understand their own codebase and decisions — not just fix things, but understand why. No jargon without definition. Name concepts, explain patterns, give context before code. The user should finish every exchange knowing more than they did before.`,
+    builder: "",
+    strategist: `\n\n--- PROJECT STYLE: STRATEGIST ---\nZoom out. Before answering any tactical question, check if there's a strategic implication worth surfacing. Think like a co-founder who's read the whole roadmap.`,
+    reviewer: `\n\n--- PROJECT STYLE: REVIEWER ---\nBe critical. Lead with what's fragile or missing before validating what's working. Ask hard questions. Don't soften the assessment.`,
+    teacher: `\n\n--- PROJECT STYLE: TEACHER ---\nExplain everything. No jargon without definition. Name concepts, explain patterns, give context before code.`,
   };
   if (activeLens !== "builder") {
     systemPrompt += lensInstructions[activeLens] ?? "";
