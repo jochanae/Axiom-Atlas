@@ -1260,6 +1260,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   // Extract FLOW_NODE lines before persisting
   const { content: flowStripped, flowNodes } = extractFlowNodes(finalContent);
   const displayContent = isFlowMode ? flowStripped : finalContent;
+  // Strip LENS_DRIFT token before DB persistence (it's a client-side signal only)
+  const persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
 
   let savedMsgId: number | undefined;
   if (!isFlowMode && !isScenarioMode) {
@@ -1268,7 +1270,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       .values({
         sessionId,
         role: "assistant",
-        content: displayContent,
+        content: persistContent,
         intentType: detectedIntentType,
         catchPayload: undefined,
       })
@@ -1349,6 +1351,21 @@ router.post("/scenario-keep", async (req, res): Promise<void> => {
   };
   if (!sessionId || !Array.isArray(msgs) || msgs.length === 0) {
     res.status(400).json({ error: "Missing sessionId or messages" });
+    return;
+  }
+  // Verify session ownership: session → project → user
+  const authUserId = (req as any).authUser?.id as number | undefined;
+  const [sessionRow] = await db
+    .select({ projectId: sessionsTable.projectId })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.id, sessionId));
+  if (!sessionRow) { res.status(404).json({ error: "Session not found" }); return; }
+  const [projRow] = await db
+    .select({ userId: projectsTable.userId })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, sessionRow.projectId));
+  if (!projRow || projRow.userId !== authUserId) {
+    res.status(403).json({ error: "Forbidden" });
     return;
   }
   const validMsgs = msgs
