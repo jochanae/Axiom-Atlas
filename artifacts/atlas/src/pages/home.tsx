@@ -1895,6 +1895,7 @@ export default function Home() {
                     </div>
                     {([
                       { id: "chatgpt", label: "ChatGPT", sub: "Context auto-fills" },
+                      { id: "perplexity", label: "Perplexity", sub: "Context auto-fills" },
                       { id: "gemini", label: "Gemini", sub: deepDiveCopied ? "Copied — paste when it opens" : "Copies context, paste once" },
                     ] as const).map(p => (
                       <button
@@ -1907,6 +1908,8 @@ export default function Home() {
                           setShowDeepDiveMenu(false);
                           if (p.id === "chatgpt") {
                             window.open(`https://chatgpt.com/?q=${encoded}`, "_blank");
+                          } else if (p.id === "perplexity") {
+                            window.open(`https://www.perplexity.ai/search?q=${encoded}`, "_blank");
                           } else {
                             navigator.clipboard.writeText(ctx).catch(() => {});
                             setDeepDiveCopied(true);
