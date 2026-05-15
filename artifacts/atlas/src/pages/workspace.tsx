@@ -8538,7 +8538,7 @@ export default function Workspace() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 420 }}>
                   {[
                     { label: "I need to make a decision", sub: "Walk me through it and lock it in" },
-                    { label: "I'm not sure which direction to take", sub: "Think out loud, I'll catch contradictions" },
+                    { label: "I'm not sure which direction to take", sub: "Think out loud, I'll help you see the tension" },
                     { label: "Audit my recent decisions", sub: "Review what I've committed to" },
                     { label: "I want to map my architecture", sub: "System Map + layer-by-layer spec" },
                   ].map((p, i) => (

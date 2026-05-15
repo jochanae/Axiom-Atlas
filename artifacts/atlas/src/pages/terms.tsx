@@ -60,7 +60,7 @@ export default function Terms() {
         </Section>
 
         <Section title="02 // Description of Service">
-          Atlas is a decision enforcement and strategic thinking tool designed for founders and builders. It helps you track commitments, surface contradictions in your decisions, and maintain a structured record of the choices that shape your projects. Atlas is a thinking aid — not a substitute for professional legal, financial, or business advice.
+          Atlas is a strategic thinking partner designed for founders and builders. It helps you track commitments, notice when direction shifts, and maintain a structured record of the choices that shape your projects. Atlas is a thinking aid — not a substitute for professional legal, financial, or business advice.
         </Section>
 
         <Section title="03 // User Accounts">

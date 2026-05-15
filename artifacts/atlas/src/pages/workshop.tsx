@@ -348,7 +348,7 @@ function ContextBuilder({ projects, onBack }: { projects: { id: number; name: st
             <textarea
               value={memory}
               onChange={(e) => { setMemory(e.target.value); setSaved(false); }}
-              placeholder={"Goals: Build a decision enforcement tool for founders.\nStack: React + Vite, Express 5, PostgreSQL.\nConstraints: Mobile-first, Z Fold 6.\nKey decisions: No external auth providers except Google OAuth."}
+              placeholder={"Goals: Build a strategic thinking partner for founders.\nStack: React + Vite, Express 5, PostgreSQL.\nConstraints: Mobile-first, Z Fold 6.\nKey decisions: No external auth providers except Google OAuth."}
               rows={14}
               style={{ width: "100%", padding: "12px", borderRadius: 8, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", color: "var(--atlas-fg)", fontSize: 12.5, fontFamily: "var(--app-font-mono)", lineHeight: 1.7, resize: "vertical", outline: "none", boxSizing: "border-box" }}
             />
