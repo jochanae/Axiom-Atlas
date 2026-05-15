@@ -508,7 +508,6 @@ function ProjectCard({ project, onSelect }: { project: Project; onSelect: () => 
   );
 }
 
-// ── HomeContextBar ────────────────────────────────────────────────────────────
 type HomeRepo = { fullName: string; name: string; defaultBranch: string };
 
 // ── RepoSearchSheet ────────────────────────────────────────────────────────────
@@ -1177,7 +1176,7 @@ export default function Home() {
                 (m as any).id === streamingId ? { ...m, content: streamedText } : m
               ));
             } else if (evtName === "done") {
-              const meta = JSON.parse(evtData) as { memoryUpdated: boolean; detectedMode: string; focusSuggestion: any };
+              const meta = JSON.parse(evtData) as { memoryUpdated: boolean; detectedMode: string };
               setHomeMessages(prev => prev.map(m =>
                 (m as any).id === streamingId ? { ...m, streaming: false } : m
               ));
