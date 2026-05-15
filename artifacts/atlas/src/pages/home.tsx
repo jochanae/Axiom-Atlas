@@ -19,6 +19,7 @@ import { InviteModal } from "../components/InviteModal";
 import { extractApiErrorMessage } from "../lib/atlas-utils";
 import { fileToBase64Safe } from "../lib/image-resize";
 import { useAuth, useRequireAuth, isSuperAdmin } from "../hooks/useAuth";
+import { useThemeMode } from "../lib/theme";
 import { useSubscription } from "../hooks/useSubscription";
 import { toast } from "sonner";
 import { UpgradeModal } from "../components/UpgradeModal";
@@ -871,6 +872,7 @@ export default function Home() {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+  const isParchment = useThemeMode() === "parchment";
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
@@ -2069,16 +2071,21 @@ export default function Home() {
             const spotlightName = focusedProject?.name ?? activeProjects[0]?.name ?? null;
             return (
               <div aria-hidden style={{ position: "absolute", bottom: 20, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 2 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderRadius: 20, background: "rgba(28,25,23,0.6)", border: "1px solid rgba(201,162,76,0.08)", backdropFilter: "blur(8px)" }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "7px 16px", borderRadius: 20,
+                  background: isParchment ? "rgba(220,210,195,0.75)" : "rgba(28,25,23,0.6)",
+                  border: isParchment ? "1px solid rgba(160,130,90,0.25)" : "1px solid rgba(201,162,76,0.08)",
+                  backdropFilter: "blur(8px)",
+                }}>
                   {/* Pulse dot */}
                   <span style={{ position: "relative", width: 6, height: 6, flexShrink: 0 }}>
-                    <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(201,162,76,0.5)", animation: "atlas-pulse 2.4s ease-in-out infinite" }} />
-                    <span style={{ position: "absolute", inset: 1, borderRadius: "50%", background: "var(--atlas-gold)", opacity: 0.9 }} />
+                    <span style={{ position: "absolute", inset: 0, borderRadius: "50%", background: isParchment ? "rgba(146,64,14,0.45)" : "rgba(201,162,76,0.5)", animation: "atlas-pulse 2.4s ease-in-out infinite" }} />
+                    <span style={{ position: "absolute", inset: 1, borderRadius: "50%", background: isParchment ? "var(--atlas-ember)" : "var(--atlas-gold)", opacity: 0.9 }} />
                   </span>
-                  <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.7, whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", color: isParchment ? "rgba(80,50,25,0.7)" : "var(--atlas-muted)", opacity: 0.9, whiteSpace: "nowrap" }}>
                     {activeProjects.length} active
                     {spotlightName && (
-                      <> &nbsp;·&nbsp; <span style={{ color: "rgba(201,162,76,0.65)" }}>{spotlightName}</span></>
+                      <> &nbsp;·&nbsp; <span style={{ color: isParchment ? "rgba(146,64,14,0.8)" : "rgba(201,162,76,0.65)" }}>{spotlightName}</span></>
                     )}
                     &nbsp;·&nbsp; overview below
                   </span>
