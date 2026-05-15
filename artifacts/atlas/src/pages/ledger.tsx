@@ -225,6 +225,17 @@ export default function Ledger() {
 
   const committedCount = entries.filter((e: Entry) => e.status === "committed").length;
 
+  // ── Global view branches to its own layout ─────────────────────────
+  if (isAllProjects) {
+    return (
+      <GlobalDecisionsView
+        allEntries={allEntries}
+        projects={projects}
+        isLoading={allEntriesLoading}
+      />
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "transparent", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
       <FooterAuditLine />
@@ -515,6 +526,289 @@ export default function Ledger() {
         onSave={handleEditSave}
         saving={editSaving}
       />
+    </div>
+  );
+}
+
+/* ─── Global Decisions View ──────────────────────────────────────── */
+
+type GlobalEntry = Entry & { projectName?: string };
+
+function GlobalDecisionsView({
+  allEntries,
+  projects,
+  isLoading,
+}: {
+  allEntries: GlobalEntry[];
+  projects: Project[];
+  isLoading: boolean;
+}) {
+  const [, setLocation] = useLocation();
+  const [focusProjectId, setFocusProjectId] = useState<number | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // ── Stats ────────────────────────────────────────────────────────
+  const committed = useMemo(() => allEntries.filter((e) => e.status === "committed"), [allEntries]);
+  const now = Date.now();
+  const thisWeek = committed.filter((e) => now - new Date(e.createdAt).getTime() < 7 * 86400000);
+  const flagged = allEntries.filter((e) => e.severity === "blocker");
+
+  const mostActiveProject = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of committed) {
+      const n = e.projectName ?? "Unknown";
+      counts.set(n, (counts.get(n) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+  }, [committed]);
+
+  // ── Per-project cards ────────────────────────────────────────────
+  const projectStats = useMemo(() =>
+    projects.map((p) => {
+      const pe = allEntries.filter((e) => e.projectId === p.id && e.status === "committed");
+      const cats = { structure: 0, aesthetic: 0, logic: 0, general: 0 };
+      for (const e of pe) cats[inferCategory(e)]++;
+      const total = pe.length || 1;
+      return { project: p, count: pe.length, lastEntry: pe[0] ?? null, cats, total };
+    }).filter((s) => s.count > 0).sort((a, b) => b.count - a.count),
+  [allEntries, projects]);
+
+  // ── Filtered stream ──────────────────────────────────────────────
+  const stream = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return allEntries.filter((e) => {
+      if (e.status !== "committed") return false;
+      if (focusProjectId && e.projectId !== focusProjectId) return false;
+      if (categoryFilter !== "all" && inferCategory(e) !== categoryFilter) return false;
+      if (q && !e.title.toLowerCase().includes(q) && !(e.summary ?? "").toLowerCase().includes(q)) return false;
+      return true;
+    }).slice(0, 50);
+  }, [allEntries, focusProjectId, categoryFilter, searchQuery]);
+
+  const STAT_TILES = [
+    { label: "Total Decisions", value: committed.length, color: "var(--foreground)" },
+    { label: "This Week", value: thisWeek.length, color: "var(--phosphor)" },
+    { label: "Flagged", value: flagged.length, color: "var(--ember)" },
+    { label: "Most Active", value: mostActiveProject, color: "var(--accent-gold)", small: true },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: "transparent", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
+      <FooterAuditLine />
+
+      {/* ── Header ── */}
+      <header style={{ padding: "14px 18px 12px", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 20, background: "var(--background)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <button
+            type="button"
+            onClick={() => setLocation("/")}
+            style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--muted-text)", background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
+          >
+            ← Home
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: 600, letterSpacing: "-0.01em", margin: 0, lineHeight: 1.2 }}>
+              Decisions
+            </h1>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted-text)", margin: "3px 0 0", letterSpacing: "0.06em" }}>
+              Portfolio · All Projects
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              onClick={() => setSearchOpen((v) => !v)}
+              style={{ width: 34, height: 34, borderRadius: 8, background: searchOpen ? "var(--surface-alt)" : "transparent", border: searchOpen ? "1px solid var(--accent-gold)" : "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", color: searchOpen ? "var(--accent-gold)" : "var(--muted-text)", cursor: "pointer", transition: "all 160ms ease" }}
+            >
+              <svg viewBox="0 0 16 16" width={13} height={13} stroke="currentColor" fill="none" strokeWidth={1.5}>
+                <circle cx="6.5" cy="6.5" r="4" /><path d="M10 10l3.5 3.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Search ── */}
+      {searchOpen && (
+        <div style={{ padding: "8px 18px", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+          <input
+            autoFocus
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search all decisions..."
+            style={{ width: "100%", background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 12px", fontSize: 13, color: "var(--foreground)", outline: "none", fontFamily: "var(--font-sans)", boxSizing: "border-box" as const }}
+          />
+        </div>
+      )}
+
+      {/* ── Stats bar ── */}
+      {!isLoading && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0, borderBottom: "1px solid var(--border)" }}>
+          {STAT_TILES.map((tile, i) => (
+            <div key={i} style={{ padding: "14px 16px", borderRight: i < 3 ? "1px solid var(--border)" : "none", textAlign: "center" as const }}>
+              <div style={{ fontSize: tile.small ? 12 : 22, fontWeight: 600, color: tile.color, letterSpacing: tile.small ? "-0.01em" : "-0.03em", lineHeight: 1.1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                {tile.value}
+              </div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 8.5, color: "var(--muted-text)", letterSpacing: "0.08em", textTransform: "uppercase" as const, marginTop: 4 }}>
+                {tile.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Project cards ── */}
+      {!isLoading && projectStats.length > 0 && (
+        <section style={{ borderBottom: "1px solid var(--border)" }}>
+          <div style={{ padding: "10px 18px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--muted-text)" }}>Projects</span>
+            {focusProjectId && (
+              <button
+                onClick={() => setFocusProjectId(null)}
+                style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--ember)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              >
+                Clear filter ×
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 10, padding: "10px 18px 14px", overflowX: "auto", scrollbarWidth: "none" as const }}>
+            {projectStats.map(({ project, count, lastEntry, cats, total }) => {
+              const isActive = focusProjectId === project.id;
+              return (
+                <button
+                  key={project.id}
+                  onClick={() => setFocusProjectId(isActive ? null : project.id)}
+                  style={{
+                    flexShrink: 0, width: 170, padding: "12px 14px", borderRadius: 10,
+                    border: `1px solid ${isActive ? "var(--accent-gold)" : "var(--border)"}`,
+                    background: isActive ? "color-mix(in oklab, var(--accent-gold) 8%, var(--surface))" : "var(--surface)",
+                    textAlign: "left" as const, cursor: "pointer", transition: "all 160ms ease",
+                    display: "flex", flexDirection: "column" as const, gap: 6,
+                  }}
+                >
+                  {/* Project name */}
+                  <div style={{ fontSize: 12, fontWeight: 600, color: isActive ? "var(--accent-gold)" : "var(--foreground)", letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                    {project.name}
+                  </div>
+                  {/* Decision count + last activity */}
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted-text)", letterSpacing: "0.06em" }}>
+                    {count} decision{count !== 1 ? "s" : ""}
+                    {lastEntry && <span> · {relativeTime(lastEntry.createdAt)}</span>}
+                  </div>
+                  {/* Category breakdown bar */}
+                  <div style={{ display: "flex", height: 3, borderRadius: 2, overflow: "hidden", gap: 1 }}>
+                    {(["structure", "aesthetic", "logic", "general"] as const).map((cat) => {
+                      const pct = (cats[cat] / total) * 100;
+                      if (pct === 0) return null;
+                      return (
+                        <div key={cat} style={{ height: "100%", width: `${pct}%`, background: CATEGORY_CONFIG[cat].color, opacity: 0.75, borderRadius: 2 }} />
+                      );
+                    })}
+                  </div>
+                  {/* Open per-project ledger link */}
+                  <div
+                    role="link"
+                    onClick={(e) => { e.stopPropagation(); setLocation(`/ledger/${project.id}`); }}
+                    style={{ fontFamily: "var(--font-mono)", fontSize: 8.5, color: "var(--muted-text)", letterSpacing: "0.08em", textTransform: "uppercase" as const, display: "flex", alignItems: "center", gap: 3, marginTop: 2, cursor: "pointer" }}
+                  >
+                    View ledger →
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ── Category filter pills ── */}
+      <div style={{ padding: "10px 18px", display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none" as const, borderBottom: "1px solid var(--border)" }}>
+        {(["all", "structure", "aesthetic", "logic", "general"] as const).map((cat) => {
+          const isActive = categoryFilter === cat;
+          const cfg = cat === "all" ? { label: "ALL", color: "var(--foreground)" } : CATEGORY_CONFIG[cat];
+          return (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(cat)}
+              style={{ flexShrink: 0, padding: "4px 12px", borderRadius: 14, border: `1px solid ${isActive ? cfg.color : "var(--border)"}`, background: isActive ? `color-mix(in oklab, ${cfg.color} 12%, transparent)` : "transparent", fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: isActive ? cfg.color : "var(--muted-text)", cursor: "pointer", transition: "all 160ms ease" }}
+            >
+              {cfg.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Decision stream ── */}
+      <main style={{ padding: "0 18px" }}>
+        {isLoading ? (
+          <div style={{ padding: "80px 0", display: "flex", justifyContent: "center" }}>
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : stream.length === 0 ? (
+          <div style={{ padding: "60px 0", textAlign: "center" as const }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--muted-text)", letterSpacing: "0.08em" }}>
+              {allEntries.length === 0 ? "No decisions yet. Make your first call in a workspace." : "No decisions match these filters."}
+            </p>
+          </div>
+        ) : (
+          <div style={{ position: "relative", paddingLeft: 20, paddingTop: 16 }}>
+            {/* Gold spine */}
+            <div aria-hidden style={{ position: "absolute", left: 7, top: 0, bottom: 0, width: 1, background: "linear-gradient(180deg, var(--accent-gold), color-mix(in oklab, var(--accent-gold) 20%, transparent))" }} />
+
+            {stream.map((entry) => {
+              const cat = inferCategory(entry);
+              const catCfg = CATEGORY_CONFIG[cat];
+              const severityColor = entry.severity === "blocker" ? "var(--ember)" : entry.severity === "committed" ? "var(--phosphor)" : entry.severity === "parked" ? "var(--accent-gold)" : "var(--muted-text)";
+              return (
+                <div
+                  key={entry.id}
+                  style={{ marginBottom: 8, borderRadius: 8, border: "1px solid var(--border)", background: "transparent", padding: "11px 14px", display: "flex", flexDirection: "column" as const, gap: 5 }}
+                >
+                  {/* Top row: severity dot + title + project tag */}
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", background: severityColor, flexShrink: 0, marginTop: 4 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, letterSpacing: "-0.01em", color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                        {entry.title}
+                      </div>
+                      {entry.summary && (
+                        <div style={{ fontSize: 11.5, color: "var(--muted-text)", marginTop: 2, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden" }}>
+                          {entry.summary}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Bottom row: project tag + category + time */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 17, flexWrap: "wrap" as const }}>
+                    {entry.projectName && (
+                      <span
+                        onClick={() => setFocusProjectId(entry.projectId)}
+                        style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--accent-gold)", background: "color-mix(in oklab, var(--accent-gold) 10%, transparent)", border: "0.5px solid color-mix(in oklab, var(--accent-gold) 28%, transparent)", padding: "1px 7px", borderRadius: 3, textTransform: "uppercase" as const, cursor: "pointer", flexShrink: 0 }}
+                      >
+                        {entry.projectName}
+                      </span>
+                    )}
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: catCfg.color, background: `color-mix(in oklab, ${catCfg.color} 10%, transparent)`, border: `0.5px solid color-mix(in oklab, ${catCfg.color} 25%, transparent)`, padding: "1px 7px", borderRadius: 3, textTransform: "uppercase" as const, flexShrink: 0 }}>
+                      {catCfg.label}
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--muted-text)", letterSpacing: "0.04em", flexShrink: 0 }}>
+                      {relativeTime(entry.createdAt)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {stream.length >= 50 && (
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--muted-text)", textAlign: "center" as const, padding: "16px 0", letterSpacing: "0.06em" }}>
+                Showing most recent 50 — use a project filter to see more
+              </p>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
