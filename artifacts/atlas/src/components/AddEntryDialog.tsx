@@ -108,7 +108,7 @@ export function AddEntryDialog({ open, onClose, projectId, onCreated }: Props) {
           </Field>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Field label="Mark as violation?" hint="check if this records a broken constraint">
+            <Field label="Mark as direction shift?" hint="check if this overrides a prior commitment">
               <label style={{ display: "flex", alignItems: "center", gap: 8, height: 36 }}>
                 <input
                   type="checkbox"
@@ -117,7 +117,7 @@ export function AddEntryDialog({ open, onClose, projectId, onCreated }: Props) {
                   style={{ accentColor: "var(--ember)" }}
                 />
                 <span style={{ fontSize: 12, color: "var(--muted-text)" }}>
-                  {violation ? "Logged as violation" : "Standard commit"}
+                  {violation ? "Logged as override" : "Standard commit"}
                 </span>
               </label>
             </Field>

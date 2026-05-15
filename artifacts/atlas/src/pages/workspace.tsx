@@ -2034,7 +2034,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
             )}
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: entry.isViolation ? "rgba(239,68,68,0.08)" : "rgba(74,222,128,0.07)", border: `1px solid ${entry.isViolation ? "rgba(239,68,68,0.18)" : "rgba(74,222,128,0.18)"}`, color: entry.isViolation ? "rgba(239,68,68,0.75)" : "rgba(74,222,128,0.75)", padding: "2px 9px", borderRadius: 20, textTransform: "uppercase" as const }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
-              {entry.isViolation ? "OVERRIDDEN" : "REVERSIBLE"}
+              {entry.isViolation ? "OVERRIDE" : "REVERSIBLE"}
             </span>
           </div>
 

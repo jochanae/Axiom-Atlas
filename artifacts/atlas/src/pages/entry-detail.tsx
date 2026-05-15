@@ -267,8 +267,8 @@ export default function EntryDetail() {
           <Pill color={sevColor}>{entry.status}</Pill>
           {entry.severity !== entry.status && <Pill color={sevColor}>{entry.severity}</Pill>}
           {entry.verb && <Pill>{entry.verb}</Pill>}
-          {entry.isViolation && <Pill color="var(--ember)">Violation</Pill>}
-          {entry.deviation && <Pill color="var(--accent-gold)">Deviation</Pill>}
+          {entry.isViolation && <Pill color="var(--ember)">Override</Pill>}
+          {entry.deviation && <Pill color="var(--accent-gold)">Shifted</Pill>}
           {entry.mode && <Pill color="rgba(120,200,255,0.8)">{entry.mode}</Pill>}
         </div>
 

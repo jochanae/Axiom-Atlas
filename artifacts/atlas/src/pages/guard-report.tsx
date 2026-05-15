@@ -87,7 +87,7 @@ export default function GuardReport() {
             <StatCard label="Total Entries" value={stats.total} />
             <StatCard label="System Health" value={`${stats.healthRate}%`} accent={stats.healthRate >= 95 ? "var(--phosphor)" : stats.healthRate >= 80 ? "var(--accent-gold)" : "var(--ember)"} />
             <StatCard label="Committed" value={stats.committed} accent="var(--phosphor)" />
-            <StatCard label="Violations" value={stats.violations} accent={stats.violations > 0 ? "var(--ember)" : "var(--muted-text)"} />
+            <StatCard label="Overrides" value={stats.violations} accent={stats.violations > 0 ? "var(--ember)" : "var(--muted-text)"} />
           </div>
 
           {/* Intent / Mode distribution */}
@@ -119,7 +119,7 @@ export default function GuardReport() {
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--foreground)", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{verb}</span>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent-gold)" }}>{count} entries</span>
-                      {violations > 0 && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ember)" }}>{violations} violations</span>}
+                      {violations > 0 && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ember)" }}>{violations} overrides</span>}
                     </div>
                   </div>
                 ))}
@@ -127,17 +127,17 @@ export default function GuardReport() {
             </section>
           )}
 
-          {/* Recent violations */}
+          {/* Recent overrides */}
           {stats.recentViolations.length > 0 && (
             <section>
-              <SectionHeader>Recent Violations</SectionHeader>
+              <SectionHeader>Recent Overrides</SectionHeader>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {stats.recentViolations.map((e) => (
                   <div key={e.id} style={{ padding: "10px 12px", borderRadius: 8, background: "var(--atlas-surface)", border: "1px solid var(--border)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, padding: "1px 6px", borderRadius: 4, background: "rgba(146,64,14,0.12)", color: "var(--ember)", border: "1px solid rgba(146,64,14,0.2)" }}>
-                          ⚠ violation
+                          ⚠ override
                         </span>
                         {e.verb && (
                           <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--accent-gold)", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>{e.verb}</span>
@@ -163,7 +163,7 @@ export default function GuardReport() {
             <div style={{ padding: "60px 24px", textAlign: "center" }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--phosphor)" }}>
-                No violations recorded. System operating at full integrity.
+                No overrides recorded. All decisions tracking clean.
               </p>
             </div>
           )}

@@ -611,7 +611,7 @@ function EntryRow({
               )
             )}
             {entry.costOfLesson != null && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--ember)", letterSpacing: "0.06em" }}>{formatCost(entry.costOfLesson)}</span>}
-            {entry.isViolation && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--ember)", background: "rgba(146,64,14,0.12)", border: "1px solid rgba(146,64,14,0.25)", padding: "1px 6px", borderRadius: 3, textTransform: "uppercase" as const }}>violation</span>}
+            {entry.isViolation && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.08em", color: "var(--ember)", background: "rgba(146,64,14,0.12)", border: "1px solid rgba(146,64,14,0.25)", padding: "1px 6px", borderRadius: 3, textTransform: "uppercase" as const }}>shifted</span>}
           </div>
         </div>
 

@@ -155,7 +155,7 @@ export function CockpitBar({
               {[
                 "◎ Goal — What does winning look like?",
                 "◈ Requirement — What must exist?",
-                "⚠ Blocker — What prevents progress?",
+                "⚠ Obstacle — What prevents progress?",
                 "■ Priority — MoSCoW-ranked items",
                 "◆ Decision — Committed choices",
                 "△ Sprint — Bounded work increments",
