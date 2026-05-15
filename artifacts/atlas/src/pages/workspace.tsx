@@ -6169,6 +6169,30 @@ function TerminalPanel({
       return;
     }
 
+    // Built-in: help
+    if (trimmed === "help") {
+      addLine(`$ ${trimmed}`, "input");
+      addLine(
+        `COMMON COMMANDS\n` +
+        `───────────────────────────────\n` +
+        `git status      see what changed in your repo\n` +
+        `git push        send changes to GitHub → triggers deploy\n` +
+        `git pull        get latest changes from GitHub\n` +
+        `git log         see recent commits\n` +
+        `git diff        see exact line changes\n` +
+        `ls              list files in this folder\n` +
+        `pwd             show current location\n` +
+        `cat <file>      read a file's contents\n` +
+        `clear           clear the terminal\n\n` +
+        `ATLAS COMMANDS\n` +
+        `───────────────────────────────\n` +
+        `Ask Atlas in Chat and it can suggest\n` +
+        `commands to run here automatically.`,
+        "output"
+      );
+      return;
+    }
+
     setRunning(true);
     setCmdHistory((h) => [trimmed, ...h.slice(0, 49)]);
     setHistIdx(-1);
