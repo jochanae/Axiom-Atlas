@@ -283,7 +283,7 @@ function AtlasLogo({ small, mode }: { small?: boolean; mode?: "THINK" | "PLAN" |
 }
 
 // ── DecisionLogCard ────────────────────────────────────────────────────────
-function DecisionCatchCard({
+function DecisionLogCard({
   payload,
   projectId,
   sessionId,
@@ -1805,7 +1805,7 @@ function AssistantBubble({
         )}
 
         {message.catchPayload && !message.catchResolved && (
-          <DecisionCatchCard
+          <DecisionLogCard
             payload={message.catchPayload}
             projectId={projectId}
             sessionId={sessionId}
