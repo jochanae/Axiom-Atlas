@@ -329,7 +329,7 @@ export default function Dashboard() {
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)" }}>Project Health</div>
                 <div style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", marginTop: 2, letterSpacing: "0.06em", opacity: 0.55 }}>
-                  DECISION INTEGRITY
+                  DECISION HEALTH
                 </div>
               </div>
               {stats.projectHealth.length === 0 ? (
