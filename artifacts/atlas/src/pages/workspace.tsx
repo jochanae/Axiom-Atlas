@@ -2034,7 +2034,7 @@ function ParkingLotEntry({ entry }: { entry: Entry }) {
             )}
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 9.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", background: entry.isViolation ? "rgba(239,68,68,0.08)" : "rgba(74,222,128,0.07)", border: `1px solid ${entry.isViolation ? "rgba(239,68,68,0.18)" : "rgba(74,222,128,0.18)"}`, color: entry.isViolation ? "rgba(239,68,68,0.75)" : "rgba(74,222,128,0.75)", padding: "2px 9px", borderRadius: 20, textTransform: "uppercase" as const }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
-              {entry.isViolation ? "BLOCKER" : "REVERSIBLE"}
+              {entry.isViolation ? "OVERRIDDEN" : "REVERSIBLE"}
             </span>
           </div>
 
@@ -8537,7 +8537,7 @@ export default function Workspace() {
                 {/* Starter prompts */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 420 }}>
                   {[
-                    { label: "I need to make a decision", sub: "Walk me through it and lock it in" },
+                    { label: "I need to make a decision", sub: "Walk me through it and log it" },
                     { label: "I'm not sure which direction to take", sub: "Think out loud, I'll help you see the tension" },
                     { label: "Audit my recent decisions", sub: "Review what I've committed to" },
                     { label: "I want to map my architecture", sub: "System Map + layer-by-layer spec" },

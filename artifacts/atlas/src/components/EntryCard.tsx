@@ -121,7 +121,7 @@ export function EntryCard({
                 <CapsuleTag size="xs">REOPENED</CapsuleTag>
               )}
               {entry.isViolation && (
-                <CapsuleTag severity="blocker" size="xs">VIOLATION</CapsuleTag>
+                <CapsuleTag severity="blocker" size="xs">SHIFTED</CapsuleTag>
               )}
               {entry.status === "draft" && !entry.supersedesId && (
                 <CapsuleTag size="xs">DRAFT</CapsuleTag>
