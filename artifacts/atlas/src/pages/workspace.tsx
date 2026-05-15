@@ -6119,6 +6119,9 @@ function TerminalPanel({
   onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
   scenarioLens?: boolean;
 }) {
+  const termTheme = useThemeMode();
+  const isParchment = termTheme === "parchment";
+
   const [input, setInput] = useState("");
   const [lines, setLines] = useState<TerminalLine[]>([
     { text: scenarioLens ? "SCENARIO Terminal  —  explain mode (no execution)" : "Atlas Terminal  —  ready", kind: "system" },
@@ -6307,18 +6310,26 @@ function TerminalPanel({
     }
   };
 
+  // ── Theme-aware terminal palette ──────────────────────────────────────────
+  const termBg      = isParchment ? "#F4EFE6" : "#0A0908";
+  const termInputBg = isParchment ? "#EAE4D8" : "var(--atlas-bg)";
+  const termBorder  = isParchment ? "rgba(160,130,90,0.28)" : "var(--atlas-surface)";
+  const termPrompt  = isParchment ? "#8B3E0E" : "rgba(201,162,76,0.75)";
+  const termCaret   = isParchment ? "rgba(139,62,14,0.9)" : "rgba(201,162,76,0.9)";
+  const termFgText  = isParchment ? "#2A1A0E" : "var(--atlas-fg)";
+
   const colorFor = (kind: TerminalLine["kind"]) => {
-    if (kind === "input") return "rgba(201,162,76,0.92)";
-    if (kind === "stderr") return "rgba(252,165,100,0.88)";
-    if (kind === "system") return "rgba(var(--atlas-muted-rgb),0.65)";
-    if (kind === "error") return "rgba(252,100,100,0.88)";
-    if (kind === "warning") return "var(--atlas-gold)";
-    if (kind === "commentary") return "var(--muted-foreground)";
-    return "var(--atlas-fg)";
+    if (kind === "input")      return isParchment ? "rgba(146,64,14,0.88)"  : "rgba(201,162,76,0.92)";
+    if (kind === "stderr")     return isParchment ? "rgba(160,70,10,0.9)"   : "rgba(252,165,100,0.88)";
+    if (kind === "system")     return isParchment ? "rgba(100,70,40,0.55)"  : "rgba(var(--atlas-muted-rgb),0.65)";
+    if (kind === "error")      return isParchment ? "rgba(170,30,30,0.9)"   : "rgba(252,100,100,0.88)";
+    if (kind === "warning")    return isParchment ? "#8B3E0E"               : "var(--atlas-gold)";
+    if (kind === "commentary") return isParchment ? "rgba(100,70,40,0.72)"  : "var(--muted-foreground)";
+    return termFgText;
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#0A0908", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: termBg, overflow: "hidden" }}>
       {/* Output log */}
       <div
         onClick={() => inputRef.current?.focus()}
@@ -6356,11 +6367,11 @@ function TerminalPanel({
       </div>
       {/* Input row */}
       <div style={{
-        borderTop: "1px solid var(--atlas-surface)", padding: "9px 13px",
+        borderTop: `1px solid ${termBorder}`, padding: "9px 13px",
         display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
-        background: "var(--atlas-bg)",
+        background: termInputBg,
       }}>
-        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 13, color: "rgba(201,162,76,0.75)", flexShrink: 0 }}>$</span>
+        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 13, color: termPrompt, flexShrink: 0 }}>$</span>
         <input
           ref={inputRef}
           value={input}
@@ -6374,8 +6385,8 @@ function TerminalPanel({
           style={{
             flex: 1, background: "transparent", border: "none", outline: "none",
             fontFamily: "var(--app-font-mono)", fontSize: 12,
-            color: "var(--atlas-fg)",
-            caretColor: "rgba(201,162,76,0.9)",
+            color: termFgText,
+            caretColor: termCaret,
           }}
         />
         {running ? (
