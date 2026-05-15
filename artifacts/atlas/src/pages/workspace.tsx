@@ -9003,9 +9003,8 @@ export default function Workspace() {
                           Deep Dive
                         </div>
                         {([
-                          { id: "chatgpt",    label: "ChatGPT",    sub: "Context auto-fills" },
-                          { id: "perplexity", label: "Perplexity", sub: "Context auto-fills" },
-                          { id: "gemini",     label: "Gemini",     sub: deepDiveCopied ? "Copied — paste when it opens" : "Copies context, paste once" },
+                          { id: "chatgpt", label: "ChatGPT", sub: "Context auto-fills" },
+                          { id: "gemini", label: "Gemini", sub: deepDiveCopied ? "Copied — paste when it opens" : "Copies context, paste once" },
                         ] as const).map(p => (
                           <button
                             key={p.id}
@@ -9017,8 +9016,6 @@ export default function Workspace() {
                               setShowDeepDiveMenu(false);
                               if (p.id === "chatgpt") {
                                 window.open(`https://chatgpt.com/?q=${encoded}`, "_blank");
-                              } else if (p.id === "perplexity") {
-                                window.open(`https://www.perplexity.ai/search?q=${encoded}`, "_blank");
                               } else {
                                 navigator.clipboard.writeText(ctx).catch(() => {});
                                 setDeepDiveCopied(true);
@@ -9425,11 +9422,9 @@ export default function Workspace() {
             </div>
             <div style={{ padding: "0 14px" }}>
               {([
-                { id: "claude",      label: "Claude",      sub: "Architect · Nuance & Strategy",    available: true,  icon: "C" },
-                { id: "gpt4o",       label: "GPT-4o",      sub: "Mechanic · Speed & Logic",         available: true,  icon: "G" },
-                { id: "gemini",      label: "Gemini",       sub: "Strategy · Long Context",          available: true,  icon: "Ge" },
-                { id: "perplexity",  label: "Perplexity",  sub: "Librarian · Live Research",        available: false, icon: "P" },
-                { id: "deepseek",    label: "DeepSeek",    sub: "Analyst · Deep Reasoning",         available: false, icon: "D" },
+                { id: "claude", label: "Claude", sub: "Architect · Nuance & Strategy", available: true, icon: "C" },
+                { id: "gpt4o", label: "GPT-4o", sub: "Mechanic · Speed & Logic", available: true, icon: "G" },
+                { id: "gemini", label: "Gemini", sub: "Strategy · Long Context", available: true, icon: "Ge" },
               ]).map(m => (
                 <button
                   key={m.id}
