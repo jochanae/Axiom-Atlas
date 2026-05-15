@@ -10,9 +10,29 @@ export default function LandingPage() {
   };
 
   useEffect(() => {
-    document.documentElement.classList.add("atlas-landing-active");
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById("root");
+    const prev = {
+      htmlOverflow: html.style.overflow, bodyOverflow: body.style.overflow,
+      rootOverflow: root?.style.overflow ?? "", htmlHeight: html.style.height,
+      bodyHeight: body.style.height, rootHeight: root?.style.height ?? "",
+      htmlOverscroll: html.style.overscrollBehaviorY, bodyOverscroll: body.style.overscrollBehaviorY,
+    };
+    html.style.overflow = "auto"; body.style.overflow = "auto";
+    if (root) root.style.overflow = "auto";
+    html.style.height = "auto"; body.style.height = "auto";
+    if (root) root.style.height = "auto";
+    html.style.overscrollBehaviorY = "auto"; body.style.overscrollBehaviorY = "auto";
+    html.classList.add("atlas-landing-active");
     return () => {
-      document.documentElement.classList.remove("atlas-landing-active");
+      html.style.overflow = prev.htmlOverflow; body.style.overflow = prev.bodyOverflow;
+      if (root) root.style.overflow = prev.rootOverflow;
+      html.style.height = prev.htmlHeight; body.style.height = prev.bodyHeight;
+      if (root) root.style.height = prev.rootHeight;
+      html.style.overscrollBehaviorY = prev.htmlOverscroll;
+      body.style.overscrollBehaviorY = prev.bodyOverscroll;
+      html.classList.remove("atlas-landing-active");
     };
   }, []);
 
