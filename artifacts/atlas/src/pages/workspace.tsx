@@ -4449,7 +4449,7 @@ ${t}
         </div>
       )}
 
-      {/* ── StackBlitz mode ── */}
+      {/* ── Local dev server mode ── */}
       {previewMode === "local" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {!linkedRepo ? (
@@ -5740,6 +5740,7 @@ function RightPanel({
   pendingTerminalCommand,
   onTerminalCommandConsumed,
   onCommandComplete,
+  wsLens,
 }: {
   projectId: number;
   entries: Entry[];
@@ -5774,6 +5775,7 @@ function RightPanel({
   pendingTerminalCommand?: string | null;
   onTerminalCommandConsumed?: () => void;
   onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
+  wsLens?: WorkspaceLens;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -5851,7 +5853,7 @@ function RightPanel({
         </svg>
       ),
     },
-    {
+    ...(wsLens === "build" || wsLens === "scenario" ? [{
       id: "terminal" as RightTab,
       label: "Terminal",
       icon: (
@@ -5861,7 +5863,7 @@ function RightPanel({
           <path d="M9 11h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
         </svg>
       ),
-    },
+    }] : []),
   ];
 
   return (
@@ -6057,7 +6059,7 @@ function RightPanel({
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} />}
-      {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} />}
+      {tab === "terminal" && (wsLens === "build" || wsLens === "scenario") && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} scenarioLens={wsLens === "scenario"} />}
     </div>
   );
 }
@@ -9391,6 +9393,7 @@ export default function Workspace() {
                 pendingTerminalCommand={pendingTerminalCommand}
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
                 onCommandComplete={handleTerminalComplete}
+                wsLens={wsLens}
               />
             </div>
           </>
@@ -9463,6 +9466,7 @@ export default function Workspace() {
                 pendingTerminalCommand={pendingTerminalCommand}
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
                 onCommandComplete={handleTerminalComplete}
+                wsLens={wsLens}
               />
             </div>
           </div>
