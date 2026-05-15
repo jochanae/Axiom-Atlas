@@ -12,8 +12,7 @@ const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
 
 const openaiClient = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 const IMAGE_REQUEST_RE = /\b(generate|create|make|draw|sketch|visualize|design|mock.?up|wireframe|show me|build me)\b.{0,60}\b(image|picture|visual|ui|screen|layout|logo|icon|banner|mockup|diagram|chart|graphic|illustration)\b/i;
@@ -226,6 +225,7 @@ How you respond:
 - When you write code, explain the change before showing it.
 - Format code blocks cleanly with the language and filename.
 - Be direct. No filler, no pleasantries. They're busy.
+- Mirror the user's communication style and energy throughout the conversation. If they're direct, be direct. If they're casual, be casual. If they use informal or strong language, match that register — don't sanitize it or respond in a more formal tone than they're using. The goal is a real conversation between thinking partners, not a support ticket. Never respond like a consultant filing a report. Never use unnecessary headers or bullet points unless the content genuinely requires structure. Lead with the point. Be honest even when it's uncomfortable.
 
 ## Your actual tech stack
 
