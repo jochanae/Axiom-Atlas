@@ -6131,6 +6131,16 @@ function TerminalPanel({
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fromAtlasRef = useRef(false);
+  const abortCtrlRef = useRef<AbortController | null>(null);
+
+  const killCommand = useCallback(() => {
+    if (abortCtrlRef.current) {
+      abortCtrlRef.current.abort();
+      abortCtrlRef.current = null;
+    }
+    setRunning(false);
+    setLines((prev) => [...prev, { text: "[killed]", kind: "system" as const }]);
+  }, []);
 
   const addLine = useCallback((text: string, kind: TerminalLine["kind"]) => {
     const parts = text.split("\n");
@@ -6190,12 +6200,16 @@ function TerminalPanel({
     const outputChunks: string[] = [];
     let finalExitCode: number | null = null;
 
+    const abortCtrl = new AbortController();
+    abortCtrlRef.current = abortCtrl;
+
     try {
       const res = await fetch("/api/terminal/exec", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: trimmed }),
         credentials: "include",
+        signal: abortCtrl.signal,
       });
 
       if (!res.ok || !res.body) {
@@ -6236,8 +6250,14 @@ function TerminalPanel({
         }
       }
     } catch (err) {
-      addLine(`Error: ${err instanceof Error ? err.message : String(err)}`, "error");
+      if (err instanceof Error && err.name === "AbortError") {
+        // user killed it — already handled by killCommand
+      } else {
+        addLine(`Error: ${err instanceof Error ? err.message : String(err)}`, "error");
+      }
     }
+
+    abortCtrlRef.current = null;
 
     if (finalExitCode === 0) {
       const explanation = getTerminalSuccessExplanation(trimmed);
@@ -6358,7 +6378,24 @@ function TerminalPanel({
             caretColor: "rgba(201,162,76,0.9)",
           }}
         />
-        {input.trim() && !running && (
+        {running ? (
+          <button
+            onClick={killCommand}
+            title="Kill running command"
+            style={{
+              flexShrink: 0, padding: "3px 10px", borderRadius: 4,
+              background: "rgba(220,38,38,0.15)", border: "1px solid rgba(220,38,38,0.4)",
+              color: "rgba(252,100,100,0.9)", fontSize: 10.5, fontFamily: "var(--app-font-mono)",
+              fontWeight: 600, letterSpacing: "0.08em", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 5,
+            }}
+          >
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="rgba(252,100,100,0.9)">
+              <rect width="8" height="8" rx="1" />
+            </svg>
+            kill
+          </button>
+        ) : input.trim() && (
           <button
             onClick={() => { const cmd = input; setInput(""); runCommand(cmd); }}
             style={{
