@@ -6276,7 +6276,7 @@ function TerminalPanel({
       }
     }
     fromAtlasRef.current = false;
-  }, [running, addLine, onCommandComplete, scenarioLens]);
+  }, [running, addLine, onCommandComplete, scenarioLens, welcomeLines]);
 
   useEffect(() => {
     if (pendingCommand) {
@@ -8835,8 +8835,8 @@ export default function Workspace() {
             }}
           />
 
-          {/* Input */}
-          <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
+          {/* Input — hidden when Terminal tab is active (terminal has its own input row) */}
+          {leftTab !== "terminal" && <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
             {/* Hidden file input — handles both images and ZIP files */}
             <input
               ref={fileInputRef}
@@ -9287,7 +9287,7 @@ export default function Workspace() {
                 </div>
               </div>
             </div>
-          </div>
+          </div>}
         </div>
 
         {/* Desktop: resize handle + right panel */}
