@@ -330,8 +330,8 @@ function HandoffSection() {
     },
     {
       phase: "BUILD MODE",
-      title: "Enforced",
-      description: "Every decision you make gets tracked against the spec. The moment you contradict something you committed to, Axiom catches it — shows you exactly what you said, and asks you to explain yourself first.",
+      title: "Grounded",
+      description: "Every decision you make gets tracked against the spec. The moment something pulls in a different direction, Atlas notices — surfaces what you committed to, and quietly asks if you want to log the shift or adjust course.",
       visual: "grid",
       color: "#D4AF37",
       goldAccent: true,
@@ -608,7 +608,7 @@ function WallOfGoldSection({ onEnter }: { onEnter: () => void }) {
   const principles = [
     "Every dependency mapped before a single line is written.",
     "Every assumption interrogated until it proves itself.",
-    "Every contradiction caught before it becomes a problem.",
+    "Every direction shift logged before it becomes invisible.",
   ];
 
   return (

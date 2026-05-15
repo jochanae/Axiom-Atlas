@@ -39,7 +39,7 @@ export default function Workshop() {
       id: "diff-review",
       icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>,
       label: "Diff Review",
-      desc: "Compare proposed decisions against committed ones. Spot contradictions before they land.",
+      desc: "Compare proposed decisions against committed ones. Notice shifts before they go untracked.",
     },
     {
       id: "session-exporter",
@@ -292,7 +292,7 @@ function EntryForm({ initial, initialStatus, onSave, onCancel, saving }: { initi
             <option value="neutral">Neutral</option>
             <option value="committed">Committed</option>
             <option value="parked">Parked</option>
-            <option value="blocker">Blocker</option>
+            <option value="blocker">Flagged</option>
           </select>
         </div>
       </div>
