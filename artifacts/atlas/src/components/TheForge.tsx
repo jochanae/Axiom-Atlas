@@ -36,17 +36,18 @@ interface Props {
   activeProjectName?: string;
   projectId?: number;
   defaultTab?: "forge" | "prompt";
+  preloadContent?: string;
   onClose: () => void;
   onNodesReady?: (nodes: ArchNode[]) => void;
   onFillChatInput?: (text: string) => void;
 }
 
-export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, defaultTab = "forge", onClose, onNodesReady, onFillChatInput }: Props) {
+export function TheForge({ platform, readinessScore = 0, activeProjectName, projectId, defaultTab = "forge", preloadContent, onClose, onNodesReady, onFillChatInput }: Props) {
   const [isMobile] = useState(() => window.innerWidth < 768);
   const [tab, setTab] = useState<"forge" | "prompt">(defaultTab);
 
-  // Forge state
-  const [transcript, setTranscript] = useState("");
+  // Forge state — pre-fill transcript from preloadContent if provided
+  const [transcript, setTranscript] = useState(preloadContent ?? "");
   const [projectContext, setProjectContext] = useState("");
   const [showContext, setShowContext] = useState(false);
   const [isForging, setIsForging] = useState(false);
