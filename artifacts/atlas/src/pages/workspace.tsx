@@ -5070,9 +5070,17 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile, onOpenForge }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean; onOpenForge?: () => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile, onOpenForge, externalForgeNodes, onForgeNodesConsumed }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean; onOpenForge?: () => void; externalForgeNodes?: ArchNode[]; onForgeNodesConsumed?: () => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
+
+  // Consume nodes pushed from the external Forge button into the canvas
+  useEffect(() => {
+    if (externalForgeNodes && externalForgeNodes.length > 0) {
+      setPendingNodes(externalForgeNodes);
+      onForgeNodesConsumed?.();
+    }
+  }, [externalForgeNodes, onForgeNodesConsumed]);
   const [nodes, setNodes] = useState<ArchNode[]>([]);
   const [pendingNodes, setPendingNodes] = useState<ArchNode[]>([]);
   const [showChat, setShowChat] = useState(true);
@@ -5778,6 +5786,8 @@ function RightPanel({
   onCommandComplete,
   wsLens,
   onOpenForge,
+  externalForgeNodes,
+  onForgeNodesConsumed,
 }: {
   projectId: number;
   entries: Entry[];
@@ -5814,6 +5824,8 @@ function RightPanel({
   onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
   wsLens?: WorkspaceLens;
   onOpenForge?: () => void;
+  externalForgeNodes?: ArchNode[];
+  onForgeNodesConsumed?: () => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -6103,7 +6115,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} externalForgeNodes={externalForgeNodes} onForgeNodesConsumed={onForgeNodesConsumed} />}
       {tab === "terminal" && (wsLens === "build" || wsLens === "scenario") && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} scenarioLens={wsLens === "scenario"} />}
     </div>
   );
@@ -6911,6 +6923,7 @@ export default function Workspace() {
   const [showVault, setShowVault] = useState(false);
   const [showForgeExternal, setShowForgeExternal] = useState(false);
   const [forgePreloadContent, setForgePreloadContent] = useState<string | undefined>(undefined);
+  const [externalForgeNodes, setExternalForgeNodes] = useState<ArchNode[]>([]);
   const [firstRunDismissed, setFirstRunDismissed] = useState(false);
   const [firstRunInput, setFirstRunInput] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -9426,6 +9439,8 @@ export default function Workspace() {
                 onCommandComplete={handleTerminalComplete}
                 wsLens={wsLens}
                 onOpenForge={() => setShowForgeExternal(true)}
+                externalForgeNodes={externalForgeNodes}
+                onForgeNodesConsumed={() => setExternalForgeNodes([])}
               />
             </div>
           </>
@@ -9500,6 +9515,8 @@ export default function Workspace() {
                 onCommandComplete={handleTerminalComplete}
                 wsLens={wsLens}
                 onOpenForge={() => setShowForgeExternal(true)}
+                externalForgeNodes={externalForgeNodes}
+                onForgeNodesConsumed={() => setExternalForgeNodes([])}
               />
             </div>
           </div>
@@ -9553,21 +9570,12 @@ export default function Workspace() {
           preloadContent={forgePreloadContent}
           onClose={() => { setShowForgeExternal(false); setForgePreloadContent(undefined); }}
           onNodesReady={(nodes) => {
-            nodes.forEach((node) => {
-              createEntry.mutate(
-                {
-                  projectId: id,
-                  data: {
-                    title: node.label,
-                    summary: (node as { details?: string }).details ?? "",
-                    status: "committed",
-                    severity: "committed",
-                    mode: "decide",
-                  },
-                },
-                { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); } }
-              );
-            });
+            // Push nodes to Flow canvas
+            setExternalForgeNodes(nodes);
+            // Also switch right panel to the map tab so nodes are visible
+            setDesktopForceTab("map");
+            setTimeout(() => setDesktopForceTab(undefined), 80);
+            if (isMobile) setMobileTab("map");
             setShowForgeExternal(false);
             setForgePreloadContent(undefined);
           }}
