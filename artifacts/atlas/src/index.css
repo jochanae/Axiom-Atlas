@@ -743,7 +743,7 @@ html, body {
 }
 
 /* ── Landing page: allow scrolling (overrides global overflow:hidden) ──────── */
-.atlas-landing-active,
+html.atlas-landing-active,
 .atlas-landing-active body,
 .atlas-landing-active #root {
   overflow: auto !important;
