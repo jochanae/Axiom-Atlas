@@ -115,6 +115,22 @@ interface LinkedRepo {
 
 type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
+type WorkspaceLens = "flow" | "build" | "look" | "scenario";
+
+const LENS_CONFIG: Record<WorkspaceLens, {
+  label: string;
+  sub: string;
+  color: string;
+  borderColor: string;
+  glowColor: string;
+  bgTint: string;
+  model: string;
+}> = {
+  flow:     { label: "Flow",     sub: "Think it through",            color: "#C9A24C", borderColor: "rgba(201,162,76,0.45)",  glowColor: "rgba(201,162,76,0.10)", bgTint: "transparent",                   model: "claude" },
+  build:    { label: "Build",    sub: "Write code · push to GitHub", color: "#C4521A", borderColor: "rgba(196,82,26,0.45)",   glowColor: "rgba(196,82,26,0.10)",  bgTint: "transparent",                   model: "claude" },
+  look:     { label: "Look",     sub: "CSS · animation · visual",    color: "#8B5CF6", borderColor: "rgba(139,92,246,0.40)",  glowColor: "rgba(139,92,246,0.10)", bgTint: "transparent",                   model: "gemini" },
+  scenario: { label: "Scenario", sub: "What if — no commitment",     color: "#78716C", borderColor: "rgba(120,113,108,0.35)", glowColor: "rgba(120,113,108,0.06)", bgTint: "rgba(120,113,108,0.04)",       model: "" },
+};
 
 interface ProjectScan {
   projectName: string;
@@ -6619,6 +6635,14 @@ export default function Workspace() {
   const [wsModel, setWsModel] = useState<string>(() => {
     try { const r = localStorage.getItem("atlas-home-context"); return r ? (JSON.parse(r).model ?? "claude") : "claude"; } catch { return "claude"; }
   });
+  const [wsLens, setWsLensRaw] = useState<WorkspaceLens>(() => {
+    try { return (localStorage.getItem(`atlas-ws-lens-v2-${id}`) as WorkspaceLens) || "flow"; } catch { return "flow"; }
+  });
+  const [showLensPicker, setShowLensPicker] = useState(false);
+  const [detectedLens, setDetectedLens] = useState<WorkspaceLens | null>(null);
+  const scenarioStartIdxRef = useRef<number>(-1);
+  const [showScenarioPrompt, setShowScenarioPrompt] = useState(false);
+  const [pendingLensSwitch, setPendingLensSwitch] = useState<WorkspaceLens | null>(null);
   const [showWsModelSheet, setShowWsModelSheet] = useState(false);
   const [rightFullscreen, setRightFullscreen] = useState(false);
   const [showSrcPicker, setShowSrcPicker] = useState(false);
@@ -6648,6 +6672,26 @@ export default function Workspace() {
   const [projectLens, setProjectLens] = useState<"builder" | "strategist" | "reviewer" | "teacher">(() => {
     try { return (localStorage.getItem(`atlas-lens-${id}`) as "builder" | "strategist" | "reviewer" | "teacher") || "builder"; } catch { return "builder"; }
   });
+
+  const setWsLens = useCallback((newLens: WorkspaceLens) => {
+    const currentMessages = messages;
+    if (wsLens === "scenario" && scenarioStartIdxRef.current >= 0 && currentMessages.length > scenarioStartIdxRef.current) {
+      setPendingLensSwitch(newLens);
+      setShowScenarioPrompt(true);
+      return;
+    }
+    setWsLensRaw(newLens);
+    setDetectedLens(null);
+    try { localStorage.setItem(`atlas-ws-lens-v2-${id}`, newLens); } catch {}
+    if (newLens === "scenario") {
+      scenarioStartIdxRef.current = currentMessages.length;
+    } else {
+      scenarioStartIdxRef.current = -1;
+    }
+    const cfg = LENS_CONFIG[newLens];
+    if (cfg.model) setWsModel(cfg.model);
+    setShowLensPicker(false);
+  }, [wsLens, messages, id]);
   const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
@@ -7136,6 +7180,7 @@ export default function Workspace() {
         model: wsModel,
         mode: projectMode.toLowerCase(),
         lens: projectLens,
+        workspaceLens: wsLens,
         history,
         entries: ledgerEntries,
         ...(activeCtx ? { fileContext: activeCtx } : {}),
@@ -7158,6 +7203,17 @@ export default function Workspace() {
           return r.json();
         })
         .then((res) => {
+          // Detect LENS_DRIFT signal in response content and strip it
+          if (res.content && typeof res.content === "string") {
+            const driftMatch = res.content.match(/LENS_DRIFT:\s*(flow|build|look|scenario)/i);
+            if (driftMatch) {
+              const drifted = driftMatch[1].toLowerCase() as WorkspaceLens;
+              if (drifted !== wsLens) {
+                setDetectedLens(drifted);
+              }
+              res.content = res.content.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
+            }
+          }
           const cp = res.catchPayload as CatchPayload | null;
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
           const lps = (res.linePatches ?? []) as LinePatch[];
@@ -8039,6 +8095,26 @@ export default function Workspace() {
 
           {/* Right: vault + % score + mode + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {/* Lens chip */}
+            <button
+              title={`Lens: ${LENS_CONFIG[wsLens].sub}`}
+              onClick={() => setShowLensPicker(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: 4,
+                padding: "3px 8px", borderRadius: 20,
+                background: "transparent",
+                border: `1px solid ${detectedLens ? LENS_CONFIG[detectedLens].borderColor : "rgba(var(--atlas-muted-rgb),0.2)"}`,
+                cursor: "pointer", transition: "all 180ms ease", flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = LENS_CONFIG[wsLens].borderColor; e.currentTarget.style.background = LENS_CONFIG[wsLens].glowColor; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = detectedLens ? LENS_CONFIG[detectedLens].borderColor : "rgba(var(--atlas-muted-rgb),0.2)"; e.currentTarget.style.background = "transparent"; }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: detectedLens ? LENS_CONFIG[detectedLens].color : LENS_CONFIG[wsLens].color, flexShrink: 0, transition: "background 220ms ease" }} />
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: detectedLens ? LENS_CONFIG[detectedLens].color : LENS_CONFIG[wsLens].color, letterSpacing: "0.08em", transition: "color 220ms ease", whiteSpace: "nowrap" }}>
+                {LENS_CONFIG[wsLens].label}{detectedLens ? ` → ${LENS_CONFIG[detectedLens].label}` : ""}
+              </span>
+            </button>
+
             <button
               title="Visual Vault"
               onClick={() => setShowVault(true)}
@@ -8797,7 +8873,16 @@ export default function Workspace() {
               </div>
             )}
 
-            <div className="atlas-input-shell" style={{ padding: "13px 15px" }}>
+            <div
+              className="atlas-input-shell"
+              style={{
+                padding: "13px 15px",
+                borderColor: LENS_CONFIG[wsLens].borderColor,
+                boxShadow: `0 4px 24px rgba(0,0,0,0.28), 0 0 14px -8px ${LENS_CONFIG[wsLens].glowColor}`,
+                transition: "border-color 220ms ease, box-shadow 220ms ease",
+                ...(wsLens === "scenario" ? { background: "rgba(120,113,108,0.04)" } : {}),
+              }}
+            >
               <div style={{ position: "relative" }}>
                 {!hasInput && (
                   <div
@@ -9378,6 +9463,140 @@ export default function Workspace() {
                   TIP: Type <span style={{ color: "rgba(201,162,76,0.7)" }}>/deep [topic]</span> in any message to run a structured research analysis via Gemini — regardless of selected model.
                 </p>
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Lens picker sheet ── */}
+      {showLensPicker && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={() => setShowLensPicker(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} />
+          <div style={{
+            position: "relative", zIndex: 1, width: "100%", maxWidth: 480,
+            background: "var(--atlas-surface)", borderRadius: "16px 16px 0 0",
+            borderTop: "1px solid rgba(201,162,76,0.18)",
+            boxShadow: "0 -8px 40px rgba(0,0,0,0.5)", paddingBottom: 32,
+          }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Lens</span>
+              <button onClick={() => setShowLensPicker(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+            </div>
+            <div style={{ padding: "0 14px" }}>
+              {(Object.entries(LENS_CONFIG) as [WorkspaceLens, typeof LENS_CONFIG[WorkspaceLens]][]).map(([lensId, cfg]) => (
+                <button
+                  key={lensId}
+                  onClick={() => setWsLens(lensId)}
+                  style={{
+                    width: "100%", textAlign: "left", padding: "11px 12px", borderRadius: 8,
+                    background: wsLens === lensId ? `${cfg.glowColor}` : "transparent",
+                    border: `1px solid ${wsLens === lensId ? cfg.borderColor : "transparent"}`,
+                    cursor: "pointer", display: "flex", alignItems: "center", gap: 10, marginBottom: 2,
+                    transition: "all 140ms ease",
+                  }}
+                >
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                    background: `${cfg.glowColor}`,
+                    border: `1px solid ${cfg.borderColor}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: cfg.color, display: "block" }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)" }}>
+                      <span style={{ color: cfg.color }}>{cfg.label}</span>
+                      {cfg.model && (
+                        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", letterSpacing: "0.1em", opacity: 0.6, border: "1px solid rgba(var(--atlas-muted-rgb),0.2)", borderRadius: 3, padding: "1px 4px" }}>
+                          {cfg.model === "claude" ? "Claude" : "Gemini"}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", marginTop: 2, opacity: 0.7 }}>{cfg.sub}</div>
+                  </div>
+                  {wsLens === lensId && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path d="M2 6l3 3 5-5" stroke="var(--atlas-gold)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                  {detectedLens === lensId && wsLens !== lensId && (
+                    <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: cfg.color, letterSpacing: "0.1em", border: `1px solid ${cfg.borderColor}`, borderRadius: 3, padding: "1px 5px", opacity: 0.85 }}>SUGGESTED</span>
+                  )}
+                </button>
+              ))}
+              <div style={{ margin: "10px 0 2px", padding: "8px 12px", background: "rgba(201,162,76,0.04)", borderRadius: 6, border: "1px solid rgba(201,162,76,0.1)" }}>
+                <p style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.07em", margin: 0, lineHeight: 1.6 }}>
+                  Lens shapes how Atlas responds — and sets the model. <span style={{ color: "rgba(201,162,76,0.7)" }}>Scenario</span> keeps the model you're already using.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Scenario exit prompt ── */}
+      {showScenarioPrompt && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" }}>
+          <div onClick={() => setShowScenarioPrompt(false)} style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }} />
+          <div style={{
+            position: "relative", zIndex: 1, width: "100%", maxWidth: 360,
+            background: "var(--atlas-surface)", borderRadius: 14,
+            border: "1px solid rgba(120,113,108,0.35)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)", padding: "20px 20px 18px",
+          }}>
+            <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(120,113,108,0.7)", marginBottom: 8 }}>Leaving Scenario</div>
+            <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 14, color: "var(--atlas-fg)", lineHeight: 1.5, marginBottom: 16 }}>
+              What do you want to do with the scenario messages?
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button
+                onClick={() => {
+                  if (pendingLensSwitch) {
+                    setWsLensRaw(pendingLensSwitch);
+                    setDetectedLens(null);
+                    try { localStorage.setItem(`atlas-ws-lens-v2-${id}`, pendingLensSwitch); } catch {}
+                    const cfg = LENS_CONFIG[pendingLensSwitch];
+                    if (cfg.model) setWsModel(cfg.model);
+                    scenarioStartIdxRef.current = -1;
+                    setPendingLensSwitch(null);
+                  }
+                  setShowScenarioPrompt(false);
+                  setShowLensPicker(false);
+                }}
+                style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.25)", color: "var(--atlas-gold)", cursor: "pointer", fontFamily: "var(--app-font-sans)", fontSize: 13, textAlign: "left" }}
+              >
+                Keep — bring it into the project
+              </button>
+              <button
+                onClick={() => {
+                  if (scenarioStartIdxRef.current >= 0) {
+                    setMessages(prev => prev.slice(0, scenarioStartIdxRef.current));
+                  }
+                  if (pendingLensSwitch) {
+                    setWsLensRaw(pendingLensSwitch);
+                    setDetectedLens(null);
+                    try { localStorage.setItem(`atlas-ws-lens-v2-${id}`, pendingLensSwitch); } catch {}
+                    const cfg = LENS_CONFIG[pendingLensSwitch];
+                    if (cfg.model) setWsModel(cfg.model);
+                    setPendingLensSwitch(null);
+                  }
+                  scenarioStartIdxRef.current = -1;
+                  setShowScenarioPrompt(false);
+                  setShowLensPicker(false);
+                }}
+                style={{ padding: "10px 14px", borderRadius: 8, background: "transparent", border: "1px solid rgba(var(--atlas-muted-rgb),0.2)", color: "var(--atlas-muted)", cursor: "pointer", fontFamily: "var(--app-font-sans)", fontSize: 13, textAlign: "left" }}
+              >
+                Discard — remove from this session
+              </button>
+              <button
+                onClick={() => { setShowScenarioPrompt(false); setPendingLensSwitch(null); }}
+                style={{ padding: "8px 14px", borderRadius: 8, background: "transparent", border: "none", color: "var(--atlas-muted)", cursor: "pointer", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.06em", opacity: 0.55 }}
+              >
+                Stay in Scenario
+              </button>
             </div>
           </div>
         </div>,
