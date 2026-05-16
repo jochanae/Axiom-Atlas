@@ -25,6 +25,7 @@ import galleryRouter from "./gallery";
 import storageRouter from "./storage";
 import errorlogRouter from "./errorlog";
 import selfmapRouter from "./selfmap";
+import forgeStateRouter from "./forge-state";
 
 const router: IRouter = Router();
 
@@ -52,6 +53,7 @@ router.use(requireAuth, thoughtsRouter);
 router.use(requireAuth, vaultRouter);
 router.use(requireAuth, secretsRouter);
 router.use(requireAuth, forgeRouter);
+router.use(requireAuth, forgeStateRouter);
 router.use(requireAuth, devserverRouter);
 router.use(requireAuth, importRouter);
 router.use(requireAuth, selfmapRouter);
