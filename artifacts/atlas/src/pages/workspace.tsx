@@ -7096,6 +7096,9 @@ export default function Workspace() {
     try { setForgePillDismissed(localStorage.getItem(`atlas-forge-dismissed-${id}`) === "1"); } catch { setForgePillDismissed(false); }
     try { setForgeContext(sessionStorage.getItem(`atlas-forge-ctx-${id}`) ?? null); } catch { setForgeContext(null); }
   }, [id]);
+  // Explicit state captured at pill-open time so TheForge always gets a stable context snapshot
+  const [forgeActiveProjectName, setForgeActiveProjectName] = useState<string | undefined>(undefined);
+  const [forgeActiveProjectId, setForgeActiveProjectId] = useState<number | undefined>(undefined);
   const [firstRunDismissed, setFirstRunDismissed] = useState(false);
   const [firstRunInput, setFirstRunInput] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -9084,7 +9087,7 @@ export default function Workspace() {
                 <button
                   aria-label="Open The Forge"
                   title="The Forge — re-run or review strategic map"
-                  onClick={() => setShowForgeExternal(true)}
+                  onClick={() => { setForgeActiveProjectName(project?.name); setForgeActiveProjectId(id); setShowForgeExternal(true); }}
                   style={{
                     display: "inline-flex", alignItems: "center", justifyContent: "center",
                     width: 28, height: 28, borderRadius: 8,
@@ -9116,7 +9119,7 @@ export default function Workspace() {
                   }}
                 >
                   <button
-                    onClick={() => setShowForgeExternal(true)}
+                    onClick={() => { setForgeActiveProjectName(project?.name); setForgeActiveProjectId(id); setShowForgeExternal(true); }}
                     style={{
                       display: "inline-flex", alignItems: "center", gap: 7,
                       padding: "6px 10px 6px 12px", border: "none", cursor: "pointer",
@@ -9791,8 +9794,8 @@ export default function Workspace() {
 
       {showForgeExternal && (
         <TheForge
-          projectId={id}
-          activeProjectName={project?.name}
+          projectId={forgeActiveProjectId ?? id}
+          activeProjectName={forgeActiveProjectName ?? project?.name}
           preloadContent={forgePreloadContent}
           onClose={() => { setShowForgeExternal(false); setForgePreloadContent(undefined); }}
           onNodesReady={(nodes) => {
