@@ -70,6 +70,8 @@ Link a repository to a project. Browse the file tree, load file context into cha
 
 ## Local Setup
 
+Agents should run `bash setup.sh` before any task to install missing dependencies and run the library typecheck.
+
 ### Prerequisites
 - Node.js 20+
 - pnpm 9+
