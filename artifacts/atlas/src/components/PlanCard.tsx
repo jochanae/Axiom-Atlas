@@ -1,5 +1,6 @@
 import { Check, Eye, Pencil, Upload, X } from "lucide-react";
-import type { Plan, PlanExecution, PlanStepType } from "../lib/plan";
+import type React from "react";
+import type { Moscow, Plan, PlanExecution, PlanStepType } from "../lib/plan";
 
 type PlanCardProps = {
   plan: Plan;
@@ -53,6 +54,44 @@ function stepVerb(type: PlanStepType): string {
   return "Working on";
 }
 
+function moscowBadgeStyle(moscow: Moscow): React.CSSProperties {
+  if (moscow === "must") {
+    return {
+      color: "var(--atlas-bg)",
+      background: "var(--atlas-gold)",
+      border: "1px solid var(--atlas-gold)",
+      textDecoration: "none",
+    };
+  }
+  if (moscow === "should") {
+    return {
+      color: "var(--atlas-gold)",
+      background: "transparent",
+      border: "1px solid color-mix(in oklab, var(--atlas-gold) 42%, transparent)",
+      textDecoration: "none",
+    };
+  }
+  if (moscow === "wont") {
+    return {
+      color: "var(--atlas-ember)",
+      background: "color-mix(in oklab, var(--atlas-ember) 7%, transparent)",
+      border: "1px solid color-mix(in oklab, var(--atlas-ember) 20%, transparent)",
+      textDecoration: "line-through",
+    };
+  }
+  return {
+    color: "var(--atlas-muted)",
+    background: "color-mix(in oklab, var(--atlas-muted) 8%, transparent)",
+    border: "1px solid color-mix(in oklab, var(--atlas-muted) 18%, transparent)",
+    textDecoration: "none",
+  };
+}
+
+function moscowLabel(moscow: Moscow): string {
+  if (moscow === "wont") return "WON'T";
+  return moscow.toUpperCase();
+}
+
 export function PlanCard({
   plan,
   messageId,
@@ -73,6 +112,8 @@ export function PlanCard({
   const currentStep = plan.steps.find((step) => step.order === currentOrder) ?? plan.steps[0];
   const showBody = isExpanded || isExecuting || isCompleted || !!failedOrder;
   const badgeStyle = confidenceStyles(plan.confidence);
+  const isBlueprint = plan.mode === "blueprint";
+  const accent = isBlueprint ? "color-mix(in oklab, var(--atlas-gold) 78%, var(--atlas-bg))" : "var(--atlas-gold)";
   const _ids = { messageId, projectId }; void _ids;
 
   return (
@@ -82,9 +123,9 @@ export function PlanCard({
         padding: "12px 14px",
         borderRadius: 10,
         background: "var(--atlas-surface)",
-        border: "1px solid color-mix(in oklab, var(--atlas-gold) 20%, var(--atlas-border))",
-        borderLeft: "3px solid var(--atlas-gold)",
-        boxShadow: "0 14px 36px -28px var(--atlas-gold)",
+        border: `1px solid color-mix(in oklab, ${accent} 20%, var(--atlas-border))`,
+        borderLeft: `3px solid ${accent}`,
+        boxShadow: `0 14px 36px -28px ${accent}`,
       }}
     >
       <style>{`
@@ -96,8 +137,22 @@ export function PlanCard({
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 9, marginBottom: showBody ? 10 : 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--atlas-fg)", lineHeight: 1.35 }}>
-            {plan.title}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+            <span
+              style={{
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 9,
+                letterSpacing: "0.12em",
+                color: accent,
+                textTransform: "uppercase",
+                flexShrink: 0,
+              }}
+            >
+              {isBlueprint ? "Blueprint" : "Plan"}
+            </span>
+            <span style={{ fontSize: isBlueprint ? 15 : 13, fontWeight: 700, color: "var(--atlas-fg)", lineHeight: 1.35 }}>
+              {plan.title}
+            </span>
           </div>
           <div style={{ marginTop: 5, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
             <span
@@ -193,6 +248,24 @@ export function PlanCard({
                         }}
                       >
                         {step.file.split("/").pop()}
+                      </span>
+                    )}
+                    {step.moscow && (
+                      <span
+                        style={{
+                          ...moscowBadgeStyle(step.moscow),
+                          display: "inline-flex",
+                          alignItems: "center",
+                          borderRadius: 4,
+                          padding: "1px 5px",
+                          fontFamily: "var(--app-font-mono)",
+                          fontSize: 8,
+                          fontWeight: 800,
+                          letterSpacing: "0.08em",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {moscowLabel(step.moscow)}
                       </span>
                     )}
                     <span style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.45 }}>
