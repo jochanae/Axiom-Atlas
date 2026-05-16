@@ -1353,7 +1353,26 @@ export default function Home() {
     setHandoffLoading(true);
     setHandoffStage("Setting up your workspace...");
     try {
-      const name = (projectNameOverride || signal?.projectName || "New Project").trim() || "New Project";
+      let name = (projectNameOverride || signal?.projectName || "").trim();
+      const DEFAULT_PROJECT_NAMES = new Set(["New Project", "New Idea", "My Project", ""]);
+      if (DEFAULT_PROJECT_NAMES.has(name)) {
+        const lastUserMsg = [...homeMessages].reverse().find(m => m.role === "user");
+        if (lastUserMsg?.content) {
+          try {
+            const nameRes = await fetch("/api/nexus/name", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ message: lastUserMsg.content }),
+            });
+            if (nameRes.ok) {
+              const nameData = await nameRes.json() as { name?: string };
+              if (nameData.name?.trim()) name = nameData.name.trim();
+            }
+          } catch {}
+        }
+        if (!name) name = "New Project";
+      }
       const createRes = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -215,9 +215,15 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
                       {p.name[0]?.toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 12.5, fontWeight: p.id === activeProjectId ? 600 : 400, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-                        {p.name}
-                      </span>
+                      {(() => {
+                        const isUnnamed = p.name === "New Project" || p.name === "New Idea" || p.name === "My Project";
+                        return (
+                          <span style={{ fontSize: 12.5, fontWeight: p.id === activeProjectId ? 600 : 400, color: isUnnamed ? "var(--atlas-muted)" : "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4, fontStyle: isUnnamed ? "italic" : "normal" }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{p.name}</span>
+                            {isUnnamed && <span style={{ opacity: 0.55, fontSize: 9.5, flexShrink: 0 }}>✎</span>}
+                          </span>
+                        );
+                      })()}
                       {p.description && (
                         <span style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", marginTop: 1 }}>
                           {p.description}

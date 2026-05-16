@@ -7683,6 +7683,7 @@ export default function Workspace() {
   // Explicit state captured at pill-open time so TheForge always gets a stable context snapshot
   const [forgeActiveProjectName, setForgeActiveProjectName] = useState<string | undefined>(undefined);
   const [forgeActiveProjectId, setForgeActiveProjectId] = useState<number | undefined>(undefined);
+  const [autoNameKey, setAutoNameKey] = useState(0);
   const [firstRunDismissed, setFirstRunDismissed] = useState(false);
   const [firstRunInput, setFirstRunInput] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -8314,6 +8315,15 @@ export default function Workspace() {
               return merged;
             });
           }
+          // Auto-name: update project name silently when Atlas generates one on the first message
+          if (res.autoName && typeof res.autoName === "string") {
+            setAutoNameKey((k) => k + 1);
+            queryClient.setQueryData(getGetProjectQueryKey(id), (old: unknown) => {
+              if (old && typeof old === "object" && "name" in old) return { ...(old as object), name: res.autoName };
+              return old;
+            });
+            queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+          }
         })
         .catch((err: unknown) => {
           if (err instanceof Error && err.name === "AbortError") {
@@ -8829,6 +8839,10 @@ export default function Workspace() {
         <style>{`
           @keyframes shimmer { 0% { background-position: -600px 0; } 100% { background-position: 600px 0; } }
           .ws-shimmer { background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.03) 75%); background-size: 600px 100%; animation: shimmer 1.6s infinite linear; border-radius: 6px; }
+          @keyframes atlas-name-fresh { from { opacity: 0; transform: translateY(-2px); } to { opacity: 0.92; transform: translateY(0); } }
+          .atlas-name-fresh { animation: atlas-name-fresh 0.5s ease forwards; }
+          .atlas-name-pencil { opacity: 0; transition: opacity 150ms ease; }
+          button:hover .atlas-name-pencil, button:focus .atlas-name-pencil { opacity: 0.4; }
         `}</style>
         {/* Header skeleton */}
         <div style={{ height: 46, flexShrink: 0, borderBottom: "1px solid rgba(201,162,76,0.08)", display: "flex", alignItems: "center", padding: "0 16px", gap: 10 }}>
@@ -8970,12 +8984,21 @@ export default function Workspace() {
                 </div>
               ) : (
                 <>
-                  {/* Title row: status dot + name */}
-                  <span style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, overflow: "hidden", width: "100%" }}>
+                  {/* Title row: status dot + name (tap to rename) + pencil hint */}
+                  <span
+                    style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0, overflow: "hidden", width: "100%" }}
+                    onClick={(e) => { e.stopPropagation(); setRenameDraft(project?.name ?? ""); setRenaming(true); }}
+                    title="Tap to rename"
+                  >
                     <span className={sessionId ? "atlas-pulse-dot" : undefined} style={{ width: 6, height: 6, borderRadius: "50%", background: sessionId ? "#4ade80" : "rgba(var(--atlas-muted-rgb),0.4)", flexShrink: 0, display: "inline-block" }} />
-                    <span style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.92, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
+                    <span
+                      key={autoNameKey}
+                      className={autoNameKey > 0 ? "atlas-name-fresh" : undefined}
+                      style={{ fontSize: 13, color: "var(--atlas-fg)", opacity: 0.92, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}
+                    >
                       {project?.name ?? "…"}
                     </span>
+                    <span className="atlas-name-pencil" style={{ fontSize: 10, color: "var(--atlas-muted)", flexShrink: 0, lineHeight: 1 }}>✎</span>
                   </span>
                   {/* Chevron on its own line, centered below */}
                   <svg width="10" height="6" viewBox="0 0 12 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "rgba(var(--atlas-muted-rgb),0.45)", flexShrink: 0 }}>
