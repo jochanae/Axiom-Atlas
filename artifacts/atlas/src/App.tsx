@@ -35,8 +35,25 @@ const SILENT_401_PATTERNS = ["/api/nexus/activity", "/api/nexus/briefing", "/api
 
 let _401redirectPending = false;
 
+// When VITE_API_BASE_URL is set (e.g. Railway backend URL), all relative /api/
+// calls are automatically rewritten to hit that origin. This makes the frontend
+// work correctly when deployed to a different domain (Vercel, Netlify, etc.)
+// without touching any individual fetch call in the codebase.
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+function resolveApiUrl(input: RequestInfo | URL): RequestInfo | URL {
+  if (!API_BASE) return input;
+  if (typeof input === "string" && input.startsWith("/api/")) return `${API_BASE}${input}`;
+  if (input instanceof URL && input.pathname.startsWith("/api/")) return new URL(`${API_BASE}${input.pathname}${input.search}`);
+  if (input instanceof Request && new URL(input.url, location.origin).pathname.startsWith("/api/")) {
+    return new Request(`${API_BASE}${new URL(input.url, location.origin).pathname}${new URL(input.url, location.origin).search}`, input);
+  }
+  return input;
+}
+
 const _originalFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
+  args[0] = resolveApiUrl(args[0]);
   const res = await _originalFetch(...args);
   if (res.status === 401) {
     const url = typeof args[0] === "string" ? args[0] : (args[0] as Request).url;
@@ -50,7 +67,7 @@ window.fetch = async (...args) => {
         // the user out of a live conversation.
         setTimeout(async () => {
           try {
-            const check = await _originalFetch("/api/auth/me", { credentials: "include" });
+            const check = await _originalFetch(`${API_BASE}/api/auth/me`, { credentials: "include" });
             if (check.status === 401) {
               const base = import.meta.env.BASE_URL.replace(/\/$/, "");
               window.location.href = `${base}/login?reason=session_expired`;
