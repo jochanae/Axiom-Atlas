@@ -59,6 +59,8 @@ import {
 } from "../components/ReadinessRing";
 
 // ── Types ────────────────────────────────────────────────────────────────────
+const ICON_TOUCH_TARGET_STYLE: React.CSSProperties = { minWidth: 44, minHeight: 44, padding: 9 };
+
 interface CatchPayload {
   v: number;
   against: { id: string; title: string };
@@ -397,6 +399,7 @@ function DecisionLogCard({
         <button
           onClick={onProceed}
           title="Dismiss"
+          aria-label="Dismiss"
           style={{
             background: "transparent", border: "none", cursor: "pointer",
             color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1,
@@ -653,17 +656,23 @@ function UserBubble({
     >
       <div style={{ maxWidth: "74%", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
         {/* Bubble */}
-        <div
+        <button
+          type="button"
+          disabled={!isTall}
           style={{
             position: "relative",
             padding: "11px 15px 11px 17px",
             borderRadius: "16px 4px 16px 16px",
             width: "100%",
             background: "var(--atlas-surface)",
+            border: "none",
+            textAlign: "left",
+            font: "inherit",
             cursor: isTall ? "pointer" : "default",
             transition: "all 280ms cubic-bezier(0.4, 0, 0.2, 1)",
           }}
           onClick={isTall ? () => setExpanded((v) => !v) : undefined}
+          aria-label={isTall ? (expanded ? "Collapse message" : "Expand message") : undefined}
         >
           <div
             style={{
@@ -682,19 +691,19 @@ function UserBubble({
               {expanded ? "SHOW LESS ↑" : "SHOW MORE ↓"}
             </div>
           )}
-        </div>
+        </button>
 
         {/* Action row — icon-only, visible on hover */}
         <div style={{ display: "flex", gap: 4, opacity: hov ? 1 : 0, transition: "opacity 180ms ease", justifyContent: "flex-end" }}>
           {/* Copy */}
-          <button className={`atlas-icon-action${copied ? " copy-done" : ""}`} onClick={handleCopy} title={copied ? "Copied!" : "Copy"}>
+          <button className={`atlas-icon-action${copied ? " copy-done" : ""}`} onClick={handleCopy} title={copied ? "Copied!" : "Copy"} aria-label="Copy message" style={ICON_TOUCH_TARGET_STYLE}>
             {copied
               ? <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7l3 3 7-7" /></svg>
               : <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="8" height="8" rx="1.5" /><path d="M9 5V3a1 1 0 00-1-1H3a1 1 0 00-1 1v5a1 1 0 001 1h2" /></svg>
             }
           </button>
           {/* Edit */}
-          <button className="atlas-icon-action" onClick={onEdit} title="Edit &amp; resend">
+          <button className="atlas-icon-action" onClick={onEdit} title="Edit &amp; resend" aria-label="Edit message" style={ICON_TOUCH_TARGET_STYLE}>
             <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" />
             </svg>
@@ -1006,7 +1015,7 @@ function GitHubPushModal({
               {linkedRepo && <div style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", marginTop: 1 }}>{linkedRepo.fullName}</div>}
             </div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 18, lineHeight: 1, padding: "4px 6px", opacity: 0.5 }} onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")} onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}>×</button>
+          <button onClick={onClose} aria-label="Dismiss" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", fontSize: 18, lineHeight: 1, padding: "4px 6px", opacity: 0.5 }} onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")} onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.5")}>×</button>
         </div>
 
         <div style={{ padding: "14px 20px", overflowY: "auto", flex: 1 }}>
@@ -1676,17 +1685,20 @@ function InlineDiffCard({
   return (
     <>
       <div
-        onClick={() => setOpen((value) => !value)}
         style={{
           marginTop: 12,
           borderRadius: 8,
           background: "var(--atlas-surface)",
           border: "1px solid var(--atlas-border)",
           overflow: "hidden",
-          cursor: "pointer",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderBottom: open ? "1px solid var(--atlas-border)" : "none" }}>
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          aria-label={open ? "Collapse" : "Expand"}
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderBottom: open ? "1px solid var(--atlas-border)" : "none", background: "transparent", borderLeft: "none", borderRight: "none", borderTop: "none", cursor: "pointer", textAlign: "left" }}
+        >
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ flexShrink: 0, transition: "transform 160ms ease", transform: open ? "rotate(90deg)" : "rotate(0deg)", opacity: 0.55 }}>
             <path d="M3 2l4 3-4 3" stroke="var(--atlas-fg)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -1696,7 +1708,7 @@ function InlineDiffCard({
           <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.7 }}>
             {changedCount} line{changedCount === 1 ? "" : "s"} changed
           </span>
-        </div>
+        </button>
 
         <div style={{ background: "var(--atlas-bg)", fontFamily: "var(--app-font-mono)", fontSize: 10.5, lineHeight: 1.55 }}>
           {visibleLines.map((line, idx) => {
@@ -2213,6 +2225,8 @@ function AssistantBubble({
           <button
             className={`atlas-icon-action${copied ? " copy-done" : ""}`}
             title={copied ? "Copied!" : "Copy response"}
+            aria-label="Copy message"
+            style={ICON_TOUCH_TARGET_STYLE}
             onClick={() => { navigator.clipboard.writeText(message.content).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1800); }}
           >
             {copied
@@ -2221,7 +2235,7 @@ function AssistantBubble({
             }
           </button>
           {/* Regenerate / Retry */}
-          <button className="atlas-icon-action" title="Retry (regenerate)" onClick={onRegenerate}>
+          <button className="atlas-icon-action" title="Retry (regenerate)" aria-label="Retry" onClick={onRegenerate} style={ICON_TOUCH_TARGET_STYLE}>
             <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M1.5 7a5.5 5.5 0 005.5 5.5 5.5 5.5 0 005.5-5.5 5.5 5.5 0 00-5.5-5.5 5.5 5.5 0 00-3.9 1.6" />
               <polyline points="1.5 1.5 1.5 4 4 4" />
@@ -2231,6 +2245,8 @@ function AssistantBubble({
           <button
             className={`atlas-icon-action${parkDone ? " done" : ""}`}
             title={parkDone ? "Parked" : "Park to inbox"}
+            aria-label="Save to parking lot"
+            style={ICON_TOUCH_TARGET_STYLE}
             onClick={() => { if (!parkDone) { onPark(message.content); setParkDone(true); } }}
           >
             {parkDone
@@ -2242,6 +2258,8 @@ function AssistantBubble({
           <button
             className={`atlas-icon-action${commitDone ? " done" : ""}`}
             title={commitDone ? "Committed to ledger" : "Commit to ledger"}
+            aria-label="Save to ledger"
+            style={ICON_TOUCH_TARGET_STYLE}
             onClick={() => { if (!commitDone) { onCommit(message.content); setCommitDone(true); } }}
           >
             {commitDone
@@ -2254,8 +2272,9 @@ function AssistantBubble({
             <button
               className="atlas-icon-action"
               title="Preview in Sandbox"
+              aria-label="Toggle preview"
               onClick={() => onPreviewCode(previewableCode)}
-              style={{ color: "var(--atlas-gold)", opacity: hov ? 0.85 : 0.32 }}
+              style={{ ...ICON_TOUCH_TARGET_STYLE, color: "var(--atlas-gold)", opacity: hov ? 0.85 : 0.32 }}
             >
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="1" y="2" width="12" height="9" rx="1.5" />
@@ -2268,8 +2287,9 @@ function AssistantBubble({
             <button
               className="atlas-icon-action"
               title="Extract to Forge"
+              aria-label="Open Forge"
               onClick={() => onExtractToForge(message.content)}
-              style={{ opacity: hov ? 0.85 : 0.32 }}
+              style={{ ...ICON_TOUCH_TARGET_STYLE, opacity: hov ? 0.85 : 0.32 }}
             >
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M7 1v8M4 6l3 3 3-3" />
@@ -4592,6 +4612,7 @@ ${t}
                   <button
                     onClick={() => { setIframeError(false); setIframeLoading(true); setReloadKey((k) => k + 1); }}
                     title="Reload"
+                    aria-label="Reload preview"
                     style={{ padding: "5px 7px", borderRadius: 5, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", fontSize: 11, cursor: "pointer", flexShrink: 0, lineHeight: 1, opacity: 0.55, transition: "opacity 160ms ease" }}
                     onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
                     onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.55")}
@@ -4601,7 +4622,7 @@ ${t}
                     onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
                     onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.55")}
                   >↗</a>
-                  <button onClick={handleClear} title="Clear"
+                  <button onClick={handleClear} title="Clear" aria-label="Clear preview"
                     style={{ padding: "5px 7px", borderRadius: 5, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", fontSize: 13, cursor: "pointer", flexShrink: 0, lineHeight: 1, opacity: 0.4, transition: "opacity 160ms ease" }}
                     onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
                     onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.4")}
@@ -4806,6 +4827,7 @@ ${t}
                 <button
                   onClick={() => { setReloadKey(k => k + 1); }}
                   title="Reload preview"
+                  aria-label="Reload preview"
                   style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px 6px", color: "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", borderRadius: 4, opacity: 0.55, transition: "opacity 140ms" }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
                   onMouseLeave={e => (e.currentTarget.style.opacity = "0.55")}
@@ -5556,6 +5578,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
               <button
                 onClick={onOpenForge}
+                aria-label="Open Forge"
                 style={{
                   pointerEvents: "auto", display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 6,
                   padding: "14px 20px", borderRadius: 12, cursor: "pointer",
@@ -5787,7 +5810,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                           <span style={{ fontSize: 7, color: "rgba(var(--atlas-gold-rgb),0.55)", maxWidth: 40, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--app-font-mono)" }}>{file.name.split(".").pop()?.toUpperCase() ?? "FILE"}</span>
                         </div>
                       )}
-                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} style={{ position: "absolute", top: -4, right: -4, width: 14, height: 14, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(var(--atlas-gold-rgb),0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}>×</button>
+                      <button onClick={() => setFlowAttachedFiles(prev => prev.filter((_, i) => i !== idx))} aria-label="Remove attachment" style={{ position: "absolute", top: -4, right: -4, minWidth: 44, minHeight: 44, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(var(--atlas-gold-rgb),0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 9, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 14, zIndex: 1 }}>×</button>
                     </div>
                   ))}
                 </div>
@@ -5803,8 +5826,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                 <button
                   onClick={() => flowFileInputRef.current?.click()}
                   title="Attach file"
+                  aria-label="Attach file"
                   style={{
-                    width: 28, height: 28, flexShrink: 0, borderRadius: 7,
+                    minWidth: 44, minHeight: 44, padding: 8, flexShrink: 0, borderRadius: 7,
                     background: "transparent", border: "none",
                     color: flowAttachedFiles.length > 0 ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.4)",
                     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
@@ -5835,8 +5859,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                 <button
                   onClick={() => sendFlowMessage(flowInput)}
                   disabled={!flowInput.trim() || flowLoading}
+                  aria-label="Send message"
                   style={{
-                    width: 32, height: 32, flexShrink: 0, borderRadius: 8,
+                    minWidth: 44, minHeight: 44, padding: 6, flexShrink: 0, borderRadius: 8,
                     background: flowInput.trim() && !flowLoading ? "rgba(var(--atlas-gold-rgb),0.18)" : "transparent",
                     border: `1px solid ${flowInput.trim() && !flowLoading ? "rgba(var(--atlas-gold-rgb),0.45)" : "rgba(var(--atlas-muted-rgb),0.2)"}`,
                     cursor: flowInput.trim() && !flowLoading ? "pointer" : "not-allowed",
@@ -5920,8 +5945,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
                   <button
                     onClick={deleteActiveSignal}
                     title="Delete this signal"
+                    aria-label="Delete signal"
                     style={{
-                      width: 20, height: 20, borderRadius: 4, flexShrink: 0,
+                      minWidth: 44, minHeight: 44, padding: 12, borderRadius: 4, flexShrink: 0,
                       background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)",
                       color: "rgba(239,68,68,0.6)", cursor: "pointer",
                       display: "flex", alignItems: "center", justifyContent: "center",
@@ -6346,6 +6372,7 @@ function RightPanel({
           <button
             onClick={onToggleFullscreen}
             title={fullscreen ? "Restore" : "Full screen"}
+              aria-label={fullscreen ? "Collapse" : "Expand"}
             style={{
               marginLeft: onClose ? 0 : "auto", marginRight: 2,
               width: 28, height: 28, borderRadius: 6,
@@ -6373,6 +6400,7 @@ function RightPanel({
         {onClose && (
           <button
             onClick={onClose}
+            aria-label="Dismiss"
             style={{
               marginLeft: onToggleFullscreen ? 0 : "auto", marginRight: 6,
               width: 28, height: 28, borderRadius: 6,
@@ -7058,6 +7086,7 @@ function MobileTabBar({
           <button
             key={id}
             onClick={() => { if (id === "map") { navTo("/map"); } else { onTabChange(id); } }}
+            aria-label={id === "chat" ? "Open chat" : id === "ledger" ? "Open ledger" : id === "files" ? "Open files" : id === "preview" ? "Toggle preview" : "Open map"}
             style={{
               flex: 1,
               display: "flex",
@@ -8608,6 +8637,7 @@ export default function Workspace() {
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button
               onClick={() => setLocation("/home")}
+              aria-label="Go home"
               style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4, display: "flex", borderRadius: 7, flexShrink: 0 }}
             >
               <AtlasLogo small />
@@ -8624,6 +8654,7 @@ export default function Workspace() {
                 }
               }}
               title={trustMode === "auto" ? "Autopilot ON — Atlas applies changes continuously. Tap to turn off." : "Autopilot OFF — you review every diff. Tap to turn on."}
+              aria-label="Toggle trust mode"
               style={{
                 display: "flex", alignItems: "center", gap: isMobile ? 0 : 5,
                 padding: isMobile ? "5px 7px" : "4px 10px",
@@ -8711,7 +8742,8 @@ export default function Workspace() {
                 Lives next to the project name so it's visible from any tab,
                 not just the Map tab. */}
             {!!project?.lastHandoverHash && !!currentSnapshot && currentSnapshot.hash !== project.lastHandoverHash && (
-              <span
+              <button
+                type="button"
                 title="Architecture flow has changed since last Atlas handover"
                 onClick={focusSystemMap}
                 style={{
@@ -8731,7 +8763,7 @@ export default function Workspace() {
                 }}
               >
                 Updated since handover
-              </span>
+              </button>
             )}
 
             {/* Dropdown menu — portaled to escape any parent stacking context */}
@@ -8899,9 +8931,10 @@ export default function Workspace() {
             {!isTinyScreen && (
               <button
                 title="Visual Vault"
+                aria-label="Open visual vault"
                 onClick={() => setShowVault(true)}
                 style={{
-                  width: 28, height: 28, borderRadius: 7,
+                  minWidth: 44, minHeight: 44, padding: 8, borderRadius: 7,
                   background: "transparent", border: "none",
                   color: "rgba(201,162,76,0.45)", cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -9003,9 +9036,10 @@ export default function Workspace() {
             {!isMobile && (
               <button
                 title="Open Preview"
+                aria-label="Toggle preview"
                 onClick={openPreviewPanel}
                 style={{
-                  width: 28, height: 28, borderRadius: 7,
+                  minWidth: 44, minHeight: 44, padding: 8, borderRadius: 7,
                   background: "transparent", border: "none",
                   color: "var(--atlas-muted)", cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -9157,6 +9191,7 @@ export default function Workspace() {
             onClick={dismissAxiomBanner}
             style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(201,162,76,0.5)", fontSize: 16, lineHeight: 1, padding: "2px 4px", flexShrink: 0 }}
             title="Dismiss"
+            aria-label="Dismiss"
           >
             ×
           </button>
@@ -9215,6 +9250,7 @@ export default function Workspace() {
                 onClick={() => setShowHomeHandoffBanner(false)}
                 style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-gold)", fontSize: 16, lineHeight: 1, padding: "2px 4px", flexShrink: 0, opacity: 0.55 }}
                 title="Dismiss"
+                aria-label="Dismiss"
               >
                 ×
               </button>
@@ -9349,6 +9385,7 @@ export default function Workspace() {
                 <button
                   key={tab}
                   onClick={() => setLeftTab(tab)}
+                  aria-label={tab === "terminal" ? "Open terminal" : tab === "diff" ? "View diff" : "Open chat"}
                   style={{
                     padding: "8px 14px", background: "transparent", border: "none",
                     borderBottom: `2px solid ${active ? "var(--atlas-gold)" : "transparent"}`,
@@ -9430,6 +9467,9 @@ export default function Workspace() {
           /* ── Chat view ── */
           <div
             ref={chatPanelScrollRef}
+            aria-live="polite"
+            aria-label="Atlas conversation"
+            aria-busy={chatPending ? "true" : "false"}
             onScroll={(e) => {
               const el = e.currentTarget;
               setShowWsScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
@@ -9772,7 +9812,7 @@ export default function Workspace() {
                     </svg>
                     <span style={{ fontSize: 12, fontWeight: 600, color: "var(--atlas-gold)", letterSpacing: "0.06em", textTransform: "uppercase", opacity: 0.9 }}>New workspace</span>
                   </div>
-                  <button onClick={() => setFirstRunDismissed(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", padding: "2px 4px", lineHeight: 1, fontSize: 16, opacity: 0.5 }}>×</button>
+                  <button onClick={() => setFirstRunDismissed(true)} aria-label="Dismiss" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--atlas-muted)", padding: "2px 4px", lineHeight: 1, fontSize: 16, opacity: 0.5 }}>×</button>
                 </div>
                 <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--atlas-fg)", lineHeight: 1.6, opacity: 0.8 }}>
                   What are you building?
@@ -9847,7 +9887,8 @@ export default function Workspace() {
                     )}
                     <button
                       onClick={() => setAttachedFiles(prev => prev.filter((_, i) => i !== idx))}
-                      style={{ position: "absolute", top: -5, right: -5, width: 16, height: 16, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0, zIndex: 1 }}
+                      aria-label="Remove attachment"
+                      style={{ position: "absolute", top: -5, right: -5, minWidth: 44, minHeight: 44, borderRadius: "50%", background: "var(--atlas-bg)", border: "1px solid rgba(201,162,76,0.3)", cursor: "pointer", color: "var(--atlas-fg)", fontSize: 10, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 14, zIndex: 1 }}
                     >×</button>
                   </div>
                 ))}
@@ -9880,6 +9921,7 @@ export default function Workspace() {
                 )}
                 <textarea
                   ref={textareaRef}
+                  aria-label="Message Atlas"
                   value={input}
                   onChange={(e) => { setInput(e.target.value); autoResize(); }}
                   onKeyDown={handleKeyDown}
@@ -9900,8 +9942,9 @@ export default function Workspace() {
                   <label
                     htmlFor="ws-file-input"
                     title="Attach image or project ZIP"
+                    aria-label="Attach file"
                     style={{
-                      width: 30, height: 30, borderRadius: 7,
+                      minWidth: 44, minHeight: 44, padding: 7, borderRadius: 7,
                       background: (attachedFiles.length > 0 || zipFiles.length > 0) ? "rgba(201,162,76,0.08)" : "transparent",
                       border: (attachedFiles.length > 0 || zipFiles.length > 0) ? "1px solid rgba(201,162,76,0.2)" : "1px solid transparent",
                       color: (attachedFiles.length > 0 || zipFiles.length > 0) ? "var(--atlas-gold)" : "var(--atlas-muted)",
@@ -9919,9 +9962,10 @@ export default function Workspace() {
                   {isTinyScreen && (
                     <button
                       title="Visual Vault"
+                      aria-label="Open visual vault"
                       onClick={() => setShowVault(true)}
                       style={{
-                        width: 30, height: 30, borderRadius: 7,
+                        minWidth: 44, minHeight: 44, padding: 7, borderRadius: 7,
                         background: "transparent", border: "1px solid transparent",
                         color: "var(--atlas-muted)", cursor: "pointer",
                         display: "flex", alignItems: "center", justifyContent: "center",
@@ -9943,8 +9987,9 @@ export default function Workspace() {
                   <button
                     onClick={() => setShowSrcPicker((v) => !v)}
                     title="Read Atlas source file into context"
+                    aria-label="Read Atlas source file into context"
                     style={{
-                      width: 30, height: 30, borderRadius: 7,
+                      minWidth: 44, minHeight: 44, padding: 7, borderRadius: 7,
                       background: showSrcPicker ? "rgba(56,189,248,0.1)" : "transparent",
                       border: showSrcPicker ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
                       color: showSrcPicker ? "rgba(56,189,248,0.9)" : "var(--atlas-muted)",
@@ -9972,8 +10017,9 @@ export default function Workspace() {
                     <button
                       onClick={() => setShowDeepDiveMenu(v => !v)}
                       title="Deep Dive — send this conversation to ChatGPT, Perplexity or Gemini"
+                      aria-label="Open deep dive menu"
                       style={{
-                        width: 30, height: 30, borderRadius: 7,
+                        minWidth: 44, minHeight: 44, padding: 7, borderRadius: 7,
                         background: showDeepDiveMenu ? "rgba(201,162,76,0.1)" : "transparent",
                         border: showDeepDiveMenu ? "1px solid rgba(201,162,76,0.25)" : "1px solid transparent",
                         color: showDeepDiveMenu ? "var(--atlas-gold)" : "var(--atlas-muted)",
@@ -10095,6 +10141,7 @@ export default function Workspace() {
                   <button
                     onClick={() => setShowWsModelSheet(true)}
                     title="Switch model"
+                    aria-label="Switch model"
                     style={{
                       display: "flex", alignItems: "center", gap: 4,
                       padding: "4px 8px", borderRadius: 20,
@@ -10120,9 +10167,10 @@ export default function Workspace() {
                     <button
                       onClick={toggleVoice}
                       title={voiceListening ? "Stop listening" : "Voice input"}
+                      aria-label="Voice input"
                       className={voiceListening ? "atlas-voice-active" : ""}
                       style={{
-                        width: 32, height: 32, borderRadius: 8,
+                        minWidth: 44, minHeight: 44, padding: 6, borderRadius: 8,
                         background: voiceListening ? "var(--atlas-ember)" : "var(--atlas-surface)",
                         border: `1px solid ${voiceListening ? "var(--atlas-ember)" : "var(--atlas-border)"}`,
                         color: voiceListening ? "var(--atlas-fg)" : "var(--atlas-muted)",
@@ -10141,8 +10189,9 @@ export default function Workspace() {
                     <button
                       onClick={handleStop}
                       title="Stop generating"
+                      aria-label="Stop generating"
                       style={{
-                        width: 38, height: 38, borderRadius: 10,
+                        minWidth: 44, minHeight: 44, padding: 3, borderRadius: 10,
                         background: "var(--atlas-surface)",
                         border: "1px solid rgba(146,64,14,0.55)",
                         cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
@@ -10158,8 +10207,9 @@ export default function Workspace() {
                       className="atlas-send-btn"
                       onClick={handleSend}
                       disabled={!hasInput || !sessionId}
+                      aria-label="Send message"
                       style={{
-                        width: 38, height: 38,
+                        minWidth: 44, minHeight: 44, padding: 3,
                         background: hasInput && sessionId ? "var(--atlas-ember)" : "var(--atlas-surface)",
                         border: hasInput ? "none" : "1px solid var(--atlas-border)",
                         boxShadow: hasInput ? "0 0 16px -3px rgba(146,64,14,0.5)" : "none",
@@ -10506,7 +10556,7 @@ export default function Workspace() {
             <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
               <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Model</span>
-              <button onClick={() => setShowWsModelSheet(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+              <button onClick={() => setShowWsModelSheet(false)} aria-label="Dismiss" style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
             </div>
             <div style={{ padding: "0 14px" }}>
               {([
@@ -10578,7 +10628,7 @@ export default function Workspace() {
             <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--atlas-border)", margin: "12px auto 4px" }} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px 10px" }}>
               <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>Lens</span>
-              <button onClick={() => setShowLensPicker(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
+              <button onClick={() => setShowLensPicker(false)} aria-label="Dismiss" style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(var(--atlas-muted-rgb),0.6)", fontSize: 20, lineHeight: 1, padding: 4 }}>×</button>
             </div>
             <div style={{ padding: "0 14px" }}>
               {(Object.entries(LENS_CONFIG) as [WorkspaceLens, typeof LENS_CONFIG[WorkspaceLens]][]).map(([lensId, cfg]) => (
