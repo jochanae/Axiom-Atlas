@@ -20,6 +20,8 @@ const PLATFORMS = [
   { id: "Claude", label: "Claude" },
 ];
 
+const FORGE_GAP_NODE_TYPES: Array<ArchNode["type"]> = ["goal", "blocker", "decision"];
+
 function detectPlatformId(): string {
   const host = typeof window !== "undefined" ? window.location.hostname : "";
   if (host.includes("lovable") || host.includes("lovableproject")) return "Lovable";
@@ -53,6 +55,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   const [isForging, setIsForging] = useState(false);
   const [stageIdx, setStageIdx] = useState(0);
   const [forgeError, setForgeError] = useState<string | null>(null);
+  const [forgeResult, setForgeResult] = useState<{ nodes: ArchNode[]; summary: string } | null>(null);
   const stageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -259,6 +262,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     if (!canForge) return;
     setIsForging(true);
     setForgeError(null);
+    setForgeResult(null);
     startStageAnimation();
     abortRef.current = new AbortController();
     try {
@@ -277,8 +281,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
       const data = await res.json() as { nodes: ArchNode[]; summary: string };
       haptics.cardConfirmed();
       sounds.cardConfirmed();
-      onNodesReady?.(data.nodes);
-      onClose();
+      setForgeResult(data);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") return;
       setForgeError("The Forge couldn't process this. Try a more specific description.");
@@ -294,10 +297,19 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     setIsForging(false);
   };
 
+  const handleForgeHandoff = () => {
+    if (!forgeResult?.nodes.length) return;
+    onNodesReady?.(forgeResult.nodes);
+    onClose();
+  };
+
   // ── Quick Prompt logic ─────────────────────────────────────────────────────
   const canGenerate = promptDesc.trim().length > 5 && !isGenerating;
 
   const isAxiom = selectedPlatform === "Axiom";
+  const missingForgeNodeTypes = forgeResult
+    ? FORGE_GAP_NODE_TYPES.filter(type => !forgeResult.nodes.some(node => node.type === type))
+    : [];
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
@@ -458,6 +470,62 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           </span>
         ) : "Run The Forge →"}
       </button>
+
+      {forgeResult && forgeResult.nodes.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, borderRadius: 12, border: "1px solid color-mix(in oklab, var(--atlas-gold) 18%, var(--atlas-border))", background: "color-mix(in oklab, var(--atlas-gold) 5%, var(--atlas-surface))", padding: "12px 14px" }}>
+          {forgeResult.summary && (
+            <p style={{ margin: 0, color: "var(--atlas-muted)", fontSize: 12, lineHeight: 1.5 }}>
+              {forgeResult.summary}
+            </p>
+          )}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: "var(--atlas-gold)", textTransform: "uppercase", fontFamily: "var(--app-font-mono)" }}>
+              Extracted nodes
+            </span>
+            {onNodesReady && (
+              <button
+                onClick={handleForgeHandoff}
+                style={{
+                  borderRadius: 7,
+                  border: "1px solid color-mix(in oklab, var(--atlas-gold) 35%, var(--atlas-border))",
+                  background: "color-mix(in oklab, var(--atlas-gold) 12%, var(--atlas-surface))",
+                  color: "var(--atlas-gold)",
+                  cursor: "pointer",
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  padding: "5px 9px",
+                  textTransform: "uppercase",
+                }}
+              >
+                Hand to Atlas →
+              </button>
+            )}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {forgeResult.nodes.map(node => (
+              <div key={node.id} style={{ display: "flex", alignItems: "center", gap: 8, borderRadius: 8, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", padding: "8px 10px" }}>
+                <span style={{ color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", flexShrink: 0 }}>
+                  {node.type}
+                </span>
+                <span style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {node.label}
+                </span>
+              </div>
+            ))}
+          </div>
+          {missingForgeNodeTypes.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, borderRadius: 8, border: "1px solid color-mix(in oklab, var(--warning) 28%, var(--atlas-border))", background: "color-mix(in oklab, var(--warning) 9%, var(--atlas-surface))", padding: "9px 10px" }}>
+              {missingForgeNodeTypes.map(type => (
+                <p key={type} style={{ margin: 0, color: "var(--warning)", fontSize: 11, lineHeight: 1.45, fontFamily: "var(--app-font-mono)" }}>
+                  No {type} detected — consider adding one before handing to Atlas.
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {forgeError && (
         <div style={{ borderRadius: 10, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)", padding: "12px 14px", fontSize: 12, color: "rgba(239,100,100,0.9)", lineHeight: 1.5 }}>

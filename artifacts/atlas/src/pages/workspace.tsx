@@ -5060,6 +5060,7 @@ function MapTab({ projectId }: { projectId: number }) {
 // ── Platform detection ────────────────────────────────────────────────────────
 function detectPlatform(): string {
   const host = typeof window !== "undefined" ? window.location.hostname : "";
+  if (host.includes("axiomsystem")) return "Axiom";
   if (host.includes("lovable")) return "LOVABLE";
   if (host.includes("replit") || host.includes("repl.co") || host.includes("replit.app")) return "REPLIT";
   if (host.includes("cursor")) return "CURSOR";
@@ -6924,6 +6925,7 @@ export default function Workspace() {
   const [showForgeExternal, setShowForgeExternal] = useState(false);
   const [forgePreloadContent, setForgePreloadContent] = useState<string | undefined>(undefined);
   const [externalForgeNodes, setExternalForgeNodes] = useState<ArchNode[]>([]);
+  const [forgePillDismissed, setForgePillDismissed] = useState(false);
   const [firstRunDismissed, setFirstRunDismissed] = useState(false);
   const [firstRunInput, setFirstRunInput] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -8901,13 +8903,12 @@ export default function Workspace() {
           />
 
           {/* Forge shortcut — visible on Chat tab only */}
-          {leftTab === "chat" && (
+          {leftTab === "chat" && !forgePillDismissed && (
             <div style={{ padding: "0 14px 8px", flexShrink: 0 }}>
-              <button
-                onClick={() => setShowForgeExternal(true)}
+              <div
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 7,
-                  padding: "6px 12px", borderRadius: 8, cursor: "pointer",
+                  borderRadius: 8, overflow: "hidden",
                   background: "rgba(var(--atlas-gold-rgb),0.07)",
                   border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
                   color: "rgba(var(--atlas-gold-rgb),0.85)",
@@ -8916,13 +8917,35 @@ export default function Workspace() {
                   transition: "all 160ms ease",
                 }}
               >
-                <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 2L3 8.5l2.5 2.5L12 4.5 9 2z" />
-                  <path d="M5.5 11L2 14.5" />
-                  <path d="M11 3.5L13 5.5" />
-                </svg>
-                Forge — Extract strategy from a doc or transcript
-              </button>
+                <button
+                  onClick={() => setShowForgeExternal(true)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "6px 10px 6px 12px", border: "none", cursor: "pointer",
+                    background: "rgba(var(--atlas-gold-rgb),0)", color: "inherit",
+                    font: "inherit", letterSpacing: "inherit", textTransform: "inherit" as const,
+                  }}
+                >
+                  <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 2L3 8.5l2.5 2.5L12 4.5 9 2z" />
+                    <path d="M5.5 11L2 14.5" />
+                    <path d="M11 3.5L13 5.5" />
+                  </svg>
+                  Forge — Extract strategy from a doc or transcript
+                </button>
+                <button
+                  aria-label="Dismiss Forge shortcut"
+                  onClick={() => setForgePillDismissed(true)}
+                  style={{
+                    alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: 24, border: "none", borderLeft: "1px solid rgba(var(--atlas-gold-rgb),0.18)",
+                    background: "rgba(var(--atlas-gold-rgb),0)", color: "rgba(var(--atlas-gold-rgb),0.65)",
+                    cursor: "pointer", fontSize: 13, lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             </div>
           )}
 
@@ -9567,6 +9590,7 @@ export default function Workspace() {
       {showForgeExternal && (
         <TheForge
           projectId={id}
+          activeProjectName={project?.name}
           preloadContent={forgePreloadContent}
           onClose={() => { setShowForgeExternal(false); setForgePreloadContent(undefined); }}
           onNodesReady={(nodes) => {
