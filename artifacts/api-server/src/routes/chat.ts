@@ -664,15 +664,17 @@ function extractConfidenceAssessment(content: string): ConfidenceAssessment | nu
 
   try {
     const parsed = JSON.parse(match[1]) as Partial<ConfidenceAssessment>;
-    const validConfidence = parsed.confidence === "high" || parsed.confidence === "medium" || parsed.confidence === "low";
-    const validBlastRadius = parsed.blast_radius === "isolated" || parsed.blast_radius === "moderate" || parsed.blast_radius === "wide";
+    const confidence = parsed.confidence;
+    const blastRadius = parsed.blast_radius;
+    const validConfidence = confidence === "high" || confidence === "medium" || confidence === "low";
+    const validBlastRadius = blastRadius === "isolated" || blastRadius === "moderate" || blastRadius === "wide";
     if (!validConfidence || !validBlastRadius || !Array.isArray(parsed.files_affected) || typeof parsed.reasoning !== "string") {
       return null;
     }
     return {
-      confidence: parsed.confidence,
+      confidence,
       files_affected: parsed.files_affected.filter((file): file is string => typeof file === "string"),
-      blast_radius: parsed.blast_radius,
+      blast_radius: blastRadius,
       reasoning: parsed.reasoning,
     };
   } catch {
