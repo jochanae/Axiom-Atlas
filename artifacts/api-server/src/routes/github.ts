@@ -6,11 +6,31 @@ import { spawn } from "child_process";
 import { writeFile, mkdir, rm } from "fs/promises";
 import { randomBytes } from "crypto";
 import * as nodePath from "path";
+import { decryptToken } from "../lib/tokenCrypto";
 
 const router: IRouter = Router();
 
 const GH_API = "https://api.github.com";
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const COMMIT_CACHE_TTL_MS = 60_000;
+
+type CommitFileSummary = {
+  filename: string;
+  additions: number;
+  deletions: number;
+  status: string;
+};
+
+type CommitSummary = {
+  sha: string;
+  message: string;
+  author: string;
+  timestamp: string;
+  url: string;
+  files: CommitFileSummary[];
+};
+
+const commitsCache = new Map<string, { expiresAt: number; payload: { commits: CommitSummary[] } }>();
 
 function ghHeaders(token: string) {
   return {
@@ -26,6 +46,17 @@ function getToken(req: { headers: Record<string, string | string[] | undefined> 
   const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
   if (h && h !== "__server__") return h;
   return process.env.GITHUB_TOKEN ?? null;
+}
+
+function parseLinkedRepoFullName(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { fullName?: unknown; full_name?: unknown };
+    const fullName = typeof parsed.fullName === "string" ? parsed.fullName : typeof parsed.full_name === "string" ? parsed.full_name : null;
+    return fullName && fullName.includes("/") ? fullName : null;
+  } catch {
+    return raw.includes("/") ? raw : null;
+  }
 }
 
 class GitHubApiError extends Error {
@@ -179,6 +210,73 @@ router.get("/github/file", async (req, res): Promise<void> => {
     res.json({ path: data.path, content: truncated ? content.split("\n").slice(0, 800).join("\n") : content, size: data.size, sha: data.sha, truncated, lines });
   } else {
     res.status(422).json({ error: "File encoding not supported", encoding: data.encoding });
+  }
+});
+
+// GET /api/projects/:projectId/commits — recent commit history for the linked repo
+router.get("/projects/:projectId/commits", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const projectId = Number(req.params.projectId);
+  if (!Number.isFinite(projectId)) { res.status(400).json({ error: "Invalid project id" }); return; }
+
+  const [project] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+    .limit(1);
+
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const repo = parseLinkedRepoFullName(project.linkedRepo ?? null);
+  const storedToken = project.githubToken ? decryptToken(project.githubToken) : null;
+  const token = storedToken && storedToken !== "__server__" ? storedToken : process.env.GITHUB_TOKEN ?? null;
+  if (!repo || !token) { res.json({ commits: [], reason: "no_repo" }); return; }
+
+  const cacheKey = `${project.id}:${repo}`;
+  const cached = commitsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.json(cached.payload);
+    return;
+  }
+
+  try {
+    const listResp = await fetch(`${GH_API}/repos/${repo}/commits?per_page=20`, { headers: ghHeaders(token) });
+    if (!listResp.ok) {
+      res.status(listResp.status).json({ error: "GitHub API error", detail: await listResp.text() });
+      return;
+    }
+
+    const list = await listResp.json() as any[];
+    const commits = await Promise.all(list.map(async (item): Promise<CommitSummary> => {
+      const sha = String(item.sha ?? "");
+      const detailResp = await fetch(`${GH_API}/repos/${repo}/commits/${sha}`, { headers: ghHeaders(token) });
+      const detail = detailResp.ok ? await detailResp.json() as any : item;
+      const files = Array.isArray(detail.files)
+        ? detail.files.map((file: any): CommitFileSummary => ({
+            filename: String(file.filename ?? ""),
+            additions: Number(file.additions ?? 0),
+            deletions: Number(file.deletions ?? 0),
+            status: String(file.status ?? ""),
+          }))
+        : [];
+
+      return {
+        sha,
+        message: String(detail.commit?.message ?? item.commit?.message ?? ""),
+        author: String(detail.commit?.author?.name ?? item.commit?.author?.name ?? detail.author?.login ?? item.author?.login ?? "Unknown"),
+        timestamp: String(detail.commit?.author?.date ?? item.commit?.author?.date ?? new Date().toISOString()),
+        url: String(detail.html_url ?? item.html_url ?? `https://github.com/${repo}/commit/${sha}`),
+        files,
+      };
+    }));
+
+    const payload = { commits };
+    commitsCache.set(cacheKey, { expiresAt: Date.now() + COMMIT_CACHE_TTL_MS, payload });
+    res.json(payload);
+  } catch (e) {
+    res.status(500).json({ error: "GitHub API error", detail: String(e) });
   }
 });
 
