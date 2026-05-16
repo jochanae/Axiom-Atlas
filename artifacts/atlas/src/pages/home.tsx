@@ -24,6 +24,9 @@ import { useSubscription } from "../hooks/useSubscription";
 import { toast } from "sonner";
 import { UpgradeModal } from "../components/UpgradeModal";
 import { CompactReadinessRing, computeScoreFromNodeState } from "../components/ReadinessRing";
+import { PlanCard } from "../components/PlanCard";
+import { detectPlanFromText } from "../lib/plan";
+import type { Plan } from "../lib/plan";
 
 const PLACEHOLDERS = [
   "What are we actually trying to solve here…",
@@ -57,6 +60,7 @@ type HomeMessage = {
   id?: string;
   streaming?: boolean;
   handoffSignal?: HomeHandoffSignal;
+  plan?: Plan;
 };
 
 function renderMarkdown(text: string): string {
@@ -1040,6 +1044,7 @@ export default function Home() {
     try { return sessionStorage.getItem(`atlas-home-handoff-dismissed-${activeConversationId}`) === "1"; } catch { return false; }
   });
   const [handoffProjectName, setHandoffProjectName] = useState("");
+  const [reviewingPlanIds, setReviewingPlanIds] = useState<Set<string>>(() => new Set());
 
 
   // Cycle pending phrases while Atlas is generating
@@ -1320,8 +1325,9 @@ export default function Home() {
               ));
             } else if (evtName === "done") {
               const meta = JSON.parse(evtData) as { memoryUpdated: boolean; detectedMode: string; handoffSignal?: HomeHandoffSignal };
+              const plan = detectPlanFromText(streamedText);
               setHomeMessages(prev => prev.map(m =>
-                (m as any).id === streamingId ? { ...m, streaming: false, handoffSignal: meta.handoffSignal } : m
+                (m as any).id === streamingId ? { ...m, streaming: false, handoffSignal: meta.handoffSignal, ...(plan ? { plan } : {}) } : m
               ));
               if (meta.handoffSignal?.projectName) setHandoffProjectName(meta.handoffSignal.projectName);
               if (meta.detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) setShowHandoff(true);
@@ -1348,7 +1354,7 @@ export default function Home() {
   }, [input, attachedFiles, isSending, homeModel, homeFocus, projects, activeConversationId, homeMessages.length]);
 
 
-  const handleHandoff = useCallback(async (signal?: HomeHandoffSignal, projectNameOverride?: string) => {
+  const handleHandoff = useCallback(async (signal?: HomeHandoffSignal, projectNameOverride?: string, plan?: Plan) => {
     if (!homeMessages.length) return;
     setHandoffLoading(true);
     setHandoffStage("Setting up your workspace...");
@@ -1459,6 +1465,9 @@ export default function Home() {
           parkedTitles: ideaTexts.map(idea => idea.slice(0, 80)),
         }));
         sessionStorage.setItem("atlas-open-tab", "map");
+        if (plan) {
+          sessionStorage.setItem(`atlas-home-plan-${projectId}`, JSON.stringify(plan));
+        }
       } catch {}
 
       queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
@@ -1475,6 +1484,7 @@ export default function Home() {
   const handleClearThread = useCallback(async () => {
     await fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(activeConversationId)}`, { method: "DELETE", credentials: "include" }).catch(() => {});
     setHomeMessages([]);
+    setReviewingPlanIds(new Set());
     setShowClearConfirm(false);
     toast("Conversation cleared");
   }, []);
@@ -1485,6 +1495,7 @@ export default function Home() {
     try { sessionStorage.setItem("atlas-home-conversation-id", newId); } catch {}
     setActiveConversationId(newId);
     setHomeMessages([]);
+    setReviewingPlanIds(new Set());
     setShowHistory(false);
   }, []);
 
@@ -1505,8 +1516,18 @@ export default function Home() {
       const res = await fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(id)}`, { credentials: "include" });
       const msgs = await res.json() as Array<{ role: string; content: string }>;
       if (Array.isArray(msgs) && msgs.length > 0) {
-        setHomeMessages(msgs.map(m => ({ role: m.role as "user" | "assistant", content: m.content })));
+        setHomeMessages(msgs.map((m, index) => {
+          const role = m.role as "user" | "assistant";
+          const plan = role === "assistant" ? detectPlanFromText(m.content) : null;
+          return {
+            role,
+            content: m.content,
+            id: `${id}-history-${index}`,
+            ...(plan ? { plan } : {}),
+          };
+        }));
         setActiveConversationId(id);
+        setReviewingPlanIds(new Set());
         try { localStorage.setItem("atlas-home-conversation-id", id); } catch {}
         try { sessionStorage.setItem("atlas-home-conversation-id", id); } catch {}
       }
@@ -1853,6 +1874,35 @@ export default function Home() {
                           }}>
                             <HomeChunkedBubbles text={msg.content} isNew={!!msg.isNew} />
                           </div>
+                          {msg.plan && !msg.streaming && (() => {
+                            const planKey = msg.id ?? `home-plan-${i}`;
+                            const isExpanded = reviewingPlanIds.has(planKey);
+                            return (
+                              <PlanCard
+                                plan={msg.plan}
+                                messageId={i}
+                                projectId={homeFocus ?? 0}
+                                displayMode="home"
+                                isExecuting={false}
+                                isExpanded={isExpanded}
+                                onReview={() => {
+                                  setReviewingPlanIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(planKey)) next.delete(planKey);
+                                    else next.add(planKey);
+                                    return next;
+                                  });
+                                }}
+                                onSkip={() => {}}
+                                onApprove={() => {}}
+                                onTakeToWorkspace={() => void handleHandoff(
+                                  msg.handoffSignal,
+                                  handoffProjectName || msg.handoffSignal?.projectName || msg.plan?.title || "New Project",
+                                  msg.plan
+                                )}
+                              />
+                            );
+                          })()}
                           {msg.handoffSignal && i === firstHandoffMessageIndex && !handoffCardDismissed && !msg.streaming && (
                             <HomeHandoffCard
                               signal={msg.handoffSignal}
