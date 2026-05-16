@@ -23,6 +23,7 @@ import nexusRouter from "./nexus";
 import terminalRouter from "./terminal";
 import galleryRouter from "./gallery";
 import storageRouter from "./storage";
+import errorlogRouter from "./errorlog";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ router.use(stripeRouter);
 router.use(authRouter);
 router.use(googleAuthRouter);
 router.use(healthRouter);
+router.use(errorlogRouter);
 
 // Invite redemption is public so users can sign up via invite link
 router.use(invitesRouter);

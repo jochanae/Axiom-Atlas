@@ -14,3 +14,4 @@ export * from "./nexus_messages";
 export * from "./secrets";
 export * from "./gallery";
 export * from "./atlas_incidents";
+export * from "./atlas_error_logs";
