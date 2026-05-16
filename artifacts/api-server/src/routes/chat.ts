@@ -197,6 +197,52 @@ async function fetchRepoTree(fullName: string, token: string, branch = "main"): 
   }
 }
 
+function formatHoursAgo(timestamp: string, now: Date): string {
+  const elapsedMs = now.getTime() - new Date(timestamp).getTime();
+  const hours = Math.max(0, Math.floor(elapsedMs / (60 * 60 * 1000)));
+  return `${hours} hours ago`;
+}
+
+async function fetchRecentRepoActivity(fullName: string, token: string, branch = "main", now = new Date()): Promise<string | null> {
+  try {
+    const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const url = new URL(`${GH_API}/repos/${fullName}/commits`);
+    url.searchParams.set("per_page", "5");
+    url.searchParams.set("since", since.toISOString());
+    if (branch) url.searchParams.set("sha", branch);
+
+    const resp = await fetch(url, { headers: ghHeaders(token) });
+    if (!resp.ok) return null;
+
+    const data = await resp.json() as Array<{
+      sha?: string;
+      commit?: {
+        message?: string;
+        author?: { name?: string; date?: string | null } | null;
+        committer?: { name?: string; date?: string | null } | null;
+      };
+    }>;
+
+    const lines = data
+      .map((commit) => {
+        const timestamp = commit.commit?.author?.date ?? commit.commit?.committer?.date;
+        if (!commit.sha || !timestamp) return null;
+        const committedAt = new Date(timestamp);
+        if (Number.isNaN(committedAt.getTime()) || committedAt < since) return null;
+        const message = (commit.commit?.message ?? "").split("\n")[0]?.trim();
+        if (!message) return null;
+        const author = commit.commit?.author?.name ?? commit.commit?.committer?.name ?? "Unknown";
+        return `[${commit.sha.slice(0, 7)}] ${message} — ${author}, ${formatHoursAgo(timestamp, now)}`;
+      })
+      .filter((line): line is string => line !== null);
+
+    if (lines.length === 0) return null;
+    return `--- RECENT REPO ACTIVITY (since last session) ---\n${lines.join("\n")}\n--- END RECENT REPO ACTIVITY ---`;
+  } catch {
+    return null;
+  }
+}
+
 // ── Intent Type Parser ────────────────────────────────────────────────────────
 const INTENT_TYPE_RE = /^INTENT_TYPE:\s*(BUILD|PLAN|THINK|EXPLORE|DECIDE|DEBUG|AUDIT)\s*$/im;
 
@@ -932,6 +978,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Auto-fetch repo file tree (Phase 1 — always injected when a repo is linked)
   let repoTreeContext: string | null = null;
+  let recentRepoActivityContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
   const resolvedGithubToken = (() => {
     const t = project?.githubToken;
@@ -947,6 +994,7 @@ router.post("/chat", async (req, res): Promise<void> => {
       repoData = JSON.parse(project.linkedRepo) as { fullName?: string; defaultBranch?: string };
       if (repoData.fullName) {
         repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
+        recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main", now);
       }
     } catch {
       // Non-fatal: continue without tree context
@@ -1061,6 +1109,16 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
   }
+  if (recentRepoActivityContext) {
+    systemPrompt += `\n\n${recentRepoActivityContext}`;
+  }
+  systemPrompt += `\n\n--- SESSION CONTINUITY ---
+If this appears to be the first message in a new conversation (no prior assistant messages in this session), lead your response with a brief session recap before answering. Format:
+
+"Still here. [One sentence on most recent commit or change]. [One sentence on any open errors or blockers]. [One sentence on what's next based on memory]. Then answer their question."
+
+Keep the recap to 3 sentences max. Never repeat this recap after the first message.
+--- END SESSION CONTINUITY ---`;
   if (recentErrorContext) {
     systemPrompt += `\n\n--- RECENT PRODUCTION ERRORS ---\n${recentErrorContext}\n--- END RECENT PRODUCTION ERRORS ---`;
   }
