@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS "atlas_incidents" (
 	"commit_message" text NOT NULL,
 	"branch_name" text NOT NULL,
 	"pr_url" text NOT NULL,
+	"validation_passed" boolean DEFAULT false NOT NULL,
 	"outcome" text,
 	"notes" text
 );

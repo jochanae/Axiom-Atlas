@@ -93,6 +93,26 @@ async function openPullRequest(token: string, repo: string, head: string, base: 
   return { prUrl: pr.html_url, prNumber: pr.number, title: pr.title };
 }
 
+async function runWorkspaceTypecheck(): Promise<{ ok: true } | { ok: false; message: string }> {
+  const workspaceRoot = process.env.WORKSPACE_ROOT ?? "/home/runner/workspace";
+  const tscPath = nodePath.join(workspaceRoot, "node_modules/.bin/tsc");
+
+  return await new Promise((resolve) => {
+    const proc = spawn(tscPath, ["--noEmit"], { cwd: workspaceRoot, env: process.env });
+    let output = "";
+    proc.stdout.on("data", (d: Buffer) => { output += d.toString(); });
+    proc.stderr.on("data", (d: Buffer) => { output += d.toString(); });
+    proc.on("error", (e) => resolve({ ok: false, message: e.message }));
+    proc.on("close", (code) => {
+      if (code === 0) {
+        resolve({ ok: true });
+        return;
+      }
+      resolve({ ok: false, message: output.trim() || `tsc --noEmit failed with exit code ${code ?? "unknown"}` });
+    });
+  });
+}
+
 // GET /api/github/server-token — tells the client whether a server-side token is configured
 router.get("/github/server-token", (_req, res): void => {
   res.json({ available: !!process.env.GITHUB_TOKEN });
@@ -212,6 +232,12 @@ router.put("/github/commit", async (req, res): Promise<void> => {
     }
 
     const pullBranch = `atlas/fix-${Date.now()}`;
+    const validation = await runWorkspaceTypecheck();
+    if (!validation.ok) {
+      res.status(400).json({ error: "TypeScript validation failed", message: validation.message });
+      return;
+    }
+
     const baseSha = await getBranchSha(token, repo, "main");
     await createBranch(token, repo, pullBranch, baseSha);
     const commit = await commitFile(token, repo, pullBranch, filePath, content, message);
@@ -228,6 +254,7 @@ router.put("/github/commit", async (req, res): Promise<void> => {
       commitMessage: message,
       branchName: pullBranch,
       prUrl: pr.prUrl,
+      validationPassed: true,
       outcome: null,
       notes: null,
     });

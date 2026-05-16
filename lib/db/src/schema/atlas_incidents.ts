@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -10,6 +10,7 @@ export const atlasIncidentsTable = pgTable("atlas_incidents", {
   commitMessage: text("commit_message").notNull(),
   branchName: text("branch_name").notNull(),
   prUrl: text("pr_url").notNull(),
+  validationPassed: boolean("validation_passed").notNull().default(false),
   outcome: text("outcome"),
   notes: text("notes"),
 });
