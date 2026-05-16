@@ -10,6 +10,7 @@ import type { ArchNode, NodeStateMap, HandoverSnapshot } from "../components/Axi
 import { SystemMap } from "../components/SystemMap";
 import type { ArchNode as SystemMapNode } from "../components/SystemMap";
 import { TheForge } from "../components/TheForge";
+import { GlossaryTip } from "../components/GlossaryTip";
 import { VisualVault } from "../components/VisualVault";
 import { CockpitBar } from "../components/CockpitBar";
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
@@ -7212,6 +7213,7 @@ export default function Workspace() {
   const hasForgeNodes = forgeContext !== null ||
     Object.keys((project?.nodeState ?? {}) as Record<string, unknown>)
       .some(k => !["auth", "db", "api", "state", "ui", "logic"].includes(k));
+  const isBrandNewProject = messages.length === 0 && !hasForgeNodes;
 
   const { data: sessions, isLoading: sessionsLoading } = useListSessions(id, {
     query: { enabled: !!id, queryKey: getListSessionsQueryKey(id) },
@@ -8877,7 +8879,12 @@ export default function Workspace() {
           >
             {messages.length === 0 && !chatPending && (
               <div style={{ padding: "52px 20px 32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <>
+                {isBrandNewProject ? (
+                    <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 28, letterSpacing: "-0.01em", textAlign: "center" }}>
+                      New project. Before we build — do you have a <GlossaryTip term="north star">The one outcome that makes everything else worth building.</GlossaryTip> for this? Or should we start from what's in your head?
+                    </div>
+                ) : (
+                  <>
                     <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 6, letterSpacing: "-0.01em", textAlign: "center" }}>
                       {project ? project.name : "Ready."}
                     </div>
@@ -8885,6 +8892,7 @@ export default function Workspace() {
                       What are we working through today?
                     </div>
                   </>
+                )}
                 {/* Starter prompts */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 420 }}>
                   {[
