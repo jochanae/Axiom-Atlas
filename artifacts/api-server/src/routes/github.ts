@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, projectsTable } from "@workspace/db";
+import { atlasIncidentsTable, db, projectsTable } from "@workspace/db";
 import { eq, and, isNull, isNotNull } from "drizzle-orm";
 import { spawn } from "child_process";
 import { writeFile, mkdir, rm } from "fs/promises";
@@ -197,8 +197,8 @@ router.put("/github/commit", async (req, res): Promise<void> => {
   const token = getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
-  const { repo, branch = "main", path: filePath, content, message, forceDirect = false } = req.body as {
-    repo: string; branch?: string; path?: string; content?: string; message: string; forceDirect?: boolean;
+  const { repo, branch = "main", path: filePath, content, message, forceDirect = false, projectId, project_id } = req.body as {
+    repo: string; branch?: string; path?: string; content?: string; message: string; forceDirect?: boolean; projectId?: string; project_id?: string;
   };
   if (!repo || !filePath || content === undefined || !message) {
     res.status(400).json({ error: "Missing required fields: repo, path, content, message" }); return;
@@ -222,6 +222,15 @@ router.put("/github/commit", async (req, res): Promise<void> => {
       `- \`${filePath}\``,
     ].join("\n");
     const pr = await openPullRequest(token, repo, pullBranch, "main", message, prBody);
+    await db.insert(atlasIncidentsTable).values({
+      projectId: String(projectId ?? project_id ?? repo),
+      filesChanged: [filePath],
+      commitMessage: message,
+      branchName: pullBranch,
+      prUrl: pr.prUrl,
+      outcome: null,
+      notes: null,
+    });
 
     res.json({ ...commit, ...pr, path: filePath, branch: pullBranch, base: "main", direct: false });
   } catch (e: unknown) {
