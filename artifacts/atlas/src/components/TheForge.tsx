@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { haptics } from "@/lib/haptics";
 import { sounds } from "@/lib/sounds";
 import type { ArchNode } from "./AxiomFlow";
+import { GlossaryTip } from "./GlossaryTip";
 
 const FORGE_STAGES = [
   "Reading intent...",
@@ -21,6 +22,34 @@ const PLATFORMS = [
 ];
 
 const FORGE_GAP_NODE_TYPES: Array<ArchNode["type"]> = ["goal", "blocker", "decision"];
+
+const BLOCKER_EXPLANATION = "Something actively preventing progress right now — not hypothetical, real.";
+const DECISION_EXPLANATION = "A choice that's already been made and now constrains everything else.";
+const SPRINT_EXPLANATION = "A bounded chunk of work with a defined end point.";
+
+function ForgeStageLabel({ stage }: { stage: string }) {
+  if (stage === "Identifying blockers...") {
+    return (
+      <>
+        Identifying <GlossaryTip term="blockers">{BLOCKER_EXPLANATION}</GlossaryTip>...
+      </>
+    );
+  }
+  return stage;
+}
+
+function ForgeNodeTypeLabel({ type }: { type: ArchNode["type"] }) {
+  if (type === "blocker") {
+    return <GlossaryTip term="blocker">{BLOCKER_EXPLANATION}</GlossaryTip>;
+  }
+  if (type === "decision") {
+    return <GlossaryTip term="decision">{DECISION_EXPLANATION}</GlossaryTip>;
+  }
+  if (type === "sprint") {
+    return <GlossaryTip term="sprint">{SPRINT_EXPLANATION}</GlossaryTip>;
+  }
+  return type;
+}
 
 function detectPlatformId(): string {
   const host = typeof window !== "undefined" ? window.location.hostname : "";
@@ -418,7 +447,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 12px", display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ borderRadius: 10, background: "rgba(212,175,55,0.05)", border: "1px solid rgba(212,175,55,0.12)", padding: "12px 14px" }}>
         <p style={{ fontSize: 12, color: "rgba(212,175,55,0.75)", lineHeight: 1.6, margin: 0 }}>
-          Paste a raw transcript, voice note, brain dump, or strategy doc. The Forge reads intent, extracts goals, requirements, and blockers — then places them on your Axiom Flow.
+          Paste a raw transcript, voice note, brain dump, or strategy doc. The Forge reads intent, extracts goals, requirements, and <GlossaryTip term="blockers">{BLOCKER_EXPLANATION}</GlossaryTip> — then places them on your Axiom Flow.
         </p>
       </div>
 
@@ -469,7 +498,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         {showContext && (
           <div style={{ marginTop: 10 }}>
             <p style={{ fontSize: 11, color: "rgba(120,113,108,0.55)", marginBottom: 8, lineHeight: 1.5 }}>
-              Give The Forge more signal — paste your current decisions, tech stack, or project goals so nodes are more precisely typed and prioritized.
+              Give The Forge more signal — paste your current <GlossaryTip term="decisions">{DECISION_EXPLANATION}</GlossaryTip>, tech stack, or project goals so nodes are more precisely typed and prioritized.
               {activeProjectName && <span style={{ color: "rgba(212,175,55,0.55)" }}> Project: <strong>{activeProjectName}</strong></span>}
               {platform && <span style={{ color: "rgba(212,175,55,0.45)" }}> · Stack: <strong>{platform}</strong></span>}
             </p>
@@ -518,7 +547,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         {isForging ? (
           <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
             <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "#D4AF37", animation: "forge-pulse 1.4s ease-in-out infinite" }} />
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}>{FORGE_STAGES[stageIdx]}</span>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 12, letterSpacing: "0.04em" }}><ForgeStageLabel stage={FORGE_STAGES[stageIdx]} /></span>
           </span>
         ) : "Run The Forge →"}
       </button>
@@ -559,7 +588,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
             {forgeResult.nodes.map(node => (
               <div key={node.id} style={{ display: "flex", alignItems: "center", gap: 8, borderRadius: 8, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", padding: "8px 10px" }}>
                 <span style={{ color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", flexShrink: 0 }}>
-                  {node.type}
+                  <ForgeNodeTypeLabel type={node.type} />
                 </span>
                 <span style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {node.label}
@@ -571,7 +600,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
             <div style={{ display: "flex", flexDirection: "column", gap: 4, borderRadius: 8, border: "1px solid color-mix(in oklab, var(--warning) 28%, var(--atlas-border))", background: "color-mix(in oklab, var(--warning) 9%, var(--atlas-surface))", padding: "9px 10px" }}>
               {missingForgeNodeTypes.map(type => (
                 <p key={type} style={{ margin: 0, color: "var(--warning)", fontSize: 11, lineHeight: 1.45, fontFamily: "var(--app-font-mono)" }}>
-                  No {type} detected — consider adding one before handing to Atlas.
+                  No <ForgeNodeTypeLabel type={type} /> detected — consider adding one before handing to Atlas.
                 </p>
               ))}
             </div>
