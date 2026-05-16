@@ -1,6 +1,6 @@
 {
   "buildCommand": "pnpm --filter @workspace/atlas run build",
-  "outputDirectory": "artifacts/atlas/dist",
+  "outputDirectory": "artifacts/atlas/dist/public",
   "installCommand": "pnpm install",
   "rewrites": [
     {
