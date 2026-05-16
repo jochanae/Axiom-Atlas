@@ -661,6 +661,21 @@ interface ConfidenceAssessment {
   reasoning: string;
 }
 
+type PlanStepType = "analysis" | "edit" | "push" | "read" | "other";
+
+interface ResponsePlan {
+  title: string;
+  steps: Array<{
+    order: number;
+    description: string;
+    type: PlanStepType;
+    file?: string;
+  }>;
+  confidence: "high" | "medium" | "low";
+  estimatedChanges: number;
+  reversible: boolean;
+}
+
 function extractAllLinePatches(content: string): { visibleContent: string; linePatches: LinePatch[] } {
   const startMarker = "LINE_PATCH_START";
   const findMarker = "LINE_PATCH_FIND";
@@ -730,6 +745,161 @@ function extractConfidenceAssessment(content: string): ConfidenceAssessment | nu
 
 function canProceedWithFileChanges(assessment: ConfidenceAssessment | null): boolean {
   return assessment?.confidence === "high" && assessment.blast_radius === "isolated";
+}
+
+const PLAN_PHRASE_RE = /\b(here'?s the plan|here'?s what i(?:'ll| will) do|plan:|steps:|i(?:'ll| will):)\b/i;
+const NUMBERED_PLAN_RE = /^\s*(\d+)[.)]\s+(.+)$/;
+const BULLET_PLAN_RE = /^\s*[-*•]\s+(.+)$/;
+const PLAN_ACTION_RE = /\b(add|apply|build|change|check|commit|create|edit|fetch|fix|implement|inspect|move|patch|push|read|refactor|remove|review|run|scan|test|update|wire)\b/i;
+const PLAN_FILE_RE = /(?:[\w.-]+\/)+(?:[\w.-]+\.\w+)|\b[\w.-]+\.(?:tsx?|jsx?|css|scss|json|mdx?|html|py|go|rs|sql|ya?ml)\b/;
+
+function cleanPlanDescription(value: string): string {
+  return value
+    .replace(/^#+\s*/, "")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[.;]\s*$/, "");
+}
+
+function classifyPlanStep(value: string): PlanStepType {
+  if (/\b(push|commit|pull request|pr|github)\b/i.test(value)) return "push";
+  if (/\b(edit|change|update|patch|write|implement|create|remove|refactor|fix)\b/i.test(value)) return "edit";
+  if (/\b(read|inspect|scan|review|look at|fetch)\b/i.test(value)) return "read";
+  if (/\b(analy[sz]e|compare|decide|map|plan|identify|confirm|check)\b/i.test(value)) return "analysis";
+  return "other";
+}
+
+function extractPlanFile(value: string): string | undefined {
+  return value.match(PLAN_FILE_RE)?.[0];
+}
+
+function planTitleFromContent(content: string, steps: ResponsePlan["steps"]): string {
+  const heading = content.split("\n").find((line) => /^#{1,3}\s+\S/.test(line.trim()));
+  if (heading) return cleanPlanDescription(heading).slice(0, 110);
+
+  const phraseLine = content.split("\n").find((line) => PLAN_PHRASE_RE.test(line));
+  if (phraseLine) {
+    const afterColon = phraseLine.includes(":") ? phraseLine.split(":").slice(1).join(":").trim() : "";
+    const cleaned = cleanPlanDescription(afterColon || phraseLine);
+    if (cleaned.length > 12 && !PLAN_PHRASE_RE.test(cleaned)) return cleaned.slice(0, 110);
+  }
+
+  const firstSentence = content
+    .replace(/\n+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .find((part) => cleanPlanDescription(part).length > 12);
+  if (firstSentence) return cleanPlanDescription(firstSentence).slice(0, 110);
+
+  return steps[0]?.description.slice(0, 110) || "Proposed plan";
+}
+
+function stripPlanControlBlocks(content: string): string {
+  return content
+    .replace(/FILE_EDIT_START[\s\S]*?FILE_EDIT_END/g, "")
+    .replace(/LINE_PATCH_START[\s\S]*?LINE_PATCH_END/g, "")
+    .replace(/```[\s\S]*?```/g, "")
+    .trim();
+}
+
+function buildResponsePlan(args: {
+  content: string;
+  workspaceLens: string;
+  confidenceAssessment: ConfidenceAssessment | null;
+  fileEdits: FileEdit[];
+  linePatches: LinePatch[];
+}): ResponsePlan | null {
+  if (args.workspaceLens !== "build" && args.workspaceLens !== "flow") return null;
+
+  const text = stripPlanControlBlocks(args.content);
+  const lines = text.split("\n");
+  const numberedSteps = lines
+    .map((line) => line.match(NUMBERED_PLAN_RE)?.[2])
+    .filter((value): value is string => !!value && PLAN_ACTION_RE.test(value));
+  const hasNumberedPlan = numberedSteps.length >= 3;
+  const hasExplicitPhrase = PLAN_PHRASE_RE.test(text);
+
+  const sectionSteps: string[] = [];
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const line = lines[index].trim();
+    const isHeader = /^#{1,3}\s+\S/.test(line) || /^[A-Z][\w\s/-]{2,}:$/.test(line);
+    if (!isHeader) continue;
+    const items = lines
+      .slice(index + 1, index + 7)
+      .map((candidate) => candidate.match(BULLET_PLAN_RE)?.[1] ?? candidate.match(NUMBERED_PLAN_RE)?.[2])
+      .filter((value): value is string => !!value && PLAN_ACTION_RE.test(value));
+    if (items.length >= 2) sectionSteps.push(...items);
+  }
+
+  const hasProposedFileChanges = args.fileEdits.length > 0 || args.linePatches.length > 0;
+  const explanationBeforePatch = hasProposedFileChanges && text.length > 20 && /\S/.test(text);
+  const rawStepText = hasNumberedPlan ? numberedSteps : sectionSteps;
+
+  if (!hasNumberedPlan && !(hasExplicitPhrase && rawStepText.length >= 2) && sectionSteps.length < 2 && !explanationBeforePatch) {
+    return null;
+  }
+
+  const steps = rawStepText
+    .map(cleanPlanDescription)
+    .filter(Boolean)
+    .slice(0, 12)
+    .map((description, index) => {
+      const file = extractPlanFile(description);
+      return {
+        order: index + 1,
+        description,
+        type: classifyPlanStep(description),
+        ...(file ? { file } : {}),
+      };
+    });
+
+  if (explanationBeforePatch) {
+    for (const edit of args.fileEdits) {
+      if (!steps.some((step) => step.file === edit.path)) {
+        steps.push({
+          order: steps.length + 1,
+          description: `Edit ${edit.path}`,
+          type: "edit",
+          file: edit.path,
+        });
+      }
+    }
+    for (const patch of args.linePatches) {
+      if (!steps.some((step) => step.file === patch.path)) {
+        steps.push({
+          order: steps.length + 1,
+          description: `Patch ${patch.path}`,
+          type: "edit",
+          file: patch.path,
+        });
+      }
+    }
+    if (!steps.some((step) => step.type === "push")) {
+      steps.push({
+        order: steps.length + 1,
+        description: "Review and push the proposed changes",
+        type: "push",
+      });
+    }
+  }
+
+  if (steps.length < 2) return null;
+
+  const touchedFiles = new Set<string>();
+  for (const file of args.confidenceAssessment?.files_affected ?? []) touchedFiles.add(file);
+  for (const edit of args.fileEdits) touchedFiles.add(edit.path);
+  for (const patch of args.linePatches) touchedFiles.add(patch.path);
+  for (const step of steps) {
+    if (step.file) touchedFiles.add(step.file);
+  }
+
+  return {
+    title: planTitleFromContent(text, steps),
+    steps: steps.map((step, index) => ({ ...step, order: index + 1 })),
+    confidence: args.confidenceAssessment?.confidence ?? "medium",
+    estimatedChanges: touchedFiles.size,
+    reversible: hasProposedFileChanges && touchedFiles.size > 0,
+  };
 }
 
 // Matches NODE_RESOLVED: auth  /  NODE_RESOLVED: [auth]  /  NODE_RESOLVED: {auth}
@@ -1448,6 +1618,13 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
   // Strip LENS_DRIFT token before DB persistence (it's a client-side signal only)
   const persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
+  const responsePlan = buildResponsePlan({
+    content: displayContent,
+    workspaceLens,
+    confidenceAssessment,
+    fileEdits: fileChangesAllowed ? fileEdits : [],
+    linePatches: fileChangesAllowed ? linePatches : [],
+  });
 
   let savedMsgId: number | undefined;
   let autoName: string | undefined;
@@ -1548,6 +1725,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     fileEdits: fileChangesAllowed && fileEdits.length > 0 ? fileEdits : undefined,
     fileEdit: fileChangesAllowed && fileEdits.length > 0 ? fileEdits[0] : undefined,
     linePatches: fileChangesAllowed && linePatches.length > 0 ? linePatches : undefined,
+    plan: responsePlan ?? undefined,
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
