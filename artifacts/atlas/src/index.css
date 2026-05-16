@@ -97,7 +97,7 @@ html, body {
   --secondary: 20 8% 13%;
   --secondary-foreground: 20 8% 90%;
   --muted: 20 8% 13%;
-  --muted-foreground: 20 5% 44%;
+  --muted-foreground: 20 5% 48%;
   --accent: 40 49% 54%;
   --accent-foreground: 20 14% 4%;
   --destructive: 0 63% 30%;
@@ -179,7 +179,7 @@ html, body {
   --atlas-gold-rgb: 212, 175, 55;
   --atlas-bg-rgb: 13, 11, 9;
   --atlas-surface-rgb: 20, 18, 14;
-  --atlas-muted-rgb: 120, 113, 108;
+  --atlas-muted-rgb: 166, 160, 154;
   --atlas-flow-pane-bg: oklch(0.11 0.01 60);
 }
 

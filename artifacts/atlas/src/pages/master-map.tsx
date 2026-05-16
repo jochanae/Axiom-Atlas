@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import * as THREE from "three";
 import { haptics } from "@/lib/haptics";
@@ -179,7 +179,7 @@ async function fetchAll(): Promise<{ nexus: Project | null; list: Project[] }> {
 // ── component ────────────────────────────────────────────────────────────────
 
 export default function MasterMap() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const theme = useThemeMode();
   const palette = paletteFor(theme);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -203,6 +203,17 @@ export default function MasterMap() {
   const isDraggingRef = useRef(false);
   const warpFnRef = useRef<((destId: number) => void) | null>(null);
   const recenterFnRef = useRef<(() => void) | null>(null);
+
+  const activeProjectId = useMemo(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("projectId") ?? params.get("activeProjectId") ?? params.get("project") ?? sessionStorage.getItem("atlas-active-project-id");
+      const parsed = raw ? Number(raw) : NaN;
+      return Number.isFinite(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }, [location]);
 
   useEffect(() => { hoveredIdxRef.current = hoveredIdx; }, [hoveredIdx]);
   useEffect(() => { projectsRef.current = projects; }, [projects]);
@@ -787,13 +798,41 @@ export default function MasterMap() {
         {projects.map((p, i) => {
           const act = actLevel(p.updatedAt);
           const isHovered = i === hoveredIdx;
+          const isActiveProject = p.id === activeProjectId;
           return (
             <div key={p.id} ref={el => { labelEls.current[i] = el; }} style={{
               position: "absolute", transform: "translateX(-50%)", textAlign: "center",
               pointerEvents: "none",
               opacity: hoveredIdx !== null && !isHovered ? 0.28 : 1,
               transition: "opacity 180ms ease",
+              ...(isActiveProject ? {
+                minWidth: 118,
+                padding: "8px 12px 7px",
+                borderRadius: 12,
+                border: "1px solid rgba(var(--atlas-gold-rgb),0.42)",
+                background: "rgba(var(--atlas-bg-rgb),0.68)",
+                boxShadow: "0 0 12px 2px rgba(var(--atlas-gold-rgb), 0.4)",
+                animation: "atlas-active-project-breathe 2s ease-in-out infinite",
+              } : {}),
             }}>
+              {isActiveProject && (
+                <div style={{
+                  position: "absolute",
+                  top: -9,
+                  right: -7,
+                  borderRadius: 999,
+                  border: "1px solid rgba(var(--atlas-gold-rgb),0.35)",
+                  background: "rgba(var(--atlas-bg-rgb),0.92)",
+                  color: "var(--atlas-gold)",
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 7,
+                  fontWeight: 800,
+                  letterSpacing: "0.12em",
+                  padding: "2px 5px",
+                }}>
+                  ACTIVE
+                </div>
+              )}
               <div style={{ fontSize: isHovered ? 11.5 : 10.5, fontWeight: 600, color: isHovered ? (theme === "parchment" ? "#1A1714" : "#E8E5E1") : palette.labelText, letterSpacing: "0.01em", whiteSpace: "nowrap", transition: "font-size 150ms ease, color 150ms ease" }}>
                 {p.name}
               </div>
@@ -1060,5 +1099,15 @@ const STYLES = `
   0%   { transform: rotate(0deg) scale(0.7); opacity: 0; }
   35%  { opacity: 0.8; }
   100% { transform: rotate(12deg) scale(2.5); opacity: 0; }
+}
+@keyframes atlas-active-project-breathe {
+  0%, 100% {
+    box-shadow: 0 0 12px 2px rgba(var(--atlas-gold-rgb), 0.4);
+    border-color: rgba(var(--atlas-gold-rgb),0.42);
+  }
+  50% {
+    box-shadow: 0 0 18px 3px rgba(var(--atlas-gold-rgb), 0.5);
+    border-color: rgba(var(--atlas-gold-rgb),0.58);
+  }
 }
 `;
