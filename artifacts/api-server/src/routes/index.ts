@@ -26,6 +26,7 @@ import storageRouter from "./storage";
 import errorlogRouter from "./errorlog";
 import selfmapRouter from "./selfmap";
 import forgeStateRouter from "./forge-state";
+import serverApiRouter from "./server-api";
 
 const router: IRouter = Router();
 
@@ -35,6 +36,7 @@ router.use(authRouter);
 router.use(googleAuthRouter);
 router.use(healthRouter);
 router.use(errorlogRouter);
+router.use("/server", serverApiRouter);
 
 // Invite redemption is public so users can sign up via invite link
 router.use(invitesRouter);
