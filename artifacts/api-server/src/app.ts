@@ -48,6 +48,8 @@ const ALLOWED_ORIGINS: Set<string> = new Set([
   "https://axiomsystem.app",
   "https://axiom-atlas-mocha.vercel.app",
   ...(process.env.REPLIT_DOMAINS?.split(",").map((d) => `https://${d.trim()}`) ?? []),
+  ...(process.env.RAILWAY_PUBLIC_DOMAIN ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`] : []),
+  ...(process.env.EXTRA_ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
 ]);
 
 app.use(
