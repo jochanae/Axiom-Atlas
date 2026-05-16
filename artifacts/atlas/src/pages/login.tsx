@@ -3,13 +3,12 @@ import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { apiUrl } from "../lib/api";
 
 type Mode = "login" | "signup" | "forgot";
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 async function apiPost(path: string, body: Record<string, string>) {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -417,7 +416,7 @@ export default function Login() {
           {/* Social gates */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <a
-              href={`${BASE}/api/auth/google`}
+              href={apiUrl("/api/auth/google")}
               style={{
                 width: "100%", display: "flex", alignItems: "center", justifyContent: "center",
                 gap: 10, padding: "10px 16px", borderRadius: 10,
