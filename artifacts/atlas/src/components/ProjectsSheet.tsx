@@ -232,9 +232,15 @@ export function ProjectsSheet({ onClose }: Props) {
                     {letter}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {p.name}
-                    </div>
+                    {(() => {
+                      const isUnnamed = p.name === "New Project" || p.name === "New Idea" || p.name === "My Project";
+                      return (
+                        <div style={{ fontSize: 11.5, fontWeight: 600, color: isUnnamed ? "var(--atlas-muted)" : "var(--atlas-fg)", fontFamily: "var(--app-font-sans)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: isUnnamed ? "italic" : "normal", display: "flex", alignItems: "center", gap: 3 }}>
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{p.name}</span>
+                          {isUnnamed && <span style={{ opacity: 0.5, fontSize: 9, flexShrink: 0 }}>✎</span>}
+                        </div>
+                      );
+                    })()}
                     <div style={{ fontSize: 9.5, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", opacity: 0.6, marginTop: 1 }}>
                       Edited {relTime(p.createdAt)}
                     </div>

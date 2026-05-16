@@ -952,4 +952,25 @@ router.get("/nexus/activity", async (req, res): Promise<void> => {
   res.json({ items: items.slice(0, 40) });
 });
 
+// POST /api/nexus/name — generate a short project name from a message
+router.post("/nexus/name", async (req, res): Promise<void> => {
+  const { message } = req.body as { message?: string };
+  if (!message?.trim()) { res.json({ name: "" }); return; }
+  try {
+    const resp = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 20,
+      messages: [{
+        role: "user",
+        content: `Based on this message, generate a project name.\nRules:\n- 3-5 words maximum\n- Title case\n- Descriptive of what's being built\n- No punctuation\n- No generic words like "Project" or "App" unless essential\n\nMessage: "${message.slice(0, 400)}"\n\nRespond with only the project name, nothing else.`,
+      }],
+    });
+    const raw = resp.content[0]?.type === "text" ? resp.content[0].text.trim() : "";
+    const name = raw.replace(/["""''`]/g, "").replace(/[.!?]$/, "").trim();
+    res.json({ name: name || "" });
+  } catch {
+    res.json({ name: "" });
+  }
+});
+
 export default router;

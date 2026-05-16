@@ -946,7 +946,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Load project memory + repo info + node state from DB
   const [project] = await db
-    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState })
+    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId));
 
@@ -1450,6 +1450,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   const persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
 
   let savedMsgId: number | undefined;
+  let autoName: string | undefined;
   if (!isFlowMode && !isScenarioMode) {
     const [savedMsg] = await db
       .insert(chatMessagesTable)
@@ -1467,6 +1468,30 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       .update(sessionsTable)
       .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
       .where(eq(sessionsTable.id, sessionId));
+  }
+
+  // Auto-name: on first message, generate a real project name from the user's intent
+  if (!isFlowMode && !isScenarioMode) {
+    const isFirstMessage = history.length === 0;
+    const DEFAULT_NAMES = new Set(["New Project", "New Idea", "My Project", ""]);
+    if (isFirstMessage && DEFAULT_NAMES.has((project?.name ?? "").trim())) {
+      try {
+        const nameResp = await anthropic.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 20,
+          messages: [{
+            role: "user",
+            content: `Based on this first message from a user, generate a project name.\nRules:\n- 3-5 words maximum\n- Title case\n- Descriptive of what's being built\n- No punctuation\n- No generic words like "Project" or "App" unless essential\n\nUser message: "${message.slice(0, 300)}"\n\nRespond with only the project name, nothing else.`,
+          }],
+        });
+        const raw = nameResp.content[0]?.type === "text" ? nameResp.content[0].text.trim() : "";
+        const cleaned = raw.replace(/["""''`]/g, "").replace(/[.!?]$/, "").trim();
+        if (cleaned && cleaned.split(/\s+/).length <= 6) {
+          await db.update(projectsTable).set({ name: cleaned }).where(eq(projectsTable.id, projectId));
+          autoName = cleaned;
+        }
+      } catch { /* non-fatal — original name stays */ }
+    }
   }
 
   // Attempt image generation if the user's message looks like an image request
@@ -1527,6 +1552,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
     ...(imageB64 ? { imageB64, imageMimeType } : {}),
+    ...(autoName ? { autoName } : {}),
   });
 });
 
