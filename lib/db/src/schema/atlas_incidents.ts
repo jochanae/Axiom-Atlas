@@ -11,6 +11,9 @@ export const atlasIncidentsTable = pgTable("atlas_incidents", {
   branchName: text("branch_name").notNull(),
   prUrl: text("pr_url").notNull(),
   validationPassed: boolean("validation_passed").notNull().default(false),
+  confidence: text("confidence"),
+  blastRadius: text("blast_radius"),
+  reasoning: text("reasoning"),
   outcome: text("outcome"),
   notes: text("notes"),
 });

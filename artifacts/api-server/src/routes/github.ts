@@ -217,8 +217,8 @@ router.put("/github/commit", async (req, res): Promise<void> => {
   const token = getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
-  const { repo, branch = "main", path: filePath, content, message, forceDirect = false, projectId, project_id } = req.body as {
-    repo: string; branch?: string; path?: string; content?: string; message: string; forceDirect?: boolean; projectId?: string; project_id?: string;
+  const { repo, branch = "main", path: filePath, content, message, forceDirect = false, projectId, project_id, confidence, blast_radius, blastRadius, reasoning } = req.body as {
+    repo: string; branch?: string; path?: string; content?: string; message: string; forceDirect?: boolean; projectId?: string; project_id?: string; confidence?: string; blast_radius?: string; blastRadius?: string; reasoning?: string;
   };
   if (!repo || !filePath || content === undefined || !message) {
     res.status(400).json({ error: "Missing required fields: repo, path, content, message" }); return;
@@ -255,6 +255,9 @@ router.put("/github/commit", async (req, res): Promise<void> => {
       branchName: pullBranch,
       prUrl: pr.prUrl,
       validationPassed: true,
+      confidence: confidence ?? null,
+      blastRadius: blastRadius ?? blast_radius ?? null,
+      reasoning: reasoning ?? null,
       outcome: null,
       notes: null,
     });
