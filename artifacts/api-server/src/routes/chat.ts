@@ -2,8 +2,8 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable } from "@workspace/db";
-import { eq, sql, and } from "drizzle-orm";
+import { atlasErrorLogsTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable } from "@workspace/db";
+import { eq, sql, and, gte, desc } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
@@ -946,6 +946,30 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Merge auto-fetched content with any manually-opened files from the client
   const combinedFileContext = [autoFetchedContext, fileContext].filter(Boolean).join("\n\n");
 
+  let recentErrorContext = "";
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentErrors = await db
+      .select({
+        errorMessage: atlasErrorLogsTable.errorMessage,
+        route: atlasErrorLogsTable.route,
+        timestamp: atlasErrorLogsTable.timestamp,
+      })
+      .from(atlasErrorLogsTable)
+      .where(and(
+        eq(atlasErrorLogsTable.projectId, String(projectId)),
+        gte(atlasErrorLogsTable.createdAt, cutoff)
+      ))
+      .orderBy(desc(atlasErrorLogsTable.createdAt))
+      .limit(5);
+
+    recentErrorContext = recentErrors
+      .map((error) => `Recent production errors detected: ${error.errorMessage} at ${error.route} — ${error.timestamp.toISOString()}`)
+      .join("\n");
+  } catch {
+    // Non-fatal: Atlas can still respond without production error context.
+  }
+
   // Build layered system prompt
   let systemPrompt = DEV_SYSTEM_PROMPT;
   if (userProfile) {
@@ -959,6 +983,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   }
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
+  }
+  if (recentErrorContext) {
+    systemPrompt += `\n\n--- RECENT PRODUCTION ERRORS ---\n${recentErrorContext}\n--- END RECENT PRODUCTION ERRORS ---`;
   }
   if (combinedFileContext) {
     systemPrompt += `\n\n--- CODE CONTEXT (files Atlas read for this request — use these to write complete FILE_EDIT blocks) ---\n${combinedFileContext}\n--- END CODE CONTEXT ---`;
