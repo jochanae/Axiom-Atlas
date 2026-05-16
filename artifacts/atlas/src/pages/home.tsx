@@ -2339,10 +2339,8 @@ export default function Home() {
 
           {/* LEDGER */}
           <button
-            onClick={() => {
-              const p = (projects ?? [])[0];
-              if (p) setLocation(`/ledger/${p.id}`);
-            }}
+            onClick={() => setLocation("/ledger")}
+
             style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(120,113,108,0.55)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
