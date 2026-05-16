@@ -21,9 +21,12 @@ import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
 import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
+import { CommitCard } from "../components/CommitCard";
 import { Eye, TerminalSquare } from "lucide-react";
 import { useThemeMode } from "@/lib/theme";
 import { fileToBase64Safe } from "@/lib/image-resize";
+import { detectDecisionMoment } from "@/lib/DecisionCatchEngine";
+import type { CommitCardPayload } from "@/lib/DecisionCatchEngine";
 import type { ZipEntry } from "../components/ZipImport";
 import {
   useGetProject,
@@ -1253,12 +1256,14 @@ function StreamingText({
   speed = 35,
   animate = true,
   onComplete,
+  onVisibleTextChange,
   style,
 }: {
   text: string;
   speed?: number;
   animate?: boolean;
   onComplete?: () => void;
+  onVisibleTextChange?: (visibleText: string) => void;
   style?: React.CSSProperties;
 }) {
   const [visibleCount, setVisibleCount] = useState(animate ? 0 : Infinity);
@@ -1291,10 +1296,14 @@ function StreamingText({
   }, [visibleCount, animate, speed, onComplete]);
 
   const done = !animate || visibleCount >= (words.current.length || Infinity);
+  const visible = done ? text : words.current.slice(0, visibleCount).join(" ");
+  useEffect(() => {
+    onVisibleTextChange?.(visible);
+  }, [visible, onVisibleTextChange]);
+
   if (done) {
     return <div style={style}>{text}</div>;
   }
-  const visible = words.current.slice(0, visibleCount).join(" ");
   return (
     <div style={style}>
       {visible}
@@ -1319,13 +1328,18 @@ function ChunkedBubbles({
   text,
   isNew,
   textStyle,
+  onStreamTextChange,
+  onComplete,
 }: {
   text: string;
   isNew: boolean;
   textStyle?: React.CSSProperties;
+  onStreamTextChange?: (visibleText: string) => void;
+  onComplete?: () => void;
 }) {
   const chunks = splitIntoChunks(text);
   const [revealed, setRevealed] = useState(isNew ? 0 : chunks.length);
+  const completedRef = useRef(false);
 
   useEffect(() => {
     if (!isNew || revealed >= chunks.length) return;
@@ -1336,6 +1350,10 @@ function ChunkedBubbles({
     return () => clearTimeout(timer);
   }, [revealed, chunks.length, isNew]);
 
+  useEffect(() => {
+    completedRef.current = false;
+  }, [text, isNew]);
+
   const visibleChunks = chunks.slice(0, isNew ? Math.min(revealed + 1, chunks.length) : chunks.length);
   return (
     <>
@@ -1344,6 +1362,15 @@ function ChunkedBubbles({
           key={i}
           text={chunk}
           animate={isNew && i === revealed && revealed < chunks.length}
+          onVisibleTextChange={(visible) => {
+            if (!isNew) return;
+            onStreamTextChange?.([...chunks.slice(0, i), visible].join("\n\n"));
+          }}
+          onComplete={() => {
+            if (!isNew || i !== chunks.length - 1 || completedRef.current) return;
+            completedRef.current = true;
+            onComplete?.();
+          }}
           style={{ ...textStyle, ...(i < visibleChunks.length - 1 ? { marginBottom: 12 } : {}) }}
         />
       ))}
@@ -1490,6 +1517,292 @@ function LinePatchReviewCard({
   );
 }
 
+type InlinePreviewLine = { type: "added" | "removed"; line: string };
+
+function InlineDiffCard({
+  fileEdits,
+  linePatches,
+  linkedRepo,
+  projectId,
+  trustMode,
+  onReviewDiff,
+  onPushSuccess,
+  onPrCreated,
+}: {
+  fileEdits: FileEdit[];
+  linePatches: LinePatch[];
+  linkedRepo: LinkedRepo | null;
+  projectId: number;
+  trustMode: "review" | "auto";
+  onReviewDiff: () => void;
+  onPushSuccess: (records: PushRecord[]) => void;
+  onPrCreated?: (prUrl: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [patchedEdits, setPatchedEdits] = useState<FileEdit[] | null>(null);
+  const [showPushModal, setShowPushModal] = useState(false);
+  const [originals, setOriginals] = useState<Record<string, string | null>>({});
+
+  const { data: project } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
+  const token = project?.githubToken ?? null;
+  const fileEditKey = fileEdits.map((edit) => `${edit.path}:${edit.content.length}`).join("|");
+
+  useEffect(() => {
+    if (!linkedRepo || !token || fileEdits.length === 0) return;
+    let cancelled = false;
+    void Promise.all(
+      fileEdits.map(async (edit) => {
+        try {
+          const r = await fetch(
+            `/api/github/file?repo=${encodeURIComponent(linkedRepo.fullName)}&path=${encodeURIComponent(edit.path)}&branch=${encodeURIComponent(linkedRepo.defaultBranch)}`,
+            { headers: { "x-github-token": token } }
+          );
+          if (!r.ok) return [edit.path, null] as const;
+          const d = await r.json() as { content?: string };
+          return [edit.path, d.content ?? null] as const;
+        } catch {
+          return [edit.path, null] as const;
+        }
+      })
+    ).then((entries) => {
+      if (cancelled) return;
+      setOriginals(Object.fromEntries(entries));
+    });
+    return () => { cancelled = true; };
+  }, [fileEditKey, linkedRepo?.fullName, linkedRepo?.defaultBranch, token]);
+
+  const patchGroups = useMemo(() => {
+    const groups: Record<string, LinePatch[]> = {};
+    for (const patch of linePatches) {
+      if (!groups[patch.path]) groups[patch.path] = [];
+      groups[patch.path].push(patch);
+    }
+    return groups;
+  }, [linePatches]);
+
+  const previewLines = useMemo<InlinePreviewLine[]>(() => {
+    if (fileEdits.length > 0) {
+      return fileEdits.flatMap((edit) => {
+        const original = originals[edit.path];
+        const lines = original !== undefined && original !== null
+          ? computeLineDiff(original, edit.content).filter((line) => line.type !== "context")
+          : edit.content.split("\n").map((line) => ({ type: "added" as const, line }));
+        return lines.map((line) => ({ type: line.type as "added" | "removed", line: line.line }));
+      });
+    }
+    return linePatches.flatMap((patch) => [
+      ...patch.find.split("\n").map((line) => ({ type: "removed" as const, line })),
+      ...patch.replace.split("\n").map((line) => ({ type: "added" as const, line })),
+    ]);
+  }, [fileEdits, linePatches, originals]);
+
+  const targetPaths = fileEdits.length > 0
+    ? fileEdits.map((edit) => edit.path)
+    : Object.keys(patchGroups);
+  const firstPath = targetPaths[0] ?? "changes";
+  const filename = targetPaths.length > 1
+    ? `${firstPath.split("/").pop() ?? firstPath} +${targetPaths.length - 1}`
+    : firstPath;
+  const changedCount = previewLines.length;
+  const visibleLines = open ? previewLines : previewLines.slice(0, 3);
+
+  const applyLinePatches = async () => {
+    if (!linkedRepo) { setError("No repo linked — connect a GitHub repo in the Files tab."); return; }
+    if (!token) { setError("No GitHub token — add your personal token in the Files tab."); return; }
+    setApplying(true);
+    setError(null);
+    try {
+      const edits: FileEdit[] = [];
+      for (const [filePath, patches] of Object.entries(patchGroups)) {
+        const r = await fetch(
+          `/api/github/file?repo=${encodeURIComponent(linkedRepo.fullName)}&path=${encodeURIComponent(filePath)}&branch=${encodeURIComponent(linkedRepo.defaultBranch)}`,
+          { headers: { "x-github-token": token } }
+        );
+        if (!r.ok) throw new Error(`Could not fetch ${filePath.split("/").pop()} (${r.status})`);
+        const data = await r.json() as { content: string };
+        let content = data.content;
+        for (const patch of patches) {
+          const idx = content.indexOf(patch.find);
+          if (idx === -1) throw new Error(`Anchor not found in ${filePath.split("/").pop()}. Ask Atlas to re-read the file first.`);
+          content = content.slice(0, idx) + patch.replace + content.slice(idx + patch.find.length);
+        }
+        const ext = filePath.split(".").pop() ?? "";
+        const language = ["ts", "tsx"].includes(ext) ? "typescript" : ["js", "jsx"].includes(ext) ? "javascript" : ext;
+        edits.push({ path: filePath, language, content });
+      }
+      setPatchedEdits(edits);
+      setShowPushModal(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not apply patches.");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleApply = () => {
+    if (fileEdits.length > 0) {
+      setShowPushModal(true);
+      return;
+    }
+    void applyLinePatches();
+  };
+
+  const modalEdits = fileEdits.length > 0 ? fileEdits : patchedEdits;
+
+  if (trustMode === "auto") {
+    return (
+      <div style={{ marginTop: 12, fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.65 }}>
+        Applied automatically
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div
+        onClick={() => setOpen((value) => !value)}
+        style={{
+          marginTop: 12,
+          borderRadius: 8,
+          background: "var(--atlas-surface)",
+          border: "1px solid var(--atlas-border)",
+          overflow: "hidden",
+          cursor: "pointer",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderBottom: open ? "1px solid var(--atlas-border)" : "none" }}>
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ flexShrink: 0, transition: "transform 160ms ease", transform: open ? "rotate(90deg)" : "rotate(0deg)", opacity: 0.55 }}>
+            <path d="M3 2l4 3-4 3" stroke="var(--atlas-fg)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--app-font-mono)", fontSize: 10.5, color: "var(--atlas-fg)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {filename}
+          </span>
+          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.7 }}>
+            {changedCount} line{changedCount === 1 ? "" : "s"} changed
+          </span>
+        </div>
+
+        <div style={{ background: "var(--atlas-bg)", fontFamily: "var(--app-font-mono)", fontSize: 10.5, lineHeight: 1.55 }}>
+          {visibleLines.map((line, idx) => {
+            const added = line.type === "added";
+            return (
+              <div
+                key={`${idx}-${line.type}-${line.line}`}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  background: added
+                    ? "color-mix(in oklab, var(--atlas-phosphor) 8%, transparent)"
+                    : "color-mix(in oklab, var(--atlas-ember) 8%, transparent)",
+                  borderLeft: `2px solid ${added ? "var(--atlas-phosphor)" : "var(--atlas-ember)"}`,
+                }}
+              >
+                <span style={{ width: 18, flexShrink: 0, textAlign: "center", color: added ? "var(--atlas-phosphor)" : "var(--atlas-ember)", userSelect: "none" as const }}>
+                  {added ? "+" : "-"}
+                </span>
+                <span style={{ flex: 1, padding: "1px 8px 1px 0", color: "var(--atlas-muted)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {line.line || " "}
+                </span>
+              </div>
+            );
+          })}
+          {!open && previewLines.length > 3 && (
+            <div style={{ padding: "4px 12px", color: "var(--atlas-muted)", opacity: 0.45 }}>
+              + {previewLines.length - 3} more changed line{previewLines.length - 3 === 1 ? "" : "s"}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 7, padding: "8px 10px", borderTop: "1px solid var(--atlas-border)" }}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onReviewDiff(); }}
+            style={{ padding: "5px 10px", borderRadius: 5, background: "transparent", border: "1px solid var(--atlas-border)", color: "var(--atlas-muted)", cursor: "pointer", fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.06em" }}
+          >
+            Review in Diff →
+          </button>
+          <button
+            type="button"
+            disabled={applying}
+            onClick={(e) => { e.stopPropagation(); handleApply(); }}
+            style={{ padding: "5px 12px", borderRadius: 5, background: "var(--atlas-gold)", border: "1px solid var(--atlas-gold)", color: "var(--atlas-bg)", cursor: applying ? "not-allowed" : "pointer", fontFamily: "var(--app-font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", opacity: applying ? 0.55 : 1 }}
+          >
+            {applying ? "Applying..." : "Apply"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ marginTop: 8, padding: "8px 12px", borderRadius: 6, background: "color-mix(in oklab, var(--atlas-ember) 9%, transparent)", border: "1px solid color-mix(in oklab, var(--atlas-ember) 24%, transparent)", color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)", fontSize: 11, lineHeight: 1.55 }}>
+          {error}
+        </div>
+      )}
+
+      {showPushModal && modalEdits && modalEdits.length > 0 && (
+        <GitHubPushModal
+          fileEdits={modalEdits}
+          linkedRepo={linkedRepo}
+          projectId={projectId}
+          onClose={() => setShowPushModal(false)}
+          onPushSuccess={(records) => { onPushSuccess(records); setShowPushModal(false); }}
+          onPrCreated={onPrCreated}
+        />
+      )}
+    </>
+  );
+}
+
+function atlasActivityStatus(content: string): string {
+  if (/LINE_PATCH/i.test(content)) return "Patching code...";
+  if (/FILE_EDIT/i.test(content)) return "Preparing changes...";
+  if (/FILE_READ/i.test(content)) return "Reading files...";
+  if (/\b(git|push)\b/i.test(content)) return "Pushing to GitHub...";
+  return "Atlas is thinking...";
+}
+
+function AtlasActivityBar({ content }: { content: string }) {
+  return (
+    <div
+      style={{
+        margin: "2px 0 18px",
+        padding: "6px 10px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        borderRadius: 999,
+        background: "color-mix(in oklab, var(--atlas-gold) 7%, transparent)",
+        border: "1px solid color-mix(in oklab, var(--atlas-gold) 14%, transparent)",
+        pointerEvents: "none",
+      }}
+    >
+      <span
+        className="atlas-pulse-dot"
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: "var(--atlas-gold)",
+          display: "inline-block",
+          flexShrink: 0,
+        }}
+      />
+      <span
+        style={{
+          fontFamily: "var(--app-font-mono)",
+          fontSize: 10,
+          letterSpacing: "0.08em",
+          color: "var(--atlas-muted)",
+          textTransform: "uppercase",
+        }}
+      >
+        {atlasActivityStatus(content)}
+      </span>
+    </div>
+  );
+}
+
 // ── AssistantBubble ───────────────────────────────────────────────────────────
 function AssistantBubble({
   message,
@@ -1507,6 +1820,11 @@ function AssistantBubble({
   onPrCreated,
   onRunCommand,
   onExtractToForge,
+  onReviewDiff,
+  onStreamActivityUpdate,
+  onStreamActivityComplete,
+  onCommitCardDone,
+  trustMode,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -1523,6 +1841,11 @@ function AssistantBubble({
   onPrCreated?: (prUrl: string) => void;
   onRunCommand?: (command: string) => void;
   onExtractToForge?: (content: string) => void;
+  onReviewDiff: () => void;
+  onStreamActivityUpdate?: (content: string) => void;
+  onStreamActivityComplete?: () => void;
+  onCommitCardDone?: () => void;
+  trustMode: "review" | "auto";
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
@@ -1531,6 +1854,7 @@ function AssistantBubble({
   const [copied, setCopied] = useState(false);
   const [selfApplyStatus, setSelfApplyStatus] = useState<"idle" | "applying" | "done" | "error">("idle");
   const [selfApplyMsg, setSelfApplyMsg] = useState("");
+  const [commitCardDone, setCommitCardDone] = useState(false);
   const activeEdits = message.fileEdits ?? (message.fileEdit ? [message.fileEdit] : []);
 
   // Parse CMD_EXEC block from Atlas response
@@ -1566,6 +1890,10 @@ function AssistantBubble({
   const SELF_PATH_RE = /^artifacts\/(atlas|api-server)\//;
   const selfEdits = activeEdits.filter((e) => SELF_PATH_RE.test(e.path));
   const userEdits = activeEdits.filter((e) => !SELF_PATH_RE.test(e.path));
+  const commitPayload = useMemo<CommitCardPayload | null>(
+    () => detectDecisionMoment(message.content),
+    [message.content]
+  );
 
   const handleSelfApply = async () => {
     if (selfApplyStatus === "applying") return;
@@ -1724,6 +2052,8 @@ function AssistantBubble({
         <ChunkedBubbles
           text={cleanContent}
           isNew={isNew}
+          onStreamTextChange={onStreamActivityUpdate}
+          onComplete={onStreamActivityComplete}
           textStyle={{ fontSize: 14, lineHeight: 1.78, color: "var(--atlas-fg)", opacity: 0.9, whiteSpace: "pre-wrap" }}
         />
 
@@ -1783,53 +2113,29 @@ function AssistantBubble({
           </div>
         )}
 
-        {/* Code ready card — user project paths */}
-        {userEdits.length > 0 && (
-          <div
-            style={{
-              marginTop: 12, padding: "11px 14px", borderRadius: 8,
-              background: "rgba(201,162,76,0.05)", border: "1px solid rgba(201,162,76,0.2)",
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-              <div style={{ width: 26, height: 26, borderRadius: 6, flexShrink: 0, background: "rgba(201,162,76,0.12)", border: "1px solid rgba(201,162,76,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 2h8l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="var(--atlas-gold)" strokeWidth="1.2" />
-                  <path d="M11 2v4h4" stroke="var(--atlas-gold)" strokeWidth="1.2" />
-                  <path d="M5 8.5h6M5 11h4" stroke="var(--atlas-gold)" strokeWidth="1.1" strokeLinecap="round" />
-                </svg>
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-gold)", marginBottom: 2 }}>
-                  {userEdits.length === 1 ? "Code ready" : `${userEdits.length} files ready`}
-                </div>
-                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-                  {userEdits.length === 1
-                    ? <>{userEdits[0].path}<span style={{ opacity: 0.5, marginLeft: 6 }}>· {userEdits[0].content.split("\n").length} lines</span></>
-                    : userEdits.map((fe) => fe.path.split("/").pop()).join(", ")
-                  }
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowPushModal(true)}
-              style={{ flexShrink: 0, padding: "6px 13px", borderRadius: 5, fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", background: "linear-gradient(180deg, var(--atlas-gold) 0%, color-mix(in oklab, var(--atlas-gold) 78%, #6a4a18) 100%)", color: "var(--atlas-bg)", border: "none", cursor: "pointer", boxShadow: "0 0 12px -4px color-mix(in oklab, var(--atlas-gold) 50%, transparent)", transition: "opacity 160ms ease" }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-            >
-              Review &amp; Push →
-            </button>
-          </div>
-        )}
-
-        {message.linePatches && message.linePatches.length > 0 && (
-          <LinePatchReviewCard
-            linePatches={message.linePatches}
+        {(userEdits.length > 0 || (message.linePatches && message.linePatches.length > 0)) && (
+          <InlineDiffCard
+            fileEdits={userEdits}
+            linePatches={message.linePatches ?? []}
             linkedRepo={linkedRepo}
             projectId={projectId}
+            trustMode={trustMode}
+            onReviewDiff={onReviewDiff}
             onPushSuccess={onPushSuccess}
             onPrCreated={onPrCreated}
+          />
+        )}
+
+        {commitPayload && !commitCardDone && (
+          <CommitCard
+            payload={commitPayload}
+            projectId={projectId}
+            sessionId={sessionId}
+            sourceMessageId={message.id}
+            onDone={() => {
+              setCommitCardDone(true);
+              onCommitCardDone?.();
+            }}
           />
         )}
 
@@ -7165,6 +7471,7 @@ export default function Workspace() {
 
   const [fileContext, setFileContext] = useState<string | null>(null);
   const [chatPending, setChatPending] = useState(false);
+  const [activityStream, setActivityStream] = useState<{ active: boolean; content: string }>({ active: false, content: "" });
   const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
   const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(null);
 
@@ -7205,6 +7512,28 @@ export default function Workspace() {
   const { data: entries } = useListEntries(id, {}, { query: { enabled: !!id, queryKey: getListEntriesQueryKey(id, {}) } });
   const createSession = useCreateSession();
   const createEntry = useCreateEntry();
+  const [parkedEntries, setParkedEntries] = useState<Entry[]>([]);
+  const [showParkingDrawer, setShowParkingDrawer] = useState(false);
+
+  const refreshParkedEntries = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/projects/${id}/entries?status=parked`);
+      if (!res.ok) return;
+      const data = await res.json() as Entry[];
+      setParkedEntries(data);
+    } catch {
+      // Parking lot count is ambient UI; never interrupt chat if it fails.
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void refreshParkedEntries();
+  }, [refreshParkedEntries]);
+
+  useEffect(() => {
+    void refreshParkedEntries();
+  }, [entries?.length, refreshParkedEntries]);
 
   const handlePushAll = useCallback(async (fileEdits: FileEdit[]) => {
     if (!linkedRepo) return;
@@ -7504,6 +7833,7 @@ export default function Workspace() {
 
       setMessages((prev) => [...prev, userMsg]);
       setChatPending(true);
+      setActivityStream({ active: true, content: "" });
 
       const userProfileStr = profileToString(loadProfile());
 
@@ -7579,11 +7909,20 @@ export default function Workspace() {
           const cp = res.catchPayload as CatchPayload | null;
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
           const lps = (res.linePatches ?? []) as LinePatch[];
+          const aff = (res.autoFetchedFiles ?? []) as string[];
+          setActivityStream({
+            active: true,
+            content: [
+              res.content ?? "",
+              aff.length > 0 ? "FILE_READ" : "",
+              fes.length > 0 ? "FILE_EDIT" : "",
+              lps.length > 0 ? "LINE_PATCH" : "",
+            ].filter(Boolean).join("\n"),
+          });
           const rawChips = (res.memoryChips ?? []) as Array<string | MemoryChip>;
           const normalizedChips: MemoryChip[] = rawChips.map((c) =>
             typeof c === "string" ? { label: c } : c
           );
-          const aff = (res.autoFetchedFiles ?? []) as string[];
           setMessages((prev) => [...prev, {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
@@ -7630,8 +7969,12 @@ export default function Workspace() {
           }
         })
         .catch((err: unknown) => {
-          if (err instanceof Error && err.name === "AbortError") return;
+          if (err instanceof Error && err.name === "AbortError") {
+            setActivityStream({ active: false, content: "" });
+            return;
+          }
           setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again.", sentAt: new Date().toISOString() }]);
+          setActivityStream({ active: false, content: "" });
         })
         .finally(() => { setChatPending(false); abortControllerRef.current = null; });
     },
@@ -7844,10 +8187,10 @@ export default function Workspace() {
       const title = content.replace(/\n/g, " ").slice(0, 80).trim();
       createEntry.mutate(
         { projectId: id, data: { title, summary: content.slice(0, 500), status: "parked", severity: "parked", mode: "think", sessionId } },
-        { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }) }
+        { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); void refreshParkedEntries(); } }
       );
     },
-    [id, sessionId, createEntry, queryClient]
+    [id, sessionId, createEntry, queryClient, refreshParkedEntries]
   );
 
   const handleCommit = useCallback(
@@ -7856,10 +8199,10 @@ export default function Workspace() {
       const title = content.replace(/\n/g, " ").slice(0, 80).trim();
       createEntry.mutate(
         { projectId: id, data: { title, summary: content.slice(0, 500), status: "committed", severity: "committed", mode: "think", sessionId } },
-        { onSuccess: () => { playCommit(); queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); } }
+        { onSuccess: () => { playCommit(); queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); void refreshParkedEntries(); } }
       );
     },
-    [id, sessionId, createEntry, queryClient, playCommit]
+    [id, sessionId, createEntry, queryClient, playCommit, refreshParkedEntries]
   );
 
   const handleRollbackPush = useCallback(async (record: PushRecord) => {
@@ -7904,7 +8247,7 @@ export default function Workspace() {
 
   const hasInput = input.trim().length > 0;
   const entryCount = entries?.length ?? 0;
-  const parkedCount = entries?.filter((e) => e.status === "parked").length ?? 0;
+  const parkedCount = parkedEntries.length;
   const committedCount = entries?.filter((e) => e.status === "committed").length ?? 0;
   const healthPct = entryCount > 0 ? Math.round((committedCount / entryCount) * 100) : 0;
   const [mapReadiness, setMapReadiness] = useState(0);
@@ -8761,6 +9104,7 @@ export default function Workspace() {
             flexDirection: "column",
             background: "var(--atlas-bg)",
             overflow: "hidden",
+            position: "relative",
           }}
         >
           {/* ── Chat / Diff / Terminal tab strip ── */}
@@ -8938,6 +9282,21 @@ export default function Workspace() {
                   onRunCommand={handleRunCommand}
                   onPrCreated={(url) => { setSessionPrUrl(url); setLeftTab("diff"); }}
                   onExtractToForge={(content) => { setForgePreloadContent(content); setShowForgeExternal(true); }}
+                  onReviewDiff={() => setLeftTab("diff")}
+                  onStreamActivityUpdate={(content) => {
+                    const markers = [
+                      msg.autoFetchedFiles && msg.autoFetchedFiles.length > 0 ? "FILE_READ" : "",
+                      msg.fileEdits && msg.fileEdits.length > 0 ? "FILE_EDIT" : "",
+                      msg.linePatches && msg.linePatches.length > 0 ? "LINE_PATCH" : "",
+                    ].filter(Boolean).join("\n");
+                    setActivityStream({ active: true, content: [content, markers].filter(Boolean).join("\n") });
+                  }}
+                  onStreamActivityComplete={() => setActivityStream({ active: false, content: "" })}
+                  onCommitCardDone={() => {
+                    queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) });
+                    void refreshParkedEntries();
+                  }}
+                  trustMode={trustMode}
                   onPushSuccess={(records) => {
                     setPushHistory((prev) => {
                       const next = [...prev, ...records].slice(-20);
@@ -8959,7 +9318,7 @@ export default function Workspace() {
                           verb: "github_push",
                         },
                       },
-                      { onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }) }
+                      { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) }); void refreshParkedEntries(); } }
                     );
                     // Refresh preview iframe after push — immediate + follow-up for slower deployments
                     setPreviewRefreshTrigger((t) => t + 1);
@@ -8997,26 +9356,7 @@ export default function Workspace() {
               </div>
             )}
 
-            {chatPending && (
-              <div className="atlas-bubble-in" style={{ marginBottom: 24 }}>
-                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.35, marginBottom: 8 }}>
-                  Atlas
-                </div>
-                <LoadingSpinner size="sm" color="atlas" />
-                <div style={{
-                  marginTop: 10,
-                  fontFamily: "var(--app-font-mono)",
-                  fontSize: 10,
-                  color: "var(--atlas-muted)",
-                  letterSpacing: "0.07em",
-                  opacity: 0.65,
-                  transition: "opacity 400ms ease",
-                  minHeight: "1em",
-                }}>
-                  {PENDING_PHRASES[pendingPhraseIdx]}
-                </div>
-              </div>
-            )}
+            {activityStream.active && <AtlasActivityBar content={activityStream.content} />}
 
             <div ref={bottomRef} />
 
@@ -9147,7 +9487,7 @@ export default function Workspace() {
           )}
 
           {/* Input — hidden when Terminal tab is active (terminal has its own input row) */}
-          {leftTab !== "terminal" && <div style={{ padding: "10px 14px 14px", flexShrink: 0 }}>
+          {leftTab !== "terminal" && <div style={{ padding: "10px 14px 14px", flexShrink: 0, position: "sticky", bottom: 0, zIndex: 30, background: "var(--atlas-bg)", borderTop: "1px solid var(--atlas-border)" }}>
             {/* Hidden file input — handles both images and ZIP files */}
             <input
               ref={fileInputRef}
@@ -9599,6 +9939,88 @@ export default function Workspace() {
               </div>
             </div>
           </div>}
+
+          {parkedCount > 0 && !showParkingDrawer && (
+            <button
+              type="button"
+              onClick={() => { setShowParkingDrawer(true); void refreshParkedEntries(); }}
+              style={{
+                position: "absolute",
+                right: 16,
+                bottom: 104,
+                zIndex: 42,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 7,
+                padding: "6px 10px",
+                borderRadius: 999,
+                background: "var(--atlas-surface)",
+                border: "1px solid var(--atlas-border)",
+                color: "var(--atlas-muted)",
+                cursor: "pointer",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 9,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                boxShadow: "0 12px 28px -20px var(--atlas-gold)",
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block", flexShrink: 0 }} />
+              {parkedCount} items
+            </button>
+          )}
+
+          {showParkingDrawer && (
+            <>
+              <div
+                onClick={() => setShowParkingDrawer(false)}
+                style={{ position: "absolute", inset: 0, zIndex: 44, background: "color-mix(in oklab, var(--atlas-bg) 56%, transparent)" }}
+              />
+              <div
+                className="atlas-slide-in-right"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 45,
+                  width: "min(360px, 92%)",
+                  background: "var(--atlas-bg)",
+                  borderLeft: "1px solid var(--atlas-border)",
+                  boxShadow: "-24px 0 60px -38px var(--atlas-gold)",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <div style={{ padding: "13px 14px", borderBottom: "1px solid var(--atlas-border)", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--atlas-gold)", display: "inline-block" }} />
+                  <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)" }}>
+                    Parking Lot
+                  </span>
+                  <span style={{ marginLeft: "auto", fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", opacity: 0.65 }}>
+                    {parkedCount} items
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowParkingDrawer(false)}
+                    style={{ background: "transparent", border: "none", color: "var(--atlas-muted)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 3px", opacity: 0.65 }}
+                    aria-label="Close parking lot"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "12px 14px" }} className="scrollbar-none">
+                  {parkedEntries.length === 0 ? (
+                    <div style={{ padding: "30px 10px", textAlign: "center", color: "var(--atlas-muted)", fontSize: 12, opacity: 0.6 }}>
+                      Nothing parked right now.
+                    </div>
+                  ) : (
+                    parkedEntries.map((entry) => <ParkingLotEntry key={entry.id} entry={entry} />)
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Desktop: resize handle + right panel */}
