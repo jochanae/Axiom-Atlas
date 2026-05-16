@@ -1413,6 +1413,23 @@ export default function Home() {
         localStorage.setItem(`axiom-flow-nodes-${projectId}`, JSON.stringify(nodes));
         localStorage.setItem(`axiom-flow-nodes-${projectId}-edges`, JSON.stringify(edges));
       } catch {}
+      const nodeState = Object.fromEntries(nodes.map(n => [n.id, {
+        resolved: Boolean(n.resolved),
+        label: n.label,
+        type: n.type,
+        x: n.x,
+        y: n.y,
+        ...(n.details ? { details: n.details } : {}),
+        ...(n.meta ? { meta: n.meta } : {}),
+        ...(n.moscow ? { moscow: n.moscow } : {}),
+        ...(n.question ? { question: n.question } : {}),
+      }]));
+      await fetch(`/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ nodeState }),
+      }).catch(() => {});
 
       const ideaTexts = transcriptMessages
         .filter(m => m.role === "user" && m.content.trim().length > 20)
@@ -1438,7 +1455,7 @@ export default function Home() {
           parkedCount: ideaTexts.length,
           flowNodeCount: nodes.length,
           goalLabel: goal?.label ?? "your goal",
-          nodes: nodes.map(n => ({ id: n.id, label: n.label, type: n.type })),
+          nodes: nodes.map(n => ({ id: n.id, label: n.label, type: n.type, details: n.details, meta: n.meta, moscow: n.moscow })),
           parkedTitles: ideaTexts.map(idea => idea.slice(0, 80)),
         }));
         sessionStorage.setItem("atlas-open-tab", "map");

@@ -77,6 +77,9 @@ type HomeHandoffNode = {
   id?: string;
   label: string;
   type: string;
+  details?: string;
+  meta?: string;
+  moscow?: string;
 };
 
 type HomeHandoffMeta = {
@@ -136,6 +139,61 @@ interface LinkedRepo {
 type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
 type WorkspaceLens = "flow" | "build" | "look" | "scenario";
+
+const FLOW_NODE_TYPES = new Set<ArchNode["type"]>(["goal", "requirement", "blocker", "priority", "decision", "sprint", "wont"]);
+const FLOW_NODE_META = new Set(["must", "should", "could", "wont"]);
+const SYSTEM_NODE_IDS = new Set(["auth", "db", "api", "state", "ui", "logic"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function asFlowNodeType(value: unknown): ArchNode["type"] | null {
+  return typeof value === "string" && FLOW_NODE_TYPES.has(value as ArchNode["type"])
+    ? value as ArchNode["type"]
+    : null;
+}
+
+function asFlowMeta(value: unknown): ArchNode["meta"] | undefined {
+  return typeof value === "string" && FLOW_NODE_META.has(value)
+    ? value as ArchNode["meta"]
+    : undefined;
+}
+
+function flowNodeFallbackPosition(index: number): { x: number; y: number } {
+  const angle = (2 * Math.PI * index) / 8 - Math.PI / 2;
+  return {
+    x: Math.round(300 + 160 * Math.cos(angle)),
+    y: Math.round(250 + 160 * Math.sin(angle)),
+  };
+}
+
+function extractPersistedFlowNodes(nodeState: unknown): ArchNode[] {
+  if (!isRecord(nodeState)) return [];
+  return Object.entries(nodeState).flatMap(([id, raw], index): ArchNode[] => {
+    if (SYSTEM_NODE_IDS.has(id) || !isRecord(raw)) return [];
+    const label = typeof raw.label === "string" && raw.label.trim() ? raw.label.trim() : "";
+    const type = asFlowNodeType(raw.type);
+    if (!label || !type) return [];
+    const fallback = flowNodeFallbackPosition(index);
+    const strategicAnswer = typeof raw.strategicAnswer === "string" && raw.strategicAnswer.trim()
+      ? raw.strategicAnswer.trim()
+      : undefined;
+    return [{
+      id,
+      label,
+      type,
+      resolved: Boolean(strategicAnswer) || raw.resolved === true,
+      x: typeof raw.x === "number" ? raw.x : fallback.x,
+      y: typeof raw.y === "number" ? raw.y : fallback.y,
+      details: typeof raw.details === "string" && raw.details.trim() ? raw.details.trim() : undefined,
+      meta: asFlowMeta(raw.meta),
+      moscow: asFlowMeta(raw.moscow),
+      question: typeof raw.question === "string" && raw.question.trim() ? raw.question.trim() : undefined,
+      strategicAnswer,
+    }];
+  });
+}
 
 const LENS_CONFIG: Record<WorkspaceLens, {
   label: string;
@@ -5775,14 +5833,34 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
   const handleNodesChange = useCallback((updatedNodes: ArchNode[]) => {
     setNodes(updatedNodes);
     if (!projectId) return;
-    // New shape: per-node object { resolved, strategicAnswer? }. The DB column
-    // is jsonb so this is a non-breaking change; AxiomFlow's hydration handler
-    // tolerates the legacy boolean shape on read.
-    const axiomState: Record<string, { resolved: boolean; strategicAnswer?: string }> = {};
+    // New shape: per-node object with display metadata plus resolution state.
+    // The DB column is jsonb so this is non-breaking; AxiomFlow's hydration
+    // handler still tolerates the legacy boolean shape on read.
+    const axiomState: Record<string, {
+      resolved: boolean;
+      strategicAnswer?: string;
+      label: string;
+      type: ArchNode["type"];
+      x: number;
+      y: number;
+      details?: string;
+      meta?: ArchNode["meta"];
+      moscow?: ArchNode["moscow"];
+      question?: string;
+    }> = {};
     updatedNodes.forEach(n => {
-      axiomState[n.id] = n.strategicAnswer
-        ? { resolved: n.resolved, strategicAnswer: n.strategicAnswer }
-        : { resolved: n.resolved };
+      axiomState[n.id] = {
+        resolved: n.resolved,
+        ...(n.strategicAnswer ? { strategicAnswer: n.strategicAnswer } : {}),
+        label: n.label,
+        type: n.type,
+        x: n.x,
+        y: n.y,
+        ...(n.details ? { details: n.details } : {}),
+        ...(n.meta ? { meta: n.meta } : {}),
+        ...(n.moscow ? { moscow: n.moscow } : {}),
+        ...(n.question ? { question: n.question } : {}),
+      };
     });
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
@@ -7596,6 +7674,7 @@ export default function Workspace() {
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [switchToExpanded, setSwitchToExpanded] = useState(false);
+  const [switchProjectDeleteId, setSwitchProjectDeleteId] = useState<number | null>(null);
   const projectBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
   // Close portaled header dropdowns on scroll/resize so they don't float off their anchors.
@@ -7775,6 +7854,25 @@ export default function Workspace() {
   const deleteProjectMutation = useDeleteProject();
   const createProjectMutation = useCreateProject();
 
+  const handleDeleteProjectFromSwitcher = useCallback((projectToDeleteId: number) => {
+    deleteProjectMutation.mutate({ id: projectToDeleteId }, {
+      onSuccess: () => {
+        queryClient.setQueryData(getListProjectsQueryKey(), (current: unknown) => (
+          Array.isArray(current) ? current.filter((p: any) => p?.id !== projectToDeleteId) : current
+        ));
+        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+        setSwitchProjectDeleteId(null);
+        if (projectToDeleteId === id) {
+          setShowProjectMenu(false);
+          setLocation("/home");
+        }
+      },
+      onError: () => {
+        toast.error("Project could not be deleted.");
+      },
+    });
+  }, [deleteProjectMutation, id, queryClient, setLocation]);
+
   const ATLAS_SRC_FILES = [
     { label: "workspace.tsx", path: "artifacts/atlas/src/pages/workspace.tsx", hint: "main UI · ~4k lines" },
     { label: "home.tsx", path: "artifacts/atlas/src/pages/home.tsx", hint: "home page" },
@@ -7827,6 +7925,7 @@ export default function Workspace() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const importPrimed = useRef(false);
   const touchStartX = useRef(0);
+  const homeHandoffDbLoadedRef = useRef<number | null>(null);
 
   const { data: allProjects } = useListProjects();
   const { data: project, isLoading: projectLoading } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
@@ -7872,7 +7971,14 @@ export default function Workspace() {
       const stored = raw ? JSON.parse(raw) as HomeHandoffNode[] : [];
       return stored
         .filter((node) => node && typeof node.label === "string" && typeof node.type === "string")
-        .map((node) => ({ id: node.id, label: node.label, type: node.type }));
+        .map((node) => ({
+          id: node.id,
+          label: node.label,
+          type: node.type,
+          details: node.details,
+          meta: node.meta,
+          moscow: node.moscow,
+        }));
     } catch {
       return [];
     }
@@ -8626,6 +8732,45 @@ export default function Workspace() {
   const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : undefined
   );
+  useEffect(() => {
+    if (!isHomeHandoff || !Number.isFinite(id) || homeHandoffDbLoadedRef.current === id) return;
+    homeHandoffDbLoadedRef.current = id;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${id}`, { credentials: "include", signal: controller.signal });
+        if (!res.ok) return;
+        const data = await res.json() as { nodeState?: unknown };
+        const persistedNodes = extractPersistedFlowNodes(data.nodeState);
+        if (persistedNodes.length === 0) return;
+        setExternalForgeNodes(persistedNodes);
+        setHomeHandoffMeta((prev) => ({
+          parkedCount: prev?.parkedCount ?? parkedEntries.length,
+          flowNodeCount: persistedNodes.length,
+          goalLabel: persistedNodes.find(n => n.type === "goal")?.label ?? prev?.goalLabel ?? persistedNodes[0]?.label ?? "your goal",
+          parkedTitles: prev?.parkedTitles,
+          nodes: persistedNodes.map(n => ({
+            id: n.id,
+            label: n.label,
+            type: n.type,
+            details: n.details,
+            meta: n.meta,
+            moscow: n.moscow,
+          })),
+        }));
+        if (isMobile) {
+          setMobileTab("map");
+          setRightOpen(true);
+        } else {
+          setDesktopForceTab("map");
+          setTimeout(() => setDesktopForceTab(undefined), 120);
+        }
+      } catch {
+        // Handoff details are a progressive enhancement; keep the workspace usable.
+      }
+    })();
+    return () => controller.abort();
+  }, [id, isHomeHandoff, isMobile, parkedEntries.length]);
   const openPreviewPanel = useCallback(() => {
     if (isMobile) {
       setMobileTab("preview");
@@ -9053,7 +9198,7 @@ export default function Workspace() {
                 >
                   {/* Switch to existing project — shown when other projects exist */}
                   {(allProjects ?? []).filter(p => p.id !== id && p.status !== "archived").length > 0 && (() => {
-                    const others = (allProjects ?? []).filter(p => p.id !== id && p.status !== "archived").slice(0, 7);
+                    const others = (allProjects ?? []).filter(p => p.id !== id && p.status !== "archived");
                     const isEmptyNew = messages.length === 0 && project?.name === "New Project";
                     return (
                       <>
@@ -9077,45 +9222,112 @@ export default function Workspace() {
                             <path d="M1 1l4 4 4-4" />
                           </svg>
                         </button>
-                        {switchToExpanded && (<>
-                        {/* New idea — creates blank project + opens its workspace */}
-                        <MenuBtn
-                          icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="8" y1="2" x2="8" y2="14" /><line x1="2" y1="8" x2="14" y2="8" /></svg>}
-                          label={createProjectMutation.isPending ? "Creating…" : "New idea"}
-                          onClick={() => {
-                            if (createProjectMutation.isPending) return;
-                            setShowProjectMenu(false);
-                            createProjectMutation.mutate({ data: { name: "New Project" } }, {
-                              onSuccess: (created) => {
-                                queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                                setLocation(`/project/${created.id}`);
-                              },
-                            });
-                          }}
-                          style={{ color: "rgba(201,162,76,0.75)", borderBottom: "1px solid rgba(201,162,76,0.08)" }}
-                        />
-                        {others.map(p => (
-                          <MenuBtn
-                            key={p.id}
-                            icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><circle cx="8" cy="8" r="2.2" /></svg>}
-                            label={p.name}
-                            onClick={() => {
-                              setShowProjectMenu(false);
-                              if (isEmptyNew) {
-                                deleteProjectMutation.mutate({ id }, {
-                                  onSuccess: () => {
+                        {switchToExpanded && (
+                          <div style={{ maxHeight: "60vh", overflowY: "auto", paddingRight: 2 }}>
+                            {/* New idea — creates blank project + opens its workspace */}
+                            <MenuBtn
+                              icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><line x1="8" y1="2" x2="8" y2="14" /><line x1="2" y1="8" x2="14" y2="8" /></svg>}
+                              label={createProjectMutation.isPending ? "Creating…" : "New idea"}
+                              onClick={() => {
+                                if (createProjectMutation.isPending) return;
+                                setShowProjectMenu(false);
+                                createProjectMutation.mutate({ data: { name: "New Project" } }, {
+                                  onSuccess: (created) => {
                                     queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-                                    setLocation(`/project/${p.id}`);
+                                    setLocation(`/project/${created.id}`);
                                   },
-                                  onError: () => setLocation(`/project/${p.id}`),
                                 });
-                              } else {
-                                setLocation(`/project/${p.id}`);
+                              }}
+                              style={{ color: "color-mix(in oklab, var(--atlas-gold) 75%, var(--atlas-muted))", borderBottom: "1px solid color-mix(in oklab, var(--atlas-gold) 8%, transparent)" }}
+                            />
+                            {others.map(p => {
+                              const confirming = switchProjectDeleteId === p.id;
+                              if (confirming) {
+                                return (
+                                  <div key={p.id} style={{ padding: "9px 12px", display: "flex", flexDirection: "column", gap: 7, borderRadius: 7, background: "color-mix(in oklab, var(--atlas-gold) 7%, transparent)" }}>
+                                    <div style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.45 }}>
+                                      Delete {p.name}? This cannot be undone.
+                                    </div>
+                                    <div style={{ display: "flex", gap: 6 }}>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSwitchProjectDeleteId(null)}
+                                        style={{ flex: 1, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--atlas-border)", background: "var(--atlas-surface-alt)", color: "var(--atlas-muted)", cursor: "pointer", fontSize: 11 }}
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={deleteProjectMutation.isPending}
+                                        onClick={() => handleDeleteProjectFromSwitcher(p.id)}
+                                        style={{ flex: 1, padding: "6px 8px", borderRadius: 6, border: "1px solid color-mix(in oklab, var(--atlas-gold) 36%, var(--atlas-border))", background: "color-mix(in oklab, var(--atlas-gold) 13%, var(--atlas-surface))", color: "var(--atlas-gold)", cursor: deleteProjectMutation.isPending ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700 }}
+                                      >
+                                        {deleteProjectMutation.isPending ? "Deleting…" : "Confirm"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
                               }
-                            }}
-                          />
-                        ))}
-                        </>)}
+                              return (
+                                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                  <MenuBtn
+                                    icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="12" height="12" rx="1.5" /><circle cx="8" cy="8" r="2.2" /></svg>}
+                                    label={p.name}
+                                    onClick={() => {
+                                      setShowProjectMenu(false);
+                                      if (isEmptyNew) {
+                                        deleteProjectMutation.mutate({ id }, {
+                                          onSuccess: () => {
+                                            queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                                            setLocation(`/project/${p.id}`);
+                                          },
+                                          onError: () => setLocation(`/project/${p.id}`),
+                                        });
+                                      } else {
+                                        setLocation(`/project/${p.id}`);
+                                      }
+                                    }}
+                                    style={{ width: "auto", minWidth: 0, flex: 1 }}
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label={`Delete ${p.name}`}
+                                    title={`Delete ${p.name}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSwitchProjectDeleteId(p.id);
+                                    }}
+                                    style={{
+                                      flexShrink: 0,
+                                      width: 30,
+                                      height: 30,
+                                      borderRadius: 7,
+                                      border: "1px solid transparent",
+                                      background: "transparent",
+                                      color: "var(--atlas-muted)",
+                                      cursor: "pointer",
+                                      fontSize: 17,
+                                      lineHeight: 1,
+                                      opacity: 0.72,
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = "color-mix(in oklab, var(--atlas-gold) 8%, transparent)";
+                                      e.currentTarget.style.borderColor = "color-mix(in oklab, var(--atlas-gold) 18%, transparent)";
+                                      e.currentTarget.style.color = "var(--atlas-gold)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = "transparent";
+                                      e.currentTarget.style.borderColor = "transparent";
+                                      e.currentTarget.style.color = "var(--atlas-muted)";
+                                    }}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                         <div style={{ height: 1, background: "var(--atlas-border)", margin: "4px 6px", opacity: 0.5 }} />
                       </>
                     );
@@ -9568,9 +9780,23 @@ export default function Workspace() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 180, overflowY: "auto" }}>
                   {homeHandoffNodes.length > 0 ? homeHandoffNodes.map((node) => (
-                    <div key={node.id ?? `${node.type}-${node.label}`} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-                      <span style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.45 }}>{node.label}</span>
-                      <span style={{ color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0 }}>{node.type}</span>
+                    <div key={node.id ?? `${node.type}-${node.label}`} style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, minWidth: 0 }}>
+                        <span style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.45, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{node.label}</span>
+                        <span style={{ color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0 }}>{node.type}</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                        {(node.moscow ?? node.meta) && (
+                          <span style={{ flexShrink: 0, color: "var(--atlas-gold)", border: "1px solid rgba(var(--atlas-gold-rgb),0.28)", background: "rgba(var(--atlas-gold-rgb),0.08)", borderRadius: 999, padding: "1px 6px", fontFamily: "var(--app-font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                            {node.moscow ?? node.meta}
+                          </span>
+                        )}
+                        {node.details && (
+                          <span style={{ minWidth: 0, color: "var(--atlas-muted)", fontSize: 11, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {node.details}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )) : (
                     <div style={{ color: "var(--atlas-muted)", fontSize: 12, lineHeight: 1.5 }}>No flow node details were saved for this handoff.</div>
