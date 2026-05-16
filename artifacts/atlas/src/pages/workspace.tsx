@@ -7091,6 +7091,11 @@ export default function Workspace() {
   const [forgeContext, setForgeContext] = useState<string | null>(() => {
     try { return sessionStorage.getItem(`atlas-forge-ctx-${id}`) ?? null; } catch { return null; }
   });
+  // Reload per-project forge state when project ID changes — prevents cross-project state contamination
+  useEffect(() => {
+    try { setForgePillDismissed(localStorage.getItem(`atlas-forge-dismissed-${id}`) === "1"); } catch { setForgePillDismissed(false); }
+    try { setForgeContext(sessionStorage.getItem(`atlas-forge-ctx-${id}`) ?? null); } catch { setForgeContext(null); }
+  }, [id]);
   const [firstRunDismissed, setFirstRunDismissed] = useState(false);
   const [firstRunInput, setFirstRunInput] = useState("");
   const [renaming, setRenaming] = useState(false);
@@ -7200,6 +7205,10 @@ export default function Workspace() {
 
   const { data: allProjects } = useListProjects();
   const { data: project, isLoading: projectLoading } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
+  // True when forge has run this session OR when saved AxiomFlow nodes exist for this project
+  const hasForgeNodes = forgeContext !== null ||
+    Object.keys((project?.nodeState ?? {}) as Record<string, unknown>)
+      .some(k => !["auth", "db", "api", "state", "ui", "logic"].includes(k));
 
   const { data: sessions, isLoading: sessionsLoading } = useListSessions(id, {
     query: { enabled: !!id, queryKey: getListSessionsQueryKey(id) },
@@ -9070,7 +9079,7 @@ export default function Workspace() {
 
           {/* Forge shortcut — visible on Chat tab only */}
           {leftTab === "chat" && !forgePillDismissed && (
-            forgeContext !== null ? (
+            hasForgeNodes ? (
               <div style={{ padding: "0 14px 8px", flexShrink: 0 }}>
                 <button
                   aria-label="Open The Forge"
