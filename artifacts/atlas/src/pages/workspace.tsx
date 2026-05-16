@@ -3113,6 +3113,22 @@ interface GhFileContent {
   lines: number;
 }
 
+interface GhCommitFile {
+  filename: string;
+  additions: number;
+  deletions: number;
+  status: string;
+}
+
+interface GhCommitSummary {
+  sha: string;
+  message: string;
+  author: string;
+  timestamp: string;
+  url: string;
+  files: GhCommitFile[];
+}
+
 
 function FileIcon({ ext }: { ext?: string }) {
   const color =
@@ -3140,6 +3156,131 @@ function FolderIcon({ open }: { open?: boolean }) {
         fill={open ? "rgba(201,162,76,0.07)" : "none"}
       />
     </svg>
+  );
+}
+
+function formatCommitTimeAgo(timestamp: string): string {
+  const diff = Date.now() - new Date(timestamp).getTime();
+  const mins = Math.max(0, Math.floor(diff / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  const months = Math.floor(days / 30);
+  return `${months} month${months === 1 ? "" : "s"} ago`;
+}
+
+function CommitHistoryCard({ commit }: { commit: GhCommitSummary }) {
+  const [expanded, setExpanded] = useState(false);
+  const firstLine = commit.message.split("\n")[0] || "(no commit message)";
+  const displayMessage = expanded || firstLine.length <= 80 ? firstLine : `${firstLine.slice(0, 77)}...`;
+  return (
+    <div
+      style={{
+        width: "100%",
+        borderRadius: 8,
+        background: "var(--atlas-surface)",
+        border: "1px solid var(--atlas-border)",
+        color: "var(--atlas-fg)",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "stretch" }}>
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            textAlign: "left",
+            padding: "10px 12px",
+            background: "transparent",
+            border: "none",
+            color: "inherit",
+            cursor: "pointer",
+          }}
+        >
+          <div style={{ fontSize: 12.5, color: "var(--atlas-fg)", lineHeight: 1.45, overflow: "hidden", textOverflow: "ellipsis" }}>
+            {displayMessage}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", marginTop: 4 }}>
+            <span style={{ fontSize: 10.5, color: "var(--atlas-muted)" }}>{commit.author}</span>
+            <span style={{ fontSize: 10, color: "var(--atlas-muted)", opacity: 0.55 }}>·</span>
+            <span style={{ fontSize: 10.5, color: "var(--atlas-muted)" }}>{formatCommitTimeAgo(commit.timestamp)}</span>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.65 }}>{commit.sha.slice(0, 7)}</span>
+          </div>
+        </button>
+        <a
+          href={commit.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="View commit on GitHub"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            color: "var(--atlas-gold)",
+            textDecoration: "none",
+            fontSize: 15,
+            lineHeight: 1,
+            padding: "10px 12px",
+            flexShrink: 0,
+            opacity: 0.78,
+          }}
+        >
+          ↗
+        </a>
+      </div>
+      {expanded && (
+        <div style={{ borderTop: "1px solid var(--atlas-border)", padding: "9px 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+            {commit.message || "(no commit message)"}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {commit.files.length > 0 ? commit.files.map((file) => (
+              <div key={file.filename} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10.5, color: "var(--atlas-fg)", fontFamily: "var(--app-font-mono)" }}>
+                  {file.filename}
+                </span>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-phosphor)", flexShrink: 0 }}>
+                  +{file.additions}
+                </span>
+                <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-ember)", flexShrink: 0 }}>
+                  -{file.deletions}
+                </span>
+              </div>
+            )) : (
+              <div style={{ fontSize: 10.5, color: "var(--atlas-muted)", opacity: 0.65 }}>No file details available.</div>
+            )}
+          </div>
+          <a
+            href={commit.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.06em", color: "var(--atlas-gold)", textDecoration: "none", alignSelf: "flex-start" }}
+          >
+            View on GitHub →
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommitHistorySkeleton() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <style>{`@keyframes atlas-history-pulse{0%,100%{opacity:.36}50%{opacity:.72}}`}</style>
+      {[0, 1, 2].map((idx) => (
+        <div key={idx} style={{ padding: "12px", borderRadius: 8, border: "1px solid var(--atlas-border)", background: "var(--atlas-surface)", animation: "atlas-history-pulse 1.4s ease-in-out infinite" }}>
+          <div style={{ height: 12, width: "72%", borderRadius: 4, background: "var(--atlas-muted)", opacity: 0.28, marginBottom: 9 }} />
+          <div style={{ height: 9, width: "42%", borderRadius: 4, background: "var(--atlas-muted)", opacity: 0.18 }} />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -3333,6 +3474,11 @@ function FilesTab({
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [view, setView] = useState<"repos" | "tree" | "file">("repos");
+  const [filesSubTab, setFilesSubTab] = useState<"files" | "history">("files");
+  const [commits, setCommits] = useState<GhCommitSummary[]>([]);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsError, setCommitsError] = useState<string | null>(null);
+  const [commitsReason, setCommitsReason] = useState<string | null>(null);
   const [disconnectConfirm, setDisconnectConfirm] = useState(false);
   const [clearTokenError, setClearTokenError] = useState<string | null>(null);
   const [unlinkRepoError, setUnlinkRepoError] = useState<string | null>(null);
@@ -3377,8 +3523,35 @@ function FilesTab({
     setSelectedPath(null);
     setFileContent(null);
     setView("repos");
+    setFilesSubTab("files");
+    setCommits([]);
+    setCommitsError(null);
+    setCommitsReason(null);
     onFileContext(null);
   }, [projectId]);
+
+  const loadCommits = useCallback(async () => {
+    setCommitsLoading(true);
+    setCommitsError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/commits`, { credentials: "include" });
+      const data = await res.json().catch(() => ({})) as { commits?: GhCommitSummary[]; reason?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setCommits(data.commits ?? []);
+      setCommitsReason(data.reason ?? null);
+    } catch (e) {
+      setCommits([]);
+      setCommitsReason(null);
+      setCommitsError(e instanceof Error ? e.message : "Could not load commits");
+    } finally {
+      setCommitsLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (filesSubTab !== "history") return;
+    void loadCommits();
+  }, [filesSubTab, loadCommits]);
 
   const handleAutoLink = async () => {
     if (!tokenState || autoLinkStatus === "running") return;
@@ -3474,6 +3647,7 @@ function FilesTab({
 
   const loadTree = useCallback(async (repo: GhRepo) => {
     setSelectedRepo(repo);
+    setFilesSubTab("files");
     setView("tree");
     setTree([]);
     setTreeLoading(true);
@@ -3581,6 +3755,7 @@ function FilesTab({
 
   const loadFile = useCallback(async (path: string) => {
     if (!selectedRepo) return;
+    setFilesSubTab("files");
     setSelectedPath(path);
     setView("file");
     setFileContent(null);
@@ -3681,7 +3856,7 @@ function FilesTab({
       {/* Header breadcrumb */}
       <div style={{ padding: "7px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <button
-          onClick={() => { setView("repos"); setSelectedRepo(null); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
+          onClick={() => { setFilesSubTab("files"); setView("repos"); setSelectedRepo(null); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
           style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "repos" ? "var(--atlas-fg)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "repos" ? 0.8 : 0.45, flexShrink: 0 }}
         >
           repos
@@ -3690,7 +3865,7 @@ function FilesTab({
           <>
             <span style={{ color: "var(--atlas-border)", fontSize: 10, flexShrink: 0 }}>/</span>
             <button
-              onClick={() => { setView("tree"); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
+              onClick={() => { setFilesSubTab("files"); setView("tree"); setSelectedPath(null); setFileContent(null); onFileContext(null); }}
               style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, color: view === "tree" ? "var(--atlas-gold)" : "var(--atlas-muted)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", opacity: view === "tree" ? 1 : 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 90 }}
             >
               {selectedRepo.name}
@@ -3798,6 +3973,59 @@ function FilesTab({
         </div>
       </div>
 
+      {selectedRepo && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderBottom: "1px solid var(--atlas-border)", flexShrink: 0 }}>
+          {(["files", "history"] as const).map((tab) => {
+            const active = filesSubTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setFilesSubTab(tab)}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: 999,
+                  border: `1px solid ${active ? "var(--atlas-gold)" : "var(--atlas-border)"}`,
+                  background: active ? "rgba(var(--atlas-gold-rgb),0.10)" : "transparent",
+                  color: active ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                  cursor: "pointer",
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 9.5,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {tab === "files" ? "Files" : "History"}
+              </button>
+            );
+          })}
+          {filesSubTab === "history" && (
+            <button
+              type="button"
+              onClick={() => void loadCommits()}
+              aria-label="Refresh commit history"
+              disabled={commitsLoading}
+              style={{
+                marginLeft: "auto",
+                width: 28,
+                height: 28,
+                borderRadius: 7,
+                border: "1px solid var(--atlas-border)",
+                background: "transparent",
+                color: "var(--atlas-muted)",
+                cursor: commitsLoading ? "default" : "pointer",
+                opacity: commitsLoading ? 0.45 : 0.8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ↻
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Inline errors for disconnect / unlink */}
       {clearTokenError && (
         <div style={{ margin: "4px 6px 0", padding: "6px 10px", borderRadius: 5, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", fontSize: 10, color: "rgba(252,165,165,0.85)", fontFamily: "var(--app-font-mono)", lineHeight: 1.4, display: "flex", alignItems: "flex-start", gap: 6 }}>
@@ -3812,8 +4040,28 @@ function FilesTab({
         </div>
       )}
 
+      {filesSubTab === "history" && (
+        <div style={{ flex: 1, overflowY: "auto", padding: "10px 10px 14px" }} className="scrollbar-none">
+          {commitsLoading ? (
+            <CommitHistorySkeleton />
+          ) : commitsError ? (
+            <div style={{ padding: "24px 12px", textAlign: "center", color: "var(--atlas-ember)", fontSize: 11, fontFamily: "var(--app-font-mono)", lineHeight: 1.5 }}>
+              {commitsError}
+            </div>
+          ) : commits.length === 0 ? (
+            <div style={{ padding: "34px 12px", textAlign: "center", color: "var(--atlas-muted)", fontSize: 12, lineHeight: 1.6 }}>
+              {commitsReason === "no_repo" ? "No commits yet. Link a GitHub repo to see history." : "No commits yet."}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {commits.map((commit) => <CommitHistoryCard key={commit.sha} commit={commit} />)}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Repos list */}
-      {view === "repos" && (
+      {filesSubTab === "files" && view === "repos" && (
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 6px" }} className="scrollbar-none">
 
           {/* Auto-link all projects button — appears when repos are loaded */}
@@ -3992,7 +4240,7 @@ function FilesTab({
       )}
 
       {/* File tree */}
-      {view === "tree" && (
+      {filesSubTab === "files" && view === "tree" && (
         <div style={{ flex: 1, overflowY: "auto", padding: "6px 2px" }} className="scrollbar-none">
           {treeLoading && (
             <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 10, ...sMuted, opacity: 0.4 }}>
@@ -4080,7 +4328,7 @@ function FilesTab({
       )}
 
       {/* File content */}
-      {view === "file" && (
+      {filesSubTab === "files" && view === "file" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {fileLoading && (
             <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 10, ...sMuted, opacity: 0.4 }}>

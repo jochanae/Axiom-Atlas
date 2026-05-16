@@ -237,11 +237,11 @@ export default function Ledger() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "transparent", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
+    <div style={{ position: "relative", height: "100dvh", background: "transparent", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
       <FooterAuditLine />
 
       {/* ─── Header ─── */}
-      <header style={{ padding: "14px 18px 12px", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 20, background: "var(--background)" }}>
+      <header style={{ padding: "14px 18px 12px", borderBottom: "1px solid var(--border)", background: "var(--background)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <button
             type="button"
@@ -478,8 +478,8 @@ export default function Ledger() {
 
             {groups.map((group) => (
               <div key={group.key} style={{ marginBottom: 24 }}>
-                {/* Sticky date header */}
-                <div style={{ position: "sticky", top: 0, zIndex: 10, paddingBottom: 8, paddingTop: 4, background: "var(--background)" }}>
+                {/* Date header */}
+                <div style={{ paddingBottom: 8, paddingTop: 4, background: "var(--background)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: -20 }}>
                     <div style={{ width: 14, height: 14, borderRadius: "50%", background: "var(--background)", border: "2px solid var(--accent-gold)", flexShrink: 0 }} />
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--accent-gold)" }}>{group.dateLabel}</span>
@@ -595,11 +595,11 @@ function GlobalDecisionsView({
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "transparent", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
+    <div style={{ position: "relative", height: "100dvh", background: "transparent", color: "var(--foreground)", paddingBottom: 80, overflowY: "auto" }}>
       <FooterAuditLine />
 
       {/* ── Header ── */}
-      <header style={{ padding: "14px 18px 12px", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 20, background: "var(--background)" }}>
+      <header style={{ padding: "14px 18px 12px", borderBottom: "1px solid var(--border)", background: "var(--background)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <button
             type="button"
