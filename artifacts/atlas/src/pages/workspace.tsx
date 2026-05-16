@@ -7402,6 +7402,16 @@ export default function Workspace() {
   const importSource = (() => {
     try { return new URLSearchParams(window.location.search).get("source") ?? null; } catch { return null; }
   })();
+  const isHomeHandoff = importSource === "home-handoff";
+  const [homeHandoffMeta, setHomeHandoffMeta] = useState<{ parkedCount: number; flowNodeCount: number; goalLabel: string } | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(`atlas-home-handoff-${id}`);
+      return raw ? JSON.parse(raw) as { parkedCount: number; flowNodeCount: number; goalLabel: string } : null;
+    } catch { return null; }
+  });
+  const [showHomeHandoffBanner, setShowHomeHandoffBanner] = useState(() => {
+    try { return isHomeHandoff && sessionStorage.getItem(`atlas-home-handoff-banner-${id}`) !== "1"; } catch { return isHomeHandoff; }
+  });
   const importSourceLabel = importSource === "compani" ? "Compani Blueprints" : importSource === "axiom" ? "Axiom" : importSource ? importSource.charAt(0).toUpperCase() + importSource.slice(1) : null;
   const [showAxiomBanner, setShowAxiomBanner] = useState(() => {
     try {
@@ -7414,6 +7424,23 @@ export default function Workspace() {
     try { localStorage.setItem(`atlas-axiom-banner-${id}`, "1"); } catch { /* ignore */ }
     setShowAxiomBanner(false);
   };
+
+  useEffect(() => {
+    if (!isHomeHandoff) return;
+    let meta = homeHandoffMeta;
+    if (!meta) {
+      try {
+        const raw = sessionStorage.getItem(`atlas-home-handoff-${id}`);
+        meta = raw ? JSON.parse(raw) as typeof homeHandoffMeta : null;
+        setHomeHandoffMeta(meta);
+      } catch {}
+    }
+    toast(`${meta?.parkedCount ?? 0} ideas parked · ${meta?.flowNodeCount ?? 0} flow nodes mapped · conversation memory loaded`, { duration: 4000 });
+    try { sessionStorage.setItem(`atlas-home-handoff-banner-${id}`, "1"); } catch {}
+    const timer = setTimeout(() => setShowHomeHandoffBanner(false), 6000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, isHomeHandoff]);
 
   const dismissOnboardingCoach = useCallback((markId: OnboardingCoachId) => {
     setOnboardingCoachDismissed((prev) => {
@@ -8148,6 +8175,7 @@ export default function Workspace() {
   const handleSend = () => {
     const text = input.trim();
     if (!text || !sessionId || chatPending) return;
+    setShowHomeHandoffBanner(false);
     // Auto-dismiss any active catch — user chose to keep moving
     if (activeCatch) {
       setMessages((prev) => prev.map((m) =>
@@ -9088,6 +9116,35 @@ export default function Workspace() {
         </div>
       )}
 
+      {showHomeHandoffBanner && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            padding: "9px 18px",
+            background: "color-mix(in oklab, var(--atlas-gold) 8%, transparent)",
+            borderBottom: "1px solid color-mix(in oklab, var(--atlas-gold) 20%, transparent)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, display: "inline-block" }} />
+            <span style={{ fontSize: 12, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.03em" }}>
+              Continued from your home conversation. Your ideas and flow map are ready.
+            </span>
+          </div>
+          <button
+            onClick={() => setShowHomeHandoffBanner(false)}
+            style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-gold)", fontSize: 16, lineHeight: 1, padding: "2px 4px", flexShrink: 0, opacity: 0.55 }}
+            title="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* ── Two-pane body ── */}
       <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
 
@@ -9205,7 +9262,14 @@ export default function Workspace() {
             style={{ flex: 1, overflowY: "auto", padding: "28px 22px 12px", position: "relative" }}
             className="scrollbar-none atlas-chat-timeline"
           >
-            {messages.length === 0 && !chatPending && (
+            {messages.length === 0 && !chatPending && isHomeHandoff && homeHandoffMeta && (
+              <div style={{ padding: "52px 20px 32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ maxWidth: 520, color: "var(--atlas-fg)", fontSize: 15, lineHeight: 1.75, textAlign: "center", opacity: 0.88 }}>
+                  Picked up where we left off. Your flow map has {homeHandoffMeta.flowNodeCount} nodes — {homeHandoffMeta.goalLabel} is the center. What do you want to tackle first?
+                </div>
+              </div>
+            )}
+            {messages.length === 0 && !chatPending && !(isHomeHandoff && homeHandoffMeta) && (
               <div style={{ padding: "52px 20px 32px", display: "flex", flexDirection: "column", alignItems: "center" }}>
                 {isBrandNewProject ? (
                     <div style={{ fontSize: 20, fontWeight: 300, color: "var(--atlas-muted)", marginBottom: 28, letterSpacing: "-0.01em", textAlign: "center" }}>

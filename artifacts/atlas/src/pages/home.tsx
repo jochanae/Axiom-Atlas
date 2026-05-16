@@ -40,6 +40,25 @@ const HOME_PENDING_PHRASES = [
   "Composing a response…",
 ];
 
+type HomeHandoffSignal = {
+  readyToHandoff: boolean;
+  confidence: "high" | "medium" | "low";
+  projectName: string | null;
+  reason: string | null;
+};
+
+type HomeMessage = {
+  role: "user" | "assistant";
+  content: string;
+  imageUrl?: string;
+  model?: string;
+  intentType?: string | null;
+  isNew?: boolean;
+  id?: string;
+  streaming?: boolean;
+  handoffSignal?: HomeHandoffSignal;
+};
+
 function renderMarkdown(text: string): string {
   return text
     .replace(/```(\w*)\n?([\s\S]*?)```/g, (_: string, _lang: string, code: string) =>
@@ -112,6 +131,110 @@ function HomeChunkedBubbles({ text, isNew }: { text: string; isNew: boolean }) {
         />
       ))}
     </>
+  );
+}
+
+function HomeHandoffCard({
+  signal,
+  projectName,
+  onProjectNameChange,
+  onStart,
+  onDismiss,
+  loading,
+  stage,
+}: {
+  signal: HomeHandoffSignal;
+  projectName: string;
+  onProjectNameChange: (value: string) => void;
+  onStart: () => void;
+  onDismiss: () => void;
+  loading: boolean;
+  stage: string;
+}) {
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: "13px 14px",
+        borderRadius: 10,
+        background: "color-mix(in oklab, var(--atlas-gold) 7%, transparent)",
+        border: "1px solid color-mix(in oklab, var(--atlas-gold) 24%, transparent)",
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--atlas-fg)", marginBottom: 4 }}>
+        This is ready to build.
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--atlas-muted)", lineHeight: 1.55, marginBottom: 10 }}>
+        {signal.reason ?? "Atlas has enough shape to start a workspace."}
+      </div>
+      <input
+        value={projectName}
+        onChange={(e) => onProjectNameChange(e.target.value)}
+        disabled={loading}
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          marginBottom: 10,
+          padding: "8px 10px",
+          borderRadius: 7,
+          background: "var(--atlas-bg)",
+          border: "1px solid var(--atlas-border)",
+          color: "var(--atlas-fg)",
+          outline: "none",
+          fontFamily: "var(--app-font-sans)",
+          fontSize: 12.5,
+        }}
+      />
+      {loading && (
+        <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-gold)", marginBottom: 10, letterSpacing: "0.06em" }}>
+          {stage || "Setting up your workspace..."}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={loading}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            borderRadius: 7,
+            background: "var(--atlas-gold)",
+            border: "1px solid var(--atlas-gold)",
+            color: "var(--atlas-bg)",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.55 : 1,
+            fontFamily: "var(--app-font-mono)",
+            fontSize: 10.5,
+            fontWeight: 800,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          Start Building →
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          disabled={loading}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 7,
+            background: "transparent",
+            border: "1px solid var(--atlas-border)",
+            color: "var(--atlas-muted)",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.55 : 1,
+            fontFamily: "var(--app-font-mono)",
+            fontSize: 10.5,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}
+        >
+          Keep Talking
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -885,7 +1008,7 @@ export default function Home() {
   const [showProjectsSheet, setShowProjectsSheet] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [homeMessages, setHomeMessages] = useState<Array<{role: 'user' | 'assistant'; content: string; imageUrl?: string; model?: string; intentType?: string | null; isNew?: boolean; id?: string; streaming?: boolean}>>([]);
+  const [homeMessages, setHomeMessages] = useState<HomeMessage[]>([]);
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
@@ -912,6 +1035,11 @@ export default function Home() {
   const [homeMode] = useState<string>("strategic");
   const [showHandoff, setShowHandoff] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
+  const [handoffStage, setHandoffStage] = useState("");
+  const [handoffCardDismissed, setHandoffCardDismissed] = useState(() => {
+    try { return sessionStorage.getItem(`atlas-home-handoff-dismissed-${activeConversationId}`) === "1"; } catch { return false; }
+  });
+  const [handoffProjectName, setHandoffProjectName] = useState("");
 
 
   // Cycle pending phrases while Atlas is generating
@@ -1038,6 +1166,12 @@ export default function Home() {
   useEffect(() => {
     setHomeMessages([]);
     setThreadLoading(true);
+    try {
+      setHandoffCardDismissed(sessionStorage.getItem(`atlas-home-handoff-dismissed-${activeConversationId}`) === "1");
+    } catch {
+      setHandoffCardDismissed(false);
+    }
+    setHandoffProjectName("");
     fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(activeConversationId)}`, { credentials: "include" })
       .then(r => r.ok ? r.json() : [])
       .then(async (msgs: Array<{ role: string; content: string }>) => {
@@ -1088,6 +1222,7 @@ export default function Home() {
     setOverlayDismissed(true);
   };
   const showOverlay = !isLoading && projects !== undefined && projects.length === 0 && !overlayDismissed;
+  const firstHandoffMessageIndex = homeMessages.findIndex(m => m.role === "assistant" && !!m.handoffSignal);
 
   const navigateToProject = useCallback(
     (projectId: number) => {
@@ -1184,10 +1319,11 @@ export default function Home() {
                 (m as any).id === streamingId ? { ...m, content: streamedText } : m
               ));
             } else if (evtName === "done") {
-              const meta = JSON.parse(evtData) as { memoryUpdated: boolean; detectedMode: string };
+              const meta = JSON.parse(evtData) as { memoryUpdated: boolean; detectedMode: string; handoffSignal?: HomeHandoffSignal };
               setHomeMessages(prev => prev.map(m =>
-                (m as any).id === streamingId ? { ...m, streaming: false } : m
+                (m as any).id === streamingId ? { ...m, streaming: false, handoffSignal: meta.handoffSignal } : m
               ));
+              if (meta.handoffSignal?.projectName) setHandoffProjectName(meta.handoffSignal.projectName);
               if (meta.detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) setShowHandoff(true);
             } else if (evtName === "error") {
               const errMsg = JSON.parse(evtData) as string;
@@ -1212,27 +1348,91 @@ export default function Home() {
   }, [input, attachedFiles, isSending, homeModel, homeFocus, projects, activeConversationId, homeMessages.length]);
 
 
-  const handleHandoff = useCallback(async () => {
+  const handleHandoff = useCallback(async (signal?: HomeHandoffSignal, projectNameOverride?: string) => {
     if (!homeMessages.length) return;
     setHandoffLoading(true);
+    setHandoffStage("Setting up your workspace...");
     try {
-      const res = await fetch("/api/nexus/handoff", {
+      const name = (projectNameOverride || signal?.projectName || "New Project").trim() || "New Project";
+      const createRes = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ messages: homeMessages, projectId: homeFocus ?? undefined }),
+        body: JSON.stringify({ name }),
       });
-      const data = await res.json();
-      if (data.projectId) {
-        queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
-        setLocation(`/project/${data.projectId}?from=home`);
-      }
+      const project = await createRes.json();
+      if (!createRes.ok || !project.id) throw new Error(project?.error ?? "Project creation failed");
+      const projectId = Number(project.id);
+      const transcriptMessages = homeMessages.slice(-20).map(({ role, content }) => ({ role, content }));
+      const transcript = transcriptMessages.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`).join("\n\n");
+      const summary = signal?.reason || transcriptMessages.map(m => m.content).join(" ").slice(0, 800);
+
+      setHandoffStage("Loading your conversation...");
+      await fetch(`/api/projects/${projectId}/memories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tier: "episodic", summary, messages: transcriptMessages }),
+      }).catch(() => {});
+
+      setHandoffStage("Mapping your ideas...");
+      const forgeRes = await fetch("/api/forge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ transcript, projectId, moscow: true }),
+      });
+      const forgeData = forgeRes.ok
+        ? await forgeRes.json() as { nodes?: Array<{ id: string; label: string; type: string; x: number; y: number; resolved?: boolean; meta?: string; moscow?: string; details?: string; question?: string }> }
+        : { nodes: [] };
+      const nodes = (forgeData.nodes ?? []).map(n => ({ ...n, resolved: Boolean(n.resolved) }));
+      const goal = nodes.find(n => n.type === "goal") ?? nodes[0];
+      const edges = goal
+        ? nodes.filter(n => n.id !== goal.id).map(n => ({ id: `e-${goal.id}-${n.id}`, from: goal.id, to: n.id }))
+        : [];
+      try {
+        localStorage.setItem(`axiom-flow-nodes-${projectId}`, JSON.stringify(nodes));
+        localStorage.setItem(`axiom-flow-nodes-${projectId}-edges`, JSON.stringify(edges));
+      } catch {}
+
+      const ideaTexts = transcriptMessages
+        .filter(m => m.role === "user" && m.content.trim().length > 20)
+        .slice(-4)
+        .map(m => m.content.replace(/\s+/g, " ").trim());
+      await Promise.all(ideaTexts.map((idea, idx) => fetch(`/api/projects/${projectId}/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title: idea.slice(0, 80),
+          summary: idea.slice(0, 500),
+          status: "parked",
+          severity: "parked",
+          mode: "home",
+          verb: idx === 0 ? "home_handoff" : "idea",
+        }),
+      }).catch(() => null)));
+
+      setHandoffStage("Ready.");
+      try {
+        sessionStorage.setItem(`atlas-home-handoff-${projectId}`, JSON.stringify({
+          parkedCount: ideaTexts.length,
+          flowNodeCount: nodes.length,
+          goalLabel: goal?.label ?? "your goal",
+        }));
+        sessionStorage.setItem("atlas-open-tab", "map");
+      } catch {}
+
+      queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+      setLocation(`/project/${projectId}?source=home-handoff`);
+      return;
     } catch {
       toast("Handoff failed — try again");
     } finally {
       setHandoffLoading(false);
+      setHandoffStage("");
     }
-  }, [homeMessages, homeFocus, queryClient, setLocation]);
+  }, [homeMessages, queryClient, setLocation]);
 
   const handleClearThread = useCallback(async () => {
     await fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(activeConversationId)}`, { method: "DELETE", credentials: "include" }).catch(() => {});
@@ -1615,6 +1815,20 @@ export default function Home() {
                           }}>
                             <HomeChunkedBubbles text={msg.content} isNew={!!msg.isNew} />
                           </div>
+                          {msg.handoffSignal && i === firstHandoffMessageIndex && !handoffCardDismissed && !msg.streaming && (
+                            <HomeHandoffCard
+                              signal={msg.handoffSignal}
+                              projectName={handoffProjectName || msg.handoffSignal.projectName || "New Project"}
+                              onProjectNameChange={setHandoffProjectName}
+                              loading={handoffLoading}
+                              stage={handoffStage}
+                              onStart={() => void handleHandoff(msg.handoffSignal, handoffProjectName || msg.handoffSignal?.projectName || "New Project")}
+                              onDismiss={() => {
+                                try { sessionStorage.setItem(`atlas-home-handoff-dismissed-${activeConversationId}`, "1"); } catch {}
+                                setHandoffCardDismissed(true);
+                              }}
+                            />
+                          )}
                           {/* Copy button */}
                           {msg.content && (
                             <button
@@ -1711,29 +1925,6 @@ export default function Home() {
                   )}
                   <div ref={messagesEndRef} />
 
-                  {showHandoff && homeMessages.length >= 2 && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(201,162,76,0.06)", border: "1px solid rgba(201,162,76,0.22)", marginTop: 4, animation: "fadeIn 300ms ease forwards" }}>
-                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="rgba(201,162,76,0.75)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                        <path d="M3 8h10M9 4l4 4-4 4"/>
-                      </svg>
-                      <span style={{ fontSize: 12, color: "rgba(201,162,76,0.75)", fontFamily: "var(--app-font-mono)", flex: 1, letterSpacing: "0.02em" }}>
-                        Ready to build? Take this to the workspace.
-                      </span>
-                      <button
-                        onClick={handleHandoff}
-                        disabled={handoffLoading}
-                        style={{ background: "rgba(201,162,76,0.13)", border: "1px solid rgba(201,162,76,0.28)", borderRadius: 6, padding: "4px 12px", fontSize: 11, color: "rgba(201,162,76,0.9)", cursor: handoffLoading ? "not-allowed" : "pointer", fontFamily: "var(--app-font-mono)", opacity: handoffLoading ? 0.5 : 1, flexShrink: 0, whiteSpace: "nowrap" as const }}
-                      >
-                        {handoffLoading ? "Preparing…" : "Take to workspace →"}
-                      </button>
-                      <button
-                        onClick={() => setShowHandoff(false)}
-                        style={{ background: "transparent", border: "none", fontSize: 14, color: "var(--atlas-muted)", cursor: "pointer", padding: "0 2px", flexShrink: 0, lineHeight: 1 }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
