@@ -13,9 +13,10 @@ const ForgeRequestSchema = z.object({
   projectContext: z.string().max(4000).optional(),
   repoContext: z.string().max(3000).optional(),
   projectId: z.number().optional(),
+  moscow: z.boolean().optional(),
 });
 
-type NodeType = "goal" | "requirement" | "blocker" | "priority" | "decision" | "sprint";
+type NodeType = "goal" | "requirement" | "blocker" | "priority" | "decision" | "sprint" | "wont";
 type NodeMeta = "must" | "should" | "could" | "wont";
 
 interface ForgeNode {
@@ -27,6 +28,7 @@ interface ForgeNode {
   y: number;
   details?: string;
   meta?: NodeMeta;
+  moscow?: NodeMeta;
   question?: string;
 }
 
@@ -35,7 +37,7 @@ interface ForgeResponse {
   summary: string;
 }
 
-const VALID_TYPES: NodeType[] = ["goal", "requirement", "blocker", "priority", "decision", "sprint"];
+const VALID_TYPES: NodeType[] = ["goal", "requirement", "blocker", "priority", "decision", "sprint", "wont"];
 const VALID_META: NodeMeta[] = ["must", "should", "could", "wont"];
 const MAX_NODES = 12;
 
@@ -78,6 +80,7 @@ Node types you can create (choose the most appropriate):
 - "priority": A ranked work item with a MoSCoW sub-type (meta field required)
 - "decision": A committed choice that constrains future options (must already be decided, not open)
 - "sprint": A bounded work increment with a defined goal
+- "wont": A consciously excluded feature or scope boundary
 
 For "priority" nodes, you MUST include a "meta" field:
 - "must": Non-negotiable, project fails without it
@@ -95,6 +98,14 @@ Rules:
 7. Include a "question" field for each node — the strategic pivot question a founder should answer for this node.
 8. Keep "label" to 30 characters max.
 
+For every node you extract, classify it using MoSCoW:
+- "must" — the product fails without this
+- "should" — important but not critical for launch
+- "could" — nice to have if time allows
+- "wont" — explicitly out of scope, consciously decided against
+
+Add a "moscow" field to every node in your response.
+
 Respond ONLY with valid JSON — no markdown, no explanation, no code fences:
 {
   "summary": "One concise sentence describing what you extracted.",
@@ -104,6 +115,7 @@ Respond ONLY with valid JSON — no markdown, no explanation, no code fences:
       "label": "Short Label",
       "type": "priority",
       "meta": "must",
+      "moscow": "must",
       "resolved": false,
       "x": 300,
       "y": 120,
@@ -163,7 +175,9 @@ router.post("/forge", async (req, res) => {
 
     const nodes: ForgeNode[] = rawNodes.map((n, idx) => {
       const type = (VALID_TYPES.includes(n.type) ? n.type : "requirement") as NodeType;
-      const rawMeta = (n.meta ?? "") as NodeMeta;
+      const rawMoscow = (n.moscow ?? n.meta ?? (type === "wont" ? "wont" : "")) as NodeMeta;
+      const moscow = VALID_META.includes(rawMoscow) ? rawMoscow : "should";
+      const rawMeta = (n.meta ?? (type === "priority" ? moscow : "")) as NodeMeta;
       const meta = (type === "priority" && VALID_META.includes(rawMeta))
         ? rawMeta
         : type === "priority" ? "must" as NodeMeta : undefined;
@@ -183,6 +197,7 @@ router.post("/forge", async (req, res) => {
         y,
         details: n.details ? String(n.details).slice(0, 200) : undefined,
         meta,
+        moscow,
         question: n.question
           ? String(n.question).slice(0, 200)
           : getPivotQuestion(type, meta),

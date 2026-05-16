@@ -96,12 +96,13 @@ export type FlowNodeMeta = "must" | "should" | "could" | "wont";
 export interface ArchNode {
   id: string;
   label: string;
-  type: "goal" | "requirement" | "blocker" | "priority" | "decision" | "sprint";
+  type: "goal" | "requirement" | "blocker" | "priority" | "decision" | "sprint" | "wont";
   resolved: boolean;
   x: number;
   y: number;
   details?: string;
   meta?: FlowNodeMeta;
+  moscow?: FlowNodeMeta;
   question?: string;
   strategicAnswer?: string;
 }
@@ -252,6 +253,7 @@ function getNodeIcon(node: ArchNode): string {
   if (node.type === "blocker")     return "⚠";
   if (node.type === "decision")    return "◆";
   if (node.type === "sprint")      return "△";
+  if (node.type === "wont")        return "✕";
   if (node.type === "priority") {
     if (node.meta === "must")   return "■";
     if (node.meta === "should") return "□";
@@ -270,6 +272,7 @@ function getPivotQuestion(node: ArchNode): string {
   if (node.type === "blocker")     return "What could prevent this from shipping or succeeding?";
   if (node.type === "decision")    return "Who owns this decision, and what information do you need to make it?";
   if (node.type === "sprint")      return "What is the single deliverable that makes this sprint complete?";
+  if (node.type === "wont")        return "What are we consciously leaving out, and why?";
   if (node.type === "priority") {
     if (node.meta === "must")   return "Why is this non-negotiable? What breaks without it?";
     if (node.meta === "should") return "What's the cost of deferring this to v2?";
@@ -299,6 +302,17 @@ const EDGE_FLOW_STYLE = `
 @keyframes amber-pulse-parchment {
   0%, 100% { box-shadow: 0 0 6px rgba(146,64,14,0.18); }
   50%      { box-shadow: 0 0 14px rgba(146,64,14,0.38); }
+}
+.flow-node-strike::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 1.5px;
+  background: currentColor;
+  opacity: 0.55;
+  transform: rotate(-28deg);
 }
 `;
 
@@ -463,6 +477,14 @@ export function AxiomFlow({
   const palette = flowPaletteFor(theme);
   const [nodes, setNodes] = useState<ArchNode[]>(() => loadNodes(storageKey));
   const [edges, setEdges] = useState<ArchEdge[]>(() => loadEdges(storageKey));
+  const mapSeenKey = projectId ? `atlas-map-seen-${projectId}` : "atlas-map-seen-standalone";
+  const [summaryCollapsed, setSummaryCollapsed] = useState(() => {
+    try { return localStorage.getItem(mapSeenKey) === "1"; } catch { return false; }
+  });
+
+  useEffect(() => {
+    try { setSummaryCollapsed(localStorage.getItem(mapSeenKey) === "1"); } catch { setSummaryCollapsed(false); }
+  }, [mapSeenKey]);
 
   // Sync strategicAnswer from DB on first load. `resolved` is now strictly
   // derived from a non-empty strategicAnswer — legacy `Record<id, boolean>`
@@ -553,6 +575,11 @@ export function AxiomFlow({
   const readinessScore = Math.round(
     (nonWontNodes.filter(isNodeDefined).length / Math.max(nonWontNodes.length, 1)) * 100
   );
+  const goalForSummary = nodes.find(n => n.type === "goal") ?? nodes[0];
+  const mustCount = nodes.filter(n => getMoscow(n) === "must").length;
+  const shouldCount = nodes.filter(n => getMoscow(n) === "should").length;
+  const openDecisionCount = nodes.filter(n => n.type === "decision" && !isNodeDefined(n)).length;
+  const blockerCount = nodes.filter(n => n.type === "blocker").length;
 
   useEffect(() => { onReadinessChange?.(readinessScore); }, [readinessScore, onReadinessChange]);
 
@@ -864,6 +891,94 @@ export function AxiomFlow({
         )}
         <span className="text-xs font-bold tracking-widest text-gold uppercase">AXIOM FLOW</span>
       </div>
+
+      {nodes.length > 0 && (
+        summaryCollapsed ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); setSummaryCollapsed(false); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            title="Show Flow summary"
+            style={{
+              position: "absolute",
+              right: 14,
+              top: 14,
+              zIndex: 12,
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              background: palette.panelBg,
+              border: `1px solid rgba(${palette.goldRgb},0.32)`,
+              color: palette.goldText,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+              <path d="M3 4h10M3 8h7M3 12h5" />
+            </svg>
+          </button>
+        ) : (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: 42,
+              transform: "translateX(-50%)",
+              zIndex: 12,
+              width: "min(520px, calc(100% - 28px))",
+              background: palette.panelBg,
+              border: `1px solid rgba(${palette.goldRgb},0.38)`,
+              borderRadius: 12,
+              padding: "12px 14px",
+              boxShadow: palette.panelShadow,
+              pointerEvents: "auto",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: palette.goldText, flexShrink: 0 }} />
+              <span style={{ flex: 1, fontFamily: "var(--app-font-mono)", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: palette.goldText }}>
+                Here's what Atlas mapped from your conversation
+              </span>
+              <button
+                onClick={() => {
+                  setSummaryCollapsed(true);
+                  try { localStorage.setItem(mapSeenKey, "1"); } catch {}
+                }}
+                style={{ background: "transparent", border: "none", color: palette.fgText, opacity: 0.55, cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ color: palette.fgText, fontSize: 12, lineHeight: 1.55, opacity: 0.88, marginBottom: 10 }}>
+              Your goal is {goalForSummary?.label ?? "your first node"}. You have {mustCount} must-haves, {shouldCount} should-haves, {openDecisionCount} open decisions, and {blockerCount} blockers. Tap any node to edit.
+            </div>
+            <button
+              onClick={() => {
+                setSummaryCollapsed(true);
+                try { localStorage.setItem(mapSeenKey, "1"); } catch {}
+              }}
+              style={{
+                padding: "6px 11px",
+                borderRadius: 7,
+                background: `rgba(${palette.goldRgb},0.18)`,
+                border: `1px solid rgba(${palette.goldRgb},0.45)`,
+                color: palette.goldText,
+                cursor: "pointer",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        )
+      )}
 
       {/* No floating pill in the canvas — handover is triggered from the
           CockpitBar navRight (mobile) or the RightPanel tab bar (desktop).
@@ -1195,6 +1310,24 @@ function getNodeVisual(node: ArchNode, palette: FlowPalette): NodeVisual {
     };
   }
 
+  if (node.type === "wont") {
+    return {
+      size: 56,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderStyle: "solid",
+      borderColor: `rgba(${E},0.38)`,
+      bgColor: `rgba(${E},0.06)`,
+      textColor: `rgba(${E},0.62)`,
+      textDecoration: "line-through",
+      shadow: "none",
+      opacity: 0.58,
+      pulse: false,
+      labelSize: 9.5,
+      labelWeight: 500,
+    };
+  }
+
   if (node.type === "priority") {
     if (node.meta === "wont") {
       return {
@@ -1310,6 +1443,40 @@ function getNodeVisual(node: ArchNode, palette: FlowPalette): NodeVisual {
   };
 }
 
+function getMoscow(node: ArchNode): FlowNodeMeta | undefined {
+  return node.moscow ?? node.meta ?? (node.type === "wont" ? "wont" : undefined);
+}
+
+function MoscowBadge({ value, palette }: { value: FlowNodeMeta; palette: FlowPalette }) {
+  const G = palette.goldRgb;
+  const E = palette.emberRgb;
+  const M = palette.mutedRgb;
+  const label = value === "wont" ? "WON'T" : value.toUpperCase();
+  const style =
+    value === "must"
+      ? { background: `rgba(${G},0.82)`, border: `1px solid rgba(${G},0.90)`, color: palette.rootBg }
+      : value === "should"
+        ? { background: "transparent", border: `1px solid rgba(${G},0.50)`, color: `rgba(${G},0.82)` }
+        : value === "could"
+          ? { background: `rgba(${M},0.12)`, border: `1px solid rgba(${M},0.22)`, color: `rgba(${M},0.78)` }
+          : { background: `rgba(${E},0.10)`, border: `1px solid rgba(${E},0.28)`, color: `rgba(${E},0.72)` };
+  return (
+    <span style={{
+      ...style,
+      fontFamily: "var(--app-font-mono)",
+      fontSize: 6.5,
+      fontWeight: 800,
+      letterSpacing: "0.10em",
+      borderRadius: 999,
+      padding: "1px 4px",
+      marginTop: -3,
+      lineHeight: 1.4,
+    }}>
+      {label}
+    </span>
+  );
+}
+
 function FlowNodeComponent({
   node,
   onFocus,
@@ -1328,6 +1495,7 @@ function FlowNodeComponent({
   const v = getNodeVisual(node, palette);
   const icon = getNodeIcon(node);
   const defined = isNodeDefined(node);
+  const moscow = getMoscow(node);
   const isParchment = palette.rootBg === "#F5F1E8";
   const goldPulseName = isParchment ? "gold-pulse-parchment" : "gold-pulse";
   const amberPulseName = isParchment ? "amber-pulse-parchment" : "amber-pulse";
@@ -1354,8 +1522,9 @@ function FlowNodeComponent({
         animation: newlyAdded ? "node-fly-in 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards" : undefined,
       }}
     >
-      <div style={{
+      <div className={node.type === "wont" || moscow === "wont" ? "flow-node-strike" : undefined} style={{
         width: v.size, height: v.size,
+        position: "relative",
         display: "flex", alignItems: "center", justifyContent: "center",
         borderRadius: v.borderRadius,
         border: `${v.borderWidth}px ${v.borderStyle} ${v.borderColor}`,
@@ -1373,6 +1542,7 @@ function FlowNodeComponent({
       }}>
         {icon}
       </div>
+      {moscow && <MoscowBadge value={moscow} palette={palette} />}
       <span style={{
         fontSize: v.labelSize,
         fontWeight: v.labelWeight,

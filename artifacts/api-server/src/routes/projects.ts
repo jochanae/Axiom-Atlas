@@ -184,6 +184,59 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
   res.json(serializeProject(project, true));
 });
 
+router.post("/projects/:id/memories", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id) || id <= 0) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const userId = (req as any).authUser.id as number;
+  const [project] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const body = req.body as {
+    messages?: Array<{ role: string; content: string }>;
+    tier?: "episodic" | "foundational" | "contextual";
+    summary?: string;
+  };
+  const transcript = (body.messages ?? [])
+    .slice(-20)
+    .map((m) => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`)
+    .join("\n\n");
+  const summary = (body.summary?.trim() || transcript.slice(0, 1200) || "Home conversation imported.").trim();
+  const tier = body.tier === "foundational" ? 1 : body.tier === "contextual" ? 4 : 3;
+
+  let existing: { v: 2; entries: Array<Record<string, unknown>> } = { v: 2, entries: [] };
+  try {
+    const parsed = project.memory ? JSON.parse(project.memory) : null;
+    if (parsed?.v === 2 && Array.isArray(parsed.entries)) existing = parsed;
+  } catch {
+    existing = { v: 2, entries: [] };
+  }
+
+  const next = {
+    v: 2,
+    entries: [
+      ...existing.entries,
+      {
+        tier,
+        text: `Home conversation handoff: ${summary}`,
+        createdAt: new Date().toISOString(),
+        retrievalCount: 0,
+        lastRetrievedAt: null,
+      },
+    ],
+  };
+
+  const [updated] = await db
+    .update(projectsTable)
+    .set({ memory: JSON.stringify(next) })
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)))
+    .returning();
+
+  res.json(serializeProject(updated, true));
+});
+
 router.post("/projects/:id/clone", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }

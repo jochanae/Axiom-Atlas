@@ -15,6 +15,71 @@ const anthropic = new Anthropic({
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
 
+type HandoffSignal = {
+  readyToHandoff: boolean;
+  confidence: "high" | "medium" | "low";
+  projectName: string | null;
+  reason: string | null;
+};
+
+function parseJsonObject<T>(raw: string): T | null {
+  try {
+    const cleaned = raw.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    return JSON.parse(match ? match[0] : cleaned) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function detectHomeHandoff(
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+): Promise<HandoffSignal | null> {
+  if (messages.length < 4) return null;
+  const context = messages
+    .slice(-10)
+    .map((m) => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`)
+    .join("\n\n");
+  const prompt = `Given this conversation, respond with JSON only:
+{
+  "readyToHandoff": true/false,
+  "confidence": "high" | "medium" | "low",
+  "projectName": "suggested name for this project or null",
+  "reason": "one sentence why this is ready to build, or null"
+}
+
+It is ready to handoff if:
+- A specific product, feature, or system has been identified
+- At least one concrete requirement or goal has been discussed
+- The conversation has moved beyond pure exploration into planning or decision-making
+- 4 or more messages have been exchanged
+
+Return readyToHandoff: false if it's still early exploration or casual conversation.
+
+Conversation:
+${context}`;
+
+  try {
+    const result = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 400,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const raw = result.content[0]?.type === "text" ? result.content[0].text : "";
+    const parsed = parseJsonObject<HandoffSignal>(raw);
+    if (!parsed?.readyToHandoff) return null;
+    if (parsed.confidence !== "high" && parsed.confidence !== "medium") return null;
+    return {
+      readyToHandoff: true,
+      confidence: parsed.confidence,
+      projectName: typeof parsed.projectName === "string" && parsed.projectName.trim() ? parsed.projectName.trim() : null,
+      reason: typeof parsed.reason === "string" && parsed.reason.trim() ? parsed.reason.trim() : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 const NEXUS_SYSTEM_PROMPT = `You are Atlas — the strategic intelligence layer of Axiom, a platform built for founders running multiple products simultaneously.
 
 This home space is the user's global command center — the place where all their work converges. You have visibility across every project at once. You are NOT inside any single project workspace right now.
@@ -507,10 +572,16 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
       : null;
 
+    const handoffSignal = await detectHomeHandoff([
+      ...conversationHistory.slice(-8),
+      { role: "user", content: message },
+      { role: "assistant", content: visibleContent },
+    ]);
+
     // Persist the assistant response to the Living Thread
     await db.insert(nexusMessagesTable).values({ userId, role: "assistant", content: visibleContent, conversationId: conversationId ?? null });
 
-    res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion })}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}) })}\n\n`);
     res.end();
   };
 
