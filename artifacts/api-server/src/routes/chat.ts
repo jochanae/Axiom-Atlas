@@ -893,16 +893,32 @@ router.post("/chat", async (req, res): Promise<void> => {
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
-  const forgeContext = body.forgeContext ?? "";
+  const clientForgeContext = body.forgeContext ?? "";
   const imageData = body.imageData;
   const activeModel: ModelId = (body.model === "gpt4o" || body.model === "gemini") ? body.model : "claude";
   const now = new Date();
 
-  // Load project memory + repo info from DB
+  // Load project memory + repo info + node state from DB
   const [project] = await db
-    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken })
+    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState })
     .from(projectsTable)
     .where(eq(projectsTable.id, projectId));
+
+  // Derive server-side forge foundation from persisted AxiomFlow node state
+  // This is the authoritative source — client-sent forgeContext supplements but never replaces it
+  const SYSTEM_NODE_IDS = new Set(["auth", "db", "api", "state", "ui", "logic"]);
+  const savedNodeState = (project?.nodeState ?? {}) as Record<string, unknown>;
+  const savedForgeNodes = Object.keys(savedNodeState).filter(k => !SYSTEM_NODE_IDS.has(k));
+  // Each saved node entry: { resolved, strategicAnswer?, label? } — we only have IDs here,
+  // so build a compact representation from what's persisted
+  const serverForgeContext = savedForgeNodes.length > 0
+    ? savedForgeNodes.map(k => {
+        const v = savedNodeState[k] as { resolved?: boolean; strategicAnswer?: string } | undefined;
+        return `[node:${k}]${v?.resolved ? " ✓resolved" : ""}${v?.strategicAnswer ? `: ${v.strategicAnswer.slice(0, 60)}` : ""}`;
+      }).join(" | ")
+    : "";
+  // Merge: server state is authoritative; client hint supplements (e.g. fresh label names from just-run Forge)
+  const forgeContext = [serverForgeContext, clientForgeContext].filter(Boolean).join(" | ");
 
   // Parse 5-tier memory store
   let store = parseMemoryStore(project?.memory ?? null);
