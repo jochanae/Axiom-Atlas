@@ -24,6 +24,7 @@ import terminalRouter from "./terminal";
 import galleryRouter from "./gallery";
 import storageRouter from "./storage";
 import errorlogRouter from "./errorlog";
+import selfmapRouter from "./selfmap";
 
 const router: IRouter = Router();
 
@@ -53,6 +54,7 @@ router.use(requireAuth, secretsRouter);
 router.use(requireAuth, forgeRouter);
 router.use(requireAuth, devserverRouter);
 router.use(requireAuth, importRouter);
+router.use(requireAuth, selfmapRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);

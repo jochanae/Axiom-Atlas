@@ -15,3 +15,4 @@ export * from "./secrets";
 export * from "./gallery";
 export * from "./atlas_incidents";
 export * from "./atlas_error_logs";
+export * from "./atlas_self_map";
