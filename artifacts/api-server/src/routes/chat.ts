@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable } from "@workspace/db";
 import { eq, sql, and, gte, desc } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -970,6 +970,20 @@ router.post("/chat", async (req, res): Promise<void> => {
     // Non-fatal: Atlas can still respond without production error context.
   }
 
+  let selfMapContext = "";
+  try {
+    const [selfMap] = await db
+      .select({ fileCount: atlasSelfMapTable.fileCount })
+      .from(atlasSelfMapTable)
+      .orderBy(desc(atlasSelfMapTable.createdAt))
+      .limit(1);
+    if (selfMap) {
+      selfMapContext = `Current codebase: ${selfMap.fileCount} files indexed. Architecture map available for reasoning.`;
+    }
+  } catch {
+    // Non-fatal: Atlas can still respond without the self map summary.
+  }
+
   // Build layered system prompt
   let systemPrompt = DEV_SYSTEM_PROMPT;
   if (userProfile) {
@@ -986,6 +1000,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   }
   if (recentErrorContext) {
     systemPrompt += `\n\n--- RECENT PRODUCTION ERRORS ---\n${recentErrorContext}\n--- END RECENT PRODUCTION ERRORS ---`;
+  }
+  if (selfMapContext) {
+    systemPrompt += `\n\n--- CURRENT CODEBASE MAP ---\n${selfMapContext}\n--- END CURRENT CODEBASE MAP ---`;
   }
   if (combinedFileContext) {
     systemPrompt += `\n\n--- CODE CONTEXT (files Atlas read for this request — use these to write complete FILE_EDIT blocks) ---\n${combinedFileContext}\n--- END CODE CONTEXT ---`;

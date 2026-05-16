@@ -43,6 +43,13 @@
       "when": 1778954220000,
       "tag": "0005_atlas_error_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778954520000,
+      "tag": "0006_atlas_self_map",
+      "breakpoints": true
     }
   ]
 }
