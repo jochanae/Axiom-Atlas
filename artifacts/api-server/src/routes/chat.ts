@@ -197,19 +197,19 @@ async function fetchRepoTree(fullName: string, token: string, branch = "main"): 
   }
 }
 
-function formatHoursAgo(timestamp: string, now: Date): string {
+function formatCommitAge(timestamp: string, now: Date): string {
   const elapsedMs = now.getTime() - new Date(timestamp).getTime();
   const hours = Math.max(0, Math.floor(elapsedMs / (60 * 60 * 1000)));
-  return `${hours} hours ago`;
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-async function fetchRecentRepoActivity(fullName: string, token: string, branch = "main", now = new Date()): Promise<string | null> {
+async function fetchRecentRepoActivity(fullName: string, token: string, now = new Date()): Promise<string | null> {
   try {
     const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const url = new URL(`${GH_API}/repos/${fullName}/commits`);
     url.searchParams.set("per_page", "5");
-    url.searchParams.set("since", since.toISOString());
-    if (branch) url.searchParams.set("sha", branch);
 
     const resp = await fetch(url, { headers: ghHeaders(token) });
     if (!resp.ok) return null;
@@ -232,12 +232,12 @@ async function fetchRecentRepoActivity(fullName: string, token: string, branch =
         const message = (commit.commit?.message ?? "").split("\n")[0]?.trim();
         if (!message) return null;
         const author = commit.commit?.author?.name ?? commit.commit?.committer?.name ?? "Unknown";
-        return `[${commit.sha.slice(0, 7)}] ${message} — ${author}, ${formatHoursAgo(timestamp, now)}`;
+        return `${commit.sha.slice(0, 7)} ${message} — ${author}, ${formatCommitAge(timestamp, now)}`;
       })
       .filter((line): line is string => line !== null);
 
     if (lines.length === 0) return null;
-    return `--- RECENT REPO ACTIVITY (since last session) ---\n${lines.join("\n")}\n--- END RECENT REPO ACTIVITY ---`;
+    return `--- RECENT REPO ACTIVITY ---\n${lines.join("\n")}\n--- END RECENT REPO ACTIVITY ---`;
   } catch {
     return null;
   }
@@ -989,12 +989,19 @@ router.post("/chat", async (req, res): Promise<void> => {
     return plain === "__server__" ? (process.env.GITHUB_TOKEN ?? null) : plain;
   })();
 
-  if (project?.linkedRepo && resolvedGithubToken) {
+  if (project?.linkedRepo) {
     try {
-      repoData = JSON.parse(project.linkedRepo) as { fullName?: string; defaultBranch?: string };
+      const parsedRepo = JSON.parse(project.linkedRepo) as string | { fullName?: string; defaultBranch?: string };
+      repoData = typeof parsedRepo === "string"
+        ? { fullName: parsedRepo, defaultBranch: "main" }
+        : parsedRepo;
       if (repoData.fullName) {
-        repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
-        recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main", now);
+        if (resolvedGithubToken) {
+          repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
+        }
+        if (process.env.GITHUB_TOKEN) {
+          recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, process.env.GITHUB_TOKEN, now);
+        }
       }
     } catch {
       // Non-fatal: continue without tree context
@@ -1113,11 +1120,11 @@ router.post("/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n${recentRepoActivityContext}`;
   }
   systemPrompt += `\n\n--- SESSION CONTINUITY ---
-If this appears to be the first message in a new conversation (no prior assistant messages in this session), lead your response with a brief session recap before answering. Format:
+If this is the first assistant message in this session (no prior assistant messages exist in the session history), lead your response with a brief recap before answering. Format exactly:
 
-"Still here. [One sentence on most recent commit or change]. [One sentence on any open errors or blockers]. [One sentence on what's next based on memory]. Then answer their question."
+"Still here. [One sentence on the most recent commit or change from RECENT REPO ACTIVITY, or most recent memory if no repo activity]. [One sentence on any open errors or blockers from RECENT PRODUCTION ERRORS if any exist]. What's next: [one sentence on logical next step based on project memory and flow nodes]."
 
-Keep the recap to 3 sentences max. Never repeat this recap after the first message.
+Keep the recap to 3 sentences maximum. Never show this recap after the first message in a session.
 --- END SESSION CONTINUITY ---`;
   if (recentErrorContext) {
     systemPrompt += `\n\n--- RECENT PRODUCTION ERRORS ---\n${recentErrorContext}\n--- END RECENT PRODUCTION ERRORS ---`;
