@@ -3,8 +3,21 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 import App from "./App";
 import "./index.css";
+import { reportError } from "./lib/errorReporter";
 
-createRoot(document.getElementById("root")!).render(
+const root = createRoot(document.getElementById("root")!);
+
+window.addEventListener("error", (event) => {
+  reportError(event.error, { route: window.location.pathname });
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  reportError(new Error(String(event.reason)), {
+    route: window.location.pathname,
+  });
+});
+
+root.render(
   <StrictMode>
     <App />
     <Toaster

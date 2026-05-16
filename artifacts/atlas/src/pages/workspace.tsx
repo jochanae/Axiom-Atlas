@@ -26,6 +26,7 @@ import { Eye, TerminalSquare } from "lucide-react";
 import { useThemeMode } from "@/lib/theme";
 import { fileToBase64Safe } from "@/lib/image-resize";
 import { detectDecisionMoment } from "@/lib/DecisionCatchEngine";
+import { reportError } from "../lib/errorReporter";
 import type { CommitCardPayload } from "@/lib/DecisionCatchEngine";
 import type { ZipEntry } from "../components/ZipImport";
 import {
@@ -139,6 +140,8 @@ interface LinkedRepo {
 type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
 type WorkspaceLens = "flow" | "build" | "look" | "scenario";
+
+type ForgeState = { forged: boolean; dismissed: boolean };
 
 const FLOW_NODE_TYPES = new Set<ArchNode["type"]>(["goal", "requirement", "blocker", "priority", "decision", "sprint", "wont"]);
 const FLOW_NODE_META = new Set(["must", "should", "could", "wont"]);
@@ -5720,7 +5723,7 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, displayedReadinessScore, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile, onOpenForge, externalForgeNodes, onForgeNodesConsumed }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; displayedReadinessScore?: number; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean; onOpenForge?: () => void; externalForgeNodes?: ArchNode[]; onForgeNodesConsumed?: () => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, displayedReadinessScore, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile, onOpenForge, externalForgeNodes, onForgeNodesConsumed, onForgeCompleted }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; displayedReadinessScore?: number; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean; onOpenForge?: () => void; externalForgeNodes?: ArchNode[]; onForgeNodesConsumed?: () => void; onForgeCompleted?: () => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
 
@@ -5793,7 +5796,8 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
       const incoming = (res.flowNodes ?? []) as ArchNode[];
       setFlowMessages(prev => [...prev, { role: "assistant", content: res.content ?? "" }]);
       if (incoming.length > 0) setPendingNodes(incoming);
-    } catch {
+    } catch (error) {
+      void reportError(error, { projectId });
       setFlowMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Try again." }]);
     } finally {
       setFlowLoading(false);
@@ -6364,7 +6368,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
           activeProjectName={activeProjectName}
           projectId={projectId}
           onClose={() => setShowQuickPrompt(false)}
-          onNodesReady={(nodes) => { setPendingNodes(nodes); setShowQuickPrompt(false); }}
+          onNodesReady={(nodes) => { setPendingNodes(nodes); onForgeCompleted?.(); setShowQuickPrompt(false); }}
           onFillChatInput={onFillIntent}
         />
       )}
@@ -6447,6 +6451,7 @@ function RightPanel({
   onOpenForge,
   externalForgeNodes,
   onForgeNodesConsumed,
+  onForgeCompleted,
 }: {
   projectId: number;
   entries: Entry[];
@@ -6486,6 +6491,7 @@ function RightPanel({
   onOpenForge?: () => void;
   externalForgeNodes?: ArchNode[];
   onForgeNodesConsumed?: () => void;
+  onForgeCompleted?: () => void;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -6777,7 +6783,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} displayedReadinessScore={displayedReadinessScore} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} externalForgeNodes={externalForgeNodes} onForgeNodesConsumed={onForgeNodesConsumed} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} displayedReadinessScore={displayedReadinessScore} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} externalForgeNodes={externalForgeNodes} onForgeNodesConsumed={onForgeNodesConsumed} onForgeCompleted={onForgeCompleted} />}
       {tab === "terminal" && (wsLens === "build" || wsLens === "scenario") && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} scenarioLens={wsLens === "scenario"} />}
     </div>
   );
@@ -7748,15 +7754,12 @@ export default function Workspace() {
   const [showForgeExternal, setShowForgeExternal] = useState(false);
   const [forgePreloadContent, setForgePreloadContent] = useState<string | undefined>(undefined);
   const [externalForgeNodes, setExternalForgeNodes] = useState<ArchNode[]>([]);
-  const [forgePillDismissed, setForgePillDismissed] = useState(() => {
-    try { return localStorage.getItem(`atlas-forge-dismissed-${id}`) === "1"; } catch { return false; }
-  });
+  const [forgeState, setForgeState] = useState<ForgeState | null>(null);
   const [forgeContext, setForgeContext] = useState<string | null>(() => {
     try { return sessionStorage.getItem(`atlas-forge-ctx-${id}`) ?? null; } catch { return null; }
   });
   // Reload per-project forge state when project ID changes — prevents cross-project state contamination
   useEffect(() => {
-    try { setForgePillDismissed(localStorage.getItem(`atlas-forge-dismissed-${id}`) === "1"); } catch { setForgePillDismissed(false); }
     try { setForgeContext(sessionStorage.getItem(`atlas-forge-ctx-${id}`) ?? null); } catch { setForgeContext(null); }
   }, [id]);
   // Explicit state captured at pill-open time so TheForge always gets a stable context snapshot
@@ -7934,6 +7937,49 @@ export default function Workspace() {
     Object.keys((project?.nodeState ?? {}) as Record<string, unknown>)
       .some(k => !["auth", "db", "api", "state", "ui", "logic"].includes(k));
   const isBrandNewProject = messages.length === 0 && !hasForgeNodes;
+
+  useEffect(() => {
+    if (!Number.isFinite(id)) return;
+    const controller = new AbortController();
+    setForgeState(null);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${id}/forge-state`, { credentials: "include", signal: controller.signal });
+        if (!res.ok) throw new Error(`Forge state failed: HTTP ${res.status}`);
+        const data = await res.json() as ForgeState;
+        setForgeState({ forged: !!data.forged, dismissed: !!data.dismissed });
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        void reportError(error, { projectId: id });
+        setForgeState({ forged: hasForgeNodes, dismissed: false });
+      }
+    })();
+    return () => controller.abort();
+  }, [id, hasForgeNodes]);
+
+  const updateForgeState = useCallback(async (action: "forged" | "dismissed") => {
+    if (!Number.isFinite(id)) return;
+    try {
+      const res = await fetch(`/api/projects/${id}/forge-state`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action }),
+      });
+      if (!res.ok) throw new Error(`Forge state update failed: HTTP ${res.status}`);
+      const data = await res.json() as { forgedAt?: string | null; dismissedAt?: string | null; forged?: boolean; dismissed?: boolean };
+      setForgeState({
+        forged: action === "forged" || !!data.forgedAt || !!data.forged,
+        dismissed: action === "dismissed" || !!data.dismissedAt || !!data.dismissed,
+      });
+    } catch (error) {
+      void reportError(error, { projectId: id });
+      setForgeState((prev) => ({
+        forged: action === "forged" ? true : prev?.forged ?? hasForgeNodes,
+        dismissed: action === "dismissed" ? true : prev?.dismissed ?? false,
+      }));
+    }
+  }, [hasForgeNodes, id]);
 
   const { data: sessions, isLoading: sessionsLoading } = useListSessions(id, {
     query: { enabled: !!id, queryKey: getListSessionsQueryKey(id) },
@@ -8436,6 +8482,7 @@ export default function Workspace() {
             setActivityStream({ active: false, content: "" });
             return;
           }
+          void reportError(err, { projectId: id });
           setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Please try again.", sentAt: new Date().toISOString() }]);
           setActivityStream({ active: false, content: "" });
         })
@@ -10189,77 +10236,69 @@ export default function Workspace() {
           />
 
           {/* Forge shortcut — visible on Chat tab only */}
-          {leftTab === "chat" && !forgePillDismissed && (
-            hasForgeNodes ? (
-              <div style={{ padding: "0 14px 8px", flexShrink: 0 }}>
-                <button
-                  aria-label="Open The Forge"
-                  title="The Forge — re-run or review strategic map"
-                  onClick={() => { setForgeActiveProjectName(project?.name); setForgeActiveProjectId(id); setShowForgeExternal(true); }}
-                  style={{
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: 28, height: 28, borderRadius: 8,
-                    background: "rgba(var(--atlas-gold-rgb),0.07)",
-                    border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
-                    color: "rgba(var(--atlas-gold-rgb),0.85)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 2L3 8.5l2.5 2.5L12 4.5 9 2z" />
-                    <path d="M5.5 11L2 14.5" />
-                    <path d="M11 3.5L13 5.5" />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <div style={{ padding: "0 14px 8px", flexShrink: 0 }}>
-                <div
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 7,
-                    borderRadius: 8, overflow: "hidden",
-                    background: "rgba(var(--atlas-gold-rgb),0.07)",
-                    border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
-                    color: "rgba(var(--atlas-gold-rgb),0.85)",
-                    fontFamily: "var(--app-font-mono)", fontSize: 9.5,
-                    letterSpacing: "0.1em", textTransform: "uppercase" as const,
-                    transition: "all 160ms ease",
-                  }}
-                >
+          {leftTab === "chat" && forgeState && !forgeState.dismissed && (
+            <div style={{ padding: "0 14px 8px", flexShrink: 0 }}>
+              {forgeState.forged ? (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <button
+                    aria-label="Open The Forge"
+                    title="The Forge — re-run or review strategic map"
                     onClick={() => { setForgeActiveProjectName(project?.name); setForgeActiveProjectId(id); setShowForgeExternal(true); }}
                     style={{
-                      display: "inline-flex", alignItems: "center", gap: 7,
-                      padding: "6px 10px 6px 12px", border: "none", cursor: "pointer",
-                      background: "rgba(var(--atlas-gold-rgb),0)", color: "inherit",
-                      font: "inherit", letterSpacing: "inherit", textTransform: "inherit" as const,
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: 28, height: 28, borderRadius: 8,
+                      background: "rgba(var(--atlas-gold-rgb),0.07)",
+                      border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
+                      color: "rgba(var(--atlas-gold-rgb),0.85)",
+                      cursor: "pointer",
                     }}
                   >
-                    <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width={12} height={12} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 2L3 8.5l2.5 2.5L12 4.5 9 2z" />
                       <path d="M5.5 11L2 14.5" />
                       <path d="M11 3.5L13 5.5" />
                     </svg>
-                    Forge — Extract strategy from a doc or transcript
                   </button>
                   <button
                     aria-label="Dismiss Forge shortcut"
-                    onClick={() => {
-                      setForgePillDismissed(true);
-                      try { localStorage.setItem(`atlas-forge-dismissed-${id}`, "1"); } catch {}
-                    }}
+                    title="Dismiss Forge shortcut"
+                    onClick={() => void updateForgeState("dismissed")}
                     style={{
-                      alignSelf: "stretch", display: "inline-flex", alignItems: "center", justifyContent: "center",
-                      width: 24, border: "none", borderLeft: "1px solid rgba(var(--atlas-gold-rgb),0.18)",
-                      background: "rgba(var(--atlas-gold-rgb),0)", color: "rgba(var(--atlas-gold-rgb),0.65)",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: 22, height: 22, borderRadius: 999,
+                      border: "1px solid rgba(var(--atlas-gold-rgb),0.18)",
+                      background: "rgba(var(--atlas-gold-rgb),0.04)",
+                      color: "rgba(var(--atlas-gold-rgb),0.65)",
                       cursor: "pointer", fontSize: 13, lineHeight: 1,
                     }}
                   >
                     ×
                   </button>
                 </div>
-              </div>
-            )
+              ) : (
+                <button
+                  onClick={() => { setForgeActiveProjectName(project?.name); setForgeActiveProjectId(id); setShowForgeExternal(true); }}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "6px 10px 6px 12px", borderRadius: 8,
+                    background: "rgba(var(--atlas-gold-rgb),0.07)",
+                    border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
+                    color: "rgba(var(--atlas-gold-rgb),0.85)",
+                    cursor: "pointer",
+                    fontFamily: "var(--app-font-mono)", fontSize: 9.5,
+                    letterSpacing: "0.1em", textTransform: "uppercase" as const,
+                    transition: "all 160ms ease",
+                  }}
+                >
+                  <svg width={11} height={11} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 2L3 8.5l2.5 2.5L12 4.5 9 2z" />
+                    <path d="M5.5 11L2 14.5" />
+                    <path d="M11 3.5L13 5.5" />
+                  </svg>
+                  Forge — Extract strategy from a doc or transcript
+                </button>
+              )}
+            </div>
           )}
 
           {/* Input — hidden when Terminal tab is active (terminal has its own input row) */}
@@ -10870,6 +10909,7 @@ export default function Workspace() {
                 onOpenForge={() => setShowForgeExternal(true)}
                 externalForgeNodes={externalForgeNodes}
                 onForgeNodesConsumed={() => setExternalForgeNodes([])}
+                onForgeCompleted={() => void updateForgeState("forged")}
               />
             </div>
           </>
@@ -10947,6 +10987,7 @@ export default function Workspace() {
                 onOpenForge={() => setShowForgeExternal(true)}
                 externalForgeNodes={externalForgeNodes}
                 onForgeNodesConsumed={() => setExternalForgeNodes([])}
+                onForgeCompleted={() => void updateForgeState("forged")}
               />
             </div>
           </div>
@@ -11007,6 +11048,7 @@ export default function Workspace() {
             const ctx = nodes.map(n => `[${n.type}] ${n.label}`).join(" | ");
             setForgeContext(ctx);
             try { sessionStorage.setItem(`atlas-forge-ctx-${id}`, ctx); } catch {}
+            void updateForgeState("forged");
             // Also switch right panel to the map tab so nodes are visible
             setDesktopForceTab("map");
             setTimeout(() => setDesktopForceTab(undefined), 80);
