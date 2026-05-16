@@ -312,6 +312,16 @@ Rules:
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub, creating new files, or applying self-repairs):
 When the user asks you to fix, build, or create something, output the complete file(s) at the very END of your response using this EXACT format — one block per file:
 
+Before emitting ANY FILE_EDIT or LINE_PATCH block, you MUST output this exact structured confidence assessment line in the visible part of your response:
+
+CONFIDENCE_ASSESSMENT:{"confidence":"high|medium|low","files_affected":["path/one.ts","path/two.ts"],"blast_radius":"isolated|moderate|wide","reasoning":"One sentence explaining why this confidence level fits."}
+
+Confidence gating rules:
+- high confidence + isolated blast radius: proceed automatically after the assessment; tell the user you are proceeding and then emit FILE_EDIT/LINE_PATCH blocks.
+- medium confidence OR moderate blast radius: surface the assessment and wait for explicit approval before emitting any FILE_EDIT/LINE_PATCH blocks.
+- low confidence OR wide blast radius: surface the assessment, explain the risks, suggest breaking the task into smaller steps, and require explicit approval before emitting any FILE_EDIT/LINE_PATCH blocks.
+- If approval is required, do NOT include FILE_EDIT_START or LINE_PATCH_START in that response.
+
 FILE_EDIT_START
 path: [the file path exactly as shown in the context, e.g. src/components/Foo.tsx]
 language: [typescript|javascript|css|json|etc]
@@ -598,6 +608,13 @@ interface LinePatch {
   replace: string;
 }
 
+interface ConfidenceAssessment {
+  confidence: "high" | "medium" | "low";
+  files_affected: string[];
+  blast_radius: "isolated" | "moderate" | "wide";
+  reasoning: string;
+}
+
 function extractAllLinePatches(content: string): { visibleContent: string; linePatches: LinePatch[] } {
   const startMarker = "LINE_PATCH_START";
   const findMarker = "LINE_PATCH_FIND";
@@ -639,6 +656,32 @@ function extractAllLinePatches(content: string): { visibleContent: string; lineP
   }
 
   return { visibleContent, linePatches };
+}
+
+function extractConfidenceAssessment(content: string): ConfidenceAssessment | null {
+  const match = content.match(/CONFIDENCE_ASSESSMENT:\s*(\{[^\n]+\})/);
+  if (!match?.[1]) return null;
+
+  try {
+    const parsed = JSON.parse(match[1]) as Partial<ConfidenceAssessment>;
+    const validConfidence = parsed.confidence === "high" || parsed.confidence === "medium" || parsed.confidence === "low";
+    const validBlastRadius = parsed.blast_radius === "isolated" || parsed.blast_radius === "moderate" || parsed.blast_radius === "wide";
+    if (!validConfidence || !validBlastRadius || !Array.isArray(parsed.files_affected) || typeof parsed.reasoning !== "string") {
+      return null;
+    }
+    return {
+      confidence: parsed.confidence,
+      files_affected: parsed.files_affected.filter((file): file is string => typeof file === "string"),
+      blast_radius: parsed.blast_radius,
+      reasoning: parsed.reasoning,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function canProceedWithFileChanges(assessment: ConfidenceAssessment | null): boolean {
+  return assessment?.confidence === "high" && assessment.blast_radius === "isolated";
 }
 
 // Matches NODE_RESOLVED: auth  /  NODE_RESOLVED: [auth]  /  NODE_RESOLVED: {auth}
@@ -1269,6 +1312,9 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent: afterPatches, linePatches } = extractAllLinePatches(rawContent);
   const { visibleContent, fileEdits } = extractAllFileEdits(afterPatches);
+  const confidenceAssessment = extractConfidenceAssessment(visibleContent);
+  const hasProposedFileChanges = fileEdits.length > 0 || linePatches.length > 0;
+  const fileChangesAllowed = !hasProposedFileChanges || canProceedWithFileChanges(confidenceAssessment);
   const { content: afterMemory, newFacts } = extractMemoryLines(visibleContent);
   const { content: afterNodeResolved, resolvedNodes } = extractNodeResolved(afterMemory);
   const { content: afterIntent, intentType: detectedIntentType } = extractIntentType(afterNodeResolved);
@@ -1303,7 +1349,15 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
 
   // Extract FLOW_NODE lines before persisting
   const { content: flowStripped, flowNodes } = extractFlowNodes(finalContent);
-  const displayContent = isFlowMode ? flowStripped : finalContent;
+  let displayContent = isFlowMode ? flowStripped : finalContent;
+  if (hasProposedFileChanges && !fileChangesAllowed) {
+    const approvalMessage = confidenceAssessment
+      ? confidenceAssessment.confidence === "low" || confidenceAssessment.blast_radius === "wide"
+        ? "I need explicit approval before making these changes. The risk is high enough that I recommend breaking this into smaller steps first."
+        : "I need explicit approval before making these changes."
+      : "I need to provide a confidence assessment before proposing file changes. Please ask me to restate the scope and confidence first.";
+    displayContent = `${displayContent}\n\n${approvalMessage}`.trim();
+  }
   // Strip LENS_DRIFT token before DB persistence (it's a client-side signal only)
   const persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
 
@@ -1377,9 +1431,10 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     memoryChips: allChips.length > 0 ? allChips : undefined,
     messageId: savedMsgId,
     memoryUpdated: newFacts.length > 0,
-    fileEdits: fileEdits.length > 0 ? fileEdits : undefined,
-    fileEdit: fileEdits.length > 0 ? fileEdits[0] : undefined,
-    linePatches: linePatches.length > 0 ? linePatches : undefined,
+    confidenceAssessment: confidenceAssessment ?? undefined,
+    fileEdits: fileChangesAllowed && fileEdits.length > 0 ? fileEdits : undefined,
+    fileEdit: fileChangesAllowed && fileEdits.length > 0 ? fileEdits[0] : undefined,
+    linePatches: fileChangesAllowed && linePatches.length > 0 ? linePatches : undefined,
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
