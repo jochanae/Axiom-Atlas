@@ -23,6 +23,7 @@ import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../componen
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { CommitCard } from "../components/CommitCard";
 import { PlanCard } from "../components/PlanCard";
+import { LiveGenerationCard } from "../components/LiveGenerationCard";
 import { Eye, TerminalSquare } from "lucide-react";
 import { useThemeMode } from "@/lib/theme";
 import { fileToBase64Safe } from "@/lib/image-resize";
@@ -145,6 +146,7 @@ type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
 type WorkspaceLens = "flow" | "build" | "look" | "scenario";
 type PlanState = "pending" | "reviewing" | "executing" | "completed" | "skipped";
+type LiveGenerationMode = "plan" | "blueprint" | "edit" | "thinking";
 
 type ForgeState = { forged: boolean; dismissed: boolean };
 
@@ -1854,6 +1856,66 @@ function atlasActivityStatus(content: string): string {
   if (/FILE_READ/i.test(content)) return "Reading files...";
   if (/\b(git|push)\b/i.test(content)) return "Pushing to GitHub...";
   return "Atlas is thinking...";
+}
+
+const LIVE_FILENAME_RE = /(?:[\w.-]+\/)+(?:[\w.-]+\.\w+)|\b[\w.-]+\.(?:tsx?|jsx?|css|scss|json|mdx?|html|py|go|rs|sql|ya?ml)\b/g;
+
+function uniquePush(items: string[], item: string): void {
+  if (!item || items.includes(item)) return;
+  items.push(item);
+}
+
+function parseLiveGeneration(content: string, pending: boolean): { mode: LiveGenerationMode; steps: string[]; shouldShow: boolean } {
+  const steps: string[] = [];
+  let mode: LiveGenerationMode = "thinking";
+  const filenames = [...content.matchAll(LIVE_FILENAME_RE)].map((match) => match[0]).slice(0, 4);
+  for (const filename of filenames) {
+    uniquePush(steps, `Reading ${filename.split("/").pop() ?? filename}...`);
+  }
+
+  const editMatch = content.match(/FILE_EDIT(?:_START)?[\s\S]{0,160}?(?:path:\s*)?((?:[\w.-]+\/)+(?:[\w.-]+\.\w+)|[\w.-]+\.\w+)/i);
+  if (/FILE_EDIT/i.test(content)) {
+    mode = "edit";
+    uniquePush(steps, `Preparing changes to ${editMatch?.[1]?.split("/").pop() ?? filenames[0]?.split("/").pop() ?? "files"}...`);
+  }
+
+  const patchMatch = content.match(/LINE_PATCH(?:_START)?[\s\S]{0,160}?(?:path:\s*)?((?:[\w.-]+\/)+(?:[\w.-]+\.\w+)|[\w.-]+\.\w+)/i);
+  if (/LINE_PATCH/i.test(content)) {
+    mode = "edit";
+    uniquePush(steps, `Patching ${patchMatch?.[1]?.split("/").pop() ?? filenames[0]?.split("/").pop() ?? "file"}...`);
+  }
+
+  const numbered = [...content.matchAll(/^\s*(\d+)[.)]\s+/gm)].map((match) => Number(match[1])).filter(Number.isFinite);
+  if (numbered.length > 0) {
+    mode = mode === "edit" ? "edit" : "plan";
+    for (const n of numbered.slice(-5)) uniquePush(steps, `Drafting step ${n}...`);
+  }
+
+  if (/\b(analy[sz]ing|checking|inspect|reviewing)\b/i.test(content)) {
+    if (mode === "thinking") mode = "plan";
+    uniquePush(steps, "Analyzing codebase...");
+  }
+
+  if (/\b(git|push|github|commit)\b/i.test(content)) {
+    mode = "edit";
+    uniquePush(steps, "Preparing to push...");
+  }
+
+  if (/\b(blueprint|architecture|architectural|moscow|must|should|could|won't|wont)\b/i.test(content) && (numbered.length >= 3 || /BLUEPRINT/.test(content))) {
+    mode = "blueprint";
+  }
+
+  const planStep = content.match(/PLAN_STEP:\s*(.+)/i)?.[1]?.trim();
+  if (planStep) {
+    mode = "edit";
+    uniquePush(steps, planStep.endsWith("...") ? planStep : `${planStep}...`);
+  }
+
+  return {
+    mode,
+    steps,
+    shouldShow: pending || steps.length > 0,
+  };
 }
 
 function AtlasActivityBar({ content }: { content: string }) {
@@ -8585,6 +8647,7 @@ export default function Workspace() {
             active: true,
             content: [
               res.content ?? "",
+              res.plan?.mode === "blueprint" ? "BLUEPRINT" : res.plan ? "PLAN" : "",
               aff.length > 0 ? "FILE_READ" : "",
               fes.length > 0 ? "FILE_EDIT" : "",
               lps.length > 0 ? "LINE_PATCH" : "",
@@ -9239,6 +9302,11 @@ export default function Workspace() {
       return next;
     });
   }, [zipName]);
+
+  const liveGeneration = useMemo(
+    () => parseLiveGeneration(activityStream.content, chatPending),
+    [activityStream.content, chatPending]
+  );
 
   // ── Project not found ────────────────────────────────────────────────────
   if (!projectLoading && !sessionsLoading && id && !project) {
@@ -10416,7 +10484,15 @@ export default function Workspace() {
               </div>
             )}
 
-            {activityStream.active && <AtlasActivityBar content={activityStream.content} />}
+            {activityStream.active && liveGeneration.shouldShow ? (
+              <LiveGenerationCard
+                mode={liveGeneration.mode}
+                steps={liveGeneration.steps}
+                isComplete={false}
+              />
+            ) : activityStream.active ? (
+              <AtlasActivityBar content={activityStream.content} />
+            ) : null}
 
             <div ref={bottomRef} />
 
