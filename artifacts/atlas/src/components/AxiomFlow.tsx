@@ -125,6 +125,8 @@ export interface HandoverSnapshotNode {
   type: ArchNode["type"];
   label: string;
   meta?: ArchNode["meta"];
+  moscow?: ArchNode["moscow"];
+  details?: string;
   resolved: boolean;
   strategicAnswer?: string;
 }
@@ -159,7 +161,8 @@ export function computeNodeStateHash(nodes: ArchNode[]): string {
     n.id,
     n.type,
     n.label,
-    n.meta ?? "",
+    n.moscow ?? n.meta ?? "",
+    (n.details ?? "").trim(),
     (n.strategicAnswer ?? "").trim(),
   ].join("\u0001")).join("\u0002");
   return djb2Hash(serial);
@@ -217,6 +220,8 @@ export function buildHandoverSnapshot(
     type: n.type,
     label: n.label,
     meta: n.meta,
+    moscow: n.moscow,
+    details: n.details?.trim() || undefined,
     resolved: isNodeDefined(n),
     strategicAnswer: n.strategicAnswer?.trim() || undefined,
   }));
@@ -237,7 +242,18 @@ export function buildHandoverSnapshot(
 
 // Per-node persisted state shape. Back-compat: legacy DB rows store a bare
 // boolean per id; we read both shapes and always write the object form.
-export type PersistedNodeState = boolean | { resolved: boolean; strategicAnswer?: string };
+export type PersistedNodeState = boolean | {
+  resolved: boolean;
+  strategicAnswer?: string;
+  label?: string;
+  type?: ArchNode["type"];
+  x?: number;
+  y?: number;
+  details?: string;
+  meta?: FlowNodeMeta;
+  moscow?: FlowNodeMeta;
+  question?: string;
+};
 export type NodeStateMap = Record<string, PersistedNodeState>;
 
 export interface ArchEdge {
@@ -500,7 +516,18 @@ export function AxiomFlow({
       if (typeof raw === "boolean") return { ...n, resolved: isNodeDefined(n) };
       const answer = typeof raw.strategicAnswer === "string" ? raw.strategicAnswer : undefined;
       const hasAnswer = Boolean(answer && answer.trim().length > 0);
-      const next: ArchNode = { ...n, resolved: hasAnswer };
+      const next: ArchNode = {
+        ...n,
+        label: typeof raw.label === "string" && raw.label.trim() ? raw.label : n.label,
+        type: raw.type ?? n.type,
+        x: typeof raw.x === "number" ? raw.x : n.x,
+        y: typeof raw.y === "number" ? raw.y : n.y,
+        details: typeof raw.details === "string" ? raw.details : n.details,
+        meta: raw.meta ?? n.meta,
+        moscow: raw.moscow ?? n.moscow,
+        question: typeof raw.question === "string" ? raw.question : n.question,
+        resolved: hasAnswer,
+      };
       if (hasAnswer) next.strategicAnswer = answer;
       return next;
     }));
@@ -521,7 +548,11 @@ export function AxiomFlow({
     pendingNodes.forEach(newNode => {
       setTimeout(() => {
         setNodes(prev => {
-          if (prev.find(n => n.id === newNode.id)) return prev;
+          if (prev.find(n => n.id === newNode.id)) {
+            return prev.map(n => n.id === newNode.id
+              ? { ...n, ...newNode, strategicAnswer: newNode.strategicAnswer ?? n.strategicAnswer }
+              : n);
+          }
           haptics.tap();
           sounds.tap();
           return [...prev, newNode];
@@ -555,6 +586,8 @@ export function AxiomFlow({
   const [zoom, setZoom] = useState(isMobile ? ZOOM_DEFAULT_MOBILE : ZOOM_DEFAULT_DESKTOP);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [activeCardNodeId, setActiveCardNodeId] = useState<string | null>(null);
+  const [editingDetailsNodeId, setEditingDetailsNodeId] = useState<string | null>(null);
+  const [detailsDraft, setDetailsDraft] = useState("");
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -771,6 +804,23 @@ export function AxiomFlow({
     setActiveCardNodeId(null);
   }, []);
 
+  const startDetailsEdit = useCallback((node: ArchNode) => {
+    setEditingDetailsNodeId(node.id);
+    setDetailsDraft(node.details ?? "");
+  }, []);
+
+  const saveDetailsEdit = useCallback((nodeId: string) => {
+    const trimmed = detailsDraft.trim();
+    setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, details: trimmed || undefined } : n));
+    setEditingDetailsNodeId(null);
+    setDetailsDraft("");
+  }, [detailsDraft]);
+
+  const cancelDetailsEdit = useCallback(() => {
+    setEditingDetailsNodeId(null);
+    setDetailsDraft("");
+  }, []);
+
   // ── Handover state ────────────────────────────────────────────────────────
   const [handoverOpenInternal, setHandoverOpenInternal] = useState(false);
   const [handoverTitle, setHandoverTitle] = useState("");
@@ -817,6 +867,7 @@ export function AxiomFlow({
   const strokeWidth = Math.max(1, Math.min(2, 1.5 / zoom));
 
   const activeCardNode = activeCardNodeId ? nodes.find(n => n.id === activeCardNodeId) : null;
+  const activeCardMoscow = activeCardNode ? getMoscow(activeCardNode) : undefined;
   let cardLeft = 0;
   let cardTop = 0;
   const CARD_W = 228;
@@ -1152,28 +1203,82 @@ export function AxiomFlow({
           <div style={{ fontSize: 12, fontWeight: 700, color: palette.goldText, marginBottom: 4, paddingRight: 24 }}>
             {activeCardNode.label}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
             <span style={{ fontSize: 9, color: palette.mutedText, fontFamily: "var(--app-font-mono)", textTransform: "uppercase", letterSpacing: "0.1em" }}>
               {activeCardNode.type}
             </span>
-            {activeCardNode.meta && (
+            {activeCardMoscow && (
               <span style={{
                 fontSize: 9, fontWeight: 700, letterSpacing: "0.08em",
                 padding: "1px 6px", borderRadius: 4,
-                background: activeCardNode.meta === "must" ? `rgba(${palette.goldRgb},0.22)`
-                  : activeCardNode.meta === "should" ? `rgba(${palette.goldRgb},0.10)`
+                background: activeCardMoscow === "must" ? `rgba(${palette.goldRgb},0.22)`
+                  : activeCardMoscow === "should" ? `rgba(${palette.goldRgb},0.10)`
                   : `rgba(${palette.mutedRgb},0.10)`,
-                color: activeCardNode.meta === "must" ? palette.goldText
-                  : activeCardNode.meta === "should" ? `rgba(${palette.goldRgb},0.75)`
+                color: activeCardMoscow === "must" ? palette.goldText
+                  : activeCardMoscow === "should" ? `rgba(${palette.goldRgb},0.75)`
                   : palette.mutedText,
-                border: `1px solid ${activeCardNode.meta === "must" ? `rgba(${palette.goldRgb},0.4)`
-                  : activeCardNode.meta === "should" ? `rgba(${palette.goldRgb},0.22)`
+                border: `1px solid ${activeCardMoscow === "must" ? `rgba(${palette.goldRgb},0.4)`
+                  : activeCardMoscow === "should" ? `rgba(${palette.goldRgb},0.22)`
                   : `rgba(${palette.mutedRgb},0.2)`}`,
               }}>
-                {activeCardNode.meta.toUpperCase()}
+                {activeCardMoscow.toUpperCase()}
               </span>
             )}
           </div>
+
+          {editingDetailsNodeId === activeCardNode.id ? (
+            <textarea
+              autoFocus
+              value={detailsDraft}
+              onChange={(e) => setDetailsDraft(e.target.value)}
+              onBlur={() => saveDetailsEdit(activeCardNode.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelDetailsEdit();
+                }
+              }}
+              style={{
+                width: "100%",
+                minHeight: 58,
+                resize: "vertical",
+                borderRadius: 7,
+                border: `1px solid rgba(${palette.goldRgb},0.26)`,
+                background: palette.inputBg,
+                color: palette.fgText,
+                fontSize: 11,
+                lineHeight: 1.55,
+                padding: "7px 8px",
+                marginBottom: 10,
+                outline: "none",
+                fontFamily: "var(--app-font-sans)",
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => startDetailsEdit(activeCardNode)}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                cursor: "text",
+                fontSize: 11,
+                color: activeCardNode.details ? `rgba(${palette.fgRgb},0.75)` : palette.mutedText,
+                lineHeight: 1.6,
+                maxHeight: 80,
+                overflowY: "auto",
+                marginBottom: 10,
+                fontStyle: activeCardNode.details ? "normal" : "italic",
+              }}
+              title="Edit description"
+            >
+              {activeCardNode.details || "No description yet — tap to add"}
+            </button>
+          )}
 
           {/* Strategic pivot question */}
           <div style={{
@@ -1184,16 +1289,6 @@ export function AxiomFlow({
           }}>
             {getPivotQuestion(activeCardNode)}
           </div>
-
-          {/* Details if present */}
-          {activeCardNode.details && (
-            <div style={{
-              fontSize: 11, color: `rgba(${palette.fgRgb},0.75)`, lineHeight: 1.6,
-              maxHeight: 80, overflowY: "auto", marginBottom: 10,
-            }}>
-              {activeCardNode.details}
-            </div>
-          )}
 
           {/* Lock In Answer — replaces the legacy Mark resolved toggle */}
           <AnswerCapture
