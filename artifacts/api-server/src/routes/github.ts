@@ -48,14 +48,56 @@ function getToken(req: { headers: Record<string, string | string[] | undefined> 
   return process.env.GITHUB_TOKEN ?? null;
 }
 
-function parseLinkedRepoFullName(raw: string | null): string | null {
+type ParsedLinkedRepo = { owner: string; repo: string; fullName: string };
+
+function parseOwnerRepoCandidate(value: string): ParsedLinkedRepo | null {
+  const cleaned = value.trim().replace(/\.git$/, "").replace(/\/+$/, "");
+  if (!cleaned) return null;
+
+  const urlMatch = cleaned.match(/^https?:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s?#]+)/i);
+  const pathMatch = cleaned.match(/^([^/\s]+)\/([^/\s]+)$/);
+  const match = urlMatch ?? pathMatch;
+  if (!match) return null;
+
+  const owner = decodeURIComponent(match[1]).trim();
+  const repo = decodeURIComponent(match[2]).trim().replace(/\.git$/, "");
+  if (!owner || !repo) return null;
+  return { owner, repo, fullName: `${owner}/${repo}` };
+}
+
+function parseLinkedRepo(raw: string | null): ParsedLinkedRepo | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as { fullName?: unknown; full_name?: unknown };
-    const fullName = typeof parsed.fullName === "string" ? parsed.fullName : typeof parsed.full_name === "string" ? parsed.full_name : null;
-    return fullName && fullName.includes("/") ? fullName : null;
+    const parsed = JSON.parse(raw) as {
+      owner?: unknown;
+      repo?: unknown;
+      name?: unknown;
+      fullName?: unknown;
+      full_name?: unknown;
+      url?: unknown;
+      html_url?: unknown;
+    };
+    if (typeof parsed.owner === "string" && typeof parsed.repo === "string") {
+      return parseOwnerRepoCandidate(`${parsed.owner}/${parsed.repo}`);
+    }
+    const fullName = typeof parsed.fullName === "string"
+      ? parsed.fullName
+      : typeof parsed.full_name === "string"
+        ? parsed.full_name
+        : null;
+    if (fullName) return parseOwnerRepoCandidate(fullName);
+    const url = typeof parsed.url === "string"
+      ? parsed.url
+      : typeof parsed.html_url === "string"
+        ? parsed.html_url
+        : null;
+    if (url) return parseOwnerRepoCandidate(url);
+    if (typeof parsed.owner === "string" && typeof parsed.name === "string") {
+      return parseOwnerRepoCandidate(`${parsed.owner}/${parsed.name}`);
+    }
+    return null;
   } catch {
-    return raw.includes("/") ? raw : null;
+    return parseOwnerRepoCandidate(raw);
   }
 }
 
@@ -229,12 +271,14 @@ router.get("/projects/:projectId/commits", async (req, res): Promise<void> => {
 
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
-  const repo = parseLinkedRepoFullName(project.linkedRepo ?? null);
+  const repo = parseLinkedRepo(project.linkedRepo ?? null);
   const storedToken = project.githubToken ? decryptToken(project.githubToken) : null;
   const token = storedToken && storedToken !== "__server__" ? storedToken : process.env.GITHUB_TOKEN ?? null;
-  if (!repo || !token) { res.json({ commits: [], reason: "no_repo" }); return; }
+  if (!repo) { res.json({ commits: [], reason: "parse_error", raw: project.linkedRepo ?? null }); return; }
+  if (!token) { res.json({ commits: [], reason: "no_token" }); return; }
+  console.log("[github commits] parsed repo", { owner: repo.owner, repo: repo.repo });
 
-  const cacheKey = `${project.id}:${repo}`;
+  const cacheKey = `${project.id}:${repo.fullName}`;
   const cached = commitsCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     res.json(cached.payload);
@@ -242,7 +286,8 @@ router.get("/projects/:projectId/commits", async (req, res): Promise<void> => {
   }
 
   try {
-    const listResp = await fetch(`${GH_API}/repos/${repo}/commits?per_page=20`, { headers: ghHeaders(token) });
+    const repoPath = `${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}`;
+    const listResp = await fetch(`${GH_API}/repos/${repoPath}/commits?per_page=20`, { headers: ghHeaders(token) });
     if (!listResp.ok) {
       res.status(listResp.status).json({ error: "GitHub API error", detail: await listResp.text() });
       return;
@@ -251,7 +296,7 @@ router.get("/projects/:projectId/commits", async (req, res): Promise<void> => {
     const list = await listResp.json() as any[];
     const commits = await Promise.all(list.map(async (item): Promise<CommitSummary> => {
       const sha = String(item.sha ?? "");
-      const detailResp = await fetch(`${GH_API}/repos/${repo}/commits/${sha}`, { headers: ghHeaders(token) });
+      const detailResp = await fetch(`${GH_API}/repos/${repoPath}/commits/${sha}`, { headers: ghHeaders(token) });
       const detail = detailResp.ok ? await detailResp.json() as any : item;
       const files = Array.isArray(detail.files)
         ? detail.files.map((file: any): CommitFileSummary => ({
@@ -267,7 +312,7 @@ router.get("/projects/:projectId/commits", async (req, res): Promise<void> => {
         message: String(detail.commit?.message ?? item.commit?.message ?? ""),
         author: String(detail.commit?.author?.name ?? item.commit?.author?.name ?? detail.author?.login ?? item.author?.login ?? "Unknown"),
         timestamp: String(detail.commit?.author?.date ?? item.commit?.author?.date ?? new Date().toISOString()),
-        url: String(detail.html_url ?? item.html_url ?? `https://github.com/${repo}/commit/${sha}`),
+        url: String(detail.html_url ?? item.html_url ?? `https://github.com/${repo.fullName}/commit/${sha}`),
         files,
       };
     }));
