@@ -22,12 +22,14 @@ import { CapsuleTag } from "../components/CapsuleTag";
 import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { CommitCard } from "../components/CommitCard";
+import { PlanCard } from "../components/PlanCard";
 import { Eye, TerminalSquare } from "lucide-react";
 import { useThemeMode } from "@/lib/theme";
 import { fileToBase64Safe } from "@/lib/image-resize";
 import { detectDecisionMoment } from "@/lib/DecisionCatchEngine";
 import { reportError } from "../lib/errorReporter";
 import type { CommitCardPayload } from "@/lib/DecisionCatchEngine";
+import type { Plan, PlanExecution } from "../lib/plan";
 import type { ZipEntry } from "../components/ZipImport";
 import {
   useGetProject,
@@ -114,6 +116,8 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   intentType?: string | null;
+  plan?: Plan;
+  planFromHome?: boolean;
   catchPayload?: CatchPayload | null;
   catchResolved?: boolean;
   fileEdit?: FileEdit;
@@ -140,6 +144,7 @@ interface LinkedRepo {
 type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
 type WorkspaceLens = "flow" | "build" | "look" | "scenario";
+type PlanState = "pending" | "reviewing" | "executing" | "completed" | "skipped";
 
 type ForgeState = { forged: boolean; dismissed: boolean };
 
@@ -1842,6 +1847,8 @@ function InlineDiffCard({
 }
 
 function atlasActivityStatus(content: string): string {
+  const planStep = content.match(/PLAN_STEP:\s*(.+)/i)?.[1]?.trim();
+  if (planStep) return planStep;
   if (/LINE_PATCH/i.test(content)) return "Patching code...";
   if (/FILE_EDIT/i.test(content)) return "Preparing changes...";
   if (/FILE_READ/i.test(content)) return "Reading files...";
@@ -1911,6 +1918,11 @@ function AssistantBubble({
   onStreamActivityUpdate,
   onStreamActivityComplete,
   onCommitCardDone,
+  planState,
+  planExecution,
+  onPlanStateChange,
+  onPlanExecutionChange,
+  onExecuteHomePlan,
   trustMode,
 }: {
   message: ChatMessage;
@@ -1932,17 +1944,27 @@ function AssistantBubble({
   onStreamActivityUpdate?: (content: string) => void;
   onStreamActivityComplete?: () => void;
   onCommitCardDone?: () => void;
+  planState?: PlanState;
+  planExecution?: PlanExecution;
+  onPlanStateChange?: (messageId: number, state: PlanState) => void;
+  onPlanExecutionChange?: (messageId: number, execution: PlanExecution | null) => void;
+  onExecuteHomePlan?: (plan: Plan) => void;
   trustMode: "review" | "auto";
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
   const [commitDone, setCommitDone] = useState(false);
   const [showPushModal, setShowPushModal] = useState(false);
+  const [showPlanPushModal, setShowPlanPushModal] = useState(false);
+  const [planPushEdits, setPlanPushEdits] = useState<FileEdit[] | null>(null);
   const [copied, setCopied] = useState(false);
   const [selfApplyStatus, setSelfApplyStatus] = useState<"idle" | "applying" | "done" | "error">("idle");
   const [selfApplyMsg, setSelfApplyMsg] = useState("");
   const [commitCardDone, setCommitCardDone] = useState(false);
   const activeEdits = message.fileEdits ?? (message.fileEdit ? [message.fileEdit] : []);
+  const planMessageId = message.id ?? 0;
+  const { data: planProject } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
+  const planGithubToken = planProject?.githubToken ?? null;
 
   // Parse CMD_EXEC block from Atlas response
   const { cmdExec, cleanContent } = useMemo(() => {
@@ -1981,6 +2003,107 @@ function AssistantBubble({
     () => detectDecisionMoment(message.content),
     [message.content]
   );
+
+  const setPlanStatus = (state: PlanState) => {
+    if (!message.plan) return;
+    onPlanStateChange?.(planMessageId, state);
+  };
+
+  const setPlanExecution = (execution: PlanExecution | null) => {
+    if (!message.plan) return;
+    onPlanExecutionChange?.(planMessageId, execution);
+  };
+
+  const resolvePlanLinePatches = async (): Promise<FileEdit[]> => {
+    if (!message.linePatches?.length) return [];
+    if (!linkedRepo) throw new Error("No repo linked - connect a GitHub repo in the Files tab.");
+    if (!planGithubToken) throw new Error("No GitHub token - add your personal token in the Files tab.");
+    const groups: Record<string, LinePatch[]> = {};
+    for (const patch of message.linePatches) {
+      if (!groups[patch.path]) groups[patch.path] = [];
+      groups[patch.path].push(patch);
+    }
+    const edits: FileEdit[] = [];
+    for (const [filePath, patches] of Object.entries(groups)) {
+      const r = await fetch(
+        `/api/github/file?repo=${encodeURIComponent(linkedRepo.fullName)}&path=${encodeURIComponent(filePath)}&branch=${encodeURIComponent(linkedRepo.defaultBranch)}`,
+        { headers: { "x-github-token": planGithubToken } }
+      );
+      if (!r.ok) throw new Error(`Could not fetch ${filePath.split("/").pop()} (${r.status})`);
+      const data = await r.json() as { content: string };
+      let content = data.content;
+      for (const patch of patches) {
+        const idx = content.indexOf(patch.find);
+        if (idx === -1) throw new Error(`Anchor not found in ${filePath.split("/").pop()}. Ask Atlas to re-read the file first.`);
+        content = content.slice(0, idx) + patch.replace + content.slice(idx + patch.find.length);
+      }
+      const ext = filePath.split(".").pop() ?? "";
+      const language = ["ts", "tsx"].includes(ext) ? "typescript" : ["js", "jsx"].includes(ext) ? "javascript" : ext;
+      edits.push({ path: filePath, language, content });
+    }
+    return edits;
+  };
+
+  const handlePlanApprove = async () => {
+    if (!message.plan || planState === "executing") return;
+    const firstStepOrder = message.plan.steps[0]?.order ?? 1;
+    setPlanStatus("executing");
+    setPlanExecution({ currentStepOrder: firstStepOrder, completedStepOrders: [] });
+    onStreamActivityUpdate?.(`PLAN_STEP:${message.plan.steps[0]?.description ?? message.plan.title}`);
+
+    const codeEdits = userEdits.length > 0 ? userEdits : activeEdits;
+    const hasCodeChanges = codeEdits.length > 0 || (message.linePatches?.length ?? 0) > 0;
+
+    if (message.planFromHome && !hasCodeChanges) {
+      onExecuteHomePlan?.(message.plan);
+      return;
+    }
+
+    if (!hasCodeChanges) {
+      setPlanExecution({
+        completedStepOrders: message.plan.steps.map((step) => step.order),
+        changedFiles: 0,
+        statusMessage: "Done. 0 files changed.",
+      });
+      setPlanStatus("completed");
+      onStreamActivityComplete?.();
+      return;
+    }
+
+    try {
+      const patchEdits = await resolvePlanLinePatches();
+      const modalEdits = [...codeEdits, ...patchEdits];
+      if (modalEdits.length === 0) {
+        setPlanExecution({
+          completedStepOrders: message.plan.steps.map((step) => step.order),
+          changedFiles: 0,
+          statusMessage: "Done. 0 files changed.",
+        });
+        setPlanStatus("completed");
+        onStreamActivityComplete?.();
+        return;
+      }
+      const pushStep = message.plan.steps.find((step) => step.type === "push") ?? message.plan.steps[message.plan.steps.length - 1];
+      setPlanExecution({
+        currentStepOrder: pushStep?.order,
+        completedStepOrders: message.plan.steps.filter((step) => step.order !== pushStep?.order).map((step) => step.order),
+      });
+      onStreamActivityUpdate?.(`PLAN_STEP:${pushStep?.description ?? "Review and push changes"}`);
+      setPlanPushEdits(modalEdits);
+      setShowPlanPushModal(true);
+    } catch (error) {
+      setPlanExecution({
+        currentStepOrder: undefined,
+        completedStepOrders: [],
+        failedStep: {
+          order: firstStepOrder,
+          error: error instanceof Error ? error.message : "Plan execution failed.",
+        },
+      });
+      setPlanStatus("pending");
+      onStreamActivityComplete?.();
+    }
+  };
 
   const handleSelfApply = async () => {
     if (selfApplyStatus === "applying") return;
@@ -2143,6 +2266,48 @@ function AssistantBubble({
           onComplete={onStreamActivityComplete}
           textStyle={{ fontSize: 14, lineHeight: 1.78, color: "var(--atlas-fg)", opacity: 0.9, whiteSpace: "pre-wrap" }}
         />
+
+        {message.plan && planState !== "skipped" && (
+          <PlanCard
+            plan={message.plan}
+            messageId={planMessageId}
+            projectId={projectId}
+            isExecuting={planState === "executing"}
+            isExpanded={planState === "reviewing"}
+            isCompleted={planState === "completed"}
+            execution={planExecution}
+            onReview={() => setPlanStatus(planState === "reviewing" ? "pending" : "reviewing")}
+            onSkip={() => setPlanStatus("skipped")}
+            onApprove={() => void handlePlanApprove()}
+          />
+        )}
+
+        {showPlanPushModal && planPushEdits && planPushEdits.length > 0 && message.plan && (
+          <GitHubPushModal
+            fileEdits={planPushEdits}
+            linkedRepo={linkedRepo}
+            projectId={projectId}
+            onClose={() => {
+              setShowPlanPushModal(false);
+              setPlanStatus("pending");
+              setPlanExecution(null);
+              onStreamActivityComplete?.();
+            }}
+            onPushSuccess={(records) => {
+              onPushSuccess(records);
+              const changedFiles = new Set(records.map((record) => record.path)).size;
+              setPlanExecution({
+                completedStepOrders: message.plan?.steps.map((step) => step.order) ?? [],
+                changedFiles,
+                statusMessage: `Done. ${changedFiles} file${changedFiles === 1 ? "" : "s"} changed.`,
+              });
+              setPlanStatus("completed");
+              setShowPlanPushModal(false);
+              onStreamActivityComplete?.();
+            }}
+            onPrCreated={onPrCreated}
+          />
+        )}
 
         {/* Code ready card — self-repair paths */}
         {selfEdits.length > 0 && (
@@ -7599,15 +7764,20 @@ export default function Workspace() {
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [planStates, setPlanStates] = useState<Map<number, PlanState>>(() => new Map());
+  const [planExecutions, setPlanExecutions] = useState<Map<number, PlanExecution>>(() => new Map());
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
 
   // Reset all chat state when the project changes so old messages never bleed into a new workspace
   useEffect(() => {
     setMessages([]);
+    setPlanStates(new Map());
+    setPlanExecutions(new Map());
     setSessionId(null);
     setActiveCatch(null);
     priorLoaded.current = false;
+    homePlanLoadedRef.current = false;
   }, [id]);
   const { playSend, playCatch, playCommit, playPark, playNavigate } = useSound();
   const [memoryChips, setMemoryChips] = useState<MemoryChip[]>([]);
@@ -7929,6 +8099,7 @@ export default function Workspace() {
   const importPrimed = useRef(false);
   const touchStartX = useRef(0);
   const homeHandoffDbLoadedRef = useRef<number | null>(null);
+  const homePlanLoadedRef = useRef(false);
 
   const { data: allProjects } = useListProjects();
   const { data: project, isLoading: projectLoading } = useGetProject(id, { query: { enabled: !!id, queryKey: getGetProjectQueryKey(id) } });
@@ -8426,6 +8597,7 @@ export default function Workspace() {
           setMessages((prev) => [...prev, {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
+            ...(res.plan ? { plan: res.plan as Plan } : {}),
             sentAt: new Date().toISOString(),
             model: res.model ?? wsModel,
             isDeepDive: !!res.isDeepDive,
@@ -8509,6 +8681,66 @@ export default function Workspace() {
     },
     [sessionId, chatPending, messages, doSend]
   );
+
+  const updatePlanState = useCallback((messageId: number, state: PlanState) => {
+    setPlanStates((prev) => {
+      const next = new Map(prev);
+      next.set(messageId, state);
+      return next;
+    });
+  }, []);
+
+  const updatePlanExecution = useCallback((messageId: number, execution: PlanExecution | null) => {
+    setPlanExecutions((prev) => {
+      const next = new Map(prev);
+      if (execution) next.set(messageId, execution);
+      else next.delete(messageId);
+      return next;
+    });
+  }, []);
+
+  const executeHomePlan = useCallback((plan: Plan) => {
+    if (!sessionId || chatPending) return;
+    const planText = [
+      `Approved plan from home: ${plan.title}`,
+      ...plan.steps.map((step) => `${step.order}. [${step.type}] ${step.file ? `${step.file} - ` : ""}${step.description}`),
+    ].join("\n");
+    doSend(
+      `${planText}\n\nExecute this plan in this workspace. Read the relevant files first if needed, then return FILE_EDIT or LINE_PATCH blocks for any code changes so I can review and push them.`,
+      sessionId,
+      messages
+    );
+  }, [chatPending, doSend, messages, sessionId]);
+
+  useEffect(() => {
+    if (!sessionId || homePlanLoadedRef.current || messages.length > 0) return;
+    let plan: Plan | null = null;
+    try {
+      const raw = sessionStorage.getItem(`atlas-home-plan-${id}`);
+      plan = raw ? JSON.parse(raw) as Plan : null;
+      if (raw) sessionStorage.removeItem(`atlas-home-plan-${id}`);
+    } catch {
+      plan = null;
+    }
+    if (!plan) return;
+    homePlanLoadedRef.current = true;
+    initialSent.current = true;
+    const messageId = -Date.now();
+    setPlanStates((prev) => {
+      const next = new Map(prev);
+      next.set(messageId, "pending");
+      return next;
+    });
+    setMessages([{
+      id: messageId,
+      role: "assistant",
+      content: "This plan came over from Home. Review it here, then approve it when you want Atlas to execute it inside this workspace.",
+      intentType: "PLAN",
+      plan,
+      planFromHome: true,
+      sentAt: new Date().toISOString(),
+    }]);
+  }, [id, messages.length, sessionId]);
 
   useEffect(() => {
     if (!sessionId || initialSent.current) return;
@@ -10119,6 +10351,11 @@ export default function Workspace() {
                     queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(id, {}) });
                     void refreshParkedEntries();
                   }}
+                  planState={planStates.get(msg.id ?? 0) ?? "pending"}
+                  planExecution={planExecutions.get(msg.id ?? 0)}
+                  onPlanStateChange={updatePlanState}
+                  onPlanExecutionChange={updatePlanExecution}
+                  onExecuteHomePlan={executeHomePlan}
                   trustMode={trustMode}
                   onPushSuccess={(records) => {
                     setPushHistory((prev) => {
