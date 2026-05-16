@@ -5262,6 +5262,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
             onReadinessChange={setReadinessScore}
             onNodesChange={handleNodesChange}
             compact
+            onBackToChat={onBackToChat}
             detectedBuilder={platform.toLowerCase()}
             onNodeFocus={(text) => setIntent(text)}
             initialNodeState={(activeProject?.nodeState as NodeStateMap | null) ?? null}
@@ -5701,24 +5702,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
         nodes={nodes}
         onHomeNav={onHomeNav}
         onAxiomOpen={() => setShowQuickPrompt(true)}
-        navLeft={onBackToChat ? (
-          <button
-            onClick={onBackToChat}
-            style={{
-              display: "flex", alignItems: "center", gap: 5,
-              padding: "8px 14px", borderRadius: 10,
-              background: "rgba(var(--atlas-gold-rgb),0.08)",
-              border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
-              color: "var(--atlas-gold)", fontSize: 11, fontWeight: 700,
-              letterSpacing: "0.06em", cursor: "pointer",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 5l-7 7 7 7" />
-            </svg>
-            Chat
-          </button>
-        ) : undefined}
+        navLeft={undefined}
         navRight={isMobile && onHandover ? (
           // On mobile the handover trigger lives here, in the cockpit bar footer,
           // rather than as a floating pill inside the canvas.

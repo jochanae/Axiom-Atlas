@@ -411,6 +411,7 @@ interface AxiomFlowProps {
   onReadinessChange?: (score: number) => void;
   onNodesChange?: (nodes: ArchNode[]) => void;
   compact?: boolean;
+  onBackToChat?: () => void;
   onNodeFocus?: (text: string) => void;
   atmosphere?: string;
   detectedBuilder?: string;
@@ -439,6 +440,7 @@ export function AxiomFlow({
   onReadinessChange,
   onNodesChange,
   compact,
+  onBackToChat,
   onNodeFocus,
   initialNodeState,
   detectedBuilder,
@@ -833,6 +835,33 @@ export function AxiomFlow({
 
       {/* Header label */}
       <div className="absolute left-4 top-4 z-10 flex items-center gap-2">
+        {onBackToChat && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onBackToChat(); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            style={{
+              width: 20,
+              height: 20,
+              minWidth: 20,
+              minHeight: 20,
+              padding: 0,
+              background: "transparent",
+              border: "none",
+              color: "var(--atlas-gold)",
+              opacity: 0.7,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            aria-label="Back to chat"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 5l-7 7 7 7" />
+            </svg>
+          </button>
+        )}
         <span className="text-xs font-bold tracking-widest text-gold uppercase">AXIOM FLOW</span>
       </div>
 
