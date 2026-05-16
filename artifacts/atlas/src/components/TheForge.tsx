@@ -59,6 +59,10 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
   const stageTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const [repoContext, setRepoContext] = useState("");
+  const [repoDocsFound, setRepoDocsFound] = useState<string[]>([]);
+  const [repoScanStatus, setRepoScanStatus] = useState<"idle" | "loading" | "done">("idle");
+
   // Quick Prompt state — auto-detect platform from hostname; respect prop override
   const detectedPlatform = detectPlatformId();
   const [selectedPlatform, setSelectedPlatform] = useState(() => {
@@ -113,6 +117,45 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
         if (typeof lines === "string" && lines.trim()) setProjectMap(lines);
       }
     } catch { /* silent */ }
+  }, [projectId]);
+
+  // Repo pre-scan — silently fetch known strategy docs when projectId is set
+  useEffect(() => {
+    if (!projectId) return;
+    setRepoScanStatus("loading");
+    const STRATEGY_DOCS = ["README.md", "NORTH_STAR.md", "CONSTITUTION.md", "DECISIONS.md", "ROADMAP.md", "docs/strategy.md"];
+
+    fetch(`/api/projects/${projectId}`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(async (proj: { linkedRepo?: string | null } | null) => {
+        if (!proj?.linkedRepo) { setRepoScanStatus("done"); return; }
+        let repoInfo: { fullName?: string; defaultBranch?: string } = {};
+        try { repoInfo = JSON.parse(proj.linkedRepo); } catch { setRepoScanStatus("done"); return; }
+        if (!repoInfo.fullName) { setRepoScanStatus("done"); return; }
+        const branch = repoInfo.defaultBranch ?? "main";
+        const found: { path: string; content: string }[] = [];
+        let totalLen = 0;
+        for (const docPath of STRATEGY_DOCS) {
+          if (totalLen >= 3000) break;
+          try {
+            const r = await fetch(`/api/github/file?repo=${encodeURIComponent(repoInfo.fullName)}&path=${encodeURIComponent(docPath)}&branch=${encodeURIComponent(branch)}`, { credentials: "include" });
+            if (r.ok) {
+              const data = await r.json() as { content?: string; path?: string };
+              const snippet = (data.content ?? "").slice(0, 800);
+              if (snippet.trim()) {
+                found.push({ path: docPath, content: snippet });
+                totalLen += snippet.length;
+              }
+            }
+          } catch { /* silent */ }
+        }
+        if (found.length > 0) {
+          setRepoContext(found.map(f => `### ${f.path}\n${f.content}`).join("\n\n").slice(0, 3000));
+          setRepoDocsFound(found.map(f => f.path));
+        }
+        setRepoScanStatus("done");
+      })
+      .catch(() => setRepoScanStatus("done"));
   }, [projectId]);
 
   // Load stored ZIP on mount
@@ -268,6 +311,7 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
     try {
       const body: Record<string, unknown> = { transcript: transcript.trim(), projectId };
       if (projectContext.trim()) body.projectContext = projectContext.trim();
+      if (repoContext) body.repoContext = repoContext;
       const res = await fetch("/api/forge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -449,6 +493,14 @@ export function TheForge({ platform, readinessScore = 0, activeProjectName, proj
           </div>
         )}
       </div>
+
+      {repoScanStatus === "done" && repoDocsFound.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontSize: 9, color: "rgba(120,113,108,0.45)", fontFamily: "var(--app-font-mono)", lineHeight: 1.5 }}>
+            ⬡ Repo context: {repoDocsFound.map(p => p.split("/").pop()).join(", ")} loaded
+          </span>
+        </div>
+      )}
 
       <button
         onClick={isForging ? handleAbort : handleForge}
