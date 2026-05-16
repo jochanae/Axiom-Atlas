@@ -46,6 +46,7 @@ app.use(
 );
 const ALLOWED_ORIGINS: Set<string> = new Set([
   "https://axiomsystem.app",
+  "https://axiom-atlas-mocha.vercel.app",
   ...(process.env.REPLIT_DOMAINS?.split(",").map((d) => `https://${d.trim()}`) ?? []),
 ]);
 
