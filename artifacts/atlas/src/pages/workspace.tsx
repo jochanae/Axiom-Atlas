@@ -6163,6 +6163,50 @@ function TerminalPanel({
   const termTheme = useThemeMode();
   const isParchment = termTheme === "parchment";
 
+  // ── Sync to GitHub state ──────────────────────────────────────────────────
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncFiles, setSyncFiles] = useState<string[]>([]);
+  const [syncMsg, setSyncMsg] = useState("");
+  const [syncStatus, setSyncStatus] = useState<"idle" | "pushing" | "done" | "error">("idle");
+  const [syncResult, setSyncResult] = useState<{ url: string; shortSha: string; filesCommitted: number } | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const poll = () => {
+      fetch("/api/self/modified", { credentials: "include" })
+        .then(r => r.ok ? r.json() : { files: [] })
+        .then((d: any) => setSyncFiles(d.files ?? []))
+        .catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 8000);
+    return () => clearInterval(id);
+  }, []);
+
+  const handlePush = async () => {
+    if (syncStatus === "pushing") return;
+    setSyncStatus("pushing");
+    setSyncError(null);
+    setSyncResult(null);
+    try {
+      const r = await fetch("/api/self/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ message: syncMsg.trim() || "feat: atlas self-update", files: syncFiles.length > 0 ? syncFiles : undefined }),
+      });
+      const d = await r.json() as any;
+      if (!r.ok) { setSyncStatus("error"); setSyncError(d.error ?? "Push failed"); return; }
+      setSyncStatus("done");
+      setSyncResult({ url: d.url, shortSha: d.shortSha, filesCommitted: d.filesCommitted });
+      setSyncFiles([]);
+      setSyncMsg("");
+    } catch (err) {
+      setSyncStatus("error");
+      setSyncError(err instanceof Error ? err.message : "Network error");
+    }
+  };
+
   const [input, setInput] = useState("");
   const [lines, setLines] = useState<TerminalLine[]>([
     { text: scenarioLens ? "SCENARIO Terminal  —  explain mode (no execution)" : "Atlas Terminal  —  ready", kind: "system" },
@@ -6395,6 +6439,122 @@ function TerminalPanel({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: termBg, overflow: "hidden" }}>
+      {/* ── Sync to GitHub bar ─────────────────────────────────────────── */}
+      {!scenarioLens && (
+        <div style={{ borderBottom: `1px solid ${termBorder}`, flexShrink: 0 }}>
+          {/* Collapsed bar */}
+          <button
+            onClick={() => { setSyncOpen(o => !o); setSyncStatus("idle"); setSyncError(null); setSyncResult(null); }}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", gap: 7,
+              padding: "7px 13px", background: "transparent", border: "none",
+              cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style={{ flexShrink: 0 }}>
+              <path d="M5.5 1v9M1 5.5l4.5-4.5 4.5 4.5" stroke={isParchment ? "#8B5E3C" : "rgba(201,162,76,0.7)"} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.1em", color: isParchment ? "#8B5E3C" : "rgba(201,162,76,0.7)", textTransform: "uppercase" }}>
+              Sync to GitHub
+            </span>
+            {syncFiles.length > 0 && (
+              <span style={{
+                marginLeft: "auto", padding: "1px 6px", borderRadius: 3,
+                background: "rgba(201,162,76,0.12)", border: "0.5px solid rgba(201,162,76,0.3)",
+                fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                color: "var(--atlas-gold)",
+              }}>
+                {syncFiles.length} modified
+              </span>
+            )}
+            {syncStatus === "done" && syncResult && (
+              <span style={{
+                marginLeft: "auto", padding: "1px 6px", borderRadius: 3,
+                background: "rgba(52,211,153,0.08)", border: "0.5px solid rgba(52,211,153,0.25)",
+                fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em",
+                color: "#34d399",
+              }}>
+                ✓ pushed {syncResult.shortSha}
+              </span>
+            )}
+            <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ marginLeft: syncFiles.length > 0 || (syncStatus === "done" && syncResult) ? 6 : "auto", flexShrink: 0, transform: syncOpen ? "rotate(180deg)" : "none", transition: "transform 160ms ease" }}>
+              <path d="M1 2.5l3 3 3-3" stroke={isParchment ? "#8B5E3C" : "rgba(201,162,76,0.5)"} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+
+          {/* Expanded panel */}
+          {syncOpen && (
+            <div style={{ padding: "0 13px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* File list */}
+              {syncFiles.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  {syncFiles.map(f => (
+                    <div key={f} style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: isParchment ? "rgba(100,70,40,0.7)" : "rgba(var(--atlas-muted-rgb),0.7)", letterSpacing: "0.04em", padding: "2px 0" }}>
+                      · {f}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: isParchment ? "rgba(100,70,40,0.5)" : "rgba(var(--atlas-muted-rgb),0.45)", letterSpacing: "0.05em" }}>
+                  No tracked edits yet — Atlas writes files here when it self-updates.
+                </div>
+              )}
+
+              {/* Commit message input */}
+              <input
+                value={syncMsg}
+                onChange={e => setSyncMsg(e.target.value)}
+                placeholder="Commit message (optional)"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{
+                  background: isParchment ? "rgba(240,228,210,0.6)" : "rgba(255,255,255,0.04)",
+                  border: `1px solid ${termBorder}`,
+                  borderRadius: 5, padding: "6px 9px",
+                  fontFamily: "var(--app-font-mono)", fontSize: 10.5,
+                  color: termFgText, outline: "none",
+                }}
+              />
+
+              {/* Error / result */}
+              {syncStatus === "error" && syncError && (
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "rgba(252,100,100,0.88)", lineHeight: 1.5 }}>
+                  ✗ {syncError}
+                </div>
+              )}
+              {syncStatus === "done" && syncResult && (
+                <a
+                  href={syncResult.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "#34d399", letterSpacing: "0.04em", textDecoration: "none" }}
+                >
+                  ✓ {syncResult.filesCommitted} file{syncResult.filesCommitted !== 1 ? "s" : ""} pushed · {syncResult.shortSha} →
+                </a>
+              )}
+
+              {/* Push button */}
+              <button
+                onClick={handlePush}
+                disabled={syncStatus === "pushing" || syncFiles.length === 0}
+                style={{
+                  padding: "7px", borderRadius: 5,
+                  background: syncFiles.length === 0 ? "transparent" : "rgba(146,64,14,0.22)",
+                  border: `1px solid ${syncFiles.length === 0 ? termBorder : "rgba(146,64,14,0.4)"}`,
+                  color: syncFiles.length === 0 ? "rgba(var(--atlas-muted-rgb),0.4)" : "rgba(230,150,90,0.9)",
+                  fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em",
+                  textTransform: "uppercase", cursor: syncFiles.length === 0 ? "not-allowed" : "pointer",
+                  transition: "all 160ms ease",
+                }}
+              >
+                {syncStatus === "pushing" ? "Pushing…" : "Push to GitHub"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Output log */}
       <div
         onClick={() => inputRef.current?.focus()}
