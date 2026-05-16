@@ -71,6 +71,20 @@ interface FileEdit {
   content: string;
 }
 
+type HomeHandoffNode = {
+  id?: string;
+  label: string;
+  type: string;
+};
+
+type HomeHandoffMeta = {
+  parkedCount: number;
+  flowNodeCount: number;
+  goalLabel: string;
+  nodes?: HomeHandoffNode[];
+  parkedTitles?: string[];
+};
+
 interface LinePatch {
   path: string;
   find: string;
@@ -5378,7 +5392,7 @@ function detectPlatform(): string {
 }
 
 // ── SystemMapWithCockpit ────────────────────────────────────────────────────
-function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile, onOpenForge, externalForgeNodes, onForgeNodesConsumed }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean; onOpenForge?: () => void; externalForgeNodes?: ArchNode[]; onForgeNodesConsumed?: () => void }) {
+function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent, onBackToChat, onMapReadinessChange, displayedReadinessScore, onSystemNodeMessage, onHandover, handoverPending, lastHandoverHash, resolvedNodeIds, onResolvedConsumed, onSnapshotChange, handoverOpen, onHandoverOpenChange, isMobile, onOpenForge, externalForgeNodes, onForgeNodesConsumed }: { projectId?: number; onHomeNav: () => void; onSendIntent?: (text: string) => void; onFillIntent?: (text: string) => void; onBackToChat?: () => void; onMapReadinessChange?: (score: number) => void; displayedReadinessScore?: number; onSystemNodeMessage?: (text: string) => void; onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void; handoverPending?: boolean; lastHandoverHash?: string | null; resolvedNodeIds?: string[]; onResolvedConsumed?: () => void; onSnapshotChange?: (s: HandoverSnapshot | null) => void; handoverOpen?: boolean; onHandoverOpenChange?: (open: boolean) => void; isMobile?: boolean; onOpenForge?: () => void; externalForgeNodes?: ArchNode[]; onForgeNodesConsumed?: () => void }) {
   const [readinessScore, setReadinessScore] = useState(0);
   useEffect(() => { onMapReadinessChange?.(readinessScore); }, [readinessScore, onMapReadinessChange]);
 
@@ -6004,7 +6018,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
       )}
 
       <CockpitBar
-        readinessScore={readinessScore}
+        readinessScore={displayedReadinessScore ?? readinessScore}
         nodes={nodes}
         onHomeNav={onHomeNav}
         onAxiomOpen={() => setShowQuickPrompt(true)}
@@ -6060,6 +6074,7 @@ function RightPanel({
   onBackToChat,
   isMobile,
   onMapReadinessChange,
+  displayedReadinessScore,
   onSystemNodeMessage,
   onHandover,
   handoverPending,
@@ -6098,6 +6113,7 @@ function RightPanel({
   onBackToChat?: () => void;
   isMobile?: boolean;
   onMapReadinessChange?: (score: number) => void;
+  displayedReadinessScore?: number;
   onSystemNodeMessage?: (text: string) => void;
   onHandover?: (payload: { snapshot: HandoverSnapshot; title: string }) => void;
   handoverPending?: boolean;
@@ -6407,7 +6423,7 @@ function RightPanel({
       {tab === "files" && <FilesTab projectId={projectId} onFileContext={onFileContext} onLinkedRepoChange={onLinkedRepoChange} />}
       {tab === "preview" && <PreviewTab projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
-      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} externalForgeNodes={externalForgeNodes} onForgeNodesConsumed={onForgeNodesConsumed} />}
+      {tab === "map" && <SystemMapWithCockpit projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onMapReadinessChange={onMapReadinessChange} displayedReadinessScore={displayedReadinessScore} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} externalForgeNodes={externalForgeNodes} onForgeNodesConsumed={onForgeNodesConsumed} />}
       {tab === "terminal" && (wsLens === "build" || wsLens === "scenario") && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} scenarioLens={wsLens === "scenario"} />}
     </div>
   );
@@ -7403,15 +7419,16 @@ export default function Workspace() {
     try { return new URLSearchParams(window.location.search).get("source") ?? null; } catch { return null; }
   })();
   const isHomeHandoff = importSource === "home-handoff";
-  const [homeHandoffMeta, setHomeHandoffMeta] = useState<{ parkedCount: number; flowNodeCount: number; goalLabel: string } | null>(() => {
+  const [homeHandoffMeta, setHomeHandoffMeta] = useState<HomeHandoffMeta | null>(() => {
     try {
       const raw = sessionStorage.getItem(`atlas-home-handoff-${id}`);
-      return raw ? JSON.parse(raw) as { parkedCount: number; flowNodeCount: number; goalLabel: string } : null;
+      return raw ? JSON.parse(raw) as HomeHandoffMeta : null;
     } catch { return null; }
   });
   const [showHomeHandoffBanner, setShowHomeHandoffBanner] = useState(() => {
     try { return isHomeHandoff && sessionStorage.getItem(`atlas-home-handoff-banner-${id}`) !== "1"; } catch { return isHomeHandoff; }
   });
+  const [showHomeHandoffDrawer, setShowHomeHandoffDrawer] = useState(false);
   const importSourceLabel = importSource === "compani" ? "Compani Blueprints" : importSource === "axiom" ? "Axiom" : importSource ? importSource.charAt(0).toUpperCase() + importSource.slice(1) : null;
   const [showAxiomBanner, setShowAxiomBanner] = useState(() => {
     try {
@@ -7431,16 +7448,24 @@ export default function Workspace() {
     if (!meta) {
       try {
         const raw = sessionStorage.getItem(`atlas-home-handoff-${id}`);
-        meta = raw ? JSON.parse(raw) as typeof homeHandoffMeta : null;
+        meta = raw ? JSON.parse(raw) as HomeHandoffMeta : null;
         setHomeHandoffMeta(meta);
       } catch {}
     }
-    toast(`${meta?.parkedCount ?? 0} ideas parked · ${meta?.flowNodeCount ?? 0} flow nodes mapped · conversation memory loaded`, { duration: 4000 });
     try { sessionStorage.setItem(`atlas-home-handoff-banner-${id}`, "1"); } catch {}
-    const timer = setTimeout(() => setShowHomeHandoffBanner(false), 6000);
-    return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isHomeHandoff]);
+
+  useEffect(() => {
+    if (!showHomeHandoffBanner || showHomeHandoffDrawer) return;
+    const timer = setTimeout(() => setShowHomeHandoffBanner(false), 4000);
+    return () => clearTimeout(timer);
+  }, [showHomeHandoffBanner, showHomeHandoffDrawer]);
+
+  useEffect(() => {
+    if (!Number.isFinite(id)) return;
+    try { sessionStorage.setItem("atlas-active-project-id", String(id)); } catch {}
+  }, [id]);
 
   const dismissOnboardingCoach = useCallback((markId: OnboardingCoachId) => {
     setOnboardingCoachDismissed((prev) => {
@@ -7561,6 +7586,24 @@ export default function Workspace() {
   useEffect(() => {
     void refreshParkedEntries();
   }, [entries?.length, refreshParkedEntries]);
+
+  const homeHandoffNodes = useMemo<HomeHandoffNode[]>(() => {
+    if (homeHandoffMeta?.nodes?.length) return homeHandoffMeta.nodes;
+    try {
+      const raw = localStorage.getItem(`axiom-flow-nodes-${id}`);
+      const stored = raw ? JSON.parse(raw) as HomeHandoffNode[] : [];
+      return stored
+        .filter((node) => node && typeof node.label === "string" && typeof node.type === "string")
+        .map((node) => ({ id: node.id, label: node.label, type: node.type }));
+    } catch {
+      return [];
+    }
+  }, [homeHandoffMeta, id]);
+
+  const homeHandoffParkedTitles = useMemo(() => {
+    if (homeHandoffMeta?.parkedTitles?.length) return homeHandoffMeta.parkedTitles;
+    return parkedEntries.flatMap((entry) => entry.title ? [entry.title] : []);
+  }, [homeHandoffMeta, parkedEntries]);
 
   const handlePushAll = useCallback(async (fileEdits: FileEdit[]) => {
     if (!linkedRepo) return;
@@ -8288,6 +8331,10 @@ export default function Workspace() {
     localStorage.setItem(READINESS_MODE_KEY, m);
   };
   const blendedReadiness = computeBlendedScore(mapReadiness, healthPct);
+  const displayedReadinessScore =
+    readinessMode === "arch" ? mapReadiness :
+    readinessMode === "decisions" ? healthPct :
+    blendedReadiness;
   const [pendingResolvedNodeIds, setPendingResolvedNodeIds] = useState<string[]>([]);
   const [desktopForceTab, setDesktopForceTab] = useState<RightTab | undefined>(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : undefined
@@ -8925,7 +8972,7 @@ export default function Workspace() {
             {isMobile && mobileTab === "map" && (
               <button
                 onClick={focusSystemMap}
-                title={`Readiness ${blendedReadiness}%`}
+                title={`Readiness ${displayedReadinessScore}%`}
                 style={{
                   display: "flex", alignItems: "center", gap: 5,
                   background: "rgba(201,162,76,0.08)", border: "1px solid rgba(201,162,76,0.2)",
@@ -8939,13 +8986,13 @@ export default function Workspace() {
                   fontFamily: "var(--app-font-mono)", fontSize: 11, fontWeight: 700,
                   color: "var(--atlas-gold)", letterSpacing: "0.04em",
                 }}>
-                  {blendedReadiness}%
+                  {displayedReadinessScore}%
                 </span>
                 <span style={{
                   width: 6, height: 6, borderRadius: "50%",
-                  background: blendedReadiness > 0 ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.4)",
+                  background: displayedReadinessScore > 0 ? "var(--atlas-gold)" : "rgba(var(--atlas-muted-rgb),0.4)",
                   flexShrink: 0, display: "inline-block",
-                  boxShadow: blendedReadiness > 0 ? "0 0 5px rgba(201,162,76,0.6)" : "none",
+                  boxShadow: displayedReadinessScore > 0 ? "0 0 5px rgba(var(--atlas-gold-rgb),0.6)" : "none",
                 }} />
               </button>
             )}
@@ -9116,7 +9163,16 @@ export default function Workspace() {
         </div>
       )}
 
-      {showHomeHandoffBanner && (
+      {(showHomeHandoffBanner || showHomeHandoffDrawer) && (
+        <style>{`
+          @keyframes atlas-handoff-drawer-in {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+        `}</style>
+      )}
+
+      {(showHomeHandoffBanner || showHomeHandoffDrawer) && (
         <div
           style={{
             display: "flex",
@@ -9129,19 +9185,138 @@ export default function Workspace() {
             flexShrink: 0,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, display: "inline-block" }} />
-            <span style={{ fontSize: 12, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.03em" }}>
-              Continued from your home conversation. Your ideas and flow map are ready.
+            <span style={{ fontSize: 12, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.03em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {homeHandoffMeta?.parkedCount ?? 0} ideas parked · {homeHandoffMeta?.flowNodeCount ?? 0} flow nodes mapped · conversation memory loaded
             </span>
           </div>
-          <button
-            onClick={() => setShowHomeHandoffBanner(false)}
-            style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-gold)", fontSize: 16, lineHeight: 1, padding: "2px 4px", flexShrink: 0, opacity: 0.55 }}
-            title="Dismiss"
-          >
-            ×
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => setShowHomeHandoffDrawer(true)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--atlas-gold)",
+                cursor: "pointer",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                padding: "2px 0",
+                textTransform: "uppercase",
+              }}
+            >
+              View →
+            </button>
+            {!showHomeHandoffDrawer && (
+              <button
+                onClick={() => setShowHomeHandoffBanner(false)}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--atlas-gold)", fontSize: 16, lineHeight: 1, padding: "2px 4px", flexShrink: 0, opacity: 0.55 }}
+                title="Dismiss"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showHomeHandoffDrawer && (
+        <div
+          role="region"
+          aria-label="Home handoff details"
+          style={{
+            position: "fixed",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 95,
+            background: "rgba(var(--atlas-bg-rgb),0.98)",
+            borderTop: "1px solid rgba(var(--atlas-gold-rgb),0.24)",
+            boxShadow: "0 -18px 48px rgba(var(--atlas-bg-rgb),0.85)",
+            borderRadius: "18px 18px 0 0",
+            padding: "18px 18px calc(18px + env(safe-area-inset-bottom))",
+            animation: "atlas-handoff-drawer-in 220ms ease-out",
+          }}
+        >
+          <div style={{ width: 36, height: 3, borderRadius: 999, background: "rgba(var(--atlas-muted-rgb),0.65)", margin: "0 auto 16px" }} />
+          <div style={{ maxWidth: 680, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--atlas-gold)", marginBottom: 4 }}>
+                  Home handoff
+                </div>
+                <div style={{ color: "var(--atlas-fg)", fontSize: 15, fontWeight: 600 }}>
+                  Picked up from your home session
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12 }}>
+              <section style={{ border: "1px solid rgba(var(--atlas-gold-rgb),0.16)", borderRadius: 12, padding: 12, background: "rgba(var(--atlas-surface-rgb),0.78)" }}>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)", marginBottom: 10 }}>
+                  Flow Nodes
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 180, overflowY: "auto" }}>
+                  {homeHandoffNodes.length > 0 ? homeHandoffNodes.map((node) => (
+                    <div key={node.id ?? `${node.type}-${node.label}`} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+                      <span style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.45 }}>{node.label}</span>
+                      <span style={{ color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0 }}>{node.type}</span>
+                    </div>
+                  )) : (
+                    <div style={{ color: "var(--atlas-muted)", fontSize: 12, lineHeight: 1.5 }}>No flow node details were saved for this handoff.</div>
+                  )}
+                </div>
+              </section>
+
+              <section style={{ border: "1px solid rgba(var(--atlas-gold-rgb),0.16)", borderRadius: 12, padding: 12, background: "rgba(var(--atlas-surface-rgb),0.78)" }}>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)", marginBottom: 10 }}>
+                  Parked Ideas
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 180, overflowY: "auto" }}>
+                  {homeHandoffParkedTitles.length > 0 ? homeHandoffParkedTitles.map((title) => (
+                    <div key={title} style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.45 }}>
+                      {title}
+                    </div>
+                  )) : (
+                    <div style={{ color: "var(--atlas-muted)", fontSize: 12, lineHeight: 1.5 }}>No parked ideas were saved for this handoff.</div>
+                  )}
+                </div>
+              </section>
+
+              <section style={{ border: "1px solid rgba(var(--atlas-gold-rgb),0.16)", borderRadius: 12, padding: 12, background: "rgba(var(--atlas-surface-rgb),0.78)" }}>
+                <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--atlas-gold)", marginBottom: 10 }}>
+                  Memory
+                </div>
+                <div style={{ color: "var(--atlas-fg)", fontSize: 12, lineHeight: 1.5 }}>
+                  Conversation memory loaded from home session
+                </div>
+              </section>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => { setShowHomeHandoffDrawer(false); setShowHomeHandoffBanner(false); }}
+              style={{
+                width: "100%",
+                borderRadius: 12,
+                border: "1px solid rgba(var(--atlas-gold-rgb),0.35)",
+                background: "rgba(var(--atlas-gold-rgb),0.14)",
+                color: "var(--atlas-gold)",
+                cursor: "pointer",
+                fontFamily: "var(--app-font-mono)",
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                padding: "12px 14px",
+                textTransform: "uppercase",
+              }}
+            >
+              Got it
+            </button>
+          </div>
         </div>
       )}
 
@@ -9700,7 +9875,7 @@ export default function Workspace() {
                       fontFamily: "var(--app-font-sans)",
                     }}
                   >
-                    {wsLens === "build" ? "What needs to be built or fixed…" : wsLens === "look" ? "What visual change do you need…" : wsLens === "scenario" ? "What if…" : "Say it plainly…"}
+                    {wsLens === "build" ? "What needs to be built or fixed…" : wsLens === "look" ? "What visual change do you need…" : wsLens === "scenario" ? "What if…" : "What are you turning over?"}
                   </div>
                 )}
                 <textarea
@@ -10126,6 +10301,7 @@ export default function Workspace() {
                 onSendIntent={sendFromIntentCapture}
                 onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
                 onMapReadinessChange={setMapReadiness}
+                displayedReadinessScore={displayedReadinessScore}
                 onSystemNodeMessage={pushSystemNodeMessage}
                 onHandover={handleHandover}
                 handoverPending={handoverPending}
@@ -10202,6 +10378,7 @@ export default function Workspace() {
                 onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
                 onMapReadinessChange={setMapReadiness}
+                displayedReadinessScore={displayedReadinessScore}
                 onSystemNodeMessage={pushSystemNodeMessage}
                 onHandover={handleHandover}
                 handoverPending={handoverPending}
