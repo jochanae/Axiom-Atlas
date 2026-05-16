@@ -878,6 +878,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     imageData?: { base64: string; mediaType: string };
     flowMode?: boolean;
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
+    forgeContext?: string;
   };
 
   const isFlowMode = !!body.flowMode;
@@ -892,6 +893,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
+  const forgeContext = body.forgeContext ?? "";
   const imageData = body.imageData;
   const activeModel: ModelId = (body.model === "gpt4o" || body.model === "gemini") ? body.model : "claude";
   const now = new Date();
@@ -1048,6 +1050,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   }
   if (selfMapContext) {
     systemPrompt += `\n\n--- CURRENT CODEBASE MAP ---\n${selfMapContext}\n--- END CURRENT CODEBASE MAP ---`;
+  }
+  if (forgeContext) {
+    systemPrompt += `\n\n--- FORGE STRATEGIC MAP (agreed foundation — treat these as committed nodes; flag any contradictions) ---\n${forgeContext}\n--- END FORGE STRATEGIC MAP ---`;
   }
   if (combinedFileContext) {
     systemPrompt += `\n\n--- CODE CONTEXT (files Atlas read for this request — use these to write complete FILE_EDIT blocks) ---\n${combinedFileContext}\n--- END CODE CONTEXT ---`;

@@ -11,6 +11,7 @@ const anthropic = new Anthropic({
 const ForgeRequestSchema = z.object({
   transcript: z.string().min(10).max(20000),
   projectContext: z.string().max(4000).optional(),
+  repoContext: z.string().max(3000).optional(),
   projectId: z.number().optional(),
 });
 
@@ -119,10 +120,13 @@ router.post("/forge", async (req, res) => {
     return;
   }
 
-  const { transcript, projectContext } = parsed.data;
+  const { transcript, projectContext, repoContext } = parsed.data;
 
-  const userPrompt = projectContext
-    ? `Project Context:\n${projectContext}\n\nTranscript:\n${transcript}`
+  const contextParts: string[] = [];
+  if (repoContext) contextParts.push(`Existing Repo Docs (already committed — do NOT re-extract as new nodes, use only for context):\n${repoContext}`);
+  if (projectContext) contextParts.push(`Project Context:\n${projectContext}`);
+  const userPrompt = contextParts.length > 0
+    ? `${contextParts.join("\n\n")}\n\nTranscript:\n${transcript}`
     : `Transcript:\n${transcript}`;
 
   try {
