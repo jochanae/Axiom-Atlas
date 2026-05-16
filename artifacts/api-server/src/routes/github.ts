@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, projectsTable } from "@workspace/db";
+import { atlasIncidentsTable, db, projectsTable } from "@workspace/db";
 import { eq, and, isNull, isNotNull } from "drizzle-orm";
 import { spawn } from "child_process";
 import { writeFile, mkdir, rm } from "fs/promises";
@@ -26,6 +26,71 @@ function getToken(req: { headers: Record<string, string | string[] | undefined> 
   const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
   if (h && h !== "__server__") return h;
   return process.env.GITHUB_TOKEN ?? null;
+}
+
+class GitHubApiError extends Error {
+  constructor(public status: number, public detail: string) {
+    super("GitHub API error");
+  }
+}
+
+async function getBranchSha(token: string, repo: string, branch: string): Promise<string> {
+  const refResp = await fetch(`${GH_API}/repos/${repo}/git/ref/heads/${branch}`, { headers: ghHeaders(token) });
+  if (!refResp.ok) throw new GitHubApiError(refResp.status, await refResp.text());
+
+  const refData = await refResp.json() as any;
+  return refData.object.sha as string;
+}
+
+async function createBranch(token: string, repo: string, branch: string, sha: string): Promise<void> {
+  const createResp = await fetch(`${GH_API}/repos/${repo}/git/refs`, {
+    method: "POST",
+    headers: { ...ghHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha }),
+  });
+
+  if (!createResp.ok) throw new GitHubApiError(createResp.status, await createResp.text());
+}
+
+async function commitFile(token: string, repo: string, branch: string, filePath: string, content: string, message: string) {
+  let currentSha: string | undefined;
+  const existingResp = await fetch(`${GH_API}/repos/${repo}/contents/${filePath}?ref=${branch}`, { headers: ghHeaders(token) });
+  if (existingResp.ok) { const d = await existingResp.json() as any; currentSha = d.sha; }
+
+  const body: Record<string, unknown> = {
+    message,
+    content: Buffer.from(content, "utf-8").toString("base64"),
+    branch,
+  };
+  if (currentSha) body.sha = currentSha;
+
+  const putResp = await fetch(`${GH_API}/repos/${repo}/contents/${filePath}`, {
+    method: "PUT",
+    headers: { ...ghHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!putResp.ok) throw new GitHubApiError(putResp.status, await putResp.text());
+
+  const putData = await putResp.json() as any;
+  return {
+    sha: putData.content?.sha,
+    commitSha: putData.commit?.sha,
+    commitUrl: putData.commit?.html_url,
+  };
+}
+
+async function openPullRequest(token: string, repo: string, head: string, base: string, title: string, body: string) {
+  const prResp = await fetch(`${GH_API}/repos/${repo}/pulls`, {
+    method: "POST",
+    headers: { ...ghHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body, head, base }),
+  });
+
+  if (!prResp.ok) throw new GitHubApiError(prResp.status, await prResp.text());
+
+  const pr = await prResp.json() as any;
+  return { prUrl: pr.html_url, prNumber: pr.number, title: pr.title };
 }
 
 // GET /api/github/server-token — tells the client whether a server-side token is configured
@@ -132,34 +197,49 @@ router.put("/github/commit", async (req, res): Promise<void> => {
   const token = getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
-  const { repo, branch, path: filePath, content, message } = req.body as {
-    repo: string; branch: string; path: string; content: string; message: string;
+  const { repo, branch = "main", path: filePath, content, message, forceDirect = false, projectId, project_id } = req.body as {
+    repo: string; branch?: string; path?: string; content?: string; message: string; forceDirect?: boolean; projectId?: string; project_id?: string;
   };
-  if (!repo || !branch || !filePath || content === undefined || !message) {
-    res.status(400).json({ error: "Missing required fields: repo, branch, path, content, message" }); return;
+  if (!repo || !filePath || content === undefined || !message) {
+    res.status(400).json({ error: "Missing required fields: repo, path, content, message" }); return;
   }
 
-  let currentSha: string | undefined;
-  const existingResp = await fetch(`${GH_API}/repos/${repo}/contents/${filePath}?ref=${branch}`, { headers: ghHeaders(token) });
-  if (existingResp.ok) { const d = await existingResp.json() as any; currentSha = d.sha; }
+  try {
+    if (branch !== "main" || forceDirect) {
+      const commit = await commitFile(token, repo, branch, filePath, content, message);
+      res.json({ ...commit, path: filePath, branch, direct: true });
+      return;
+    }
 
-  const body: Record<string, unknown> = {
-    message,
-    content: Buffer.from(content, "utf-8").toString("base64"),
-    branch,
-  };
-  if (currentSha) body.sha = currentSha;
+    const pullBranch = `atlas/fix-${Date.now()}`;
+    const baseSha = await getBranchSha(token, repo, "main");
+    await createBranch(token, repo, pullBranch, baseSha);
+    const commit = await commitFile(token, repo, pullBranch, filePath, content, message);
+    const prBody = [
+      "This was an Atlas-proposed change awaiting review.",
+      "",
+      "**Files changed:**",
+      `- \`${filePath}\``,
+    ].join("\n");
+    const pr = await openPullRequest(token, repo, pullBranch, "main", message, prBody);
+    await db.insert(atlasIncidentsTable).values({
+      projectId: String(projectId ?? project_id ?? repo),
+      filesChanged: [filePath],
+      commitMessage: message,
+      branchName: pullBranch,
+      prUrl: pr.prUrl,
+      outcome: null,
+      notes: null,
+    });
 
-  const putResp = await fetch(`${GH_API}/repos/${repo}/contents/${filePath}`, {
-    method: "PUT",
-    headers: { ...ghHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!putResp.ok) { res.status(putResp.status).json({ error: "GitHub API error", detail: await putResp.text() }); return; }
-
-  const putData = await putResp.json() as any;
-  res.json({ sha: putData.content?.sha, commitSha: putData.commit?.sha, commitUrl: putData.commit?.html_url, path: filePath, branch });
+    res.json({ ...commit, ...pr, path: filePath, branch: pullBranch, base: "main", direct: false });
+  } catch (e: unknown) {
+    if (e instanceof GitHubApiError) {
+      res.status(e.status).json({ error: "GitHub API error", detail: e.detail });
+      return;
+    }
+    res.status(500).json({ error: "GitHub API error", detail: String(e) });
+  }
 });
 
 // POST /api/github/pr
