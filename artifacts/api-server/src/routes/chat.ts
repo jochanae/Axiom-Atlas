@@ -662,14 +662,17 @@ interface ConfidenceAssessment {
 }
 
 type PlanStepType = "analysis" | "edit" | "push" | "read" | "other";
+type Moscow = "must" | "should" | "could" | "wont";
 
 interface ResponsePlan {
   title: string;
+  mode?: "plan" | "blueprint";
   steps: Array<{
     order: number;
     description: string;
     type: PlanStepType;
     file?: string;
+    moscow?: Moscow;
   }>;
   confidence: "high" | "medium" | "low";
   estimatedChanges: number;
@@ -770,6 +773,21 @@ function classifyPlanStep(value: string): PlanStepType {
   return "other";
 }
 
+function classifyMoscow(args: {
+  description: string;
+  type: PlanStepType;
+  file?: string;
+  coreFiles: Set<string>;
+}): Moscow {
+  const text = args.description;
+  if (/\b(won't|wont|will not|out of scope|skip|not doing|defer)\b/i.test(text)) return "wont";
+  if (/\b(optional|nice to have|could|later|if needed|stretch)\b/i.test(text)) return "could";
+  if (args.file && args.coreFiles.has(args.file)) return "must";
+  if (args.type === "edit") return "must";
+  if (args.type === "read" || args.type === "analysis") return "should";
+  return "should";
+}
+
 function extractPlanFile(value: string): string | undefined {
   return value.match(PLAN_FILE_RE)?.[0];
 }
@@ -802,6 +820,10 @@ function stripPlanControlBlocks(content: string): string {
     .trim();
 }
 
+function containsArchitecturalSignal(content: string): boolean {
+  return /\b(architecture|architectural|system design|data model|schema|component boundary|interface|contract|dependency|moscow|must|should|could|won't|wont)\b/i.test(content);
+}
+
 function buildResponsePlan(args: {
   content: string;
   workspaceLens: string;
@@ -832,6 +854,10 @@ function buildResponsePlan(args: {
   }
 
   const hasProposedFileChanges = args.fileEdits.length > 0 || args.linePatches.length > 0;
+  const coreFiles = new Set<string>([
+    ...args.fileEdits.map((edit) => edit.path),
+    ...args.linePatches.map((patch) => patch.path),
+  ]);
   const explanationBeforePatch = hasProposedFileChanges && text.length > 20 && /\S/.test(text);
   const rawStepText = hasNumberedPlan ? numberedSteps : sectionSteps;
 
@@ -845,10 +871,13 @@ function buildResponsePlan(args: {
     .slice(0, 12)
     .map((description, index) => {
       const file = extractPlanFile(description);
+      const type = classifyPlanStep(description);
+      const moscow = classifyMoscow({ description, type, coreFiles, ...(file ? { file } : {}) });
       return {
         order: index + 1,
         description,
-        type: classifyPlanStep(description),
+        type,
+        moscow,
         ...(file ? { file } : {}),
       };
     });
@@ -861,6 +890,7 @@ function buildResponsePlan(args: {
           description: `Edit ${edit.path}`,
           type: "edit",
           file: edit.path,
+          moscow: "must",
         });
       }
     }
@@ -871,6 +901,7 @@ function buildResponsePlan(args: {
           description: `Patch ${patch.path}`,
           type: "edit",
           file: patch.path,
+          moscow: "must",
         });
       }
     }
@@ -879,6 +910,7 @@ function buildResponsePlan(args: {
         order: steps.length + 1,
         description: "Review and push the proposed changes",
         type: "push",
+        moscow: "must",
       });
     }
   }
@@ -893,12 +925,24 @@ function buildResponsePlan(args: {
     if (step.file) touchedFiles.add(step.file);
   }
 
+  const touchedFileCount = touchedFiles.size;
+  const hasAnalysisStep = steps.some((step) => step.type === "analysis" || step.type === "read");
+  const hasEditStep = steps.some((step) => step.type === "edit");
+  const hasMoscowClassification = steps.some((step) => !!step.moscow);
+  const isBlueprint =
+    steps.length >= 5 &&
+    touchedFileCount > 1 &&
+    hasAnalysisStep &&
+    hasEditStep &&
+    (containsArchitecturalSignal(text) || hasMoscowClassification);
+
   return {
     title: planTitleFromContent(text, steps),
+    mode: isBlueprint ? "blueprint" : "plan",
     steps: steps.map((step, index) => ({ ...step, order: index + 1 })),
     confidence: args.confidenceAssessment?.confidence ?? "medium",
-    estimatedChanges: touchedFiles.size,
-    reversible: hasProposedFileChanges && touchedFiles.size > 0,
+    estimatedChanges: touchedFileCount,
+    reversible: hasProposedFileChanges && touchedFileCount > 0,
   };
 }
 

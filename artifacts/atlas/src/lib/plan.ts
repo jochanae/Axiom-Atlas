@@ -1,14 +1,17 @@
 export type PlanStepType = "analysis" | "edit" | "push" | "read" | "other";
 
 export type PlanConfidence = "high" | "medium" | "low";
+export type Moscow = "must" | "should" | "could" | "wont";
 
 export type Plan = {
   title: string;
+  mode?: "plan" | "blueprint";
   steps: Array<{
     order: number;
     description: string;
     type: PlanStepType;
     file?: string;
+    moscow?: Moscow;
   }>;
   confidence: PlanConfidence;
   estimatedChanges: number;
@@ -60,6 +63,14 @@ function classifyStep(value: string): PlanStepType {
   return "other";
 }
 
+function classifyMoscow(value: string, type: PlanStepType): Moscow {
+  if (/\b(won't|wont|will not|out of scope|skip|not doing|defer)\b/i.test(value)) return "wont";
+  if (/\b(optional|nice to have|could|later|if needed|stretch)\b/i.test(value)) return "could";
+  if (type === "read" || type === "analysis") return "should";
+  if (type === "edit" || type === "push") return "must";
+  return "should";
+}
+
 function titleFromContent(content: string, steps: Array<{ description: string }>): string {
   const heading = content.split("\n").find((line) => /^#{1,3}\s+\S/.test(line.trim()));
   if (heading) return cleanDescription(heading).slice(0, 110);
@@ -87,10 +98,12 @@ function renumberSteps(rawSteps: string[]) {
     .slice(0, 12)
     .map((description, index) => {
       const file = extractFile(description);
+      const type = classifyStep(description);
       return {
         order: index + 1,
         description,
-        type: classifyStep(description),
+        type,
+        moscow: classifyMoscow(description, type),
         ...(file ? { file } : {}),
       };
     });
@@ -143,6 +156,7 @@ export function detectPlanFromText(
 
   return {
     title: titleFromContent(text, steps),
+    mode: steps.length >= 5 && steps.some((step) => step.type === "analysis" || step.type === "read") && steps.some((step) => step.type === "edit") ? "blueprint" : "plan",
     steps,
     confidence: options.confidence ?? "medium",
     estimatedChanges: touched.size,
