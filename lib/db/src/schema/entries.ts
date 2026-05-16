@@ -26,6 +26,8 @@ export const entriesTable = pgTable("entries", {
   lockedAt: timestamp("locked_at", { withTimezone: true }),
   mode: text("mode"),
   sourceMessageId: integer("source_message_id"),
+  contextWhat: text("context_what"),
+  contextWhy: text("context_why"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

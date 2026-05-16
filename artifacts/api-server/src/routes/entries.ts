@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql, desc } from "drizzle-orm";
+import Anthropic from "@anthropic-ai/sdk";
+import { eq, and, sql, desc, getTableColumns } from "drizzle-orm";
 import { db, entriesTable, projectsTable } from "@workspace/db";
 import {
   CreateEntryBody,
@@ -14,6 +15,15 @@ import {
 
 const router: IRouter = Router();
 
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+type EntryContextResponse = {
+  whatItMeans: string;
+  whyItComesUp: string;
+};
+
 function serializeEntry(e: typeof entriesTable.$inferSelect) {
   return {
     ...e,
@@ -21,6 +31,20 @@ function serializeEntry(e: typeof entriesTable.$inferSelect) {
     updatedAt: e.updatedAt.toISOString(),
     lockedAt: e.lockedAt ? e.lockedAt.toISOString() : null,
   };
+}
+
+function parseContextJson(raw: string): EntryContextResponse | null {
+  try {
+    const cleaned = raw.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
+    const parsed = JSON.parse(cleaned) as Partial<EntryContextResponse>;
+    if (typeof parsed.whatItMeans !== "string" || typeof parsed.whyItComesUp !== "string") return null;
+    return {
+      whatItMeans: parsed.whatItMeans.trim(),
+      whyItComesUp: parsed.whyItComesUp.trim(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 // Verify that a project exists and is owned by the given userId.
@@ -134,6 +158,69 @@ router.get("/entries/:id", async (req, res): Promise<void> => {
   const [entry] = await db.select().from(entriesTable).where(eq(entriesTable.id, id));
   if (!entry) { res.status(404).json({ error: "Entry not found" }); return; }
   res.json(serializeEntry(entry));
+});
+
+router.post("/entries/:id/context", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: "Invalid entry id" }); return; }
+
+  const userId = (req as any).authUser.id as number;
+  if (!(await entryBelongsToUser(id, userId))) {
+    res.status(404).json({ error: "Entry not found" }); return;
+  }
+
+  const [row] = await db
+    .select({
+      ...getTableColumns(entriesTable),
+      projectName: projectsTable.name,
+    })
+    .from(entriesTable)
+    .innerJoin(projectsTable, eq(entriesTable.projectId, projectsTable.id))
+    .where(eq(entriesTable.id, id))
+    .limit(1);
+
+  if (!row) { res.status(404).json({ error: "Entry not found" }); return; }
+
+  const { projectName, ...entry } = row;
+  if (entry.contextWhat && entry.contextWhy) {
+    res.json({ whatItMeans: entry.contextWhat, whyItComesUp: entry.contextWhy });
+    return;
+  }
+
+  const prompt = `You are explaining a product decision to a non-technical founder.
+
+Entry title: ${entry.title}
+Entry summary: ${entry.summary ?? ""}
+Project: ${projectName}
+
+Respond with a JSON object only, no markdown:
+{
+  "whatItMeans": "One analogy sentence using everyday language. No jargon.",
+  "whyItComesUp": "One sentence explaining why this specific decision matters for ${projectName}. Be specific to this project, not generic."
+}`;
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 500,
+      messages: [{ role: "user", content: prompt }],
+    });
+    const raw = msg.content[0]?.type === "text" ? msg.content[0].text : "";
+    const parsed = parseContextJson(raw);
+    if (!parsed) throw new Error("Invalid context JSON");
+
+    await db
+      .update(entriesTable)
+      .set({ contextWhat: parsed.whatItMeans, contextWhy: parsed.whyItComesUp })
+      .where(eq(entriesTable.id, id));
+
+    res.json(parsed);
+  } catch {
+    res.status(502).json({
+      whatItMeans: entry.summary ?? entry.title,
+      whyItComesUp: entry.summary ?? entry.title,
+    });
+  }
 });
 
 router.patch("/entries/:id", async (req, res): Promise<void> => {

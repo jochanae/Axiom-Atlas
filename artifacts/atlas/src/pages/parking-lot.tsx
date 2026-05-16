@@ -1,8 +1,8 @@
 import { useState } from "react";
+import type React from "react";
 import { useLocation } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
-import { EntryCard, buildReopenChain } from "../components/EntryCard";
-import { EditEntryDialog } from "../components/EditEntryDialog";
+import { ParkingLotDetailPanel } from "../components/ParkingLotDetailPanel";
 import {
   useListProjects,
   useListEntries,
@@ -32,8 +32,9 @@ export default function ParkingLot() {
     } catch { return null; }
   });
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [editEntry, setEditEntry] = useState<Entry | null>(null);
-  const [editSaving, setEditSaving] = useState(false);
+  const [detailEntry, setDetailEntry] = useState<Entry | null>(null);
+  const [noteOpenId, setNoteOpenId] = useState<number | null>(null);
+  const [noteDrafts, setNoteDrafts] = useState<Record<number, string>>({});
 
   const activeProjectId = selectedProjectId ?? projects[0]?.id ?? null;
   const queryProjectId = activeProjectId ?? 0;
@@ -59,15 +60,11 @@ export default function ParkingLot() {
   );
   const isLoading = loadingParked || loadingDraft || loadingCommitted;
 
-  // Full lookup map of ALL entries so buildReopenChain can walk the full ancestry
-  const allEntriesById = new Map<number, Entry>(
-    [...committedEntries, ...parkedEntries, ...draftEntries].map((e: Entry) => [e.id, e])
-  );
-
   // Merge + sort newest first
   const entries: Entry[] = [...parkedEntries, ...draftEntries].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
+  const activeDetailEntry = detailEntry ? entries.find(e => e.id === detailEntry.id) ?? detailEntry : null;
 
   const invalidateAll = () => {
     projects.forEach(p => {
@@ -108,13 +105,29 @@ export default function ParkingLot() {
     deleteEntry.mutate({ id: entry.id }, { onSettled: () => setBusyId(null) });
   };
 
-  // Edit: patch title, summary, details, buildId, touched, costOfLesson
-  const handleEditSave = async (id: number, data: { title: string; summary: string | null; details: string | null; buildId: string | null; touched: string[] | null; costOfLesson: number | null }) => {
-    setEditSaving(true);
+  const handleNoteBlur = async (entry: Entry) => {
+    const noteText = noteDrafts[entry.id] ?? "";
+    setNoteOpenId(null);
+    await updateEntry.mutateAsync({ id: entry.id, data: { details: noteText.trim() || null } }).catch(() => {});
+  };
+
+  const handlePanelCommit = async (entry: Entry) => {
+    setBusyId(entry.id);
     try {
-      await updateEntry.mutateAsync({ id, data });
+      await updateEntry.mutateAsync({ id: entry.id, data: { status: "committed", severity: "committed" } });
+      setDetailEntry(null);
     } finally {
-      setEditSaving(false);
+      setBusyId(null);
+    }
+  };
+
+  const handlePanelDelete = async (entry: Entry) => {
+    setBusyId(entry.id);
+    try {
+      await deleteEntry.mutateAsync({ id: entry.id });
+      setDetailEntry(null);
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -226,15 +239,22 @@ export default function ParkingLot() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {entries.map(entry => (
-                <EntryCard
+                <ParkingLotRow
                   key={entry.id}
                   entry={entry}
                   busy={busyId === entry.id}
+                  noteOpen={noteOpenId === entry.id}
+                  noteValue={noteDrafts[entry.id] ?? entry.details ?? ""}
+                  onOpen={() => setDetailEntry(entry)}
                   onResume={() => handleResume(entry)}
                   onCommit={() => handleCommit(entry)}
                   onDelete={() => handleDelete(entry)}
-                  onEdit={() => setEditEntry(entry)}
-                  reopenChain={buildReopenChain(entry, allEntriesById)}
+                  onNoteOpen={() => {
+                    setNoteDrafts(prev => ({ ...prev, [entry.id]: prev[entry.id] ?? entry.details ?? "" }));
+                    setNoteOpenId(entry.id);
+                  }}
+                  onNoteChange={(value) => setNoteDrafts(prev => ({ ...prev, [entry.id]: value }))}
+                  onNoteBlur={() => void handleNoteBlur(entry)}
                 />
               ))}
             </div>
@@ -251,15 +271,188 @@ export default function ParkingLot() {
         transition: "background 600ms ease",
       }} />
 
-      {/* Edit dialog */}
-      <EditEntryDialog
-        open={editEntry !== null}
-        onClose={() => setEditEntry(null)}
-        entry={editEntry}
-        onSave={handleEditSave}
-        saving={editSaving}
-      />
+      {activeDetailEntry && activeProjectId && (
+        <ParkingLotDetailPanel
+          entry={activeDetailEntry}
+          projectId={activeProjectId}
+          onClose={() => setDetailEntry(null)}
+          onCommit={() => void handlePanelCommit(activeDetailEntry)}
+          onDelete={() => void handlePanelDelete(activeDetailEntry)}
+        />
+      )}
     </div>
+  );
+}
+
+function timeAgo(date: string | Date): string {
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (mins > 0) return `${mins}m ago`;
+  return "just now";
+}
+
+function ParkingLotRow({
+  entry,
+  busy,
+  noteOpen,
+  noteValue,
+  onOpen,
+  onResume,
+  onCommit,
+  onDelete,
+  onNoteOpen,
+  onNoteChange,
+  onNoteBlur,
+}: {
+  entry: Entry;
+  busy: boolean;
+  noteOpen: boolean;
+  noteValue: string;
+  onOpen: () => void;
+  onResume: () => void;
+  onCommit: () => void;
+  onDelete: () => void;
+  onNoteOpen: () => void;
+  onNoteChange: (value: string) => void;
+  onNoteBlur: () => void;
+}) {
+  const summary = entry.summary || entry.title;
+  return (
+    <article
+      onClick={onOpen}
+      style={{
+        borderRadius: 8,
+        padding: "0.5px",
+        background: "linear-gradient(135deg, color-mix(in oklab, var(--atlas-gold) 24%, transparent), color-mix(in oklab, var(--atlas-border) 70%, transparent), transparent)",
+        boxShadow: "0 8px 24px -18px var(--atlas-gold)",
+        cursor: "pointer",
+      }}
+    >
+      <div style={{ borderRadius: 7.5, background: "var(--atlas-surface)", overflow: "hidden" }}>
+        <div style={{ padding: "13px 14px 10px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <span
+            style={{
+              marginTop: 5,
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: entry.severity === "blocker" ? "var(--atlas-ember)" : "var(--atlas-gold)",
+              flexShrink: 0,
+              boxShadow: "0 0 0 3px color-mix(in oklab, currentColor 12%, transparent)",
+            }}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <h3 style={{ margin: 0, flex: 1, color: "var(--atlas-fg)", fontSize: 13.5, lineHeight: 1.35, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {entry.title}
+              </h3>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onNoteOpen(); }}
+                style={{
+                  padding: "2px 7px",
+                  borderRadius: 4,
+                  border: "1px solid var(--atlas-border)",
+                  background: entry.details ? "color-mix(in oklab, var(--atlas-gold) 10%, transparent)" : "transparent",
+                  color: entry.details ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                  cursor: "pointer",
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 8.5,
+                  letterSpacing: "0.12em",
+                }}
+              >
+                NOTE
+              </button>
+            </div>
+            <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.08em", color: "var(--atlas-muted)", opacity: 0.55, textTransform: "uppercase", marginBottom: 7 }}>
+              chat message · {timeAgo(entry.createdAt)}
+            </div>
+            <p style={{ margin: 0, color: "var(--atlas-muted)", fontSize: 12, lineHeight: 1.55 }}>
+              {summary}
+            </p>
+          </div>
+        </div>
+
+        {noteOpen && (
+          <div onClick={(e) => e.stopPropagation()} style={{ padding: "0 14px 12px 32px" }}>
+            <input
+              autoFocus
+              value={noteValue}
+              onChange={(e) => onNoteChange(e.target.value)}
+              onBlur={onNoteBlur}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                }
+              }}
+              placeholder="Add a short note..."
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "8px 10px",
+                borderRadius: 7,
+                background: "var(--atlas-bg)",
+                border: "1px solid var(--atlas-border)",
+                color: "var(--atlas-fg)",
+                outline: "none",
+                fontSize: 12,
+                fontFamily: "var(--app-font-sans)",
+              }}
+            />
+          </div>
+        )}
+
+        <div style={{ height: 1, background: "linear-gradient(to right, transparent, var(--atlas-border), transparent)" }} />
+
+        <footer style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 7, padding: "8px 14px" }}>
+          <ParkingLotButton disabled={busy} onClick={onResume}>Resume</ParkingLotButton>
+          <ParkingLotButton disabled={busy} onClick={onDelete} tone="danger">Delete</ParkingLotButton>
+          <ParkingLotButton disabled={busy} onClick={onCommit} tone="gold">{busy ? "Committing..." : "Commit"}</ParkingLotButton>
+        </footer>
+      </div>
+    </article>
+  );
+}
+
+function ParkingLotButton({
+  children,
+  onClick,
+  disabled,
+  tone = "muted",
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "muted" | "danger" | "gold";
+}) {
+  const color = tone === "gold"
+    ? "var(--atlas-gold)"
+    : tone === "danger" ? "var(--atlas-ember)" : "var(--atlas-muted)";
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      style={{
+        padding: "5px 10px",
+        borderRadius: 5,
+        background: tone === "gold" ? "var(--atlas-gold)" : "transparent",
+        border: `1px solid ${tone === "gold" ? "var(--atlas-gold)" : "var(--atlas-border)"}`,
+        color: tone === "gold" ? "var(--atlas-bg)" : color,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+        fontFamily: "var(--app-font-mono)",
+        fontSize: 9.5,
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
