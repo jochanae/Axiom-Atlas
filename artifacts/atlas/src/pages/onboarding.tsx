@@ -12,6 +12,14 @@ const intents = [
   { id: "technical", label: "I vibe code and need structure", icon: "⌨️", desc: "AI-assisted building with decision accountability" },
 ];
 
+function intentToUserType(id: string): "idea" | "building" | "clients" | "portfolio" | null {
+  if (id === "idea") return "idea";
+  if (id === "founder" || id === "technical") return "building";
+  if (id === "agency") return "clients";
+  if (id === "power") return "portfolio";
+  return null;
+}
+
 const shellStyle: CSSProperties = {
   minHeight: "100svh",
   background: "var(--atlas-bg)",
@@ -102,7 +110,11 @@ export default function OnboardingPage() {
 
   const chooseIntent = (id: string) => {
     setSelectedIntent(id);
-    try { localStorage.setItem("axiom_user_intent", id); } catch {}
+    try {
+      localStorage.setItem("axiom_user_intent", id);
+      const userType = intentToUserType(id);
+      if (userType) localStorage.setItem("axiom_user_type", userType);
+    } catch {}
   };
 
   const createProject = async (event: FormEvent<HTMLFormElement>) => {

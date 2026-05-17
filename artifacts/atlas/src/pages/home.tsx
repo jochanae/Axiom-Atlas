@@ -50,6 +50,8 @@ type HomeHandoffSignal = {
   reason: string | null;
 };
 
+type HomeUserType = "idea" | "building" | "clients" | "portfolio";
+
 type HomeMessage = {
   role: "user" | "assistant";
   content: string;
@@ -62,6 +64,21 @@ type HomeMessage = {
   handoffSignal?: HomeHandoffSignal;
   plan?: Plan;
 };
+
+function loadHomeUserType(): HomeUserType | null {
+  try {
+    const explicit = localStorage.getItem("axiom_user_type");
+    if (explicit === "idea" || explicit === "building" || explicit === "clients" || explicit === "portfolio") {
+      return explicit;
+    }
+    const legacy = localStorage.getItem("axiom_user_intent");
+    if (legacy === "idea") return "idea";
+    if (legacy === "founder" || legacy === "technical") return "building";
+    if (legacy === "agency") return "clients";
+    if (legacy === "power") return "portfolio";
+  } catch {}
+  return null;
+}
 
 function renderMarkdown(text: string): string {
   return text
@@ -1037,6 +1054,7 @@ export default function Home() {
   const [homeFocus] = useState<number | null>(null);
   const [homeModel] = useState<string>("claude");
   const [homeMode] = useState<string>("strategic");
+  const [homeUserType] = useState<HomeUserType | null>(() => loadHomeUserType());
   const [showHandoff, setShowHandoff] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [handoffStage, setHandoffStage] = useState("");
@@ -1177,7 +1195,10 @@ export default function Home() {
       setHandoffCardDismissed(false);
     }
     setHandoffProjectName("");
-    fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(activeConversationId)}`, { credentials: "include" })
+    const params = new URLSearchParams({ conversationId: activeConversationId });
+    if (homeUserType) params.set("userType", homeUserType);
+    if (homeFocus) params.set("focusProjectId", String(homeFocus));
+    fetch(`/api/nexus/thread?${params.toString()}`, { credentials: "include" })
       .then(r => r.ok ? r.json() : [])
       .then(async (msgs: Array<{ role: string; content: string }>) => {
         if (msgs.length > 0) {
@@ -1187,7 +1208,7 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setThreadLoading(false));
-  }, [activeConversationId]);
+  }, [activeConversationId, homeFocus, homeUserType]);
 
 
   const handleNewProject = useCallback((name = "New Project") => {
@@ -1283,7 +1304,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ message: messageText, model: homeModel, focusProjectId: homeFocus, mode: homeMode, imageBase64, imageMimeType, conversationId: activeConversationId }),
+        body: JSON.stringify({ message: messageText, model: homeModel, focusProjectId: homeFocus, mode: homeMode, imageBase64, imageMimeType, conversationId: activeConversationId, userType: homeUserType ?? undefined }),
       });
       if (!res.ok) {
         const errText = res.status === 413 ? "Images are too large to send. Try fewer or smaller images." : "Something went wrong. Try again.";
@@ -1351,7 +1372,7 @@ export default function Home() {
       setIsSending(false);
       document.body.dataset.voiceActive = "false";
     }
-  }, [input, attachedFiles, isSending, homeModel, homeFocus, projects, activeConversationId, homeMessages.length]);
+  }, [input, attachedFiles, isSending, homeModel, homeFocus, homeUserType, projects, activeConversationId, homeMessages.length]);
 
 
   const handleHandoff = useCallback(async (signal?: HomeHandoffSignal, projectNameOverride?: string, plan?: Plan) => {
