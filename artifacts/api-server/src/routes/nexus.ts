@@ -363,66 +363,74 @@ function nonBriefingMessages(whereClause: SQL | undefined) {
 
 // GET /api/nexus/thread — return a conversation thread (optionally scoped by conversationId)
 router.get("/nexus/thread", async (req, res): Promise<void> => {
-  const userId = (req as any).authUser.id as number;
-  const conversationId = req.query.conversationId as string | undefined;
-  const userType = parseHomeUserType(req.query.userType);
-  const focusProjectId = Number(req.query.focusProjectId);
+  console.log("nexus/thread userId:", (req as any).session?.userId);
+  try {
+    const userId = (req as any).authUser.id as number;
+    const conversationId = req.query.conversationId as string | undefined;
+    const userType = parseHomeUserType(req.query.userType);
+    const focusProjectId = Number(req.query.focusProjectId);
 
-  const whereClause = conversationId === "__legacy__"
-    ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
-    : conversationId
-      ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
-      : eq(nexusMessagesTable.userId, userId);
+    const whereClause = conversationId === "__legacy__"
+      ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
+      : conversationId
+        ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
+        : eq(nexusMessagesTable.userId, userId);
 
-  const messages = await db
-    .select()
-    .from(nexusMessagesTable)
-    .where(nonBriefingMessages(whereClause))
-    .orderBy(asc(nexusMessagesTable.createdAt));
-
-  if (messages.length === 0 && conversationId && conversationId !== "__legacy__") {
-    const [existingBriefing] = await db
-      .select({ id: nexusMessagesTable.id })
+    const messages = await db
+      .select()
       .from(nexusMessagesTable)
-      .where(and(whereClause, eq(nexusMessagesTable.messageType, "briefing")))
-      .limit(1);
-    if (existingBriefing) {
-      res.json([]);
+      .where(nonBriefingMessages(whereClause))
+      .orderBy(asc(nexusMessagesTable.createdAt));
+
+    if (messages.length === 0 && conversationId && conversationId !== "__legacy__") {
+      const [existingBriefing] = await db
+        .select({ id: nexusMessagesTable.id })
+        .from(nexusMessagesTable)
+        .where(and(whereClause, eq(nexusMessagesTable.messageType, "briefing")))
+        .limit(1);
+      if (existingBriefing) {
+        res.json([]);
+        return;
+      }
+
+      const [project] = await db
+        .select({ name: projectsTable.name })
+        .from(projectsTable)
+        .where(
+          Number.isInteger(focusProjectId) && focusProjectId > 0
+            ? and(eq(projectsTable.userId, userId), eq(projectsTable.id, focusProjectId))
+            : eq(projectsTable.userId, userId)
+        )
+        .orderBy(desc(projectsTable.updatedAt))
+        .limit(1);
+      const opening = await generateHomeOpening(project?.name ?? null, userType);
+      const [savedOpening] = await db
+        .insert(nexusMessagesTable)
+        .values({ userId, role: "assistant", content: opening, conversationId, messageType: "briefing" })
+        .returning();
+      res.json([{
+        id: savedOpening.id,
+        role: savedOpening.role,
+        content: savedOpening.content,
+        isBriefing: true,
+        createdAt: savedOpening.createdAt.toISOString(),
+      }]);
       return;
     }
 
-    const [project] = await db
-      .select({ name: projectsTable.name })
-      .from(projectsTable)
-      .where(
-        Number.isInteger(focusProjectId) && focusProjectId > 0
-          ? and(eq(projectsTable.userId, userId), eq(projectsTable.id, focusProjectId))
-          : eq(projectsTable.userId, userId)
-      )
-      .orderBy(desc(projectsTable.updatedAt))
-      .limit(1);
-    const opening = await generateHomeOpening(project?.name ?? null, userType);
-    const [savedOpening] = await db
-      .insert(nexusMessagesTable)
-      .values({ userId, role: "assistant", content: opening, conversationId, messageType: "briefing" })
-      .returning();
-    res.json([{
-      id: savedOpening.id,
-      role: savedOpening.role,
-      content: savedOpening.content,
-      isBriefing: true,
-      createdAt: savedOpening.createdAt.toISOString(),
-    }]);
+    res.json(messages.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      isBriefing: m.messageType === "briefing",
+      createdAt: m.createdAt.toISOString(),
+    })));
+    return;
+  } catch (err: any) {
+    console.error("nexus/thread error:", err?.message, err?.stack);
+    res.status(500).json({ error: "Failed to load thread", detail: err?.message });
     return;
   }
-
-  res.json(messages.map((m) => ({
-    id: m.id,
-    role: m.role,
-    content: m.content,
-    isBriefing: m.messageType === "briefing",
-    createdAt: m.createdAt.toISOString(),
-  })));
 });
 
 // DELETE /api/nexus/thread — clear a conversation (scoped by conversationId, or all if omitted)
@@ -465,26 +473,33 @@ router.post("/nexus/conversation/save", async (req, res): Promise<void> => {
 });
 
 router.get("/nexus/conversations", async (req, res): Promise<void> => {
-  const userId = (req as any).authUser.id as number;
-  const rows = await db
-    .select({
-      id: nexusMessagesTable.conversationId,
-      title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' ORDER BY sub.created_at ASC LIMIT 1)`,
-      createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
-      messageCount: sql<number>`COUNT(*)`,
-    })
-    .from(nexusMessagesTable)
-    .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId), sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`))
-    .groupBy(nexusMessagesTable.conversationId)
-    .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
-    .limit(30);
-  const conversations = rows.map(r => ({
-    id: r.id,
-    title: r.title ? r.title.slice(0, 60) : "Conversation",
-    createdAt: r.createdAt,
-    messageCount: Number(r.messageCount),
-  }));
-  res.json({ conversations });
+  console.log("nexus/conversations userId:", (req as any).session?.userId);
+  try {
+    const userId = (req as any).authUser.id as number;
+    const rows = await db
+      .select({
+        id: nexusMessagesTable.conversationId,
+        title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' ORDER BY sub.created_at ASC LIMIT 1)`,
+        createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
+        messageCount: sql<number>`COUNT(*)`,
+      })
+      .from(nexusMessagesTable)
+      .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId), sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`))
+      .groupBy(nexusMessagesTable.conversationId)
+      .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
+      .limit(30);
+    const conversations = rows.map(r => ({
+      id: r.id,
+      title: r.title ? r.title.slice(0, 60) : "Conversation",
+      createdAt: r.createdAt,
+      messageCount: Number(r.messageCount),
+    }));
+    res.json({ conversations });
+  } catch (err: any) {
+    console.error("nexus/conversations error:", err?.message, err?.stack);
+    res.status(500).json({ error: "Failed to load conversations", detail: err?.message });
+    return;
+  }
 });
 
 router.get("/nexus/conversation/:id", async (req, res): Promise<void> => {
