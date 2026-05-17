@@ -35,11 +35,11 @@ const SILENT_401_PATTERNS = ["/api/nexus/activity", "/api/nexus/briefing", "/api
 
 let _401redirectPending = false;
 
-// When VITE_API_BASE_URL is set (e.g. Railway backend URL), all relative /api/
+// When VITE_API_URL is set (e.g. Railway backend URL), all relative /api/
 // calls are automatically rewritten to hit that origin. This makes the frontend
 // work correctly when deployed to a different domain (Vercel, Netlify, etc.)
 // without touching any individual fetch call in the codebase.
-const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
 function resolveApiUrl(input: RequestInfo | URL): RequestInfo | URL {
   if (!API_BASE) return input;
