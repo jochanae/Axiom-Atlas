@@ -38,7 +38,9 @@ async function initStripe() {
   }
 }
 
-await initStripe();
+initStripe().catch(() => {
+  // Stripe unavailable — continuing without it
+});
 
 app.listen(port, (err) => {
   if (err) {
