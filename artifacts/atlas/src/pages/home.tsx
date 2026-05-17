@@ -65,6 +65,12 @@ type HomeMessage = {
   plan?: Plan;
 };
 
+type HomeThreadMessage = {
+  role: string;
+  content: string;
+  isBriefing?: boolean;
+};
+
 function loadHomeUserType(): HomeUserType | null {
   try {
     const explicit = localStorage.getItem("axiom_user_type");
@@ -1213,9 +1219,17 @@ export default function Home() {
     if (homeFocus) params.set("focusProjectId", String(homeFocus));
     fetch(`/api/nexus/thread?${params.toString()}`, { credentials: "include" })
       .then(r => r.ok ? r.json() : [])
-      .then(async (msgs: Array<{ role: string; content: string }>) => {
+      .then(async (msgs: HomeThreadMessage[]) => {
         if (msgs.length > 0) {
-          setHomeMessages(msgs.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
+          const briefingMessage = msgs.find(m => m.isBriefing);
+          if (briefingMessage?.content) {
+            setBriefing(briefingMessage.content);
+            setBriefingDismissed(false);
+          }
+          const regularMessages = msgs.filter(m => !m.isBriefing);
+          if (regularMessages.length > 0) {
+            setHomeMessages(regularMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })));
+          }
           return;
         }
       })
@@ -1548,9 +1562,15 @@ export default function Home() {
   const handleSwitchConversation = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/nexus/thread?conversationId=${encodeURIComponent(id)}`, { credentials: "include" });
-      const msgs = await res.json() as Array<{ role: string; content: string }>;
+      const msgs = await res.json() as HomeThreadMessage[];
       if (Array.isArray(msgs) && msgs.length > 0) {
-        setHomeMessages(msgs.map((m, index) => {
+        const briefingMessage = msgs.find(m => m.isBriefing);
+        if (briefingMessage?.content) {
+          setBriefing(briefingMessage.content);
+          setBriefingDismissed(false);
+        }
+        const regularMessages = msgs.filter(m => !m.isBriefing);
+        setHomeMessages(regularMessages.map((m, index) => {
           const role = m.role as "user" | "assistant";
           const plan = role === "assistant" ? detectPlanFromText(m.content) : null;
           return {
