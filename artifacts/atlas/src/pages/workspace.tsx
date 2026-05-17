@@ -11478,6 +11478,7 @@ export default function Workspace() {
               {([
                 { id: "claude", label: "Claude", sub: "Architect · Nuance & Strategy", available: true, icon: "C" },
                 { id: "gemini", label: "Gemini", sub: "Strategy · Long Context", available: true, icon: "Ge" },
+                { id: "gpt4o", label: "GPT-4o", sub: "Mechanic · Speed & Logic", available: false, icon: "G" },
               ]).map(m => (
                 <button
                   key={m.id}
@@ -11507,7 +11508,7 @@ export default function Workspace() {
                     <div style={{ fontFamily: "var(--app-font-sans)", fontSize: 13, fontWeight: 500, color: "var(--atlas-fg)", display: "flex", alignItems: "center", gap: 6 }}>
                       {m.label}
                       {!m.available && (
-                        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", letterSpacing: "0.1em", opacity: 0.55, border: "1px solid rgba(var(--atlas-muted-rgb),0.2)", borderRadius: 3, padding: "1px 4px" }}>KEY NEEDED</span>
+                        <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 8, color: "var(--atlas-muted)", letterSpacing: "0.1em", opacity: 0.55, border: "1px solid rgba(var(--atlas-muted-rgb),0.2)", borderRadius: 3, padding: "1px 4px" }}>COMING SOON</span>
                       )}
                     </div>
                     <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, color: "var(--atlas-muted)", letterSpacing: "0.05em", marginTop: 2, opacity: m.available ? 0.7 : 0.4 }}>{m.sub}</div>
