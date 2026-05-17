@@ -286,6 +286,16 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <div style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
+        background: "#92400E", color: "#000",
+        padding: "5px 12px",
+        fontSize: 11, fontWeight: 600, textAlign: "center",
+        fontFamily: "var(--app-font-mono, monospace)", letterSpacing: "0.04em",
+        pointerEvents: "none", userSelect: "none",
+      }}>
+        ⚠️ OLD VERSION — build in axiomsystem.app
+      </div>
       <TooltipProvider>
         <ErrorBoundary>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
