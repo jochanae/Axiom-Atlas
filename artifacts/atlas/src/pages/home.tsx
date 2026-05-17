@@ -1047,6 +1047,8 @@ export default function Home() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [briefing, setBriefing] = useState<string | null>(null);
   const [briefingLoading, setBriefingLoading] = useState(true);
+  const [briefingDismissed, setBriefingDismissed] = useState(false);
+  const [briefingFading, setBriefingFading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { isFree } = useSubscription();
 
@@ -1153,6 +1155,17 @@ export default function Home() {
       })
       .catch(() => setBriefingLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!briefing || briefingDismissed) return;
+    setBriefingFading(false);
+    const fadeTimer = window.setTimeout(() => setBriefingFading(true), 10_000);
+    const removeTimer = window.setTimeout(() => setBriefingDismissed(true), 10_500);
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(removeTimer);
+    };
+  }, [briefing, briefingDismissed]);
 
   useEffect(() => {
     fetch("/api/nexus/conversations", { credentials: "include" })
@@ -1835,6 +1848,49 @@ export default function Home() {
                 <p style={{ fontSize: 13, color: "var(--atlas-muted)", opacity: 0.55, margin: 0, fontStyle: "italic" }}>
                   I'm here. What's on your mind?
                 </p>
+              </div>
+            )}
+
+            {briefing && !briefingDismissed && (
+              <div
+                style={{
+                  position: "relative",
+                  zIndex: 1,
+                  margin: homeMessages.length > 0 ? "6px 0 14px" : "0 0 14px",
+                  padding: "13px 44px 13px 14px",
+                  borderRadius: 12,
+                  background: "var(--atlas-surface)",
+                  border: "1px solid var(--atlas-border)",
+                  color: "var(--atlas-fg)",
+                  fontSize: 13,
+                  lineHeight: 1.65,
+                  fontFamily: "var(--app-font-sans)",
+                  opacity: briefingFading ? 0 : 1,
+                  transition: "opacity 500ms ease",
+                }}
+              >
+                <button
+                  type="button"
+                  aria-label="Dismiss briefing"
+                  onClick={() => setBriefingDismissed(true)}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    width: 44,
+                    height: 44,
+                    background: "transparent",
+                    border: "none",
+                    color: "var(--atlas-muted)",
+                    cursor: "pointer",
+                    fontSize: 18,
+                    lineHeight: 1,
+                    opacity: 0.65,
+                  }}
+                >
+                  ×
+                </button>
+                <HomeChunkedBubbles text={briefing} isNew={false} />
               </div>
             )}
 
