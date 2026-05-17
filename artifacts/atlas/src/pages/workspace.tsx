@@ -2214,7 +2214,7 @@ function AssistantBubble({
             <span style={{
               display: "inline-flex", alignItems: "center", gap: 3,
               padding: "1px 6px", borderRadius: 4,
-              background: message.model === "gpt4o"
+              background: false
                 ? "rgba(16,163,127,0.12)"
                 : message.model === "gemini"
                 ? "rgba(66,133,244,0.12)"
@@ -11070,7 +11070,7 @@ export default function Workspace() {
                       <path d="M5.5 8.5L7 10l3-4" />
                     </svg>
                     <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-fg)", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>
-                      {wsModel === "claude" ? "Claude" : wsModel === "gpt4o" ? "GPT-4o" : wsModel === "gemini" ? "Gemini" : wsModel}
+                      {wsModel === "claude" ? "Claude" : wsModel === "gemini" ? "Gemini" : wsModel}
                     </span>
                     <svg width="7" height="7" viewBox="0 0 8 8" fill="none" style={{ opacity: 0.35, flexShrink: 0 }}>
                       <path d="M1.5 3L4 5.5L6.5 3" stroke="var(--atlas-fg)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -11477,7 +11477,6 @@ export default function Workspace() {
             <div style={{ padding: "0 14px" }}>
               {([
                 { id: "claude", label: "Claude", sub: "Architect · Nuance & Strategy", available: true, icon: "C" },
-                { id: "gpt4o", label: "GPT-4o", sub: "Mechanic · Speed & Logic", available: true, icon: "G" },
                 { id: "gemini", label: "Gemini", sub: "Strategy · Long Context", available: true, icon: "Ge" },
               ]).map(m => (
                 <button
