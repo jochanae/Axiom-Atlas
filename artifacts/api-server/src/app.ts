@@ -49,6 +49,8 @@ const ALLOWED_ORIGINS: Set<string> = new Set([
   "https://axiom-atlas-mocha.vercel.app",
   "https://lovable.dev",
   "https://5360bfd7-938b-4b5e-b3a5-5d9c9f8e7a2b.lovableproject.com",
+  "https://atlas-idk.vercel.app",
+  "https://atlas-iq.lovable.app",
   ...(process.env.REPLIT_DOMAINS?.split(",").map((d) => `https://${d.trim()}`) ?? []),
   ...(process.env.RAILWAY_PUBLIC_DOMAIN ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`] : []),
   ...(process.env.EXTRA_ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
@@ -61,6 +63,7 @@ app.use(
       if (ALLOWED_ORIGINS.has(origin)) return callback(null, true);
       if (/^https:\/\/[^.]+\.replit\.(dev|app)$/.test(origin)) return callback(null, true);
       if (/^https:\/\/[^.]+\.lovableproject\.com$/.test(origin)) return callback(null, true);
+      if (/^https:\/\/atlas-[^.]+\.vercel\.app$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       callback(new Error(`CORS: origin not allowed — ${origin}`));
     },
