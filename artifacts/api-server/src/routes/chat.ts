@@ -1318,6 +1318,16 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Build layered system prompt
   let systemPrompt = DEV_SYSTEM_PROMPT;
+  // Inject project identity
+  const [projectRow] = await db
+    .select({ name: projectsTable.name, description: projectsTable.description })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, projectId))
+    .limit(1);
+
+  if (projectRow) {
+    systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${projectRow.name}${projectRow.description ? `\nDescription: ${projectRow.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
+  }
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
   }
