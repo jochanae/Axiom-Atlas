@@ -55,8 +55,8 @@ async function generateHomeOpening(projectName: string | null, userType: HomeUse
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 120,
+      model: "claude-sonnet-4-6",
+      max_tokens: 400,
       messages: [{
         role: "user",
         content: `You are Atlas — a strategic thinking partner for builders and founders.
