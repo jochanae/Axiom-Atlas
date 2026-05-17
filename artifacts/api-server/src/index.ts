@@ -38,14 +38,13 @@ async function initStripe() {
   }
 }
 
-initStripe().catch(() => {
-  // Stripe unavailable — continuing without it
+// Fire and forget — never block startup
+initStripe().catch((err) => {
+  console.warn("Stripe init skipped:", err?.message ?? err);
 });
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-  logger.info({ port }, "Server listening");
+app.listen(port, () => {
+  console.log({ port }, "Server listening");
+  // Signal readiness immediately
+  if (process.send) process.send("ready");
 });
