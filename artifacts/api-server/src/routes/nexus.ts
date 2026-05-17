@@ -22,6 +22,83 @@ type HandoffSignal = {
   reason: string | null;
 };
 
+type HomeUserType = "idea" | "building" | "clients" | "portfolio";
+
+const HOME_OPENING_FALLBACKS = [
+  "What are you turning over?",
+  "What decision keeps coming back?",
+  "What's the constraint you haven't named yet?",
+  "Where did the last session leave things?",
+  "What would have to be true for this to work?",
+];
+
+function parseHomeUserType(value: unknown): HomeUserType | null {
+  return value === "idea" || value === "building" || value === "clients" || value === "portfolio"
+    ? value
+    : null;
+}
+
+function randomFallbackOpening(): string {
+  return HOME_OPENING_FALLBACKS[Math.floor(Math.random() * HOME_OPENING_FALLBACKS.length)];
+}
+
+function userTypeOpeningGuidance(userType: HomeUserType | null): string {
+  if (userType === "idea") return "The user came in with an idea. Focus the question on the problem and gap.";
+  if (userType === "building") return "The user is already building. Focus the question on current blockers and momentum.";
+  if (userType === "clients") return "The user runs projects for clients. Focus the question on delivery and oversight challenges.";
+  if (userType === "portfolio") return "The user manages multiple products. Focus the question on what is most urgent across everything.";
+  return "Choose the most natural question style from the project name.";
+}
+
+async function generateHomeOpening(projectName: string | null, userType: HomeUserType | null): Promise<string> {
+  if (!projectName?.trim()) return randomFallbackOpening();
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 120,
+      messages: [{
+        role: "user",
+        content: `You are Atlas — a strategic thinking partner for builders and founders.
+
+The user just created or opened a project named: "${projectName.trim()}"
+
+Generate a single opening message that:
+1. References the project name directly — prove you heard it
+2. Asks ONE question that deepens context — not "what are you building?" (too generic) but something that assumes they already know what they're building and pushes one level deeper
+3. Feels like a conversation already in motion, not a fresh start
+4. Is 1-3 sentences maximum — never longer
+5. Has no greeting preamble ("Hi!", "Welcome!", "Great!" — never use these)
+
+Choose the question style based on the project name:
+- If the name sounds like a tool/platform → ask what problem it solves
+- If the name sounds like a product/app → ask who it's for
+- If the name sounds abstract/conceptual → ask what it becomes when fully realized
+- If the name sounds like it's replacing something → ask what already exists and why it's not enough
+
+Onboarding context:
+${userTypeOpeningGuidance(userType)}
+
+Examples of good opening messages:
+- "Axiom Atlas — got it. What's the biggest thing you want this to solve that nothing else has solved for you?"
+- "You named this 'CoinsBloom.' Tell me who this is really for — the person who needs it most."
+- "Compani. What does this become when it's working exactly the way you imagined?"
+
+Never say: "Tell me what you're working on", "What are you building?", "How can I help?", "Welcome", "Hi", "Great choice"
+
+Respond with only the opening message. Nothing else.`,
+      }],
+    });
+    const text = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
+    if (!text || /\b(how can i help|welcome|hi\b|great choice|what are you building|tell me what you're working on)\b/i.test(text)) {
+      return `${projectName.trim()}. What does this need to solve that is not solved well enough yet?`;
+    }
+    return text.replace(/^["']|["']$/g, "").trim();
+  } catch {
+    return `${projectName.trim()}. What does this need to solve that is not solved well enough yet?`;
+  }
+}
+
 function parseJsonObject<T>(raw: string): T | null {
   try {
     const cleaned = raw.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
@@ -174,6 +251,25 @@ T4 triggers — save when:
 
 Capture the specific thought in plain language — not vague summaries but the actual insight as she would state it.`;
 
+const CONVERSATIONAL_EXPANSION_PROTOCOL = `--- CONVERSATIONAL EXPANSION PROTOCOL ---
+After the user responds to your opening question, your goal is to build a complete picture of the project through natural conversation — not a form, not a checklist, not bullet points.
+
+Guide the conversation through these dimensions, one at a time, only when natural:
+1. The problem — what does this solve that doesn't exist yet?
+2. The audience — who needs this most and why?
+3. The gap — what already exists and why is it not enough?
+4. The hard part — what's the piece they haven't figured out yet?
+5. The vision — what does it look like when it's fully realized?
+
+Rules:
+- Ask ONE question at a time. Never list multiple questions.
+- When you have enough context on a dimension, move to the next naturally
+- Do not announce what you're doing ("Now let's talk about your audience")
+- When all five dimensions have been explored, surface the handoff signal
+- The handoff signal is: "This is ready to take into a workspace. Want me to set it up with everything we've mapped?"
+
+--- END PROTOCOL ---`;
+
 // ── Five-Tier Memory helpers ───────────────────────────────────────────────
 interface MemoryEntry {
   tier: 1 | 2 | 3 | 4 | 5;
@@ -265,6 +361,8 @@ function parseRepo(raw: string | null): string | null {
 router.get("/nexus/thread", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const conversationId = req.query.conversationId as string | undefined;
+  const userType = parseHomeUserType(req.query.userType);
+  const focusProjectId = Number(req.query.focusProjectId);
 
   const whereClause = conversationId === "__legacy__"
     ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
@@ -277,6 +375,31 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
     .from(nexusMessagesTable)
     .where(whereClause)
     .orderBy(asc(nexusMessagesTable.createdAt));
+
+  if (messages.length === 0 && conversationId && conversationId !== "__legacy__") {
+    const [project] = await db
+      .select({ name: projectsTable.name })
+      .from(projectsTable)
+      .where(
+        Number.isInteger(focusProjectId) && focusProjectId > 0
+          ? and(eq(projectsTable.userId, userId), eq(projectsTable.id, focusProjectId))
+          : eq(projectsTable.userId, userId)
+      )
+      .orderBy(desc(projectsTable.updatedAt))
+      .limit(1);
+    const opening = await generateHomeOpening(project?.name ?? null, userType);
+    const [savedOpening] = await db
+      .insert(nexusMessagesTable)
+      .values({ userId, role: "assistant", content: opening, conversationId })
+      .returning();
+    res.json([{
+      id: savedOpening.id,
+      role: savedOpening.role,
+      content: savedOpening.content,
+      createdAt: savedOpening.createdAt.toISOString(),
+    }]);
+    return;
+  }
 
   res.json(messages.map((m) => ({
     id: m.id,
@@ -368,6 +491,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     imageBase64?: string;
     imageMimeType?: string;
     conversationId?: string;
+    userType?: HomeUserType;
   };
 
   const hasImage = !!(body.imageBase64 && body.imageMimeType);
@@ -380,6 +504,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
   const { userProfile = "", focusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
+  const userType = parseHomeUserType(body.userType);
   // Use a sensible fallback when the user sends an image with no text
   const message = body.message?.trim() || (hasImage ? "[image]" : "");
 
@@ -449,9 +574,12 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }));
 
   // Build system prompt
-  let systemPrompt = NEXUS_SYSTEM_PROMPT;
+  let systemPrompt = `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}`;
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
+  }
+  if (userType) {
+    systemPrompt += `\n\n--- HOME ONBOARDING CONTEXT ---\n${userTypeOpeningGuidance(userType)} Use that as a bias for the next natural question, while still following the conversational expansion protocol.\n--- END HOME ONBOARDING CONTEXT ---`;
   }
   // Always inject the full project roster so Atlas knows every room, even empty ones
   systemPrompt += `\n\n--- YOUR PROJECT PORTFOLIO (${projects.length} project${projects.length !== 1 ? "s" : ""}) ---\n${projectRoster}`;
