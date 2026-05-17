@@ -47,6 +47,7 @@ app.use(
 );
 const ALLOWED_ORIGINS: Set<string> = new Set([
   "https://axiomsystem.app",
+  "https://www.axiomsystem.app",
   "https://axiom-atlas-mocha.vercel.app",
   "https://lovable.dev",
   "https://5360bfd7-938b-4b5e-b3a5-5d9c9f8e7a2b.lovableproject.com",
