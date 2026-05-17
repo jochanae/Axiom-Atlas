@@ -194,9 +194,15 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
 
 // GET /api/auth/me
 router.get("/auth/me", async (req, res): Promise<void> => {
-  const user = await getUserFromCookie(req);
-  if (!user) { res.status(401).json({ error: "Not authenticated" }); return; }
-  res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, googleLinked: !!user.googleId, hasPassword: !!user.passwordHash });
+  try {
+    const user = await getUserFromCookie(req);
+    if (!user) { res.status(401).json({ error: "Not authenticated" }); return; }
+    res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, googleLinked: !!user.googleId, hasPassword: !!user.passwordHash });
+  } catch (err: any) {
+    console.error("auth/me error:", err);
+    res.status(401).json({ error: "Session invalid" });
+    return;
+  }
 });
 
 // PATCH /api/auth/profile — update own name and/or avatarUrl

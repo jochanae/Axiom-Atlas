@@ -36,7 +36,7 @@ function createSessionCookie(token: string, res: import("express").Response) {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: true,
-    sameSite: "lax",
+    sameSite: "none",
     expires,
     path: "/",
   });
