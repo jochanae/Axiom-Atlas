@@ -1986,6 +1986,7 @@ function AssistantBubble({
   onPlanExecutionChange,
   onExecuteHomePlan,
   trustMode,
+  agenticMode,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -2012,6 +2013,7 @@ function AssistantBubble({
   onPlanExecutionChange?: (messageId: number, execution: PlanExecution | null) => void;
   onExecuteHomePlan?: (plan: Plan) => void;
   trustMode: "review" | "auto";
+  agenticMode?: boolean;
 }) {
   const [hov, setHov] = useState(false);
   const [parkDone, setParkDone] = useState(false);
@@ -2472,7 +2474,9 @@ function AssistantBubble({
               marginTop: 12, padding: "10px 14px",
               borderRadius: 8,
               background: "var(--atlas-surface)",
-              border: "1px solid rgba(201,162,76,0.22)",
+              border: agenticMode
+                ? "1px solid rgba(201,162,76,0.40)"
+                : "1px solid rgba(201,162,76,0.22)",
               display: "flex", alignItems: "center", gap: 10,
             }}
           >
@@ -2488,22 +2492,36 @@ function AssistantBubble({
                 <div style={{ fontSize: 11, color: "var(--atlas-muted)", marginTop: 2, opacity: 0.8 }}>{cmdExec.description}</div>
               )}
             </div>
-            <button
-              onClick={() => onRunCommand?.(cmdExec.command)}
-              style={{
-                flexShrink: 0, padding: "5px 12px", borderRadius: 5,
-                background: "rgba(146,64,14,0.25)",
-                border: "1px solid rgba(146,64,14,0.55)",
-                color: "rgba(230,150,90,0.95)",
-                fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)",
-                letterSpacing: "0.08em", cursor: "pointer",
-                transition: "all 140ms ease",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(146,64,14,0.4)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(146,64,14,0.25)")}
-            >
-              Run →
-            </button>
+            {agenticMode ? (
+              <div style={{
+                flexShrink: 0, padding: "5px 10px", borderRadius: 5,
+                background: "rgba(201,162,76,0.10)",
+                border: "1px solid rgba(201,162,76,0.30)",
+                color: "rgba(201,162,76,0.80)",
+                fontSize: 10, fontWeight: 600, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 4,
+              }}>
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+                Auto
+              </div>
+            ) : (
+              <button
+                onClick={() => onRunCommand?.(cmdExec.command)}
+                style={{
+                  flexShrink: 0, padding: "5px 12px", borderRadius: 5,
+                  background: "rgba(146,64,14,0.25)",
+                  border: "1px solid rgba(146,64,14,0.55)",
+                  color: "rgba(230,150,90,0.95)",
+                  fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)",
+                  letterSpacing: "0.08em", cursor: "pointer",
+                  transition: "all 140ms ease",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(146,64,14,0.4)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(146,64,14,0.25)")}
+              >
+                Run →
+              </button>
+            )}
           </div>
         )}
 
@@ -8004,6 +8022,7 @@ export default function Workspace() {
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [trustMode, setTrustMode] = useState<"review" | "auto">("review");
+  const [agenticMode, setAgenticMode] = useState(true);
   const [autoRunCmd] = useState<string>("");
   const [previewRefreshTrigger, setPreviewRefreshTrigger] = useState(0);
 
@@ -9134,6 +9153,28 @@ export default function Workspace() {
     setLeftTab("terminal");
   }, []);
 
+  // ── Agentic auto-execute ──────────────────────────────────────────────────
+  const agenticAutoRunRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!agenticMode || chatPending) return;
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.role !== "assistant") return;
+    const match = lastMsg.content.match(/CMD_EXEC:(\{[^\n}]*\})/);
+    if (!match) return;
+    let cleanup: (() => void) | undefined;
+    try {
+      const parsed = JSON.parse(match[1]) as { command?: string };
+      const cmd = parsed.command;
+      if (!cmd?.trim()) return;
+      const key = (lastMsg.sentAt ?? String(messages.length)) + cmd;
+      if (agenticAutoRunRef.current.has(key)) return;
+      agenticAutoRunRef.current.add(key);
+      const t = setTimeout(() => handleRunCommand(cmd), 900);
+      cleanup = () => clearTimeout(t);
+    } catch {}
+    return cleanup;
+  }, [messages, chatPending, agenticMode, handleRunCommand]);
+
   const messagesRef = useRef<ChatMessage[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
@@ -9425,6 +9466,28 @@ export default function Workspace() {
                 <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
               </svg>
               {!isMobile && <span>{trustMode === "auto" ? "Autopilot ON" : "Autopilot OFF"}</span>}
+            </button>
+            {/* Agent mode toggle */}
+            <button
+              onClick={() => setAgenticMode((v) => !v)}
+              title={agenticMode ? "Agent mode ON — commands run automatically. Tap to switch to manual." : "Agent mode OFF — you tap Run for each command. Tap to enable auto-execute."}
+              aria-label="Toggle agent mode"
+              style={{
+                display: "flex", alignItems: "center", gap: isMobile ? 0 : 5,
+                padding: isMobile ? "5px 7px" : "4px 10px",
+                borderRadius: 6, fontSize: 10, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.08em", cursor: "pointer",
+                background: agenticMode ? "rgba(201,162,76,0.12)" : "var(--atlas-surface)",
+                border: agenticMode ? "1px solid rgba(201,162,76,0.35)" : "1px solid var(--atlas-border)",
+                color: agenticMode ? "rgba(201,162,76,0.9)" : "var(--atlas-muted)",
+                transition: "all 300ms ease", flexShrink: 0,
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" style={{ opacity: agenticMode ? 1 : 0.45 }}>
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" />
+                <path d="M8 5l8 7-8 7V5z" />
+              </svg>
+              {!isMobile && <span>{agenticMode ? "Agent ON" : "Agent OFF"}</span>}
             </button>
           </div>
 
@@ -10403,6 +10466,7 @@ export default function Workspace() {
                   onRegenerate={() => handleRegenerate(i)}
                   onPreviewCode={handlePreviewCode}
                   onRunCommand={handleRunCommand}
+                  agenticMode={agenticMode}
                   onPrCreated={(url) => { setSessionPrUrl(url); setLeftTab("diff"); }}
                   onExtractToForge={(content) => { setForgePreloadContent(content); setShowForgeExternal(true); }}
                   onReviewDiff={() => setLeftTab("diff")}
