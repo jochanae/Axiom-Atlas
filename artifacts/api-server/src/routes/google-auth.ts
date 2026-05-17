@@ -192,7 +192,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
     createSessionCookie(token, res);
-    res.redirect("/home");
+    res.redirect(`${process.env.FRONTEND_URL ?? "https://axiomsystem.app"}/home`);
   } catch (err) {
     req.log?.error(err, "google-oauth-callback-error");
     res.redirect("/?auth_error=server_error");
