@@ -573,6 +573,13 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     content: m.content,
   }));
 
+  const userProjects = await db
+    .select({ id: projectsTable.id, name: projectsTable.name })
+    .from(projectsTable)
+    .where(eq(projectsTable.userId, userId))
+    .orderBy(desc(projectsTable.updatedAt))
+    .limit(20);
+
   // Build system prompt
   let systemPrompt = `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}`;
   if (userProfile) {
@@ -580,6 +587,9 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
   if (userType) {
     systemPrompt += `\n\n--- HOME ONBOARDING CONTEXT ---\n${userTypeOpeningGuidance(userType)} Use that as a bias for the next natural question, while still following the conversational expansion protocol.\n--- END HOME ONBOARDING CONTEXT ---`;
+  }
+  if (userProjects.length > 0) {
+    systemPrompt += `\n\n--- YOUR PROJECTS ---\n${userProjects.map(p => `- ${p.name} (id: ${p.id})`).join("\n")}\nThese are the user's actual projects. Reference them by name when relevant. Never invent project names.\n--- END YOUR PROJECTS ---`;
   }
   // Always inject the full project roster so Atlas knows every room, even empty ones
   systemPrompt += `\n\n--- YOUR PROJECT PORTFOLIO (${projects.length} project${projects.length !== 1 ? "s" : ""}) ---\n${projectRoster}`;
