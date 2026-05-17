@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable } from "@workspace/db";
-import { eq, asc, and, inArray, desc, isNull, isNotNull, sql } from "drizzle-orm";
+import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, type SQL } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 
@@ -357,6 +357,10 @@ function parseRepo(raw: string | null): string | null {
   }
 }
 
+function nonBriefingMessages(whereClause: SQL | undefined) {
+  return and(whereClause, sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`);
+}
+
 // GET /api/nexus/thread — return a conversation thread (optionally scoped by conversationId)
 router.get("/nexus/thread", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
@@ -373,10 +377,20 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
   const messages = await db
     .select()
     .from(nexusMessagesTable)
-    .where(whereClause)
+    .where(nonBriefingMessages(whereClause))
     .orderBy(asc(nexusMessagesTable.createdAt));
 
   if (messages.length === 0 && conversationId && conversationId !== "__legacy__") {
+    const [existingBriefing] = await db
+      .select({ id: nexusMessagesTable.id })
+      .from(nexusMessagesTable)
+      .where(and(whereClause, eq(nexusMessagesTable.messageType, "briefing")))
+      .limit(1);
+    if (existingBriefing) {
+      res.json([]);
+      return;
+    }
+
     const [project] = await db
       .select({ name: projectsTable.name })
       .from(projectsTable)
@@ -390,12 +404,13 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
     const opening = await generateHomeOpening(project?.name ?? null, userType);
     const [savedOpening] = await db
       .insert(nexusMessagesTable)
-      .values({ userId, role: "assistant", content: opening, conversationId })
+      .values({ userId, role: "assistant", content: opening, conversationId, messageType: "briefing" })
       .returning();
     res.json([{
       id: savedOpening.id,
       role: savedOpening.role,
       content: savedOpening.content,
+      isBriefing: true,
       createdAt: savedOpening.createdAt.toISOString(),
     }]);
     return;
@@ -405,6 +420,7 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
     id: m.id,
     role: m.role,
     content: m.content,
+    isBriefing: m.messageType === "briefing",
     createdAt: m.createdAt.toISOString(),
   })));
 });
@@ -453,12 +469,12 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
   const rows = await db
     .select({
       id: nexusMessagesTable.conversationId,
-      title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' ORDER BY sub.created_at ASC LIMIT 1)`,
+      title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' ORDER BY sub.created_at ASC LIMIT 1)`,
       createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
       messageCount: sql<number>`COUNT(*)`,
     })
     .from(nexusMessagesTable)
-    .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId)))
+    .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId), sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`))
     .groupBy(nexusMessagesTable.conversationId)
     .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
     .limit(30);
@@ -520,11 +536,11 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       .select()
       .from(nexusMessagesTable)
       .where(
-        conversationId === "__legacy__"
+        nonBriefingMessages(conversationId === "__legacy__"
           ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
           : conversationId
             ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
-            : eq(nexusMessagesTable.userId, userId)
+            : eq(nexusMessagesTable.userId, userId))
       )
       .orderBy(asc(nexusMessagesTable.createdAt)),
   ]);
@@ -947,7 +963,7 @@ router.post("/nexus/briefing", async (req, res): Promise<void> => {
       .where(eq(projectsTable.userId, userId));
 
     if (projects.length === 0) {
-      res.json({ briefing: null });
+      res.json({ briefing: null, isBriefing: true });
       return;
     }
 
@@ -977,10 +993,10 @@ router.post("/nexus/briefing", async (req, res): Promise<void> => {
     });
 
     const text = response.content[0]?.type === "text" ? response.content[0].text.trim() : null;
-    res.json({ briefing: text });
+    res.json({ briefing: text, isBriefing: true });
   } catch (err) {
     req.log?.error({ err }, "Briefing error");
-    res.json({ briefing: null });
+    res.json({ briefing: null, isBriefing: true });
   }
 });
 

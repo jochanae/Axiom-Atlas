@@ -9,6 +9,7 @@ export const nexusMessagesTable = pgTable("nexus_messages", {
   role: text("role").notNull(),
   content: text("content").notNull(),
   conversationId: text("conversation_id"),
+  messageType: text("message_type").default("message"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
