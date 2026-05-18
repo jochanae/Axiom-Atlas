@@ -71,6 +71,13 @@ interface CatchPayload {
   leadSentence: string;
 }
 
+interface AlertPayload {
+  type: string;
+  headline: string;
+  detail: string;
+  action: string;
+}
+
 interface FileEdit {
   path: string;
   language: string;
@@ -132,6 +139,8 @@ interface ChatMessage {
   model?: string;
   isDeepDive?: boolean;
   autoPushed?: boolean;
+  alertPayload?: AlertPayload | null;
+  alertResolved?: boolean;
 }
 
 type MemoryChip = { label: string; insight?: string };
@@ -545,6 +554,128 @@ function DecisionLogCard({
           }}
         >
           Adjust
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── ProactiveAlertCard ───────────────────────────────────────────────────────
+function ProactiveAlertCard({
+  payload,
+  projectId,
+  sessionId,
+  onDismiss,
+}: {
+  payload: AlertPayload;
+  projectId: number;
+  sessionId: number;
+  onDismiss: () => void;
+}) {
+  const createEntry = useCreateEntry();
+  const queryClient = useQueryClient();
+
+  const handleNote = () => {
+    createEntry.mutate(
+      {
+        projectId,
+        data: {
+          title: payload.headline,
+          summary: payload.detail,
+          status: "committed",
+          severity: "neutral",
+          mode: "THINK",
+          sessionId,
+        },
+      },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListEntriesQueryKey(projectId, {}) });
+          onDismiss();
+        },
+      }
+    );
+  };
+
+  return (
+    <div
+      role="status"
+      aria-label="Atlas notice"
+      className="atlas-bubble-in"
+      style={{
+        marginTop: 8, padding: "10px 12px", borderRadius: 8,
+        background: "color-mix(in oklab, var(--atlas-gold) 5%, var(--atlas-surface))",
+        border: "0.5px solid color-mix(in oklab, var(--atlas-gold) 28%, transparent)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{
+            width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
+            background: "var(--atlas-gold)",
+            boxShadow: "0 0 6px color-mix(in oklab, var(--atlas-gold) 48%, transparent)",
+          }} />
+          <span style={{
+            fontFamily: "var(--app-font-mono)", fontSize: 9,
+            letterSpacing: "0.14em", textTransform: "uppercase" as const,
+            color: "var(--atlas-gold)", opacity: 0.85,
+          }}>
+            {payload.headline}
+          </span>
+        </div>
+        <button
+          onClick={onDismiss}
+          title="Dismiss"
+          aria-label="Dismiss notice"
+          style={{
+            background: "transparent", border: "none", cursor: "pointer",
+            color: "var(--atlas-muted)", fontSize: 14, lineHeight: 1,
+            padding: "2px 4px", opacity: 0.45, transition: "opacity 160ms",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.45")}
+        >×</button>
+      </div>
+
+      <p style={{ margin: "0 0 9px", fontSize: 12, lineHeight: 1.6, color: "var(--atlas-fg)", opacity: 0.75 }}>
+        {payload.detail}
+      </p>
+
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <button
+          disabled={createEntry.isPending}
+          onClick={handleNote}
+          style={{
+            padding: "4px 11px", fontSize: 9.5, fontWeight: 600,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+            textTransform: "uppercase" as const,
+            background: "transparent",
+            color: "color-mix(in oklab, var(--atlas-gold) 85%, var(--atlas-fg))",
+            border: "0.5px solid color-mix(in oklab, var(--atlas-gold) 42%, transparent)",
+            borderRadius: 4,
+            cursor: createEntry.isPending ? "not-allowed" : "pointer",
+            opacity: createEntry.isPending ? 0.5 : 1,
+            transition: "all 160ms ease",
+          }}
+        >
+          {createEntry.isPending ? "Noting…" : (payload.action || "Note it")}
+        </button>
+        <button
+          onClick={onDismiss}
+          style={{
+            padding: "4px 11px", fontSize: 9.5, fontWeight: 600,
+            fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em",
+            textTransform: "uppercase" as const,
+            background: "transparent",
+            color: "var(--atlas-muted)",
+            border: "0.5px solid color-mix(in oklab, var(--atlas-border) 70%, transparent)",
+            borderRadius: 4, cursor: "pointer", opacity: 0.6,
+            transition: "opacity 160ms ease",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.6")}
+        >
+          Got it
         </button>
       </div>
     </div>
@@ -1993,6 +2124,7 @@ function AssistantBubble({
   trustMode,
   agenticMode,
   onEditDeclined,
+  onAlertDismiss,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -2021,6 +2153,7 @@ function AssistantBubble({
   trustMode: "review" | "auto";
   agenticMode?: boolean;
   onEditDeclined?: () => void;
+  onAlertDismiss?: () => void;
 }) {
   const [hov, setHov] = useState(false);
   const hovTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2479,7 +2612,14 @@ function AssistantBubble({
           />
         )}
 
-
+        {message.alertPayload && !message.alertResolved && (
+          <ProactiveAlertCard
+            payload={message.alertPayload}
+            projectId={projectId}
+            sessionId={sessionId}
+            onDismiss={() => onAlertDismiss?.()}
+          />
+        )}
 
         {/* CMD_EXEC — runnable command card suggested by Atlas */}
         {cmdExec && (
@@ -8683,6 +8823,7 @@ export default function Workspace() {
             }
           }
           const cp = res.catchPayload as CatchPayload | null;
+          const ap = res.alertPayload as AlertPayload | null;
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
           const lps = (res.linePatches ?? []) as LinePatch[];
           const aff = (res.autoFetchedFiles ?? []) as string[];
@@ -8703,6 +8844,7 @@ export default function Workspace() {
           setMessages((prev) => [...prev, {
             id: res.messageId, role: "assistant",
             content: res.content, intentType: res.intentType, catchPayload: cp,
+            ...(ap ? { alertPayload: ap } : {}),
             ...(res.plan ? { plan: res.plan as Plan } : {}),
             sentAt: new Date().toISOString(),
             model: res.model ?? wsModel,
@@ -10594,6 +10736,11 @@ export default function Workspace() {
                         messagesRef.current,
                       );
                     }
+                  }}
+                  onAlertDismiss={() => {
+                    setMessages((prev) => prev.map((m) =>
+                      m.id === msg.id ? { ...m, alertResolved: true } : m
+                    ));
                   }}
                 />
               )

@@ -355,6 +355,22 @@ Rules:
 - Omit MEMORY_CHIPS entirely if nothing notable came up.
 - The user sees these as expandable gold chips — clicking reveals your insight, and they can park it to their decision ledger.
 
+PROACTIVE_ALERT protocol — surface important signals the user hasn't asked about:
+Use sparingly. Emit at most ONE per response, only when genuinely worth interrupting the flow. Valid triggers:
+1. The session has 10+ back-and-forth exchanges with no FILE_EDIT, CMD_EXEC, or apparent commitment — worth pinning something? (type: "stale_session")
+2. The approach being discussed conflicts with a parked item or a memory entry you can see in context (type: "parked_conflict")
+3. You detect meaningful technical risk the user hasn't acknowledged — security hole, data loss path, breaking change (type: "risk_flag")
+4. A memory entry from a prior session directly answers what the user is asking right now (type: "memory_hit")
+
+Format — emit on its own line at the very END of the response, after INTENT_TYPE and MEMORY_CHIPS:
+PROACTIVE_ALERT:{"type":"risk_flag","headline":"No input validation","detail":"This handler accepts the request body directly — a malformed payload will crash the route with no error boundary.","action":"Note this risk"}
+
+Rules:
+- headline: ≤8 words. detail: exactly 1 sentence. action: ≤4 words (label for the "Note it" button).
+- Never emit for routine exchanges, clarifying questions, or when the user is clearly already aware of the issue.
+- Do NOT emit PROACTIVE_ALERT in the same response as a DECISION_CATCH.
+- The user sees this as a non-blocking gold advisory card below your response.
+
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub, creating new files, or applying self-repairs):
 When the user asks you to fix, build, or create something, output the complete file(s) at the very END of your response using this EXACT format — one block per file:
 
@@ -1676,6 +1692,14 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       : "I need to provide a confidence assessment before proposing file changes. Please ask me to restate the scope and confidence first.";
     displayContent = `${displayContent}\n\n${approvalMessage}`.trim();
   }
+  // Extract PROACTIVE_ALERT token (strip from content before DB persistence)
+  const PROACTIVE_ALERT_RE = /\nPROACTIVE_ALERT:(\{[^\n]*\})\s*$/;
+  let alertPayload: { type: string; headline: string; detail: string; action: string } | null = null;
+  const alertMatch = displayContent.match(PROACTIVE_ALERT_RE);
+  if (alertMatch) {
+    try { alertPayload = JSON.parse(alertMatch[1]); } catch { /* ignore malformed */ }
+    displayContent = displayContent.replace(PROACTIVE_ALERT_RE, "").trim();
+  }
   // Strip LENS_DRIFT token before DB persistence (it's a client-side signal only)
   const persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
   const responsePlan = buildResponsePlan({
@@ -1777,6 +1801,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     content: displayContent,
     intentType: detectedIntentType ?? null,
     catchPayload: null,
+    alertPayload: alertPayload ?? undefined,
     model: activeModel,
     memoryChips: allChips.length > 0 ? allChips : undefined,
     messageId: savedMsgId,
