@@ -46,6 +46,8 @@ app.use(
   }),
 );
 const ALLOWED_ORIGINS: Set<string> = new Set([
+  "http://localhost:5173",
+  "http://localhost:3000",
   "https://axiomsystem.app",
   "https://www.axiomsystem.app",
   "https://axiom-atlas-mocha.vercel.app",
@@ -55,6 +57,7 @@ const ALLOWED_ORIGINS: Set<string> = new Set([
   "https://atlas-iq.lovable.app",
   ...(process.env.REPLIT_DOMAINS?.split(",").map((d) => `https://${d.trim()}`) ?? []),
   ...(process.env.RAILWAY_PUBLIC_DOMAIN ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`] : []),
+  ...(process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
   ...(process.env.EXTRA_ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
 ]);
 
@@ -64,8 +67,9 @@ app.use(
       if (!origin) return callback(null, true);
       if (ALLOWED_ORIGINS.has(origin)) return callback(null, true);
       if (/^https:\/\/[^.]+\.replit\.(dev|app)$/.test(origin)) return callback(null, true);
-      if (/^https:\/\/[^.]+\.lovableproject\.com$/.test(origin)) return callback(null, true);
-      if (/^https:\/\/atlas-[^.]+\.vercel\.app$/.test(origin)) return callback(null, true);
+      if (/^https:\/\/([a-z0-9-]+\.)*lovable\.app$/.test(origin)) return callback(null, true);
+      if (/^https:\/\/([a-z0-9-]+\.)*lovableproject\.com$/.test(origin)) return callback(null, true);
+      if (/^https:\/\/([a-z0-9-]+\.)*vercel\.app$/.test(origin)) return callback(null, true);
       if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
       callback(new Error(`CORS: origin not allowed — ${origin}`));
     },
