@@ -1619,6 +1619,7 @@ function InlineDiffCard({
   onReviewDiff,
   onPushSuccess,
   onPrCreated,
+  onEditDeclined,
 }: {
   fileEdits: FileEdit[];
   linePatches: LinePatch[];
@@ -1628,6 +1629,7 @@ function InlineDiffCard({
   onReviewDiff: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
   onPrCreated?: (prUrl: string) => void;
+  onEditDeclined?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [applying, setApplying] = useState(false);
@@ -1635,6 +1637,7 @@ function InlineDiffCard({
   const [patchedEdits, setPatchedEdits] = useState<FileEdit[] | null>(null);
   const [showPushModal, setShowPushModal] = useState(false);
   const [originals, setOriginals] = useState<Record<string, string | null>>({});
+  const pushSucceededRef = useRef(false);
 
   const { data: project } = useGetProject(projectId, { query: { queryKey: getGetProjectQueryKey(projectId) } });
   const token = project?.githubToken ?? null;
@@ -1724,6 +1727,7 @@ function InlineDiffCard({
         edits.push({ path: filePath, language, content });
       }
       setPatchedEdits(edits);
+      pushSucceededRef.current = false;
       setShowPushModal(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply patches.");
@@ -1734,6 +1738,7 @@ function InlineDiffCard({
 
   const handleApply = () => {
     if (fileEdits.length > 0) {
+      pushSucceededRef.current = false;
       setShowPushModal(true);
       return;
     }
@@ -1839,8 +1844,8 @@ function InlineDiffCard({
           fileEdits={modalEdits}
           linkedRepo={linkedRepo}
           projectId={projectId}
-          onClose={() => setShowPushModal(false)}
-          onPushSuccess={(records) => { onPushSuccess(records); setShowPushModal(false); }}
+          onClose={() => { setShowPushModal(false); if (!pushSucceededRef.current) onEditDeclined?.(); }}
+          onPushSuccess={(records) => { pushSucceededRef.current = true; onPushSuccess(records); setShowPushModal(false); }}
           onPrCreated={onPrCreated}
         />
       )}
@@ -1987,6 +1992,7 @@ function AssistantBubble({
   onExecuteHomePlan,
   trustMode,
   agenticMode,
+  onEditDeclined,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -2014,6 +2020,7 @@ function AssistantBubble({
   onExecuteHomePlan?: (plan: Plan) => void;
   trustMode: "review" | "auto";
   agenticMode?: boolean;
+  onEditDeclined?: () => void;
 }) {
   const [hov, setHov] = useState(false);
   const hovTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2445,6 +2452,7 @@ function AssistantBubble({
             onReviewDiff={onReviewDiff}
             onPushSuccess={onPushSuccess}
             onPrCreated={onPrCreated}
+            onEditDeclined={onEditDeclined}
           />
         )}
 
@@ -10564,6 +10572,28 @@ export default function Workspace() {
                     setPreviewRefreshTrigger((t) => t + 1);
                     setTimeout(() => setPreviewRefreshTrigger((t) => t + 1), 25000);
                     setTimeout(() => setPreviewRefreshTrigger((t) => t + 1), 55000);
+                    // Close the FILE_EDIT loop — tell Atlas the push landed so it can continue
+                    if (sessionId) {
+                      const plural = records.length > 1 ? `${records.length} files` : `"${records[0]?.filename}"`;
+                      const confirmNote = commitUrl ? ` Commit: ${commitUrl}` : "";
+                      doSend(
+                        `FILE_EDIT_CONFIRMED: ${plural} pushed to ${branch}.${confirmNote} Continue.`,
+                        sessionId,
+                        messagesRef.current,
+                      );
+                    }
+                  }}
+                  onEditDeclined={() => {
+                    if (sessionId) {
+                      const editsInFlight = messages
+                        .filter((m) => m.role === "assistant" && m.fileEdits && m.fileEdits.length > 0)
+                        .slice(-1)[0]?.fileEdits?.map((e) => e.path.split("/").pop()).join(", ") ?? "the proposed changes";
+                      doSend(
+                        `FILE_EDIT_DECLINED: User reviewed but did not push ${editsInFlight}. Awaiting further instruction.`,
+                        sessionId,
+                        messagesRef.current,
+                      );
+                    }
                   }}
                 />
               )
