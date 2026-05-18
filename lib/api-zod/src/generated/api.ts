@@ -379,6 +379,10 @@ export const ListMessagesResponseItem = zod.object({
   content: zod.string(),
   intentType: zod.string().nullish(),
   catchPayload: zod.object({}).passthrough().nullish(),
+  executionTimeMs: zod.number().nullish(),
+  inputTokens: zod.number().nullish(),
+  outputTokens: zod.number().nullish(),
+  costUsd: zod.number().nullish(),
   createdAt: zod.string(),
 });
 export const ListMessagesResponse = zod.array(ListMessagesResponseItem);

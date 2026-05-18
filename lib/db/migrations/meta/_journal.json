@@ -92,6 +92,13 @@
       "when": 1779110800000,
       "tag": "0012_project_entity_type",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779114400000,
+      "tag": "0013_chat_message_usage",
+      "breakpoints": true
     }
   ]
 }

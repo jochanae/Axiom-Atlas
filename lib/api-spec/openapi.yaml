@@ -813,6 +813,14 @@ components:
           type: ["string", "null"]
         catchPayload:
           type: ["object", "null"]
+        executionTimeMs:
+          type: ["integer", "null"]
+        inputTokens:
+          type: ["integer", "null"]
+        outputTokens:
+          type: ["integer", "null"]
+        costUsd:
+          type: ["number", "null"]
         createdAt:
           type: string
       required:

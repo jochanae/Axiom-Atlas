@@ -42,6 +42,14 @@ function appendSessionSummary(store: MemoryStore, text: string): MemoryStore {
   return { ...store, entries: [...store.entries, entry] };
 }
 
+function serializeMessage(m: typeof chatMessagesTable.$inferSelect) {
+  return {
+    ...m,
+    costUsd: m.costUsd == null ? null : Number(m.costUsd),
+    createdAt: m.createdAt.toISOString(),
+  };
+}
+
 // Verify that a project exists and is owned by the given userId.
 async function projectBelongsToUser(projectId: number, userId: number): Promise<boolean> {
   const rows = await db
@@ -135,10 +143,7 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
       createdAt: session.createdAt.toISOString(),
       updatedAt: session.updatedAt.toISOString(),
     },
-    messages: messages.map(m => ({
-      ...m,
-      createdAt: m.createdAt.toISOString(),
-    })),
+    messages: messages.map(serializeMessage),
   });
 });
 
@@ -221,10 +226,7 @@ router.get("/sessions/:sessionId/messages", async (req, res): Promise<void> => {
     .from(chatMessagesTable)
     .where(eq(chatMessagesTable.sessionId, params.data.sessionId))
     .orderBy(chatMessagesTable.createdAt);
-  res.json(messages.map(m => ({
-    ...m,
-    createdAt: m.createdAt.toISOString(),
-  })));
+  res.json(messages.map(serializeMessage));
 });
 
 // POST /sessions/:id/summarize — write a session memory snapshot to project memory.
