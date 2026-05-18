@@ -16,6 +16,21 @@ import {
 
 const router: IRouter = Router();
 
+let projectEntityTypeSchemaReady = false;
+
+async function ensureProjectEntityTypeSchema(): Promise<void> {
+  if (projectEntityTypeSchemaReady) return;
+  await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "entity_type" text DEFAULT 'project' NOT NULL`);
+  await db.execute(sql`
+    DO $$ BEGIN
+      ALTER TABLE "projects" ADD CONSTRAINT "projects_entity_type_check" CHECK ("entity_type" IN ('project', 'idea'));
+    EXCEPTION
+      WHEN duplicate_object THEN null;
+    END $$
+  `);
+  projectEntityTypeSchemaReady = true;
+}
+
 type MapNode = {
   id: string;
   label: string;
@@ -59,6 +74,7 @@ function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = f
 
 router.get("/projects", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
+  await ensureProjectEntityTypeSchema();
 
   const projects = await db
     .select()
@@ -119,6 +135,7 @@ router.post("/projects", async (req, res): Promise<void> => {
 
   const userId = (req as any).authUser.id as number;
   const authUser = (req as any).authUser;
+  await ensureProjectEntityTypeSchema();
 
   if (authUser?.subscriptionTier === "free" && authUser?.role !== "super_admin") {
     const [{ count }] = await db
