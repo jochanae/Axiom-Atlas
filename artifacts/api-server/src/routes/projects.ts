@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, and, isNotNull, inArray } from "drizzle-orm";
-import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable } from "@workspace/db";
+import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable } from "@workspace/db";
 import { encryptToken, decryptToken } from "../lib/tokenCrypto";
 import {
   CreateProjectBody,
@@ -15,6 +15,33 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+type MapNode = {
+  id: string;
+  label: string;
+  subType: "SPRINT" | "DECISION" | "BLOCKER" | "OPEN_QUESTION" | "OPPORTUNITY" | "RISK" | "BLUEPRINT" | "NEXT_STEP";
+  status?: string;
+  description?: string;
+};
+
+type BlueprintContent = {
+  opportunity?: unknown;
+  risks?: unknown;
+  openQuestions?: unknown;
+  nextSteps?: unknown;
+};
+
+function asBlueprintContent(value: unknown): BlueprintContent {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as BlueprintContent
+    : {};
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+}
 
 // Strip GitHub token from outbound project objects — never expose it in list responses.
 // The token is returned in single-project GET only (owner-scoped via tenant isolation).
@@ -134,6 +161,135 @@ router.post("/projects", async (req, res): Promise<void> => {
   }
 
   res.status(201).json(serializeProject(project, true));
+});
+
+router.get("/projects/:id/map-nodes", async (req, res): Promise<void> => {
+  const params = GetProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const userId = (req as any).authUser.id as number;
+  const projectId = params.data.id;
+  const [project] = await db
+    .select({ id: projectsTable.id, entityType: projectsTable.entityType })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+    .limit(1);
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const entityType = project.entityType === "idea" ? "idea" : "project";
+  const nodes: MapNode[] = [];
+
+  if (entityType === "project") {
+    const [sprints, decisions, blockers, openQuestions] = await Promise.all([
+      db
+        .select({ id: entriesTable.id, title: entriesTable.title, status: entriesTable.status })
+        .from(entriesTable)
+        .where(and(
+          eq(entriesTable.projectId, projectId),
+          sql`(upper(${entriesTable.mode}) = 'BUILD' OR lower(${entriesTable.title}) LIKE '%sprint%')`,
+        )),
+      db
+        .select({ id: entriesTable.id, title: entriesTable.title })
+        .from(entriesTable)
+        .where(and(eq(entriesTable.projectId, projectId), eq(entriesTable.status, "committed"))),
+      db
+        .select({ id: entriesTable.id, title: entriesTable.title, status: entriesTable.status })
+        .from(entriesTable)
+        .where(and(
+          eq(entriesTable.projectId, projectId),
+          eq(entriesTable.status, "committed"),
+          sql`(lower(${entriesTable.title}) LIKE '%block%' OR lower(${entriesTable.severity}) = 'blocker')`,
+        )),
+      db
+        .select({ id: entriesTable.id, title: entriesTable.title })
+        .from(entriesTable)
+        .where(and(eq(entriesTable.projectId, projectId), eq(entriesTable.status, "parked")))
+        .orderBy(desc(entriesTable.createdAt))
+        .limit(5),
+    ]);
+
+    nodes.push(
+      ...sprints.map((entry): MapNode => ({
+        id: `sprint-${entry.id}`,
+        label: entry.title,
+        subType: "SPRINT",
+        status: entry.status,
+      })),
+      ...decisions.map((entry): MapNode => ({
+        id: `decision-${entry.id}`,
+        label: entry.title,
+        subType: "DECISION",
+        status: "completed",
+      })),
+      ...blockers.map((entry): MapNode => ({
+        id: `blocker-${entry.id}`,
+        label: entry.title,
+        subType: "BLOCKER",
+        status: entry.status,
+      })),
+      ...openQuestions.map((entry): MapNode => ({
+        id: `open-question-${entry.id}`,
+        label: entry.title,
+        subType: "OPEN_QUESTION",
+        status: "backlog",
+      })),
+    );
+  } else {
+    const [blueprint] = await db
+      .select({ id: blueprintsTable.id, title: blueprintsTable.title, content: blueprintsTable.content })
+      .from(blueprintsTable)
+      .where(and(eq(blueprintsTable.projectId, projectId), eq(blueprintsTable.userId, userId)))
+      .orderBy(desc(blueprintsTable.createdAt))
+      .limit(1);
+
+    if (blueprint) {
+      const content = asBlueprintContent(blueprint.content);
+      if (typeof content.opportunity === "string" && content.opportunity.trim().length > 0) {
+        nodes.push({
+          id: `opp-${projectId}`,
+          label: "The Opportunity",
+          subType: "OPPORTUNITY",
+          description: content.opportunity,
+        });
+      }
+
+      nodes.push(
+        ...stringArray(content.risks).map((risk, index): MapNode => ({
+          id: `risk-${index}`,
+          label: risk,
+          subType: "RISK",
+          status: "active",
+        })),
+        ...stringArray(content.openQuestions).map((question, index): MapNode => ({
+          id: `oq-${index}`,
+          label: question,
+          subType: "OPEN_QUESTION",
+          status: "backlog",
+        })),
+        {
+          id: `bp-${blueprint.id}`,
+          label: blueprint.title,
+          subType: "BLUEPRINT",
+          status: "completed",
+        },
+        ...stringArray(content.nextSteps).map((step, index): MapNode => ({
+          id: `ns-${index}`,
+          label: step,
+          subType: "NEXT_STEP",
+          status: "backlog",
+        })),
+      );
+    }
+  }
+
+  res.json({ projectId, entityType, nodes });
 });
 
 router.get("/projects/:id", async (req, res): Promise<void> => {
