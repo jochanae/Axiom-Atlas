@@ -71,6 +71,13 @@
       "when": 1779100000000,
       "tag": "0009_session_reflection_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779103600000,
+      "tag": "0010_session_idea_mode",
+      "breakpoints": true
     }
   ]
 }
