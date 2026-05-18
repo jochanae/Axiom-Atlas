@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, jsonb, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { projectsTable } from "./projects";
@@ -14,6 +14,14 @@ export const nexusMessagesTable = pgTable("nexus_messages", {
   content: text("content").notNull(),
   conversationId: text("conversation_id"),
   messageType: text("message_type").default("message"),
+  executionTimeMs: integer("execution_time_ms"),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  costUsd: numeric("cost_usd", { precision: 10, scale: 5 }),
+  runStatus: text("run_status"),
+  runSummary: text("run_summary"),
+  runActions: jsonb("run_actions"),
+  runArtifacts: jsonb("run_artifacts"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

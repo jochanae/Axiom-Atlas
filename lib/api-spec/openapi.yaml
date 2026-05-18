@@ -821,6 +821,21 @@ components:
           type: ["integer", "null"]
         costUsd:
           type: ["number", "null"]
+        runStatus:
+          type: ["string", "null"]
+          enum: [completed, warnings, failed, cancelled, null]
+        runSummary:
+          type: ["string", "null"]
+        runActions:
+          type: ["array", "null"]
+          items:
+            type: object
+            additionalProperties: true
+        runArtifacts:
+          type: ["array", "null"]
+          items:
+            type: object
+            additionalProperties: true
         createdAt:
           type: string
       required:
@@ -1107,6 +1122,29 @@ components:
           type: integer
         content:
           type: string
+        executionTimeMs:
+          type: ["integer", "null"]
+        inputTokens:
+          type: ["integer", "null"]
+        outputTokens:
+          type: ["integer", "null"]
+        costUsd:
+          type: ["number", "null"]
+        runStatus:
+          type: ["string", "null"]
+          enum: [completed, warnings, failed, cancelled, null]
+        runSummary:
+          type: ["string", "null"]
+        runActions:
+          type: ["array", "null"]
+          items:
+            type: object
+            additionalProperties: true
+        runArtifacts:
+          type: ["array", "null"]
+          items:
+            type: object
+            additionalProperties: true
         createdAt:
           type: string
       required:
@@ -1295,6 +1333,21 @@ components:
           type: string
         memoryUpdated:
           type: boolean
+        runStatus:
+          type: string
+          enum: [completed, warnings, failed, cancelled]
+        runSummary:
+          type: ["string", "null"]
+        runActions:
+          type: ["array", "null"]
+          items:
+            type: object
+            additionalProperties: true
+        runArtifacts:
+          type: ["array", "null"]
+          items:
+            type: object
+            additionalProperties: true
       required:
         - response
         - memoryUpdated

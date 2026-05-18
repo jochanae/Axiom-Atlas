@@ -14,6 +14,10 @@ export const chatMessagesTable = pgTable("chat_messages", {
   inputTokens: integer("input_tokens"),
   outputTokens: integer("output_tokens"),
   costUsd: numeric("cost_usd", { precision: 10, scale: 5 }),
+  runStatus: text("run_status"),
+  runSummary: text("run_summary"),
+  runActions: jsonb("run_actions"),
+  runArtifacts: jsonb("run_artifacts"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -383,6 +383,10 @@ export const ListMessagesResponseItem = zod.object({
   inputTokens: zod.number().nullish(),
   outputTokens: zod.number().nullish(),
   costUsd: zod.number().nullish(),
+  runStatus: zod.enum(["completed", "warnings", "failed", "cancelled"]).nullish(),
+  runSummary: zod.string().nullish(),
+  runActions: zod.array(zod.object({}).passthrough()).nullish(),
+  runArtifacts: zod.array(zod.object({}).passthrough()).nullish(),
   createdAt: zod.string(),
 });
 export const ListMessagesResponse = zod.array(ListMessagesResponseItem);
@@ -592,6 +596,14 @@ export const GetNexusThreadResponseItem = zod.object({
   id: zod.number(),
   role: zod.enum(["user", "assistant"]),
   content: zod.string(),
+  executionTimeMs: zod.number().nullish(),
+  inputTokens: zod.number().nullish(),
+  outputTokens: zod.number().nullish(),
+  costUsd: zod.number().nullish(),
+  runStatus: zod.enum(["completed", "warnings", "failed", "cancelled"]).nullish(),
+  runSummary: zod.string().nullish(),
+  runActions: zod.array(zod.object({}).passthrough()).nullish(),
+  runArtifacts: zod.array(zod.object({}).passthrough()).nullish(),
   createdAt: zod.string(),
 });
 export const GetNexusThreadResponse = zod.array(GetNexusThreadResponseItem);
@@ -615,4 +627,8 @@ export const SendNexusMessageBody = zod.object({
 export const SendNexusMessageResponse = zod.object({
   response: zod.string(),
   memoryUpdated: zod.boolean(),
+  runStatus: zod.enum(["completed", "warnings", "failed", "cancelled"]).optional(),
+  runSummary: zod.string().nullish(),
+  runActions: zod.array(zod.object({}).passthrough()).nullish(),
+  runArtifacts: zod.array(zod.object({}).passthrough()).nullish(),
 });
