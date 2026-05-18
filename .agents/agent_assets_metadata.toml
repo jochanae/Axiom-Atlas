@@ -24,3 +24,9 @@ id = "3GG18VwehfnWmTZVHBBn0"
 uri = "file://screenshots/atlas-social-preview.jpg"
 type = "image"
 title = "Atlas-v2 Social Preview (1280×640)"
+
+[[outputs]]
+id = "cQzSwyLRt9XofwL1p8NaO"
+uri = "file://.local/exports/workspace-cursor-prompt.txt"
+type = "text"
+title = "workspace-cursor-prompt.txt — paste into Cursor"
