@@ -30,3 +30,9 @@ id = "cQzSwyLRt9XofwL1p8NaO"
 uri = "file://.local/exports/workspace-cursor-prompt.txt"
 type = "text"
 title = "workspace-cursor-prompt.txt — paste into Cursor"
+
+[[outputs]]
+id = "0C2pEgYBICLb__vDbeo2R"
+uri = "file://.local/exports/neon-migration.txt"
+type = "text"
+title = "neon-migration.txt — paste into Neon SQL editor"
