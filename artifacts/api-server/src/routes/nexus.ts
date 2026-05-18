@@ -6,6 +6,7 @@ import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, type SQL } from "d
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { findSemanticTensionsForProject } from "./tensions";
+import { calculateModelCostUsd } from "../pricing";
 
 const router: IRouter = Router();
 
@@ -24,6 +25,32 @@ type HandoffSignal = {
 };
 
 type HomeUserType = "idea" | "building" | "clients" | "portfolio";
+
+type RunStatus = "completed" | "warnings" | "failed" | "cancelled";
+
+type RunAction = {
+  verb: string;
+  target?: string;
+  status?: "ok" | "warn" | "fail";
+};
+
+type RunArtifact = {
+  type: "commit" | "file" | "url" | "pr";
+  label: string;
+  href?: string;
+  meta?: string;
+};
+
+type NexusRunMetadata = {
+  executionTimeMs?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  costUsd?: number | null;
+  runStatus: RunStatus;
+  runSummary?: string | null;
+  runActions?: RunAction[] | null;
+  runArtifacts?: RunArtifact[] | null;
+};
 
 type FocusLedgerEntry = {
   id: number;
@@ -675,6 +702,54 @@ function computeBlendedReadiness(architectureScore: number, decisionsScore: numb
   return Math.round(architectureScore * 0.6 + decisionsScore * 0.4);
 }
 
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function extractRunSummary(content: string): string {
+  const cleaned = content
+    .replace(/```[\s\S]*?```/g, "")
+    .split("\n")
+    .map((line) => line.replace(/^#+\s*/, "").replace(/^[-*•]\s*/, "").trim())
+    .find((line) => line.length > 0);
+  if (!cleaned) return "Atlas response completed.";
+  return cleaned.length > 120 ? `${cleaned.slice(0, 117).trim()}...` : cleaned;
+}
+
+function resolveRunStatus(actions?: RunAction[] | null): RunStatus {
+  if (!actions?.length) return "completed";
+  if (actions.some((action) => action.status === "fail")) return "failed";
+  if (actions.some((action) => action.status === "warn")) return "warnings";
+  return "completed";
+}
+
+function buildRunMetadata(content: string, usage: Partial<NexusRunMetadata> = {}): NexusRunMetadata {
+  const runActions = usage.runActions ?? null;
+  return {
+    executionTimeMs: usage.executionTimeMs ?? null,
+    inputTokens: usage.inputTokens ?? null,
+    outputTokens: usage.outputTokens ?? null,
+    costUsd: usage.costUsd ?? null,
+    runStatus: usage.runStatus ?? resolveRunStatus(runActions),
+    runSummary: usage.runSummary ?? extractRunSummary(content),
+    runActions,
+    runArtifacts: usage.runArtifacts ?? null,
+  };
+}
+
+function failedRunMetadata(summary: string, status: RunStatus = "failed"): NexusRunMetadata {
+  return {
+    executionTimeMs: null,
+    inputTokens: null,
+    outputTokens: null,
+    costUsd: null,
+    runStatus: status,
+    runSummary: summary,
+    runActions: [{ verb: status === "cancelled" ? "Cancelled" : "Failed", target: "Atlas response", status: status === "cancelled" ? "warn" : "fail" }],
+    runArtifacts: null,
+  };
+}
+
 type NexusMessageRow = {
   id: number;
   userId: number;
@@ -682,10 +757,19 @@ type NexusMessageRow = {
   content: string;
   conversationId: string | null;
   messageType: string | null;
+  executionTimeMs: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: number | string | null;
+  runStatus: string | null;
+  runSummary: string | null;
+  runActions: unknown;
+  runArtifacts: unknown;
   createdAt: Date;
 };
 
 let nexusMessageTypeColumnExistsCache: boolean | null = null;
+let nexusRunMetadataColumnsExistCache: boolean | null = null;
 
 async function hasNexusMessageTypeColumn(): Promise<boolean> {
   if (nexusMessageTypeColumnExistsCache !== null) return nexusMessageTypeColumnExistsCache;
@@ -705,6 +789,35 @@ async function hasNexusMessageTypeColumn(): Promise<boolean> {
   return nexusMessageTypeColumnExistsCache;
 }
 
+async function hasNexusRunMetadataColumns(): Promise<boolean> {
+  if (nexusRunMetadataColumnsExistCache !== null) return nexusRunMetadataColumnsExistCache;
+  try {
+    const rows = await db.execute(sql`
+      SELECT count(*)::int AS count
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'nexus_messages'
+        AND column_name IN (
+          'execution_time_ms',
+          'input_tokens',
+          'output_tokens',
+          'cost_usd',
+          'run_status',
+          'run_summary',
+          'run_actions',
+          'run_artifacts'
+        )
+    `);
+    const count = Array.isArray(rows)
+      ? Number((rows[0] as any)?.count ?? 0)
+      : Number((rows as any).rows?.[0]?.count ?? 0);
+    nexusRunMetadataColumnsExistCache = count >= 8;
+  } catch {
+    nexusRunMetadataColumnsExistCache = false;
+  }
+  return nexusRunMetadataColumnsExistCache;
+}
+
 function nonBriefingMessages(whereClause: SQL | undefined, hasMessageType = true) {
   if (!hasMessageType) return whereClause;
   return and(
@@ -721,7 +834,7 @@ function conversationMessages(whereClause: SQL | undefined, reflectionMode: bool
     : nonBriefingMessages(whereClause, hasMessageType);
 }
 
-async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: boolean): Promise<NexusMessageRow[]> {
+async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: boolean, hasRunMetadata: boolean): Promise<NexusMessageRow[]> {
   const baseSelect = {
     id: nexusMessagesTable.id,
     userId: nexusMessagesTable.userId,
@@ -730,21 +843,71 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     conversationId: nexusMessagesTable.conversationId,
     createdAt: nexusMessagesTable.createdAt,
   };
+  const withMetadataSelect = {
+    ...baseSelect,
+    executionTimeMs: nexusMessagesTable.executionTimeMs,
+    inputTokens: nexusMessagesTable.inputTokens,
+    outputTokens: nexusMessagesTable.outputTokens,
+    costUsd: nexusMessagesTable.costUsd,
+    runStatus: nexusMessagesTable.runStatus,
+    runSummary: nexusMessagesTable.runSummary,
+    runActions: nexusMessagesTable.runActions,
+    runArtifacts: nexusMessagesTable.runArtifacts,
+  };
 
   if (!hasMessageType) {
+    if (hasRunMetadata) {
+      const rows = await db
+        .select(withMetadataSelect)
+        .from(nexusMessagesTable)
+        .where(whereClause)
+        .orderBy(asc(nexusMessagesTable.createdAt));
+      return rows.map((row) => ({ ...row, messageType: null }));
+    }
     const rows = await db
       .select(baseSelect)
       .from(nexusMessagesTable)
       .where(whereClause)
       .orderBy(asc(nexusMessagesTable.createdAt));
-    return rows.map((row) => ({ ...row, messageType: null }));
+    return rows.map((row) => ({
+      ...row,
+      messageType: null,
+      executionTimeMs: null,
+      inputTokens: null,
+      outputTokens: null,
+      costUsd: null,
+      runStatus: null,
+      runSummary: null,
+      runActions: null,
+      runArtifacts: null,
+    }));
   }
 
-  return db
+  if (hasRunMetadata) {
+    const rows = await db
+      .select({ ...withMetadataSelect, messageType: nexusMessagesTable.messageType })
+      .from(nexusMessagesTable)
+      .where(whereClause)
+      .orderBy(asc(nexusMessagesTable.createdAt));
+    return rows;
+  }
+
+  const rows = await db
     .select({ ...baseSelect, messageType: nexusMessagesTable.messageType })
     .from(nexusMessagesTable)
     .where(whereClause)
     .orderBy(asc(nexusMessagesTable.createdAt));
+  return rows.map((row) => ({
+    ...row,
+    executionTimeMs: null,
+    inputTokens: null,
+    outputTokens: null,
+    costUsd: null,
+    runStatus: null,
+    runSummary: null,
+    runActions: null,
+    runArtifacts: null,
+  }));
 }
 
 // GET /api/nexus/thread — return a conversation thread (optionally scoped by conversationId)
@@ -763,7 +926,8 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
         : eq(nexusMessagesTable.userId, userId);
 
     const hasMessageType = await hasNexusMessageTypeColumn();
-    const messages = await loadNexusMessages(nonBriefingMessages(whereClause, hasMessageType), hasMessageType);
+    const hasRunMetadata = await hasNexusRunMetadataColumns();
+    const messages = await loadNexusMessages(nonBriefingMessages(whereClause, hasMessageType), hasMessageType, hasRunMetadata);
 
     if (messages.length === 0 && conversationId && conversationId !== "__legacy__") {
       const [existingBriefing] = hasMessageType
@@ -814,6 +978,22 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
         role: savedOpening.role,
         content: savedOpening.content,
         isBriefing: hasMessageType && "messageType" in savedOpening ? savedOpening.messageType === "briefing" : true,
+        executionTimeMs: null,
+        inputTokens: null,
+        outputTokens: null,
+        costUsd: null,
+        runStatus: null,
+        runSummary: null,
+        runActions: null,
+        runArtifacts: null,
+        execution_time_ms: null,
+        input_tokens: null,
+        output_tokens: null,
+        cost_usd: null,
+        run_status: null,
+        run_summary: null,
+        run_actions: null,
+        run_artifacts: null,
         createdAt: savedOpening.createdAt.toISOString(),
       }]);
       return;
@@ -824,6 +1004,22 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
       role: m.role,
       content: m.content,
       isBriefing: m.messageType === "briefing",
+      executionTimeMs: m.executionTimeMs,
+      inputTokens: m.inputTokens,
+      outputTokens: m.outputTokens,
+      costUsd: m.costUsd == null ? null : Number(m.costUsd),
+      runStatus: m.runStatus,
+      runSummary: m.runSummary,
+      runActions: m.runActions,
+      runArtifacts: m.runArtifacts,
+      execution_time_ms: m.executionTimeMs,
+      input_tokens: m.inputTokens,
+      output_tokens: m.outputTokens,
+      cost_usd: m.costUsd == null ? null : Number(m.costUsd),
+      run_status: m.runStatus,
+      run_summary: m.runSummary,
+      run_actions: m.runActions,
+      run_artifacts: m.runArtifacts,
       createdAt: m.createdAt.toISOString(),
     })));
     return;
@@ -983,6 +1179,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   let ideaMode = sessionContext[0]?.ideaMode === true;
   const focusProjectId = requestedFocusProjectId ?? sessionContext[0]?.projectId ?? null;
   const hasMessageType = await hasNexusMessageTypeColumn();
+  const hasRunMetadata = await hasNexusRunMetadataColumns();
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -997,6 +1194,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
           ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
           : eq(nexusMessagesTable.userId, userId), reflectionMode, hasMessageType),
       hasMessageType,
+      hasRunMetadata,
     ),
   ]);
 
@@ -1231,10 +1429,16 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
+  let modelStartedAt = performance.now();
+  let modelUsage: Partial<NexusRunMetadata> = {};
+  let streamDone = false;
+
   const finishStream = async (rawContent: string) => {
+    streamDone = true;
     // Strip MEMORY_Tn tags from persisted output
     const { content: visibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
     const memoryUpdated = reflectionMode ? false : parsedMemoryUpdated;
+    const runMetadata = buildRunMetadata(visibleContent, modelUsage);
 
     // Detect active mode from Atlas's response
     const lowerContent = visibleContent.toLowerCase();
@@ -1276,11 +1480,36 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       sessionId,
       conversationId: conversationId ?? null,
       ...(hasMessageType ? { messageType: reflectionMode ? "reflection" : "message" } : {}),
+      ...(hasRunMetadata ? {
+        executionTimeMs: runMetadata.executionTimeMs ?? null,
+        inputTokens: runMetadata.inputTokens ?? null,
+        outputTokens: runMetadata.outputTokens ?? null,
+        costUsd: runMetadata.costUsd == null ? null : runMetadata.costUsd.toFixed(5),
+        runStatus: runMetadata.runStatus,
+        runSummary: runMetadata.runSummary ?? null,
+        runActions: runMetadata.runActions ?? null,
+        runArtifacts: runMetadata.runArtifacts ?? null,
+      } : {}),
     });
 
-    res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}) })}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
     res.end();
   };
+
+  const failStream = async (summary: string, status: RunStatus = "failed") => {
+    if (streamDone || res.writableEnded || res.destroyed) return;
+    streamDone = true;
+    const metadata = failedRunMetadata(summary, status);
+    res.write(`event: done\ndata: ${JSON.stringify({
+      memoryUpdated: false,
+      detectedMode: "strategic",
+      ...metadata,
+    })}\n\n`);
+    res.end();
+  };
+  req.on("aborted", () => {
+    void failStream("Run cancelled by the user.", "cancelled");
+  });
 
   // Call the selected model
   const activeModel = model === "gemini" ? "gemini" : "claude";
@@ -1291,6 +1520,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ...conversationHistory.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`),
       `User: ${message}`,
     ].join("\n\n");
+    modelStartedAt = performance.now();
     if (imageBase64 && imageMimeType) {
       const result = await genai.models.generateContent({
         model: "gemini-2.5-pro",
@@ -1298,6 +1528,16 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         config: { systemInstruction: systemPrompt },
       });
       rawContent = result.text ?? "";
+      const usageMetadata = (result as any).usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | undefined;
+      const inputTokens = nullableNumber(usageMetadata?.promptTokenCount);
+      const outputTokens = nullableNumber(usageMetadata?.candidatesTokenCount)
+        ?? (usageMetadata?.totalTokenCount != null && inputTokens != null ? Math.max(usageMetadata.totalTokenCount - inputTokens, 0) : null);
+      modelUsage = {
+        executionTimeMs: Math.max(1, Math.round(performance.now() - modelStartedAt)),
+        inputTokens,
+        outputTokens,
+        costUsd: calculateModelCostUsd("gemini-2.5-pro", inputTokens, outputTokens),
+      };
     } else {
       const result = await genai.models.generateContent({
         model: "gemini-2.5-pro",
@@ -1305,6 +1545,16 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         config: { systemInstruction: systemPrompt },
       });
       rawContent = result.text ?? "";
+      const usageMetadata = (result as any).usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | undefined;
+      const inputTokens = nullableNumber(usageMetadata?.promptTokenCount);
+      const outputTokens = nullableNumber(usageMetadata?.candidatesTokenCount)
+        ?? (usageMetadata?.totalTokenCount != null && inputTokens != null ? Math.max(usageMetadata.totalTokenCount - inputTokens, 0) : null);
+      modelUsage = {
+        executionTimeMs: Math.max(1, Math.round(performance.now() - modelStartedAt)),
+        inputTokens,
+        outputTokens,
+        costUsd: calculateModelCostUsd("gemini-2.5-pro", inputTokens, outputTokens),
+      };
     }
     res.write(`event: token\ndata: ${JSON.stringify(rawContent)}\n\n`);
     await finishStream(rawContent);
@@ -1371,6 +1621,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     { role: "user", content: userContent },
   ];
 
+  modelStartedAt = performance.now();
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
@@ -1386,17 +1637,24 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   });
 
   stream.on("error", (err) => {
-    res.write(`event: error\ndata: ${JSON.stringify(err.message)}\n\n`);
-    res.end();
+    const cancelled = /\b(abort|cancel|cancelled|canceled)\b/i.test(err.message);
+    void failStream(err.message || "Atlas ran into an issue.", cancelled ? "cancelled" : "failed");
   });
 
-  stream.on("finalMessage", async () => {
+  stream.on("finalMessage", async (message) => {
     try {
+      const inputTokens = nullableNumber((message as any)?.usage?.input_tokens);
+      const outputTokens = nullableNumber((message as any)?.usage?.output_tokens);
+      modelUsage = {
+        executionTimeMs: Math.max(1, Math.round(performance.now() - modelStartedAt)),
+        inputTokens,
+        outputTokens,
+        costUsd: calculateModelCostUsd("claude-sonnet-4-6", inputTokens, outputTokens),
+      };
       await finishStream(fullText);
     } catch (err) {
       req.log.error({ err }, "nexus/chat stream finalization error");
-      res.write(`event: error\ndata: ${JSON.stringify("Atlas ran into an issue. Please try again.")}\n\n`);
-      res.end();
+      await failStream("Atlas ran into an issue. Please try again.", "failed");
     }
   });
 
@@ -1405,7 +1663,12 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   } catch (err) {
     req.log.error({ err }, "nexus/chat error");
     if (res.headersSent && !res.writableEnded) {
-      res.write(`event: error\ndata: ${JSON.stringify("Atlas ran into an issue. Please try again.")}\n\n`);
+      const metadata = failedRunMetadata("Atlas ran into an issue. Please try again.", "failed");
+      res.write(`event: done\ndata: ${JSON.stringify({
+        memoryUpdated: false,
+        detectedMode: "strategic",
+        ...metadata,
+      })}\n\n`);
       res.end();
     } else if (!res.headersSent) {
       res.status(500).json({ error: "Atlas ran into an issue. Please try again." });

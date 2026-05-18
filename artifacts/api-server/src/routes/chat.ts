@@ -1109,6 +1109,25 @@ function usageInsertValues(usage: ModelCallUsage) {
   };
 }
 
+function runSummaryFromContent(content: string): string {
+  const line = content
+    .replace(/```[\s\S]*?```/g, "")
+    .split("\n")
+    .map((part) => part.replace(/^#+\s*/, "").replace(/^[-*•]\s*/, "").trim())
+    .find(Boolean);
+  if (!line) return "Atlas response completed.";
+  return line.length > 120 ? `${line.slice(0, 117).trim()}...` : line;
+}
+
+function runMetadataInsertValues(content: string) {
+  return {
+    runStatus: "completed",
+    runSummary: runSummaryFromContent(content),
+    runActions: null,
+    runArtifacts: null,
+  };
+}
+
 async function callModel(
   modelId: ModelId,
   systemPrompt: string,
@@ -1596,6 +1615,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       content: diveResult.content,
       intentType: "EXPLORE",
       ...usageInsertValues(diveResult.usage),
+      ...runMetadataInsertValues(diveResult.content),
     }).returning();
     await db.update(sessionsTable).set({ messageCount: sql`${sessionsTable.messageCount} + 2` }).where(eq(sessionsTable.id, sessionId));
     res.json({ content: diveResult.content, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
@@ -1832,6 +1852,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         intentType: detectedIntentType,
         catchPayload: undefined,
         ...usageInsertValues(assistantUsage),
+        ...runMetadataInsertValues(persistContent),
       })
       .returning();
     savedMsgId = savedMsg.id;
