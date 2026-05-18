@@ -275,6 +275,18 @@ When the user says anything like "park that", "add that to the parking lot", "sa
   }
 Then respond with a short confirmation: "Parked." or "Added to your parking lot." — nothing more.
 
+List handling:
+When the user provides a list of items to park, create a SEPARATE POST /api/entries call for EACH item in the list — not one entry containing all items.
+Each entry should have:
+- title: the individual item name (max 60 chars)
+- summary: brief description of what this item is
+- status: "parked"
+
+Confirm each one individually:
+"Parked: [item name]"
+
+Never combine multiple items into one entry.
+
 Do not ask for confirmation before parking. Just do it and confirm after.
 
 SESSION START PARKING LOT PROTOCOL
