@@ -675,7 +675,38 @@ function computeBlendedReadiness(architectureScore: number, decisionsScore: numb
   return Math.round(architectureScore * 0.6 + decisionsScore * 0.4);
 }
 
-function nonBriefingMessages(whereClause: SQL | undefined) {
+type NexusMessageRow = {
+  id: number;
+  userId: number;
+  role: string;
+  content: string;
+  conversationId: string | null;
+  messageType: string | null;
+  createdAt: Date;
+};
+
+let nexusMessageTypeColumnExistsCache: boolean | null = null;
+
+async function hasNexusMessageTypeColumn(): Promise<boolean> {
+  if (nexusMessageTypeColumnExistsCache !== null) return nexusMessageTypeColumnExistsCache;
+  try {
+    const rows = await db.execute(sql`
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'nexus_messages'
+        AND column_name = 'message_type'
+      LIMIT 1
+    `);
+    nexusMessageTypeColumnExistsCache = Array.isArray(rows) ? rows.length > 0 : (rows as any).rowCount > 0;
+  } catch {
+    nexusMessageTypeColumnExistsCache = false;
+  }
+  return nexusMessageTypeColumnExistsCache;
+}
+
+function nonBriefingMessages(whereClause: SQL | undefined, hasMessageType = true) {
+  if (!hasMessageType) return whereClause;
   return and(
     whereClause,
     sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
@@ -683,10 +714,37 @@ function nonBriefingMessages(whereClause: SQL | undefined) {
   );
 }
 
-function conversationMessages(whereClause: SQL | undefined, reflectionMode: boolean) {
+function conversationMessages(whereClause: SQL | undefined, reflectionMode: boolean, hasMessageType = true) {
+  if (!hasMessageType) return whereClause;
   return reflectionMode
     ? and(whereClause, eq(nexusMessagesTable.messageType, "reflection"))
-    : nonBriefingMessages(whereClause);
+    : nonBriefingMessages(whereClause, hasMessageType);
+}
+
+async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: boolean): Promise<NexusMessageRow[]> {
+  const baseSelect = {
+    id: nexusMessagesTable.id,
+    userId: nexusMessagesTable.userId,
+    role: nexusMessagesTable.role,
+    content: nexusMessagesTable.content,
+    conversationId: nexusMessagesTable.conversationId,
+    createdAt: nexusMessagesTable.createdAt,
+  };
+
+  if (!hasMessageType) {
+    const rows = await db
+      .select(baseSelect)
+      .from(nexusMessagesTable)
+      .where(whereClause)
+      .orderBy(asc(nexusMessagesTable.createdAt));
+    return rows.map((row) => ({ ...row, messageType: null }));
+  }
+
+  return db
+    .select({ ...baseSelect, messageType: nexusMessagesTable.messageType })
+    .from(nexusMessagesTable)
+    .where(whereClause)
+    .orderBy(asc(nexusMessagesTable.createdAt));
 }
 
 // GET /api/nexus/thread — return a conversation thread (optionally scoped by conversationId)
@@ -704,18 +762,17 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
         ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
         : eq(nexusMessagesTable.userId, userId);
 
-    const messages = await db
-      .select()
-      .from(nexusMessagesTable)
-      .where(nonBriefingMessages(whereClause))
-      .orderBy(asc(nexusMessagesTable.createdAt));
+    const hasMessageType = await hasNexusMessageTypeColumn();
+    const messages = await loadNexusMessages(nonBriefingMessages(whereClause, hasMessageType), hasMessageType);
 
     if (messages.length === 0 && conversationId && conversationId !== "__legacy__") {
-      const [existingBriefing] = await db
-        .select({ id: nexusMessagesTable.id })
-        .from(nexusMessagesTable)
-        .where(and(whereClause, eq(nexusMessagesTable.messageType, "briefing")))
-        .limit(1);
+      const [existingBriefing] = hasMessageType
+        ? await db
+            .select({ id: nexusMessagesTable.id })
+            .from(nexusMessagesTable)
+            .where(and(whereClause, eq(nexusMessagesTable.messageType, "briefing")))
+            .limit(1)
+        : [];
       if (existingBriefing) {
         res.json([]);
         return;
@@ -732,15 +789,31 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
         .orderBy(desc(projectsTable.updatedAt))
         .limit(1);
       const opening = await generateHomeOpening(project?.name ?? null, userType);
-      const [savedOpening] = await db
-        .insert(nexusMessagesTable)
-        .values({ userId, role: "assistant", content: opening, conversationId, messageType: "briefing" })
-        .returning();
+      const [savedOpening] = hasMessageType
+        ? await db
+            .insert(nexusMessagesTable)
+            .values({ userId, role: "assistant", content: opening, conversationId, messageType: "briefing" })
+            .returning({
+              id: nexusMessagesTable.id,
+              role: nexusMessagesTable.role,
+              content: nexusMessagesTable.content,
+              messageType: nexusMessagesTable.messageType,
+              createdAt: nexusMessagesTable.createdAt,
+            })
+        : await db
+            .insert(nexusMessagesTable)
+            .values({ userId, role: "assistant", content: opening, conversationId })
+            .returning({
+              id: nexusMessagesTable.id,
+              role: nexusMessagesTable.role,
+              content: nexusMessagesTable.content,
+              createdAt: nexusMessagesTable.createdAt,
+            });
       res.json([{
         id: savedOpening.id,
         role: savedOpening.role,
         content: savedOpening.content,
-        isBriefing: true,
+        isBriefing: hasMessageType && "messageType" in savedOpening ? savedOpening.messageType === "briefing" : true,
         createdAt: savedOpening.createdAt.toISOString(),
       }]);
       return;
@@ -804,23 +877,37 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
   console.log("nexus/conversations userId:", (req as any).session?.userId);
   try {
     const userId = (req as any).authUser.id as number;
-    const rows = await db
-      .select({
-        id: nexusMessagesTable.conversationId,
-        title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' AND sub.message_type IS DISTINCT FROM 'reflection' ORDER BY sub.created_at ASC LIMIT 1)`,
-        createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
-        messageCount: sql<number>`COUNT(*)`,
-      })
-      .from(nexusMessagesTable)
-      .where(and(
-        eq(nexusMessagesTable.userId, userId),
-        isNotNull(nexusMessagesTable.conversationId),
-        sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
-        sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'reflection'`,
-      ))
-      .groupBy(nexusMessagesTable.conversationId)
-      .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
-      .limit(30);
+    const hasMessageType = await hasNexusMessageTypeColumn();
+    const rows = hasMessageType
+      ? await db
+          .select({
+            id: nexusMessagesTable.conversationId,
+            title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' AND sub.message_type IS DISTINCT FROM 'reflection' ORDER BY sub.created_at ASC LIMIT 1)`,
+            createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
+            messageCount: sql<number>`COUNT(*)`,
+          })
+          .from(nexusMessagesTable)
+          .where(and(
+            eq(nexusMessagesTable.userId, userId),
+            isNotNull(nexusMessagesTable.conversationId),
+            sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
+            sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'reflection'`,
+          ))
+          .groupBy(nexusMessagesTable.conversationId)
+          .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
+          .limit(30)
+      : await db
+          .select({
+            id: nexusMessagesTable.conversationId,
+            title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' ORDER BY sub.created_at ASC LIMIT 1)`,
+            createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
+            messageCount: sql<number>`COUNT(*)`,
+          })
+          .from(nexusMessagesTable)
+          .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId)))
+          .groupBy(nexusMessagesTable.conversationId)
+          .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
+          .limit(30);
     const conversations = rows.map(r => ({
       id: r.id,
       title: r.title ? r.title.slice(0, 60) : "Conversation",
@@ -895,6 +982,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const reflectionMode = sessionContext[0]?.reflectionMode === true;
   let ideaMode = sessionContext[0]?.ideaMode === true;
   const focusProjectId = requestedFocusProjectId ?? sessionContext[0]?.projectId ?? null;
+  const hasMessageType = await hasNexusMessageTypeColumn();
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -902,17 +990,14 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, nodeState: projectsTable.nodeState })
       .from(projectsTable)
       .where(eq(projectsTable.userId, userId)),
-    db
-      .select()
-      .from(nexusMessagesTable)
-      .where(
-        conversationMessages(conversationId === "__legacy__"
-          ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
-          : conversationId
-            ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
-            : eq(nexusMessagesTable.userId, userId), reflectionMode)
-      )
-      .orderBy(asc(nexusMessagesTable.createdAt)),
+    loadNexusMessages(
+      conversationMessages(conversationId === "__legacy__"
+        ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
+        : conversationId
+          ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
+          : eq(nexusMessagesTable.userId, userId), reflectionMode, hasMessageType),
+      hasMessageType,
+    ),
   ]);
 
   const shouldEnableIdeaMode = !reflectionMode && !ideaMode && (
@@ -1137,7 +1222,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     projectId: focusProjectId ?? null,
     sessionId,
     conversationId: conversationId ?? null,
-    messageType: reflectionMode ? "reflection" : "message",
+    ...(hasMessageType ? { messageType: reflectionMode ? "reflection" : "message" } : {}),
   });
 
   // Set SSE headers
@@ -1190,7 +1275,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       projectId: focusProjectId ?? null,
       sessionId,
       conversationId: conversationId ?? null,
-      messageType: reflectionMode ? "reflection" : "message",
+      ...(hasMessageType ? { messageType: reflectionMode ? "reflection" : "message" } : {}),
     });
 
     res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}) })}\n\n`);
