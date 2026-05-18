@@ -27,6 +27,7 @@ import errorlogRouter from "./errorlog";
 import selfmapRouter from "./selfmap";
 import forgeStateRouter from "./forge-state";
 import serverApiRouter from "./server-api";
+import tensionsRouter from "./tensions";
 
 const router: IRouter = Router();
 
@@ -59,6 +60,7 @@ router.use(requireAuth, forgeStateRouter);
 router.use(requireAuth, devserverRouter);
 router.use(requireAuth, importRouter);
 router.use(requireAuth, selfmapRouter);
+router.use(requireAuth, tensionsRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
