@@ -16,6 +16,14 @@ export const ProjectStatus = {
   archived: "archived",
 } as const;
 
+export type ProjectEntityType =
+  (typeof ProjectEntityType)[keyof typeof ProjectEntityType];
+
+export const ProjectEntityType = {
+  project: "project",
+  idea: "idea",
+} as const;
+
 export type ProjectNodeState = { [key: string]: unknown } | null;
 
 export interface Project {
@@ -24,6 +32,7 @@ export interface Project {
   /** @nullable */
   description?: string | null;
   status: ProjectStatus;
+  entityType: ProjectEntityType;
   /** @nullable */
   memory?: string | null;
   /** @nullable */
@@ -48,6 +57,7 @@ export interface CreateProjectBody {
   name: string;
   /** @nullable */
   description?: string | null;
+  entity_type?: ProjectEntityType;
 }
 
 export type UpdateProjectBodyStatus =

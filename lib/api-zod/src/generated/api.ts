@@ -148,6 +148,7 @@ export const ListProjectsResponseItem = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
   status: zod.enum(["active", "archived"]),
+  entityType: zod.enum(["project", "idea"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
   githubToken: zod.string().nullish(),
@@ -168,6 +169,7 @@ export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
 export const CreateProjectBody = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
+  entity_type: zod.enum(["project", "idea"]).optional(),
 });
 
 /**
@@ -182,6 +184,7 @@ export const GetProjectResponse = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
   status: zod.enum(["active", "archived"]),
+  entityType: zod.enum(["project", "idea"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
   githubToken: zod.string().nullish(),
@@ -221,6 +224,7 @@ export const UpdateProjectResponse = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
   status: zod.enum(["active", "archived"]),
+  entityType: zod.enum(["project", "idea"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
   githubToken: zod.string().nullish(),
