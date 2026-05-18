@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, desc } from "drizzle-orm";
+import Anthropic from "@anthropic-ai/sdk";
 import { db, sessionsTable, chatMessagesTable, projectsTable } from "@workspace/db";
 import {
   CreateSessionBody,
@@ -11,6 +12,35 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+// ── Minimal memory types (mirrors chat.ts) ───────────────────────────────────
+interface MemoryEntry {
+  tier: 1 | 2 | 3 | 4 | 5;
+  text: string;
+  createdAt: string;
+  retrievalCount: number;
+  lastRetrievedAt: string | null;
+}
+interface MemoryStore { v: 2; entries: MemoryEntry[]; }
+
+function parseMemoryStore(raw: string | null): MemoryStore {
+  if (!raw) return { v: 2, entries: [] };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.v === 2 && Array.isArray(parsed.entries)) return parsed as MemoryStore;
+    return { v: 2, entries: [] };
+  } catch { return { v: 2, entries: [] }; }
+}
+
+function appendSessionSummary(store: MemoryStore, text: string): MemoryStore {
+  const entry: MemoryEntry = {
+    tier: 3, text,
+    createdAt: new Date().toISOString(),
+    retrievalCount: 0,
+    lastRetrievedAt: null,
+  };
+  return { ...store, entries: [...store.entries, entry] };
+}
 
 // Verify that a project exists and is owned by the given userId.
 async function projectBelongsToUser(projectId: number, userId: number): Promise<boolean> {
@@ -195,6 +225,68 @@ router.get("/sessions/:sessionId/messages", async (req, res): Promise<void> => {
     ...m,
     createdAt: m.createdAt.toISOString(),
   })));
+});
+
+// POST /sessions/:id/summarize — write a session memory snapshot to project memory.
+// Called automatically by the frontend when the user navigates away (visibilitychange).
+router.post("/sessions/:id/summarize", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await sessionBelongsToUser(params.data.id, userId))) {
+    res.status(404).json({ error: "Session not found" }); return;
+  }
+
+  // Load session to get projectId
+  const [session] = await db.select({ projectId: sessionsTable.projectId })
+    .from(sessionsTable).where(eq(sessionsTable.id, params.data.id));
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+
+  // Load last 30 messages (most recent first, then reverse for chronological)
+  const rows = await db
+    .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
+    .from(chatMessagesTable)
+    .where(eq(chatMessagesTable.sessionId, params.data.id))
+    .orderBy(desc(chatMessagesTable.createdAt))
+    .limit(30);
+
+  const assistantCount = rows.filter(m => m.role === "assistant").length;
+  if (assistantCount < 2) { res.json({ ok: true, skipped: "too few messages" }); return; }
+
+  const transcript = rows.reverse()
+    .map(m => `${m.role === "user" ? "You" : "Atlas"}: ${m.content.slice(0, 500)}`)
+    .join("\n\n");
+
+  // Load current project memory
+  const [project] = await db
+    .select({ memory: projectsTable.memory })
+    .from(projectsTable)
+    .where(eq(projectsTable.id, session.projectId))
+    .limit(1);
+  const store = parseMemoryStore(project?.memory ?? null);
+
+  // Ask Claude Haiku to write a tight session summary
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const aiRes = await anthropic.messages.create({
+    model: "claude-haiku-4-5",
+    max_tokens: 200,
+    messages: [{
+      role: "user",
+      content: `You are the memory layer of Atlas, a strategic AI partner. Write a 2-3 sentence session summary covering: (1) what was discussed or built, (2) any decisions made, (3) the logical next step. Be specific. Past tense. No markdown, no bullets.\n\nSession:\n${transcript}`,
+    }],
+  });
+
+  const rawSummary = (aiRes.content[0] as { type: "text"; text: string }).text.trim();
+  const label = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const summary = `[Session ${label}] ${rawSummary}`;
+
+  const updatedStore = appendSessionSummary(store, summary);
+  await db
+    .update(projectsTable)
+    .set({ memory: JSON.stringify(updatedStore) })
+    .where(eq(projectsTable.id, session.projectId));
+
+  res.json({ ok: true, summary });
 });
 
 export default router;

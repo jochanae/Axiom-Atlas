@@ -9201,6 +9201,28 @@ export default function Workspace() {
     return cleanup;
   }, [messages, chatPending, agenticMode, handleRunCommand]);
 
+  // Session memory write — fires when user navigates away / hides the tab.
+  // Calls the summarize endpoint which asks Claude Haiku to distill the session
+  // into a T3 (episodic) memory entry on the project, so Atlas remembers
+  // what was worked on the next time the workspace opens.
+  const summarizedSessionRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!sessionId) return;
+    const assistantCount = messages.filter((m) => m.role === "assistant").length;
+    if (assistantCount < 2) return;
+    const onHide = () => {
+      if (!document.hidden) return;
+      if (summarizedSessionRef.current === sessionId) return; // already saved this session
+      summarizedSessionRef.current = sessionId;
+      void fetch(`/api/sessions/${sessionId}/summarize`, {
+        method: "POST",
+        credentials: "include",
+      });
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [sessionId, messages]);
+
   const messagesRef = useRef<ChatMessage[]>([]);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
 
