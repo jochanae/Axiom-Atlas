@@ -46,18 +46,18 @@ const OPPOSITE_SIGNAL_PAIRS: Array<[string, string]> = [
   ["required", "optional"],
 ];
 
-type ProjectSummary = {
+export type ProjectSummary = {
   id: number;
   name: string;
 };
 
-type CommittedEntry = {
+export type CommittedEntry = {
   id: number;
   projectId: number;
   title: string;
 };
 
-type Tension = {
+export type Tension = {
   projectA: ProjectSummary;
   projectB: ProjectSummary;
   entryA: { id: number; title: string };
@@ -126,6 +126,34 @@ function detectTension(
   };
 }
 
+export function findSemanticTensions(projects: ProjectSummary[], entries: CommittedEntry[]): Tension[] {
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const tensions: Tension[] = [];
+
+  for (let i = 0; i < entries.length; i += 1) {
+    for (let j = i + 1; j < entries.length; j += 1) {
+      const entryA = entries[i];
+      const entryB = entries[j];
+      if (entryA.projectId === entryB.projectId) continue;
+
+      const tension = detectTension(entryA, entryB, projectById);
+      if (tension) tensions.push(tension);
+    }
+  }
+
+  return tensions.sort((a, b) => b.score - a.score);
+}
+
+export function findSemanticTensionsForProject(
+  projectId: number,
+  projects: ProjectSummary[],
+  entries: CommittedEntry[],
+): Tension[] {
+  return findSemanticTensions(projects, entries).filter((tension) => (
+    tension.projectA.id === projectId || tension.projectB.id === projectId
+  ));
+}
+
 // GET /api/projects/tensions — compare committed decisions across projects.
 router.get("/projects/tensions", async (req, res): Promise<void> => {
   try {
@@ -146,21 +174,7 @@ router.get("/projects/tensions", async (req, res): Promise<void> => {
       .from(entriesTable)
       .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.status, "committed")));
 
-    const projectById = new Map(projects.map((project) => [project.id, project]));
-    const tensions: Tension[] = [];
-
-    for (let i = 0; i < entries.length; i += 1) {
-      for (let j = i + 1; j < entries.length; j += 1) {
-        const entryA = entries[i];
-        const entryB = entries[j];
-        if (entryA.projectId === entryB.projectId) continue;
-
-        const tension = detectTension(entryA, entryB, projectById);
-        if (tension) tensions.push(tension);
-      }
-    }
-
-    tensions.sort((a, b) => b.score - a.score);
+    const tensions = findSemanticTensions(projects, entries);
     res.json({ tensions });
   } catch (err) {
     req.log?.error({ err }, "projects/tensions error");
