@@ -10,6 +10,7 @@ export const sessionsTable = pgTable("sessions", {
   mode: text("mode"),
   status: text("status").notNull().default("active"),
   reflectionMode: boolean("reflection_mode").notNull().default(false),
+  ideaMode: boolean("idea_mode").notNull().default(false),
   messageCount: integer("message_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

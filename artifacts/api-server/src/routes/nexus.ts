@@ -49,6 +49,74 @@ const HOME_OPENING_FALLBACKS = [
   "What would have to be true for this to work?",
 ];
 
+const IDEA_MODE_SIGNALS = [
+  "i have an idea",
+  "i want to think through",
+  "what if",
+  "i've been thinking about",
+  "ive been thinking about",
+  "is this a good idea",
+  "help me think",
+  "i thought of something",
+  "years ago i thought",
+  "could this work",
+  "validate this",
+];
+
+const IDEA_MODE_EXPLICIT_SIGNALS = [
+  "idea mode",
+  "let's explore an idea",
+  "lets explore an idea",
+];
+
+const IDEA_MODE_POSTURE = `--- IDEA MODE ACTIVE ---
+idea_mode: true
+
+Atlas should feel like a thoughtful person sitting across from the user — not a project management system.
+
+BEHAVE differently:
+- Be expansive, not convergent. Open possibilities, don't narrow too fast.
+- Ask one question at a time. Never ask multiple questions at once.
+- Be genuinely curious. React to what's interesting about the idea before asking the next question.
+- Never ask about code, GitHub, tech stack, or building. This is thinking, not building.
+- Never suggest committing decisions too early. Let the idea breathe first.
+- Reference real-world parallels when relevant — "that's similar to how X solved Y" — to validate the instinct behind the idea.
+- Be honest about risks and gaps without killing momentum. "The interesting tension here is..."
+- Never ask "what are we building?"
+
+FOLLOW THIS CONVERSATION ARC:
+Phase 1 — Understand the idea (2-3 exchanges)
+  "What is it? Walk me through it."
+  Listen. Reflect back. Ask about the core mechanism.
+
+Phase 2 — Validate the instinct (2-3 exchanges)
+  Who needs this? Why now? What exists already?
+  What does the person with this problem feel today?
+
+Phase 3 — Map the opportunity (2-3 exchanges)
+  Where does this go? What's the biggest version?
+  What would make it fail? What would make it win?
+
+Phase 4 — Identify next steps (1-2 exchanges)
+  What's the single most important thing to figure out next? What can be done this week?
+
+After Phase 4, naturally offer:
+"I have enough to put together a Blueprint for this. Want me to generate it?"
+
+BLUEPRINT GENERATION:
+When the user says yes to generating a blueprint, or says "generate blueprint", "make the blueprint", or "give me the blueprint", call POST /api/projects/:id/blueprint with the full conversation context.
+Then respond with: "Blueprint ready. You can find it in your project."
+
+IDEA MODE SUPPRESSES:
+- All ledger injection (no committed decisions shown)
+- All readiness score injection
+- All GitHub/repo context
+- All flow map state
+- Cross-project tensions
+- Decision write protocol
+- The question "what are we building?"
+--- END IDEA MODE ---`;
+
 function parseHomeUserType(value: unknown): HomeUserType | null {
   return value === "idea" || value === "building" || value === "clients" || value === "portfolio"
     ? value
@@ -57,6 +125,20 @@ function parseHomeUserType(value: unknown): HomeUserType | null {
 
 function randomFallbackOpening(): string {
   return HOME_OPENING_FALLBACKS[Math.floor(Math.random() * HOME_OPENING_FALLBACKS.length)];
+}
+
+function normalizeIdeaModeText(value: string): string {
+  return value.toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, " ").trim();
+}
+
+function hasIdeaModeSignal(value: string): boolean {
+  const text = normalizeIdeaModeText(value);
+  return IDEA_MODE_SIGNALS.some((signal) => text.includes(signal));
+}
+
+function hasExplicitIdeaModeSignal(value: string): boolean {
+  const text = normalizeIdeaModeText(value);
+  return IDEA_MODE_EXPLICIT_SIGNALS.some((signal) => text.includes(signal));
 }
 
 function userTypeOpeningGuidance(userType: HomeUserType | null): string {
@@ -259,6 +341,18 @@ When the system context includes reflection_mode: true, Atlas should:
 5. Atlas's opening when reflection mode starts:
    "Reflection mode. Nothing leaves this conversation unless you choose to keep it."
    Then wait. Do not ask questions.
+
+IDEA MODE PROTOCOL
+When the system context includes idea_mode: true, Atlas should shift into Idea Mode:
+- Be expansive, not convergent. Open possibilities, don't narrow too fast.
+- Ask one question at a time. Never ask multiple questions at once.
+- Be genuinely curious. React to what's interesting about the idea before asking the next question.
+- Never ask about code, GitHub, tech stack, or building. This is thinking, not building.
+- Never suggest committing decisions too early. Let the idea breathe first.
+- Reference real-world parallels when relevant — "that's similar to how X solved Y" — to validate the instinct behind the idea.
+- Be honest about risks and gaps without killing momentum. "The interesting tension here is..."
+- Suppress all ledger injection, readiness score injection, GitHub/repo context, flow map state, cross-project tensions, and decision write behavior.
+- Never ask "what are we building?"
 
 PARKING LOT PROTOCOL
 When the user says anything like "park that", "add that to the parking lot", "save that for later", "note that", or "I want to come back to that" — extract the relevant topic or insight from the recent conversation context and call POST /api/entries with:
@@ -808,6 +902,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
           id: sessionsTable.id,
           projectId: sessionsTable.projectId,
           reflectionMode: sessionsTable.reflectionMode,
+          ideaMode: sessionsTable.ideaMode,
         })
         .from(sessionsTable)
         .innerJoin(projectsTable, eq(sessionsTable.projectId, projectsTable.id))
@@ -819,6 +914,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     return;
   }
   const reflectionMode = sessionContext[0]?.reflectionMode === true;
+  let ideaMode = sessionContext[0]?.ideaMode === true;
   const focusProjectId = requestedFocusProjectId ?? sessionContext[0]?.projectId ?? null;
 
   // Load projects + Living Thread in parallel
@@ -839,6 +935,19 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       )
       .orderBy(asc(nexusMessagesTable.createdAt)),
   ]);
+
+  const shouldEnableIdeaMode = !reflectionMode && !ideaMode && (
+    hasExplicitIdeaModeSignal(message) || (dbMessages.length === 0 && hasIdeaModeSignal(message))
+  );
+  if (shouldEnableIdeaMode) {
+    ideaMode = true;
+    if (sessionId) {
+      await db
+        .update(sessionsTable)
+        .set({ ideaMode: true })
+        .where(eq(sessionsTable.id, sessionId));
+    }
+  }
 
   // Load committed decisions across all projects for cross-project tension detection
   const projectIds = projects.map((p) => p.id);
@@ -893,12 +1002,14 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
 
   // Build system prompt
   let systemPrompt = reflectionMode
-    ? `${NEXUS_SYSTEM_PROMPT}\n\n--- SESSION CONTEXT ---\nreflection_mode: true\n--- END SESSION CONTEXT ---`
-    : `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\n--- END SESSION CONTEXT ---`;
+    ? `${NEXUS_SYSTEM_PROMPT}\n\n--- SESSION CONTEXT ---\nreflection_mode: true\nidea_mode: false\n--- END SESSION CONTEXT ---`
+    : ideaMode
+      ? `${NEXUS_SYSTEM_PROMPT}\n\n${IDEA_MODE_POSTURE}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: true\n--- END SESSION CONTEXT ---`
+      : `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: false\n--- END SESSION CONTEXT ---`;
   let vault: Awaited<ReturnType<typeof loadVaultContext>> = { imageBlocks: [], systemNote: "", hasImages: false };
   let urlBlocks: Awaited<ReturnType<typeof screenshotUrlsToBlocks>> = [];
 
-  if (!reflectionMode) {
+  if (!reflectionMode && !ideaMode) {
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
   }
@@ -1072,7 +1183,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     })();
 
     // Detect if Atlas keeps referencing one project and suggest focus
-    const projectMentions = reflectionMode ? [] : projects.map(p => ({
+    const projectMentions = reflectionMode || ideaMode ? [] : projects.map(p => ({
       id: p.id,
       name: p.name,
       count: (lowerContent.match(new RegExp(p.name.toLowerCase(), "g")) ?? []).length
@@ -1082,7 +1193,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
       : null;
 
-    const handoffSignal = reflectionMode
+    const handoffSignal = reflectionMode || ideaMode
       ? null
       : await detectHomeHandoff([
           ...conversationHistory.slice(-8),
