@@ -1,6 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import express from "express";
+
+vi.mock("@workspace/db", () => ({
+  db: {
+    execute: vi.fn(() => Promise.resolve([{ "?column?": 1 }])),
+  },
+}));
+
 import healthRouter from "../routes/health";
 
 const app = express();

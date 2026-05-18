@@ -7,6 +7,7 @@ import { eq, sql, and, gte, desc } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
+import { calculateModelCostUsd } from "../pricing";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
@@ -1011,7 +1012,9 @@ function isDeepDive(message: string): { isDive: boolean; topic: string } {
   return { isDive: false, topic: "" };
 }
 
-async function runDeepDive(topic: string, systemPrompt: string): Promise<string> {
+async function runDeepDive(topic: string, systemPrompt: string): Promise<ModelCallResult> {
+  const model = "gemini-2.5-pro";
+  const startedAt = performance.now();
   // Use Gemini for deep dives — large context window, good at synthesis
   const prompt = `You are Atlas performing a Deep Dive research analysis. The user wants comprehensive technical insight on:
 
@@ -1039,23 +1042,82 @@ Produce a structured research card in this exact format:
 Be specific and practical. No filler. This is research output, not a chat reply.`;
 
   const result = await genai.models.generateContent({
-    model: "gemini-2.5-pro",
+    model,
     contents: prompt,
     config: { systemInstruction: systemPrompt },
   });
-  return result.text ?? "Deep Dive returned no content.";
+  const usageMetadata = (result as any).usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | undefined;
+  const inputTokens = usageMetadata?.promptTokenCount ?? null;
+  const outputTokens = usageMetadata?.candidatesTokenCount
+    ?? (usageMetadata?.totalTokenCount != null && inputTokens != null ? Math.max(usageMetadata.totalTokenCount - inputTokens, 0) : null);
+  return {
+    content: result.text ?? "Deep Dive returned no content.",
+    model,
+    usage: {
+      executionTimeMs: Math.round(performance.now() - startedAt),
+      inputTokens,
+      outputTokens,
+      costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
+    },
+  };
 }
 
 // ── Multi-model dispatcher ────────────────────────────────────────────────────
 type ModelId = "claude" | "gpt4o" | "gemini";
+
+type ModelCallUsage = {
+  executionTimeMs: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: number | null;
+};
+
+type ModelCallResult = {
+  content: string;
+  model: string;
+  usage: ModelCallUsage;
+};
+
+const emptyUsage = (): ModelCallUsage => ({
+  executionTimeMs: 0,
+  inputTokens: null,
+  outputTokens: null,
+  costUsd: null,
+});
+
+function addNullableNumbers(a: number | null, b: number | null): number | null {
+  if (a == null) return b;
+  if (b == null) return a;
+  return a + b;
+}
+
+function mergeUsage(a: ModelCallUsage, b: ModelCallUsage): ModelCallUsage {
+  return {
+    executionTimeMs: a.executionTimeMs + b.executionTimeMs,
+    inputTokens: addNullableNumbers(a.inputTokens, b.inputTokens),
+    outputTokens: addNullableNumbers(a.outputTokens, b.outputTokens),
+    costUsd: addNullableNumbers(a.costUsd, b.costUsd),
+  };
+}
+
+function usageInsertValues(usage: ModelCallUsage) {
+  return {
+    executionTimeMs: usage.executionTimeMs == null ? null : Math.max(1, usage.executionTimeMs),
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    costUsd: usage.costUsd == null ? null : usage.costUsd.toFixed(5),
+  };
+}
 
 async function callModel(
   modelId: ModelId,
   systemPrompt: string,
   messages: Array<{ role: "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> }>,
   imageData?: { base64: string; mediaType: string }
-): Promise<string> {
+): Promise<ModelCallResult> {
+  const startedAt = performance.now();
   if (modelId === "gpt4o") {
+    const model = "gpt-4o";
     // Build OpenAI messages
     type OAIMsg = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> };
     const oaiMessages: OAIMsg[] = [{ role: "system", content: systemPrompt }];
@@ -1076,45 +1138,83 @@ async function callModel(
       }
     }
     const resp = await openaiClient.chat.completions.create({
-      model: "gpt-4o",
+      model,
       max_tokens: 8192,
       messages: oaiMessages as Parameters<typeof openaiClient.chat.completions.create>[0]["messages"],
     });
-    return resp.choices[0]?.message?.content ?? "";
+    const inputTokens = resp.usage?.prompt_tokens ?? null;
+    const outputTokens = resp.usage?.completion_tokens ?? null;
+    return {
+      content: resp.choices[0]?.message?.content ?? "",
+      model,
+      usage: {
+        executionTimeMs: Math.round(performance.now() - startedAt),
+        inputTokens,
+        outputTokens,
+        costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
+      },
+    };
   }
 
   if (modelId === "gemini") {
+    const model = "gemini-2.5-pro";
     const combinedText = messages.map((m) => {
       const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
       return `${m.role === "user" ? "User" : "Atlas"}: ${text}`;
     }).join("\n\n");
+    let result: Awaited<ReturnType<typeof genai.models.generateContent>>;
     if (imageData?.base64 && imageData?.mediaType) {
-      const result = await genai.models.generateContent({
-        model: "gemini-2.5-pro",
+      result = await genai.models.generateContent({
+        model,
         contents: [{ role: "user", parts: [{ text: combinedText }, { inlineData: { mimeType: imageData.mediaType, data: imageData.base64 } }] }],
         config: { systemInstruction: systemPrompt },
       });
-      return result.text ?? "";
+    } else {
+      result = await genai.models.generateContent({
+        model,
+        contents: combinedText,
+        config: { systemInstruction: systemPrompt },
+      });
     }
-    const result = await genai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: combinedText,
-      config: { systemInstruction: systemPrompt },
-    });
-    return result.text ?? "";
+    const usageMetadata = (result as any).usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | undefined;
+    const inputTokens = usageMetadata?.promptTokenCount ?? null;
+    const outputTokens = usageMetadata?.candidatesTokenCount
+      ?? (usageMetadata?.totalTokenCount != null && inputTokens != null ? Math.max(usageMetadata.totalTokenCount - inputTokens, 0) : null);
+    return {
+      content: result.text ?? "",
+      model,
+      usage: {
+        executionTimeMs: Math.round(performance.now() - startedAt),
+        inputTokens,
+        outputTokens,
+        costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
+      },
+    };
   }
 
   // Default: Claude
+  const model = "claude-sonnet-4-6";
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
   const claudeMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = messages as typeof claudeMessages;
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model,
     max_tokens: 8192,
     system: systemPrompt,
     messages: claudeMessages,
   });
-  return response.content[0]?.type === "text" ? response.content[0].text : "";
+  const inputTokens = response.usage.input_tokens ?? null;
+  const outputTokens = response.usage.output_tokens ?? null;
+  return {
+    content: response.content[0]?.type === "text" ? response.content[0].text : "",
+    model,
+    usage: {
+      executionTimeMs: Math.round(performance.now() - startedAt),
+      inputTokens,
+      outputTokens,
+      costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
+    },
+  };
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
@@ -1489,10 +1589,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   const { isDive, topic: diveTopic } = isDeepDive(message);
   if (isDive) {
     await db.insert(chatMessagesTable).values({ sessionId, role: "user", content: message, intentType: body.mode ?? null });
-    const diveContent = await runDeepDive(diveTopic, systemPrompt);
-    const [savedDive] = await db.insert(chatMessagesTable).values({ sessionId, role: "assistant", content: diveContent, intentType: "EXPLORE" }).returning();
+    const diveResult = await runDeepDive(diveTopic, systemPrompt);
+    const [savedDive] = await db.insert(chatMessagesTable).values({
+      sessionId,
+      role: "assistant",
+      content: diveResult.content,
+      intentType: "EXPLORE",
+      ...usageInsertValues(diveResult.usage),
+    }).returning();
     await db.update(sessionsTable).set({ messageCount: sql`${sessionsTable.messageCount} + 2` }).where(eq(sessionsTable.id, sessionId));
-    res.json({ content: diveContent, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
+    res.json({ content: diveResult.content, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
     return;
   }
 
@@ -1593,7 +1699,9 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     });
   }
 
-  let rawContent = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+  let rawContent = modelResult.content;
+  let assistantUsage = modelResult.usage;
 
   // FILE_READ intercept — Atlas requested specific files; fetch them and call model again
   if (repoData?.fullName && resolvedGithubToken) {
@@ -1637,7 +1745,9 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
               content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`,
             },
           ];
-          rawContent = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+          modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+          rawContent = modelResult.content;
+          assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
         }
       } catch { /* Non-fatal — keep rawContent from first call */ }
     }
@@ -1721,6 +1831,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         content: persistContent,
         intentType: detectedIntentType,
         catchPayload: undefined,
+        ...usageInsertValues(assistantUsage),
       })
       .returning();
     savedMsgId = savedMsg.id;

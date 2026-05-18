@@ -150,6 +150,14 @@ export interface Message {
   intentType?: string | null;
   /** @nullable */
   catchPayload?: MessageCatchPayload;
+  /** @nullable */
+  executionTimeMs?: number | null;
+  /** @nullable */
+  inputTokens?: number | null;
+  /** @nullable */
+  outputTokens?: number | null;
+  /** @nullable */
+  costUsd?: number | null;
   createdAt: string;
 }
 
