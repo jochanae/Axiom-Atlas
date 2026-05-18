@@ -8038,6 +8038,7 @@ export default function Workspace() {
   const [renameError, setRenameError] = useState<string | null>(null);
   const [trustMode, setTrustMode] = useState<"review" | "auto">("review");
   const [agenticMode, setAgenticMode] = useState(true);
+  const [agenticIterCount, setAgenticIterCount] = useState(0);
   const [autoRunCmd] = useState<string>("");
   const [previewRefreshTrigger, setPreviewRefreshTrigger] = useState(0);
 
@@ -9193,6 +9194,7 @@ export default function Workspace() {
       const key = (lastMsg.sentAt ?? String(messages.length)) + cmd;
       if (agenticAutoRunRef.current.has(key)) return;
       agenticAutoRunRef.current.add(key);
+      setAgenticIterCount((n) => n + 1);
       const t = setTimeout(() => handleRunCommand(cmd), 900);
       cleanup = () => clearTimeout(t);
     } catch {}
@@ -9493,7 +9495,7 @@ export default function Workspace() {
             </button>
             {/* Agent mode toggle */}
             <button
-              onClick={() => setAgenticMode((v) => !v)}
+              onClick={() => { setAgenticMode((v) => !v); setAgenticIterCount(0); }}
               title={agenticMode ? "Agent mode ON — commands run automatically. Tap to switch to manual." : "Agent mode OFF — you tap Run for each command. Tap to enable auto-execute."}
               aria-label="Toggle agent mode"
               style={{
@@ -10621,9 +10623,22 @@ export default function Workspace() {
               [{entryCount}] Ledger Entries
             </span>
             <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(200,190,185,0.5)" }}>·</span>
-            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: chatPending ? "rgba(74,222,128,0.75)" : "rgba(200,190,185,0.6)", transition: "color 300ms ease" }}>
-              {chatPending ? "Generating" : "Session Active"}
-            </span>
+            {agenticMode && agenticIterCount > 0 ? (
+              <span style={{
+                fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em",
+                textTransform: "uppercase", display: "flex", alignItems: "center", gap: 4,
+                color: "rgba(201,162,76,0.85)", transition: "color 300ms ease",
+              }}>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.9, flexShrink: 0 }}>
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+                Agent · Loop {agenticIterCount} / 8
+              </span>
+            ) : (
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: chatPending ? "rgba(74,222,128,0.75)" : "rgba(200,190,185,0.6)", transition: "color 300ms ease" }}>
+                {chatPending ? "Generating" : "Session Active"}
+              </span>
+            )}
           </div>
 
           {/* Memory chips — what Atlas is tracking this session */}
