@@ -1429,6 +1429,20 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
+  const runActions: RunAction[] = [];
+  const writeStep = (action: RunAction) => {
+    const step: RunAction = { ...action, status: action.status ?? "ok" };
+    runActions.push(step);
+    if (!res.writableEnded && !res.destroyed) {
+      res.write(`event: step\ndata: ${JSON.stringify(step)}\n\n`);
+    }
+  };
+
+  writeStep({ verb: "Read", target: "nexus_messages" });
+  if (focusProjectId) writeStep({ verb: "Read", target: "project context" });
+  if (vault.hasImages) writeStep({ verb: "Read", target: "visual vault" });
+  if (urlBlocks.length > 0) writeStep({ verb: "Captured", target: `${urlBlocks.length} URL${urlBlocks.length === 1 ? "" : "s"}` });
+
   let modelStartedAt = performance.now();
   let modelUsage: Partial<NexusRunMetadata> = {};
   let streamDone = false;
@@ -1438,7 +1452,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     // Strip MEMORY_Tn tags from persisted output
     const { content: visibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
     const memoryUpdated = reflectionMode ? false : parsedMemoryUpdated;
-    const runMetadata = buildRunMetadata(visibleContent, modelUsage);
+    writeStep({ verb: "Write", target: "nexus_messages" });
+    const runMetadata = buildRunMetadata(visibleContent, {
+      ...modelUsage,
+      runActions: runActions.length > 0 ? runActions : null,
+    });
 
     // Detect active mode from Atlas's response
     const lowerContent = visibleContent.toLowerCase();
@@ -1499,6 +1517,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   const failStream = async (summary: string, status: RunStatus = "failed") => {
     if (streamDone || res.writableEnded || res.destroyed) return;
     streamDone = true;
+    writeStep({ verb: status === "cancelled" ? "Cancelled" : "Failed", target: "Atlas response", status: status === "cancelled" ? "warn" : "fail" });
     const metadata = failedRunMetadata(summary, status);
     res.write(`event: done\ndata: ${JSON.stringify({
       memoryUpdated: false,
@@ -1520,6 +1539,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ...conversationHistory.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`),
       `User: ${message}`,
     ].join("\n\n");
+    writeStep({ verb: "Call", target: "Gemini" });
     modelStartedAt = performance.now();
     if (imageBase64 && imageMimeType) {
       const result = await genai.models.generateContent({
@@ -1622,6 +1642,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   ];
 
   modelStartedAt = performance.now();
+  writeStep({ verb: "Call", target: "Claude" });
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
@@ -1638,6 +1659,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
   stream.on("error", (err) => {
     const cancelled = /\b(abort|cancel|cancelled|canceled)\b/i.test(err.message);
+    writeStep({ verb: "Stream", target: "Claude", status: cancelled ? "warn" : "fail" });
     void failStream(err.message || "Atlas ran into an issue.", cancelled ? "cancelled" : "failed");
   });
 
