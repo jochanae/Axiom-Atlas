@@ -120,7 +120,7 @@ router.post("/projects", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const authUser = (req as any).authUser;
 
-  if (authUser?.subscriptionTier === "free") {
+  if (authUser?.subscriptionTier === "free" && authUser?.role !== "super_admin") {
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(projectsTable)
