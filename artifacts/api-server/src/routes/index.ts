@@ -30,6 +30,7 @@ import serverApiRouter from "./server-api";
 import tensionsRouter from "./tensions";
 import scanRouter from "./scan";
 import blueprintRouter from "./blueprint";
+import connectionsRouter from "./connections";
 
 const router: IRouter = Router();
 
@@ -65,6 +66,7 @@ router.use(requireAuth, selfmapRouter);
 router.use(requireAuth, tensionsRouter);
 router.use(requireAuth, scanRouter);
 router.use(requireAuth, blueprintRouter);
+router.use(requireAuth, connectionsRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
