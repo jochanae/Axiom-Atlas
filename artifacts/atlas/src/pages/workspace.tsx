@@ -5784,7 +5784,7 @@ function MemoryTab({ projectId }: { projectId: number }) {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "10px 12px" }} className="scrollbar-none">
+      <div style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 200px)", padding: "10px 12px" }} className="scrollbar-none">
         {editing ? (
           <textarea
             value={draft}
@@ -7054,52 +7054,30 @@ function RightPanel({
           );
         })}
         {/* Desktop: handover trigger button — pushed to the right of the tabs.
-            Mirrors the mobile footer pill in AxiomFlow. Switches to the Map
-            tab and opens the popover so the user can confirm/title the
-            snapshot before sending it to Atlas. */}
+            Mirrors the mobile footer pill in AxiomFlow. Opens Atlas home. */}
         {!isMobile && onHandover && (
           <>
             <div style={{ flex: 1 }} />
             <button
-              onClick={() => {
-                setTab("map");
-                onHandoverOpenChange?.(true);
-              }}
-              disabled={!currentSnapshot || (currentSnapshot?.definedCount ?? 0) === 0 || !!handoverPending}
-              title={
-                handoverPending
-                  ? "Handing over to Atlas…"
-                  : !currentSnapshot || currentSnapshot.definedCount === 0
-                    ? "Define at least one node to hand over"
-                    : "Send the current Axiom Flow snapshot to Atlas as a new chat"
-              }
+              onClick={onHomeNav}
+              title="Open Atlas home"
               style={{
                 marginRight: 8,
                 padding: "5px 11px",
                 borderRadius: 5,
-                background: !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
-                  ? "rgba(var(--atlas-muted-rgb),0.15)"
-                  : "rgba(146,64,14,0.22)",
-                border: `1px solid ${
-                  !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
-                    ? "rgba(var(--atlas-muted-rgb),0.35)"
-                    : "rgba(146,64,14,0.65)"
-                }`,
-                color: !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
-                  ? "rgba(var(--atlas-muted-rgb),0.7)"
-                  : "rgba(230,150,90,0.95)",
+                background: "rgba(146,64,14,0.22)",
+                border: "1px solid rgba(146,64,14,0.65)",
+                color: "rgba(230,150,90,0.95)",
                 fontFamily: "var(--app-font-mono)",
                 fontSize: 9.5,
                 fontWeight: 600,
                 letterSpacing: "0.12em",
                 textTransform: "uppercase",
-                cursor: !currentSnapshot || currentSnapshot.definedCount === 0 || handoverPending
-                  ? "not-allowed"
-                  : "pointer",
+                cursor: "pointer",
                 transition: "all 160ms ease",
               }}
             >
-              {handoverPending ? "Sending…" : "→ Atlas"}
+              → Atlas
             </button>
           </>
         )}
