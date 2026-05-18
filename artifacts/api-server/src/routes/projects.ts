@@ -109,7 +109,12 @@ router.post("/projects", async (req, res): Promise<void> => {
 
   const [project] = await db
     .insert(projectsTable)
-    .values({ ...parsed.data, userId })
+    .values({
+      name: parsed.data.name,
+      description: parsed.data.description ?? null,
+      entityType: parsed.data.entity_type ?? "project",
+      userId,
+    })
     .returning();
 
   // Auto-propagate GitHub token from any existing project of this user

@@ -1352,9 +1352,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 router.post("/nexus/handoff", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
-    const { messages, projectId } = req.body as {
+    const { messages, projectId, sessionId, ideaMode } = req.body as {
       messages: { role: string; content: string }[];
       projectId?: number;
+      sessionId?: number;
+      ideaMode?: boolean;
     };
 
     if (!messages?.length) {
@@ -1393,10 +1395,27 @@ If no clear project name was discussed, use "New Project".`,
     }
 
     let targetProjectId = projectId;
+    let ideaModeActive = ideaMode === true || messages.some((m) => (
+      m.role === "user" && (hasIdeaModeSignal(m.content) || hasExplicitIdeaModeSignal(m.content))
+    ));
+    if (!ideaModeActive && Number.isInteger(sessionId) && Number(sessionId) > 0) {
+      const [session] = await db
+        .select({ ideaMode: sessionsTable.ideaMode })
+        .from(sessionsTable)
+        .innerJoin(projectsTable, eq(sessionsTable.projectId, projectsTable.id))
+        .where(and(eq(sessionsTable.id, Number(sessionId)), eq(projectsTable.userId, userId)))
+        .limit(1);
+      ideaModeActive = session?.ideaMode === true;
+    }
     if (!targetProjectId) {
       const [newProject] = await db
         .insert(projectsTable)
-        .values({ name: brief.projectName, description: brief.description, userId })
+        .values({
+          name: brief.projectName,
+          description: brief.description,
+          entityType: ideaModeActive ? "idea" : "project",
+          userId,
+        })
         .returning();
       targetProjectId = newProject.id;
     }

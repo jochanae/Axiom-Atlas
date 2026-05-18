@@ -85,6 +85,13 @@
       "when": 1779107200000,
       "tag": "0011_blueprints_and_nexus_session_links",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779110800000,
+      "tag": "0012_project_entity_type",
+      "breakpoints": true
     }
   ]
 }
