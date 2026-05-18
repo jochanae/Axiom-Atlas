@@ -123,6 +123,34 @@ router.delete("/sessions/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
+router.post("/sessions/:id/reflection-mode", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const enabled = (req.body as { enabled?: unknown })?.enabled;
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ error: "enabled boolean is required" });
+    return;
+  }
+
+  const userId = (req as any).authUser.id as number;
+  if (!(await sessionBelongsToUser(params.data.id, userId))) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const [session] = await db
+    .update(sessionsTable)
+    .set({ reflectionMode: enabled })
+    .where(eq(sessionsTable.id, params.data.id))
+    .returning();
+
+  res.json({
+    ...session,
+    createdAt: session.createdAt.toISOString(),
+    updatedAt: session.updatedAt.toISOString(),
+  });
+});
+
 router.get("/sessions/:sessionId/messages", async (req, res): Promise<void> => {
   const params = ListMessagesParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
