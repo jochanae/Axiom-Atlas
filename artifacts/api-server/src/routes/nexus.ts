@@ -1155,6 +1155,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     userId,
     role: "user",
     content: message,
+    projectId: focusProjectId ?? null,
+    sessionId,
     conversationId: conversationId ?? null,
     messageType: reflectionMode ? "reflection" : "message",
   });
@@ -1206,6 +1208,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       userId,
       role: "assistant",
       content: visibleContent,
+      projectId: focusProjectId ?? null,
+      sessionId,
       conversationId: conversationId ?? null,
       messageType: reflectionMode ? "reflection" : "message",
     });
