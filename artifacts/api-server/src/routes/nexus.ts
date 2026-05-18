@@ -5,6 +5,7 @@ import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, con
 import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, type SQL } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
+import { findSemanticTensionsForProject } from "./tensions";
 
 const router: IRouter = Router();
 
@@ -23,6 +24,22 @@ type HandoffSignal = {
 };
 
 type HomeUserType = "idea" | "building" | "clients" | "portfolio";
+
+type FocusLedgerEntry = {
+  id: number;
+  title: string;
+  status: string;
+  deviation: boolean;
+  catchAgainstId: number | null;
+  supersedesId: number | null;
+};
+
+type FlowMapNode = {
+  label: string;
+  type: string;
+  answered: boolean;
+  meta?: string;
+};
 
 const HOME_OPENING_FALLBACKS = [
   "What are you turning over?",
@@ -374,6 +391,81 @@ function parseRepo(raw: string | null): string | null {
   }
 }
 
+const SYSTEM_NODE_IDS = new Set(["auth", "db", "api", "state", "ui", "logic"]);
+const FLOW_NODE_TYPES = new Set(["goal", "requirement", "blocker", "priority", "decision", "sprint", "wont"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function formatTitles(entries: Array<{ title: string }>): string {
+  return entries.length > 0 ? entries.map((entry) => entry.title).join("; ") : "none";
+}
+
+function groupLedgerEntries(entries: FocusLedgerEntry[]) {
+  const childrenBySupersedes = new Map<number, FocusLedgerEntry[]>();
+  for (const entry of entries) {
+    if (entry.supersedesId == null) continue;
+    const children = childrenBySupersedes.get(entry.supersedesId) ?? [];
+    children.push(entry);
+    childrenBySupersedes.set(entry.supersedesId, children);
+  }
+
+  const inTensionIds = new Set<number>();
+  const overriddenIds = new Set<number>();
+  for (const entry of entries) {
+    if (entry.status !== "committed") continue;
+    const children = childrenBySupersedes.get(entry.id) ?? [];
+    if (children.some((child) => child.deviation && child.status === "committed")) {
+      overriddenIds.add(entry.id);
+    }
+    if (children.some((child) => child.catchAgainstId === entry.id && child.status !== "committed")) {
+      inTensionIds.add(entry.id);
+    }
+  }
+
+  return {
+    committed: entries.filter((entry) => (
+      entry.status === "committed" && !entry.deviation && !inTensionIds.has(entry.id) && !overriddenIds.has(entry.id)
+    )),
+    parked: entries.filter((entry) => entry.status === "parked"),
+    inTension: entries.filter((entry) => inTensionIds.has(entry.id)),
+    overridden: entries.filter((entry) => (
+      entry.status === "committed" && (entry.deviation || overriddenIds.has(entry.id))
+    )),
+  };
+}
+
+function extractFlowMapNodes(nodeState: unknown): FlowMapNode[] {
+  if (!isRecord(nodeState)) return [];
+  return Object.entries(nodeState).flatMap(([id, raw]): FlowMapNode[] => {
+    if (SYSTEM_NODE_IDS.has(id) || !isRecord(raw)) return [];
+    const label = typeof raw.label === "string" && raw.label.trim() ? raw.label.trim() : "";
+    const type = typeof raw.type === "string" && FLOW_NODE_TYPES.has(raw.type) ? raw.type : "";
+    if (!label || !type) return [];
+    const strategicAnswer = typeof raw.strategicAnswer === "string" ? raw.strategicAnswer.trim() : "";
+    const answered = Boolean(strategicAnswer) || raw.resolved === true;
+    const meta = typeof raw.meta === "string" ? raw.meta : typeof raw.moscow === "string" ? raw.moscow : undefined;
+    return [{ label, type, answered, ...(meta ? { meta } : {}) }];
+  });
+}
+
+function computeArchitectureReadiness(flowNodes: FlowMapNode[]): number {
+  const scoredNodes = flowNodes.filter((node) => !(node.type === "priority" && node.meta === "wont"));
+  if (scoredNodes.length === 0) return 0;
+  return Math.round((scoredNodes.filter((node) => node.answered).length / scoredNodes.length) * 100);
+}
+
+function computeDecisionReadiness(entries: FocusLedgerEntry[]): number {
+  if (entries.length === 0) return 0;
+  const committedCount = entries.filter((entry) => entry.status === "committed").length;
+  return Math.round((committedCount / entries.length) * 100);
+}
+
+function computeBlendedReadiness(architectureScore: number, decisionsScore: number): number {
+  return Math.round(architectureScore * 0.6 + decisionsScore * 0.4);
+}
+
 function nonBriefingMessages(whereClause: SQL | undefined) {
   return and(whereClause, sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`);
 }
@@ -561,7 +653,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
     db
-      .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo })
+      .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, nodeState: projectsTable.nodeState })
       .from(projectsTable)
       .where(eq(projectsTable.userId, userId)),
     db
@@ -581,7 +673,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const projectIds = projects.map((p) => p.id);
   const committedEntries = projectIds.length > 0
     ? await db
-        .select({ projectId: entriesTable.projectId, title: entriesTable.title, summary: entriesTable.summary })
+        .select({ id: entriesTable.id, projectId: entriesTable.projectId, title: entriesTable.title, summary: entriesTable.summary })
         .from(entriesTable)
         .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.status, "committed")))
     : [];
@@ -692,9 +784,56 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
         const store = parseMemoryStore(focusProject.memory ?? null);
         return buildMemoryText(store);
       })();
+      const focusLedgerEntries: FocusLedgerEntry[] = await db
+        .select({
+          id: entriesTable.id,
+          title: entriesTable.title,
+          status: entriesTable.status,
+          deviation: entriesTable.deviation,
+          catchAgainstId: entriesTable.catchAgainstId,
+          supersedesId: entriesTable.supersedesId,
+        })
+        .from(entriesTable)
+        .where(eq(entriesTable.projectId, focusProjectId));
+      const ledgerGroups = groupLedgerEntries(focusLedgerEntries);
+      const flowNodes = extractFlowMapNodes(focusProject.nodeState);
+      const answeredFlowNodes = flowNodes.filter((node) => node.answered);
+      const unansweredFlowNodes = flowNodes.filter((node) => !node.answered);
+      const architectureScore = computeArchitectureReadiness(flowNodes);
+      const decisionsScore = computeDecisionReadiness(focusLedgerEntries);
+      const blendedScore = computeBlendedReadiness(architectureScore, decisionsScore);
+      const projectTensions = findSemanticTensionsForProject(focusProjectId, projects, committedEntries);
+      const tensionLines = projectTensions.length > 0
+        ? projectTensions.map((tension) => `${tension.projectA.name} ↔ ${tension.projectB.name}: "${tension.entryA.title}" conflicts with "${tension.entryB.title}"`).join("\n")
+        : "None detected.";
       systemPrompt += `\n\n--- FOCUSED PROJECT: ${focusProject.name.toUpperCase()} ---\nThe user has zoomed in on "${focusProject.name}" for this conversation. Prioritize this project's context. Open your FIRST response by explicitly naming the project — begin with "${focusProject.name} —" or "On ${focusProject.name}:" so the user knows the focus is active. After that, answer normally without repeating the label on every message.`;
       if (focusEntries) systemPrompt += `\nCommitted decisions:\n${focusEntries}`;
       if (focusMemory) systemPrompt += `\nProject memory:\n${focusMemory}`;
+      systemPrompt += `\n\nFULL LEDGER STATE:
+LEDGER STATE:
+Committed (${ledgerGroups.committed.length}): ${formatTitles(ledgerGroups.committed)}
+Parked (${ledgerGroups.parked.length}): ${formatTitles(ledgerGroups.parked)}
+In Tension (${ledgerGroups.inTension.length}): ${formatTitles(ledgerGroups.inTension)}
+Overridden (${ledgerGroups.overridden.length}): ${formatTitles(ledgerGroups.overridden)}
+
+Atlas should reference parked items naturally if relevant.
+Atlas should flag in-tension items if the conversation touches them.`;
+      if (ledgerGroups.parked.length > 0) {
+        systemPrompt += `\n\nPARKING LOT AWARENESS:
+The user has ${ledgerGroups.parked.length} parked item${ledgerGroups.parked.length === 1 ? "" : "s"}: ${formatTitles(ledgerGroups.parked)}. Reference them naturally if the conversation is relevant. Do not list them all at once unprompted.`;
+      }
+      systemPrompt += `\n\nCROSS-PROJECT TENSIONS:
+${tensionLines}
+If Atlas detects the conversation is heading toward one of these tensions, surface it proactively with: "⚠️ Cross-project tension: [description]"
+
+READINESS SCORE:
+Current readiness: ${blendedScore}% (architecture: ${architectureScore}%, decisions: ${decisionsScore}%)
+Atlas should reference this if asked about project health or progress.
+
+FLOW MAP STATE:
+FLOW MAP: ${flowNodes.length} nodes total — ${answeredFlowNodes.length} answered, ${unansweredFlowNodes.length} unanswered
+Unanswered: ${unansweredFlowNodes.length > 0 ? unansweredFlowNodes.map((node) => node.label).join("; ") : "none"}
+Atlas should offer to help fill unanswered nodes if the conversation provides relevant information.`;
       systemPrompt += `\n--- END FOCUSED PROJECT ---`;
     }
   }
