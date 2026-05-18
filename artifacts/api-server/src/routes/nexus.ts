@@ -243,6 +243,23 @@ You are a strategic thinking partner, not just a question-answerer. When the use
 - If the user sends a long message with multiple ideas, capture the most durable ones as memory entries before you reply.
 - Never make her feel like she's talking to a wall. If she shares something and you don't acknowledge it, you've failed as a listener.
 
+REFLECTION MODE PROTOCOL
+When the system context includes reflection_mode: true, Atlas should:
+1. Shift tone — more open, less structured, conversational and present. No strategic framing, no decisions, no plans.
+2. Never during a reflection session:
+   - Write to the ledger (no POST /api/entries)
+   - Write to the parking lot
+   - Update the flow map
+   - Reference committed decisions or readiness
+   - Inject cross-project tensions
+   - Suggest committing or parking anything
+3. Never reference reflection mode content in future sessions — messages marked as reflection_mode should never be injected into decision context or system prompt history.
+4. If the user tries to commit something during reflection mode, gently say:
+   "You're in reflection mode — nothing is being captured. If you want to commit this, unlock first."
+5. Atlas's opening when reflection mode starts:
+   "Reflection mode. Nothing leaves this conversation unless you choose to keep it."
+   Then wait. Do not ask questions.
+
 PARKING LOT PROTOCOL
 When the user says anything like "park that", "add that to the parking lot", "save that for later", "note that", or "I want to come back to that" — extract the relevant topic or insight from the recent conversation context and call POST /api/entries with:
   {
@@ -574,7 +591,17 @@ function computeBlendedReadiness(architectureScore: number, decisionsScore: numb
 }
 
 function nonBriefingMessages(whereClause: SQL | undefined) {
-  return and(whereClause, sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`);
+  return and(
+    whereClause,
+    sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
+    sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'reflection'`,
+  );
+}
+
+function conversationMessages(whereClause: SQL | undefined, reflectionMode: boolean) {
+  return reflectionMode
+    ? and(whereClause, eq(nexusMessagesTable.messageType, "reflection"))
+    : nonBriefingMessages(whereClause);
 }
 
 // GET /api/nexus/thread — return a conversation thread (optionally scoped by conversationId)
@@ -695,12 +722,17 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
     const rows = await db
       .select({
         id: nexusMessagesTable.conversationId,
-        title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' ORDER BY sub.created_at ASC LIMIT 1)`,
+        title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' AND sub.message_type IS DISTINCT FROM 'reflection' ORDER BY sub.created_at ASC LIMIT 1)`,
         createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
         messageCount: sql<number>`COUNT(*)`,
       })
       .from(nexusMessagesTable)
-      .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId), sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`))
+      .where(and(
+        eq(nexusMessagesTable.userId, userId),
+        isNotNull(nexusMessagesTable.conversationId),
+        sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
+        sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'reflection'`,
+      ))
       .groupBy(nexusMessagesTable.conversationId)
       .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
       .limit(30);
@@ -738,6 +770,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     imageBase64?: string;
     imageMimeType?: string;
     conversationId?: string;
+    sessionId?: number;
     userType?: HomeUserType;
   };
 
@@ -750,12 +783,31 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { userProfile = "", focusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
+  const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
   const userType = parseHomeUserType(body.userType);
+  const sessionId = Number.isInteger(body.sessionId) && Number(body.sessionId) > 0 ? Number(body.sessionId) : null;
   // Use a sensible fallback when the user sends an image with no text
   const message = body.message?.trim() || (hasImage ? "[image]" : "");
 
   try {
+  const sessionContext = sessionId
+    ? await db
+        .select({
+          id: sessionsTable.id,
+          projectId: sessionsTable.projectId,
+          reflectionMode: sessionsTable.reflectionMode,
+        })
+        .from(sessionsTable)
+        .innerJoin(projectsTable, eq(sessionsTable.projectId, projectsTable.id))
+        .where(and(eq(sessionsTable.id, sessionId), eq(projectsTable.userId, userId)))
+        .limit(1)
+    : [];
+  if (sessionId && sessionContext.length === 0) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  const reflectionMode = sessionContext[0]?.reflectionMode === true;
+  const focusProjectId = requestedFocusProjectId ?? sessionContext[0]?.projectId ?? null;
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -767,11 +819,11 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       .select()
       .from(nexusMessagesTable)
       .where(
-        nonBriefingMessages(conversationId === "__legacy__"
+        conversationMessages(conversationId === "__legacy__"
           ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
           : conversationId
             ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
-            : eq(nexusMessagesTable.userId, userId))
+            : eq(nexusMessagesTable.userId, userId), reflectionMode)
       )
       .orderBy(asc(nexusMessagesTable.createdAt)),
   ]);
@@ -828,7 +880,13 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     .limit(20);
 
   // Build system prompt
-  let systemPrompt = `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}`;
+  let systemPrompt = reflectionMode
+    ? `${NEXUS_SYSTEM_PROMPT}\n\n--- SESSION CONTEXT ---\nreflection_mode: true\n--- END SESSION CONTEXT ---`
+    : `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\n--- END SESSION CONTEXT ---`;
+  let vault: Awaited<ReturnType<typeof loadVaultContext>> = { imageBlocks: [], systemNote: "", hasImages: false };
+  let urlBlocks: Awaited<ReturnType<typeof screenshotUrlsToBlocks>> = [];
+
+  if (!reflectionMode) {
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
   }
@@ -953,7 +1011,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   }
 
   // Load Visual Vault images (project-scoped if focused, otherwise skip for global)
-  const vault = focusProjectId
+  vault = focusProjectId
     ? await loadVaultContext(userId, focusProjectId)
     : { imageBlocks: [], systemNote: "", hasImages: false };
   if (vault.hasImages) {
@@ -962,14 +1020,21 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
   // ── Live URL capture — screenshot any URLs in the message ─────────────────
   const detectedUrls = extractPageUrls(message);
-  const urlBlocks = await screenshotUrlsToBlocks(detectedUrls);
+  urlBlocks = await screenshotUrlsToBlocks(detectedUrls);
   const urlNote = buildUrlNote(urlBlocks);
   if (urlNote) {
     systemPrompt += `\n\n--- LIVE URL CAPTURE ---\n${urlNote}\n--- END LIVE URL CAPTURE ---`;
   }
+  }
 
   // Persist the user message to the Living Thread
-  await db.insert(nexusMessagesTable).values({ userId, role: "user", content: message, conversationId: conversationId ?? null });
+  await db.insert(nexusMessagesTable).values({
+    userId,
+    role: "user",
+    content: message,
+    conversationId: conversationId ?? null,
+    messageType: reflectionMode ? "reflection" : "message",
+  });
 
   // Set SSE headers
   res.setHeader("Content-Type", "text/event-stream");
@@ -979,7 +1044,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
   const finishStream = async (rawContent: string) => {
     // Strip MEMORY_Tn tags from persisted output
-    const { content: visibleContent, memoryUpdated } = extractMemoryLines(rawContent);
+    const { content: visibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
+    const memoryUpdated = reflectionMode ? false : parsedMemoryUpdated;
 
     // Detect active mode from Atlas's response
     const lowerContent = visibleContent.toLowerCase();
@@ -994,7 +1060,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     })();
 
     // Detect if Atlas keeps referencing one project and suggest focus
-    const projectMentions = projects.map(p => ({
+    const projectMentions = reflectionMode ? [] : projects.map(p => ({
       id: p.id,
       name: p.name,
       count: (lowerContent.match(new RegExp(p.name.toLowerCase(), "g")) ?? []).length
@@ -1004,14 +1070,22 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
       : null;
 
-    const handoffSignal = await detectHomeHandoff([
-      ...conversationHistory.slice(-8),
-      { role: "user", content: message },
-      { role: "assistant", content: visibleContent },
-    ]);
+    const handoffSignal = reflectionMode
+      ? null
+      : await detectHomeHandoff([
+          ...conversationHistory.slice(-8),
+          { role: "user", content: message },
+          { role: "assistant", content: visibleContent },
+        ]);
 
     // Persist the assistant response to the Living Thread
-    await db.insert(nexusMessagesTable).values({ userId, role: "assistant", content: visibleContent, conversationId: conversationId ?? null });
+    await db.insert(nexusMessagesTable).values({
+      userId,
+      role: "assistant",
+      content: visibleContent,
+      conversationId: conversationId ?? null,
+      messageType: reflectionMode ? "reflection" : "message",
+    });
 
     res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}) })}\n\n`);
     res.end();
