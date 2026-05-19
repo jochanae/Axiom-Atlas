@@ -2,8 +2,8 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable } from "@workspace/db";
-import { eq, sql, and, gte, desc, ne } from "drizzle-orm";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable } from "@workspace/db";
+import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
@@ -23,6 +23,38 @@ const router: IRouter = Router();
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
+  const plain = storedToken ? decryptToken(storedToken) : null;
+  return plain && plain !== "__server__" ? plain : null;
+}
+
+async function getAccountGithubToken(userId: number | undefined): Promise<string | null> {
+  if (!userId) return null;
+
+  const [connection] = await db
+    .select({ token: connectionsTable.token })
+    .from(connectionsTable)
+    .where(and(
+      eq(connectionsTable.userId, userId),
+      eq(connectionsTable.type, "github"),
+      isNotNull(connectionsTable.token)
+    ))
+    .orderBy(desc(connectionsTable.createdAt))
+    .limit(1);
+
+  return resolveStoredGithubToken(connection?.token);
+}
+
+async function resolveGithubTokenForRequest(
+  userId: number | undefined,
+  projectGithubToken: string | null | undefined
+): Promise<string | null> {
+  const accountToken = await getAccountGithubToken(userId);
+  if (accountToken) return accountToken;
+
+  return resolveStoredGithubToken(projectGithubToken) ?? process.env.GITHUB_TOKEN ?? null;
+}
 
 // ── Five-Tier Memory System ───────────────────────────────────────────────────
 interface MemoryEntry {
@@ -1336,14 +1368,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   let repoTreeContext: string | null = null;
   let recentRepoActivityContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
-  const resolvedGithubToken = (() => {
-    const t = project?.githubToken;
-    // No personal token stored — fall back to server env token directly
-    if (!t) return process.env.GITHUB_TOKEN ?? null;
-    const plain = t.startsWith("enc:v1:") ? decryptToken(t) : t;
-    // Explicit __server__ sentinel or any unrecognized value → server env token
-    return plain === "__server__" ? (process.env.GITHUB_TOKEN ?? null) : plain;
-  })();
+  const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project?.githubToken);
 
   if (project?.linkedRepo) {
     try {
