@@ -750,6 +750,22 @@ function failedRunMetadata(summary: string, status: RunStatus = "failed"): Nexus
   };
 }
 
+async function updateSessionRunMetadata(sessionId: number | null, runMetadata: NexusRunMetadata): Promise<void> {
+  if (!sessionId) return;
+  await db
+    .update(sessionsTable)
+    .set({
+      totalInputTokens: sql`coalesce(${sessionsTable.totalInputTokens}, 0) + ${runMetadata.inputTokens ?? 0}`,
+      totalOutputTokens: sql`coalesce(${sessionsTable.totalOutputTokens}, 0) + ${runMetadata.outputTokens ?? 0}`,
+      totalCostUsd: sql`coalesce(${sessionsTable.totalCostUsd}, 0) + ${runMetadata.costUsd ?? 0}`,
+      totalExecutionMs: sql`coalesce(${sessionsTable.totalExecutionMs}, 0) + ${runMetadata.executionTimeMs ?? 0}`,
+      runSummary: runMetadata.runSummary ?? null,
+      runActions: runMetadata.runActions ?? null,
+      runArtifacts: runMetadata.runArtifacts ?? null,
+    })
+    .where(eq(sessionsTable.id, sessionId));
+}
+
 type NexusMessageRow = {
   id: number;
   userId: number;
@@ -757,19 +773,10 @@ type NexusMessageRow = {
   content: string;
   conversationId: string | null;
   messageType: string | null;
-  executionTimeMs: number | null;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  costUsd: number | string | null;
-  runStatus: string | null;
-  runSummary: string | null;
-  runActions: unknown;
-  runArtifacts: unknown;
   createdAt: Date;
 };
 
 let nexusMessageTypeColumnExistsCache: boolean | null = null;
-let nexusRunMetadataColumnsExistCache: boolean | null = null;
 
 async function hasNexusMessageTypeColumn(): Promise<boolean> {
   if (nexusMessageTypeColumnExistsCache !== null) return nexusMessageTypeColumnExistsCache;
@@ -789,35 +796,6 @@ async function hasNexusMessageTypeColumn(): Promise<boolean> {
   return nexusMessageTypeColumnExistsCache;
 }
 
-async function hasNexusRunMetadataColumns(): Promise<boolean> {
-  if (nexusRunMetadataColumnsExistCache !== null) return nexusRunMetadataColumnsExistCache;
-  try {
-    const rows = await db.execute(sql`
-      SELECT count(*)::int AS count
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = 'nexus_messages'
-        AND column_name IN (
-          'execution_time_ms',
-          'input_tokens',
-          'output_tokens',
-          'cost_usd',
-          'run_status',
-          'run_summary',
-          'run_actions',
-          'run_artifacts'
-        )
-    `);
-    const count = Array.isArray(rows)
-      ? Number((rows[0] as any)?.count ?? 0)
-      : Number((rows as any).rows?.[0]?.count ?? 0);
-    nexusRunMetadataColumnsExistCache = count >= 8;
-  } catch {
-    nexusRunMetadataColumnsExistCache = false;
-  }
-  return nexusRunMetadataColumnsExistCache;
-}
-
 function nonBriefingMessages(whereClause: SQL | undefined, hasMessageType = true) {
   if (!hasMessageType) return whereClause;
   return and(
@@ -834,7 +812,7 @@ function conversationMessages(whereClause: SQL | undefined, reflectionMode: bool
     : nonBriefingMessages(whereClause, hasMessageType);
 }
 
-async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: boolean, hasRunMetadata: boolean): Promise<NexusMessageRow[]> {
+async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: boolean): Promise<NexusMessageRow[]> {
   const baseSelect = {
     id: nexusMessagesTable.id,
     userId: nexusMessagesTable.userId,
@@ -843,27 +821,8 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     conversationId: nexusMessagesTable.conversationId,
     createdAt: nexusMessagesTable.createdAt,
   };
-  const withMetadataSelect = {
-    ...baseSelect,
-    executionTimeMs: nexusMessagesTable.executionTimeMs,
-    inputTokens: nexusMessagesTable.inputTokens,
-    outputTokens: nexusMessagesTable.outputTokens,
-    costUsd: nexusMessagesTable.costUsd,
-    runStatus: nexusMessagesTable.runStatus,
-    runSummary: nexusMessagesTable.runSummary,
-    runActions: nexusMessagesTable.runActions,
-    runArtifacts: nexusMessagesTable.runArtifacts,
-  };
 
   if (!hasMessageType) {
-    if (hasRunMetadata) {
-      const rows = await db
-        .select(withMetadataSelect)
-        .from(nexusMessagesTable)
-        .where(whereClause)
-        .orderBy(asc(nexusMessagesTable.createdAt));
-      return rows.map((row) => ({ ...row, messageType: null }));
-    }
     const rows = await db
       .select(baseSelect)
       .from(nexusMessagesTable)
@@ -872,24 +831,7 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     return rows.map((row) => ({
       ...row,
       messageType: null,
-      executionTimeMs: null,
-      inputTokens: null,
-      outputTokens: null,
-      costUsd: null,
-      runStatus: null,
-      runSummary: null,
-      runActions: null,
-      runArtifacts: null,
     }));
-  }
-
-  if (hasRunMetadata) {
-    const rows = await db
-      .select({ ...withMetadataSelect, messageType: nexusMessagesTable.messageType })
-      .from(nexusMessagesTable)
-      .where(whereClause)
-      .orderBy(asc(nexusMessagesTable.createdAt));
-    return rows;
   }
 
   const rows = await db
@@ -897,17 +839,7 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     .from(nexusMessagesTable)
     .where(whereClause)
     .orderBy(asc(nexusMessagesTable.createdAt));
-  return rows.map((row) => ({
-    ...row,
-    executionTimeMs: null,
-    inputTokens: null,
-    outputTokens: null,
-    costUsd: null,
-    runStatus: null,
-    runSummary: null,
-    runActions: null,
-    runArtifacts: null,
-  }));
+  return rows;
 }
 
 // GET /api/nexus/thread — return a conversation thread (optionally scoped by conversationId)
@@ -926,8 +858,7 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
         : eq(nexusMessagesTable.userId, userId);
 
     const hasMessageType = await hasNexusMessageTypeColumn();
-    const hasRunMetadata = await hasNexusRunMetadataColumns();
-    const messages = await loadNexusMessages(nonBriefingMessages(whereClause, hasMessageType), hasMessageType, hasRunMetadata);
+    const messages = await loadNexusMessages(nonBriefingMessages(whereClause, hasMessageType), hasMessageType);
 
     if (messages.length === 0 && conversationId && conversationId !== "__legacy__") {
       const [existingBriefing] = hasMessageType
@@ -1004,22 +935,22 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
       role: m.role,
       content: m.content,
       isBriefing: m.messageType === "briefing",
-      executionTimeMs: m.executionTimeMs,
-      inputTokens: m.inputTokens,
-      outputTokens: m.outputTokens,
-      costUsd: m.costUsd == null ? null : Number(m.costUsd),
-      runStatus: m.runStatus,
-      runSummary: m.runSummary,
-      runActions: m.runActions,
-      runArtifacts: m.runArtifacts,
-      execution_time_ms: m.executionTimeMs,
-      input_tokens: m.inputTokens,
-      output_tokens: m.outputTokens,
-      cost_usd: m.costUsd == null ? null : Number(m.costUsd),
-      run_status: m.runStatus,
-      run_summary: m.runSummary,
-      run_actions: m.runActions,
-      run_artifacts: m.runArtifacts,
+      executionTimeMs: null,
+      inputTokens: null,
+      outputTokens: null,
+      costUsd: null,
+      runStatus: null,
+      runSummary: null,
+      runActions: null,
+      runArtifacts: null,
+      execution_time_ms: null,
+      input_tokens: null,
+      output_tokens: null,
+      cost_usd: null,
+      run_status: null,
+      run_summary: null,
+      run_actions: null,
+      run_artifacts: null,
       createdAt: m.createdAt.toISOString(),
     })));
     return;
@@ -1179,7 +1110,6 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   let ideaMode = sessionContext[0]?.ideaMode === true;
   const focusProjectId = requestedFocusProjectId ?? sessionContext[0]?.projectId ?? null;
   const hasMessageType = await hasNexusMessageTypeColumn();
-  const hasRunMetadata = await hasNexusRunMetadataColumns();
 
   // Load projects + Living Thread in parallel
   const [projects, dbMessages] = await Promise.all([
@@ -1194,7 +1124,6 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
           ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
           : eq(nexusMessagesTable.userId, userId), reflectionMode, hasMessageType),
       hasMessageType,
-      hasRunMetadata,
     ),
   ]);
 
@@ -1498,17 +1427,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       sessionId,
       conversationId: conversationId ?? null,
       ...(hasMessageType ? { messageType: reflectionMode ? "reflection" : "message" } : {}),
-      ...(hasRunMetadata ? {
-        executionTimeMs: runMetadata.executionTimeMs ?? null,
-        inputTokens: runMetadata.inputTokens ?? null,
-        outputTokens: runMetadata.outputTokens ?? null,
-        costUsd: runMetadata.costUsd == null ? null : runMetadata.costUsd.toFixed(5),
-        runStatus: runMetadata.runStatus,
-        runSummary: runMetadata.runSummary ?? null,
-        runActions: runMetadata.runActions ?? null,
-        runArtifacts: runMetadata.runArtifacts ?? null,
-      } : {}),
     });
+    await updateSessionRunMetadata(sessionId, runMetadata);
 
     res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
     res.end();
