@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
 import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable } from "@workspace/db";
-import { eq, sql, and, gte, desc } from "drizzle-orm";
+import { eq, sql, and, gte, desc, ne } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
@@ -1298,6 +1298,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const imageData = body.imageData;
   const activeModel: ModelId = (body.model === "gpt4o" || body.model === "gemini") ? body.model : "claude";
   const now = new Date();
+  const userId = (req as any).authUser?.id as number | undefined;
 
   // Load project memory + repo info + node state from DB
   const [project] = await db
@@ -1469,6 +1470,15 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (projectRow) {
     systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${projectRow.name}${projectRow.description ? `\nDescription: ${projectRow.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
   }
+  if (userId) {
+    const portfolioProjects = await db
+      .select({ id: projectsTable.id, name: projectsTable.name })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId)))
+      .limit(8);
+    const portfolioNames = portfolioProjects.map((p) => `- ${p.name}`).join("\n");
+    systemPrompt += `\n\n--- YOUR PORTFOLIO ---\n${portfolioNames ? `${portfolioNames}\n` : ""}${portfolioProjects.length}\n--- END PORTFOLIO ---`;
+  }
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
   }
@@ -1623,7 +1633,6 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   // ── Load Visual Vault images for this project ────────────────────────────
-  const userId = (req as any).authUser?.id as number | undefined;
   const vault = userId
     ? await loadVaultContext(userId, projectId)
     : { imageBlocks: [], systemNote: "", hasImages: false };
