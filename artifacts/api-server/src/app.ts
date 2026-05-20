@@ -55,6 +55,7 @@ const ALLOWED_ORIGINS: Set<string> = new Set([
   "https://5360bfd7-938b-4b5e-b3a5-5d9c9f8e7a2b.lovableproject.com",
   "https://atlas-idk.vercel.app",
   "https://atlas-iq.lovable.app",
+  ...(process.env.APP_URL ? [process.env.APP_URL] : []),
   ...(process.env.REPLIT_DOMAINS?.split(",").map((d) => `https://${d.trim()}`) ?? []),
   ...(process.env.RAILWAY_PUBLIC_DOMAIN ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`] : []),
   ...(process.env.ALLOWED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
