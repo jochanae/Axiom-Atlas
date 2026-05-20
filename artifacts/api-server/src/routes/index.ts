@@ -31,6 +31,7 @@ import tensionsRouter from "./tensions";
 import scanRouter from "./scan";
 import blueprintRouter from "./blueprint";
 import connectionsRouter from "./connections";
+import stateRouter from "./state";
 
 const router: IRouter = Router();
 
@@ -67,6 +68,7 @@ router.use(requireAuth, tensionsRouter);
 router.use(requireAuth, scanRouter);
 router.use(requireAuth, blueprintRouter);
 router.use(requireAuth, connectionsRouter);
+router.use(requireAuth, stateRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
