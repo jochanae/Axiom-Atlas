@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, desc } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
 import { db, sessionsTable, chatMessagesTable, projectsTable } from "@workspace/db";
 import {
   CreateSessionBody,
@@ -12,6 +13,10 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+const UpdateSessionTitleBody = z.object({
+  title: z.string(),
+});
 
 // ── Minimal memory types (mirrors chat.ts) ───────────────────────────────────
 interface MemoryEntry {
@@ -145,6 +150,31 @@ router.get("/sessions/:id", async (req, res): Promise<void> => {
     },
     messages: messages.map(serializeMessage),
   });
+});
+
+router.patch("/sessions/:id", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const parsed = UpdateSessionTitleBody.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const userId = (req as any).authUser.id as number;
+  const [session] = await db
+    .update(sessionsTable)
+    .set({ title: parsed.data.title })
+    .where(and(
+      eq(sessionsTable.id, params.data.id),
+      sql`exists (
+        select 1
+        from ${projectsTable}
+        where ${projectsTable.id} = ${sessionsTable.projectId}
+          and ${projectsTable.userId} = ${userId}
+      )`,
+    ))
+    .returning({ id: sessionsTable.id, title: sessionsTable.title });
+
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  res.json(session);
 });
 
 router.delete("/sessions/:id", async (req, res): Promise<void> => {
