@@ -658,6 +658,32 @@ function parseMemoryStore(raw: string | null): MemoryStore {
   }
 }
 
+function memoryHasConversationContext(raw: string | null, store: MemoryStore, conversationId: string): boolean {
+  const conversationIdLine = `[conversation_id: ${conversationId}]`;
+  return Boolean(raw?.includes(conversationIdLine))
+    || store.entries.some((entry) => entry.text.includes(conversationIdLine));
+}
+
+function nexusContextRole(role: string): string {
+  return role === "user" ? "user" : "atlas";
+}
+
+function buildConversationContextBlock(
+  conversationId: string,
+  timestamp: string,
+  messages: Array<{ role: string; content: string }>,
+): string {
+  return [
+    "--- CONVERSATION CONTEXT ---",
+    "[source: nexus]",
+    `[conversation_id: ${conversationId}]`,
+    `[timestamp: ${timestamp}]`,
+    "",
+    ...messages.map((message) => `[${nexusContextRole(message.role)}]: ${message.content.trim()}`),
+    "--- END CONVERSATION CONTEXT ---",
+  ].join("\n");
+}
+
 function buildMemoryText(store: MemoryStore): string {
   const TIER_LABELS: Record<number, string> = {
     1: "FOUNDATIONAL", 2: "IDENTITY", 3: "EPISODIC", 4: "CONTEXTUAL", 5: "TRANSIENT",
@@ -923,6 +949,35 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     .where(whereClause)
     .orderBy(asc(nexusMessagesTable.createdAt));
   return rows;
+}
+
+async function loadRecentNexusMessagesForConversation(
+  userId: number,
+  conversationId: string,
+  hasMessageType: boolean,
+): Promise<Array<{ role: string; content: string }>> {
+  const whereClause = conversationId === "__legacy__"
+    ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
+    : and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId));
+  const rows = await db
+    .select({
+      id: nexusMessagesTable.id,
+      role: nexusMessagesTable.role,
+      content: nexusMessagesTable.content,
+      createdAt: nexusMessagesTable.createdAt,
+    })
+    .from(nexusMessagesTable)
+    .where(nonBriefingMessages(whereClause, hasMessageType))
+    .orderBy(desc(nexusMessagesTable.createdAt), desc(nexusMessagesTable.id))
+    .limit(10);
+
+  return rows
+    .reverse()
+    .map((message) => ({
+      role: message.role,
+      content: message.content,
+    }))
+    .filter((message) => message.content.trim().length > 0);
 }
 
 // GET /api/nexus/thread — return a conversation thread (optionally scoped by conversationId)
@@ -1704,12 +1759,18 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 router.post("/nexus/handoff", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
-    const { messages, projectId, sessionId, ideaMode } = req.body as {
+    const { messages, projectId, sessionId, ideaMode, conversationId, conversation_id: conversationIdSnake } = req.body as {
       messages: { role: string; content: string }[];
       projectId?: number;
       sessionId?: number;
       ideaMode?: boolean;
+      conversationId?: string | null;
+      conversation_id?: string | null;
     };
+    const rawConversationId = conversationId ?? conversationIdSnake;
+    const handoffConversationId = typeof rawConversationId === "string" && rawConversationId.trim().length > 0
+      ? rawConversationId.trim()
+      : null;
 
     if (!messages?.length) {
       res.status(400).json({ error: "No messages provided" });
@@ -1772,24 +1833,64 @@ If no clear project name was discussed, use "New Project".`,
       targetProjectId = newProject.id;
     }
 
-    const memoryEntry = {
+    const [targetProject] = await db
+      .select({ memory: projectsTable.memory })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, targetProjectId), eq(projectsTable.userId, userId)))
+      .limit(1);
+    if (!targetProject) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const handoffTimestamp = new Date().toISOString();
+    const existingMemory = parseMemoryStore(targetProject.memory ?? null);
+    const nextEntries: MemoryEntry[] = [
+      ...existingMemory.entries,
+      {
+        tier: 1,
+        text: `Project brief from home conversation: ${brief.blueprint}`,
+        createdAt: handoffTimestamp,
+        retrievalCount: 0,
+        lastRetrievedAt: null,
+      },
+      ...(brief.firstStep ? [{
+        tier: 4 as const,
+        text: `First step: ${brief.firstStep}`,
+        createdAt: handoffTimestamp,
+        retrievalCount: 0,
+        lastRetrievedAt: null,
+      }] : []),
+    ];
+
+    if (
+      handoffConversationId
+      && !memoryHasConversationContext(targetProject.memory ?? null, existingMemory, handoffConversationId)
+    ) {
+      const hasMessageType = await hasNexusMessageTypeColumn();
+      const recentConversationMessages = await loadRecentNexusMessagesForConversation(
+        userId,
+        handoffConversationId,
+        hasMessageType,
+      );
+      if (recentConversationMessages.length > 0) {
+        nextEntries.push({
+          tier: 3,
+          text: buildConversationContextBlock(
+            handoffConversationId,
+            handoffTimestamp,
+            recentConversationMessages,
+          ),
+          createdAt: handoffTimestamp,
+          retrievalCount: 0,
+          lastRetrievedAt: null,
+        });
+      }
+    }
+
+    const memoryEntry: MemoryStore = {
       v: 2,
-      entries: [
-        {
-          tier: 1,
-          text: `Project brief from home conversation: ${brief.blueprint}`,
-          createdAt: new Date().toISOString(),
-          retrievalCount: 0,
-          lastRetrievedAt: null,
-        },
-        ...(brief.firstStep ? [{
-          tier: 4,
-          text: `First step: ${brief.firstStep}`,
-          createdAt: new Date().toISOString(),
-          retrievalCount: 0,
-          lastRetrievedAt: null,
-        }] : []),
-      ],
+      entries: nextEntries,
     };
 
     await db
