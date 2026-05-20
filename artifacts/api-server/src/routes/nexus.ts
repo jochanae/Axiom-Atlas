@@ -726,6 +726,204 @@ function extractMemoryLines(content: string): {
   return { content: kept.join("\n").trim(), memoryUpdated };
 }
 
+type SurfaceType = "MAP" | "WORKSPACE" | "DECISION";
+
+type SurfaceSignal = {
+  type: SurfaceType;
+  reason: string;
+  label: string;
+};
+
+type SurfaceMessage = {
+  role: string;
+  content: string;
+};
+
+type SurfaceScores = {
+  words: number;
+  sentences: number;
+  bullets: number;
+  numberedSteps: number;
+  decision: number;
+  decisionAnchors: number;
+  workspace: number;
+  workspaceAnchors: number;
+  map: number;
+  mapAnchors: number;
+  concernCount: number;
+};
+
+const SURFACE_CONCERN_PATTERNS = [
+  /\b(user|customer|audience|client|market|personas?)\b/,
+  /\b(product|feature|scope|mvp|experience|ux|workflow)\b/,
+  /\b(engineering|technical|code|api|database|auth|state|frontend|backend|infrastructure)\b/,
+  /\b(risk|constraint|cost|quality|security|privacy|timeline|trade-?off)\b/,
+  /\b(revenue|pricing|business|strategy|growth|retention|positioning)\b/,
+];
+
+function normalizeSurfaceText(value: string): string {
+  return value.toLowerCase().replace(/[\u2019']/g, "'").replace(/\s+/g, " ").trim();
+}
+
+function countSurfaceMatches(text: string, patterns: RegExp[]): number {
+  return patterns.reduce((count, pattern) => count + (text.match(pattern)?.length ?? 0), 0);
+}
+
+function countSurfaceLines(content: string, pattern: RegExp): number {
+  return content.split("\n").filter((line) => pattern.test(line.trim())).length;
+}
+
+function scoreSurfaceText(content: string): SurfaceScores {
+  const text = normalizeSurfaceText(content);
+  const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+  const sentences = content.split(/[.!?]+/).filter((part) => part.trim().length > 8).length;
+  const bullets = countSurfaceLines(content, /^[-*\u2022]\s+\S/);
+  const numberedSteps = countSurfaceLines(content, /^\d+[.)]\s+\S/);
+  const structuralLines = bullets + numberedSteps;
+  const concernCount = SURFACE_CONCERN_PATTERNS.filter((pattern) => pattern.test(text)).length;
+
+  const decisionAnchors = countSurfaceMatches(text, [
+    /\bwe should\b/g,
+    /\bthe right move is\b/g,
+    /\bthis is the direction\b/g,
+    /\bcommit(?:ting)? to\b/g,
+    /\block (?:it|this|that) in\b/g,
+    /\bgo with\b/g,
+    /\bmy call is\b/g,
+    /\bthe choice is\b/g,
+    /\bsettle(?:d| on)\b/g,
+    /\bthat's decided\b/g,
+  ]);
+  const conclusionMarkers = countSurfaceMatches(text, [
+    /\bbottom line\b/g,
+    /\btherefore\b/g,
+    /\bso the answer is\b/g,
+    /\bwhat this means is\b/g,
+    /\bthe direction\b/g,
+    /\brecommend(?:ation)?\b/g,
+  ]);
+  const hedges = countSurfaceMatches(text, [
+    /\bmaybe\b/g,
+    /\bmight\b/g,
+    /\bcould be\b/g,
+    /\bprobably\b/g,
+    /\bnot sure\b/g,
+    /\bdepends\b/g,
+  ]);
+  const decision = (decisionAnchors * 2) + conclusionMarkers + (hedges === 0 && decisionAnchors > 0 ? 1 : 0);
+
+  const workspaceAnchors = countSurfaceMatches(text, [
+    /\bready to build\b/g,
+    /\bnext steps?\b/g,
+    /\bimplementation plan\b/g,
+    /\bwe can build\b/g,
+    /\bi(?:'ll| will) (?:build|implement|wire|add|update|fix|create)\b/g,
+    /\blet's (?:build|implement|ship|wire|structure)\b/g,
+    /\bstructure this\b/g,
+    /\bworking space\b/g,
+  ]);
+  const operationalVerbs = countSurfaceMatches(text, [
+    /\b(build|implement|ship|wire|create|add|update|fix|refactor|test|deploy|run|push)\b/g,
+  ]);
+  const executionStructure = countSurfaceMatches(text, [
+    /\b(first|second|third|then|after that|step)\b/g,
+    /\b(file|route|endpoint|component|schema|migration|handler)\b/g,
+  ]);
+  const workspace = (workspaceAnchors * 2) + Math.min(operationalVerbs, 4) + executionStructure + structuralLines;
+
+  const mapAnchors = countSurfaceMatches(text, [
+    /\btension\b/g,
+    /\btrade-?off\b/g,
+    /\bcompeting\b/g,
+    /\bconflict(?:ing)?\b/g,
+    /\bconstraint\b/g,
+    /\binterconnected\b/g,
+    /\bmoving parts\b/g,
+    /\brelationship between\b/g,
+    /\bdepends on\b/g,
+    /\bmap\b/g,
+  ]);
+  const complexitySignals = countSurfaceMatches(text, [
+    /\bon one hand\b/g,
+    /\bon the other hand\b/g,
+    /\bbut\b/g,
+    /\bhowever\b/g,
+    /\bmeanwhile\b/g,
+    /\bat the same time\b/g,
+    /\barchitecture\b/g,
+    /\bsystem\b/g,
+    /\blayers?\b/g,
+    /\bdependencies\b/g,
+  ]);
+  const map = (mapAnchors * 2) + complexitySignals + concernCount + (structuralLines >= 2 ? 2 : 0);
+
+  return {
+    words,
+    sentences,
+    bullets,
+    numberedSteps,
+    decision,
+    decisionAnchors,
+    workspace,
+    workspaceAnchors,
+    map,
+    mapAnchors,
+    concernCount,
+  };
+}
+
+function classifySurfaceSignal(content: string): SurfaceSignal | null {
+  const scores = scoreSurfaceText(content);
+  const hasSubstance = scores.words >= 28
+    || scores.sentences >= 3
+    || (scores.bullets + scores.numberedSteps) >= 2
+    || (scores.decisionAnchors > 0 && scores.words >= 16)
+    || (scores.workspaceAnchors >= 2 && scores.words >= 12);
+  if (!hasSubstance) return null;
+
+  if (scores.decisionAnchors > 0 && scores.decision >= 3) {
+    return { type: "DECISION", reason: "commitment signal", label: "Log this decision" };
+  }
+
+  if (scores.workspaceAnchors > 0 && scores.workspace >= 5 && (scores.words >= 24 || scores.numberedSteps > 0)) {
+    return { type: "WORKSPACE", reason: "operational shift", label: "Working space prepared" };
+  }
+
+  if (scores.mapAnchors > 0 && scores.map >= 7 && scores.concernCount >= 2 && scores.words >= 45) {
+    return { type: "MAP", reason: "interconnected tensions", label: "Tension Map" };
+  }
+
+  return null;
+}
+
+function materialSurfaceShift(userMessage: string, type: SurfaceType): boolean {
+  const scores = scoreSurfaceText(userMessage);
+  if (type === "DECISION") return scores.decisionAnchors > 0 || scores.decision >= 3;
+  if (type === "WORKSPACE") return scores.workspaceAnchors > 0 || scores.workspace >= 4;
+  return scores.mapAnchors > 0 || (scores.words >= 40 && scores.concernCount >= 2);
+}
+
+function detectSurfaceSignal(args: {
+  content: string;
+  userMessage: string;
+  recentMessages?: SurfaceMessage[];
+}): SurfaceSignal | null {
+  const surface = classifySurfaceSignal(args.content);
+  if (!surface) return null;
+
+  const previousAssistant = [...(args.recentMessages ?? [])]
+    .reverse()
+    .find((message) => message.role === "assistant" && message.content.trim().length > 0);
+  if (previousAssistant) {
+    const previousSurface = classifySurfaceSignal(previousAssistant.content);
+    if (previousSurface?.type === surface.type && !materialSurfaceShift(args.userMessage, surface.type)) {
+      return null;
+    }
+  }
+
+  return surface;
+}
+
 function parseRepo(raw: string | null): string | null {
   if (!raw) return null;
   try {
@@ -1555,6 +1753,13 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
           { role: "user", content: message },
           { role: "assistant", content: visibleContent },
         ]);
+    const surface = reflectionMode
+      ? null
+      : detectSurfaceSignal({
+          content: visibleContent,
+          userMessage: message,
+          recentMessages: conversationHistory,
+        });
 
     // Persist the assistant response to the Living Thread
     await db.insert(nexusMessagesTable).values({
@@ -1568,7 +1773,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     });
     await updateSessionRunMetadata(sessionId, runMetadata);
 
-    res.write(`event: done\ndata: ${JSON.stringify({ memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, surface, memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
     res.end();
   };
 
@@ -1578,6 +1783,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     writeStep({ verb: status === "cancelled" ? "Cancelled" : "Failed", target: "Atlas response", status: status === "cancelled" ? "warn" : "fail" });
     const metadata = failedRunMetadata(summary, status);
     res.write(`event: done\ndata: ${JSON.stringify({
+      content: "",
+      surface: null,
       memoryUpdated: false,
       detectedMode: "strategic",
       ...metadata,
@@ -1745,6 +1952,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     if (res.headersSent && !res.writableEnded) {
       const metadata = failedRunMetadata("Atlas ran into an issue. Please try again.", "failed");
       res.write(`event: done\ndata: ${JSON.stringify({
+        content: "",
+        surface: null,
         memoryUpdated: false,
         detectedMode: "strategic",
         ...metadata,
