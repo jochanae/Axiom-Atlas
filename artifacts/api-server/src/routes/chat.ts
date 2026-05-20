@@ -1156,6 +1156,18 @@ type ModelCallResult = {
   usage: ModelCallUsage;
 };
 
+function selectChatModelForMessage(message: string): ModelId {
+  if (/```[\s\S]*?```/.test(message)) return "gpt4o";
+
+  const codeRequestPattern = /\b(write|fix|review|debug|implement|refactor|edit|modify|update|generate|create|build|patch)\b[\s\S]{0,80}\b(code|component|function|class|hook|api|endpoint|route|query|schema|migration|test|types?|css|html|sql|script|bug|error|file|repo|repository|pr|pull request)\b|\b(code|component|function|class|hook|api|endpoint|route|query|schema|migration|test|types?|css|html|sql|script|bug|error|file|repo|repository|pr|pull request)\b[\s\S]{0,80}\b(write|fix|review|debug|implement|refactor|edit|modify|update|generate|create|build|patch)\b/i;
+  if (codeRequestPattern.test(message)) return "gpt4o";
+
+  const structuredTechnicalPattern = /\b(return|respond|output|format|give|provide|create|generate|write|draft|design|define|produce|make|show|list)\b[\s\S]{0,80}\b(json|yaml|xml|schema|openapi|swagger|graphql|sql|regex|typescript type|interface|api spec|technical spec|acceptance criteria|test plan|diff|patch|file edit|markdown table|mermaid)\b|\b(json|yaml|xml|schema|openapi|swagger|graphql|sql|regex|typescript type|interface|api spec|technical spec|acceptance criteria|test plan|diff|patch|file edit|markdown table|mermaid)\b[\s\S]{0,80}\b(return|respond|output|format|give|provide|create|generate|write|draft|design|define|produce|make|show|list)\b/i;
+  if (structuredTechnicalPattern.test(message)) return "gpt4o";
+
+  return "claude";
+}
+
 const emptyUsage = (): ModelCallUsage => ({
   executionTimeMs: 0,
   inputTokens: null,
@@ -1345,7 +1357,6 @@ router.post("/chat", async (req, res): Promise<void> => {
     sessionId?: number;
     projectId: number;
     message: string;
-    model?: string;
     mode?: string;
     lens?: string;
     workspaceLens?: string;
@@ -1374,7 +1385,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const projectMap = (body as any).projectMap as string | undefined;
   const clientForgeContext = body.forgeContext ?? "";
   const imageData = body.imageData;
-  const activeModel: ModelId = (body.model === "gpt4o" || body.model === "gemini") ? body.model : "claude";
+  const activeModel = selectChatModelForMessage(message);
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
 
