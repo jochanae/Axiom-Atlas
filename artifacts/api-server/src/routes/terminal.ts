@@ -1,59 +1,35 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { spawn } from "child_process";
+import type { ChildProcess } from "child_process";
 import { logger } from "../lib/logger";
 import { requireAuth } from "./auth";
+import {
+  classifyTerminalCommand,
+  evaluateTerminalRequest,
+  executeTerminalCommand,
+  getTerminalHistory,
+  parseTerminalTier,
+} from "../lib/terminalExecution";
 
 const router: IRouter = Router();
 
-const WORK_DIR = process.env.GIT_WORK_DIR ?? process.env.HOME ?? "/home/runner/workspace";
-const MAX_HISTORY = 60;
-const MAX_CMD_LENGTH = 2000;
-
-type HistoryEntry = {
-  id: string;
-  command: string;
-  output: string;
-  exitCode: number | null;
-  timestamp: string;
-  durationMs: number;
-};
-
-const history: HistoryEntry[] = [];
-
-function addHistory(entry: HistoryEntry) {
-  history.push(entry);
-  if (history.length > MAX_HISTORY) history.shift();
-}
-
-// Commands that could destroy the server environment
-const BLOCKED_PATTERNS: RegExp[] = [
-  /rm\s+-[a-z]*r[a-z]*f?\s+\/(?:\s|$)/i,        // rm -rf /
-  /rm\s+-[a-z]*f[a-z]*r?\s+\/(?:\s|$)/i,        // rm -fr /
-  /:\s*\(\s*\)\s*\{.*\|.*&.*\}/,                 // fork bomb
-  /\|\s*bash\b/i,                                // curl | bash, wget | bash
-  /\|\s*sh\b/i,                                  // pipe into sh
-  /mkfs\b/i,                                     // format filesystem
-  /dd\s+.*of=\/dev\//i,                          // dd to device
-  />\s*\/dev\/sd/i,                              // redirect to block device
-  /chmod\s+-[a-z]*R[a-z]*\s+777\s+\//i,         // chmod -R 777 /
-  /shutdown\b/i,                                  // shutdown
-  /reboot\b/i,                                    // reboot
-  /halt\b/i,                                      // halt
-  /kill\s+-9\s+1\b/,                             // kill init
-  /pkill\s+-9\s+node/i,                          // kill all node processes
-];
-
-function isDangerous(cmd: string): string | null {
-  for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(cmd)) return `Command blocked: matches dangerous pattern (${pattern.source.slice(0, 40)})`;
+// POST /api/terminal/classify — classify a command before deciding how to run it
+router.post("/terminal/classify", requireAuth, (req: Request, res: Response): void => {
+  const { command } = req.body as { command?: string };
+  if (!command?.trim()) {
+    res.status(400).json({ error: "Missing command" });
+    return;
   }
-  if (cmd.length > MAX_CMD_LENGTH) return `Command too long (max ${MAX_CMD_LENGTH} chars)`;
-  return null;
-}
+
+  res.json(classifyTerminalCommand(command));
+});
 
 // POST /api/terminal/exec — execute a command, stream output as SSE
-router.post("/terminal/exec", requireAuth, (req: Request, res: Response): void => {
-  const { command } = req.body as { command?: string };
+router.post("/terminal/exec", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { command, tier, confirmationToken } = req.body as {
+    command?: string;
+    tier?: unknown;
+    confirmationToken?: string;
+  };
   if (!command?.trim()) {
     res.status(400).json({ error: "Missing command" });
     return;
@@ -82,14 +58,21 @@ Type any command above to get started.`,
     return;
   }
 
-  const danger = isDangerous(command);
-  if (danger) {
-    res.status(403).json({ error: danger });
+  const requestedTier = parseTerminalTier(tier);
+  const evaluation = evaluateTerminalRequest(command, requestedTier, confirmationToken);
+  if (evaluation.tier === "blocked") {
+    res.status(403).json({ error: evaluation.reason });
     return;
   }
-
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const start = Date.now();
+  if (evaluation.requiresConfirmation) {
+    res.json({
+      requiresConfirmation: true,
+      tier: evaluation.tier,
+      command,
+      reason: evaluation.reason,
+    });
+    return;
+  }
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -101,71 +84,30 @@ Type any command above to get started.`,
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  send("start", command);
-
-  const outputChunks: string[] = [];
-
-  const gitToken = process.env.GITHUB_TOKEN ?? "";
-  const gitUser = process.env.GIT_USER_NAME ?? "jochanae";
-  const gitEmail = process.env.GIT_USER_EMAIL ?? "jochanae@gmail.com";
-
-  const proc = spawn("bash", ["-c", command], {
-    cwd: WORK_DIR,
-    env: {
-      ...process.env,
-      FORCE_COLOR: "0",
-      NO_COLOR: "1",
-      TERM: "dumb",
-      GIT_AUTHOR_NAME: gitUser,
-      GIT_AUTHOR_EMAIL: gitEmail,
-      GIT_COMMITTER_NAME: gitUser,
-      GIT_COMMITTER_EMAIL: gitEmail,
-      GIT_ASKPASS: "echo",
-      GIT_TERMINAL_PROMPT: "0",
-      GITHUB_TOKEN: gitToken,
-    },
-  });
-
-  proc.stdout?.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    outputChunks.push(text);
-    send("output", text);
-  });
-
-  proc.stderr?.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    outputChunks.push(text);
-    send("stderr", text);
-  });
-
-  proc.on("close", (code) => {
-    const durationMs = Date.now() - start;
-    const fullOutput = outputChunks.join("");
-    send("done", JSON.stringify({ exitCode: code, durationMs }));
-    res.end();
-    addHistory({
-      id, command,
-      output: fullOutput.slice(0, 8000),
-      exitCode: code,
-      timestamp: new Date().toISOString(),
-      durationMs,
-    });
-    logger.info({ command, exitCode: code, durationMs }, "Terminal command executed");
-  });
-
-  proc.on("error", (err) => {
-    send("error", err.message);
-    res.end();
-  });
-
+  let proc: ChildProcess | null = null;
   req.on("close", () => {
-    try { proc.kill("SIGTERM"); } catch {}
+    try { proc?.kill("SIGTERM"); } catch {}
   });
+
+  try {
+    const result = await executeTerminalCommand(command, {
+      onStart: (startedCommand) => send("start", startedCommand),
+      onStdout: (text) => send("output", text),
+      onStderr: (text) => send("stderr", text),
+      onProcess: (child) => { proc = child; },
+    });
+    send("done", JSON.stringify({ exitCode: result.exitCode, durationMs: result.durationMs }));
+    res.end();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Terminal command failed";
+    send("error", message);
+    res.end();
+  }
 });
 
 // GET /api/terminal/history — last N commands with their output
 router.get("/terminal/history", requireAuth, (_req, res): void => {
-  res.json({ history: [...history].reverse() });
+  res.json({ history: getTerminalHistory() });
 });
 
 // POST /api/terminal/explain — scenario mode: explain what a command WOULD do without executing
