@@ -76,7 +76,7 @@ function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = f
   };
 }
 
-router.use(async (_req, _res, next) => {
+router.use("/projects", async (_req, _res, next) => {
   try {
     await ensureProjectSchema();
     next();
