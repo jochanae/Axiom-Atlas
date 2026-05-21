@@ -1,7 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { spawn, type ChildProcess } from "child_process";
 import { access, mkdir } from "fs/promises";
-import path from "path";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { connectionsTable, db, projectsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
@@ -20,7 +19,7 @@ const SANDBOX_ROOT = "/tmp/axiom-sandbox";
 const NO_LINKED_REPO_MESSAGE = "No GitHub repo linked to this project. Link one in project settings to run commands.";
 
 type ParsedLinkedRepo = { owner: string; repo: string; fullName: string };
-type PreparedProjectRepo = { cwd: string; githubToken: string | null };
+type PreparedProjectRepo = { sandboxDir: string; githubToken: string | null };
 
 class TerminalHttpError extends Error {
   constructor(public status: number, message: string) {
@@ -187,16 +186,16 @@ async function prepareProjectRepo(projectId: number, userId: number): Promise<Pr
   if (!repo) throw new TerminalHttpError(400, NO_LINKED_REPO_MESSAGE);
 
   const githubToken = await resolveGithubTokenForRequest(userId, project.githubToken ?? null);
-  const cwd = path.join(SANDBOX_ROOT, String(projectId));
+  const sandboxDir = `/tmp/axiom-sandbox/${projectId}`;
   const cloneUrl = buildCloneUrl(repo, githubToken);
 
   try {
     await mkdir(SANDBOX_ROOT, { recursive: true });
-    if (await pathExists(cwd)) {
-      await runGit(["-C", cwd, "remote", "set-url", "origin", cloneUrl], githubToken);
-      await runGit(["-C", cwd, "pull"], githubToken);
+    if (await pathExists(sandboxDir)) {
+      await runGit(["-C", sandboxDir, "remote", "set-url", "origin", cloneUrl], githubToken);
+      await runGit(["-C", sandboxDir, "pull"], githubToken);
     } else {
-      await runGit(["clone", "--depth", "1", cloneUrl, cwd], githubToken);
+      await runGit(["clone", "--depth", "1", cloneUrl, sandboxDir], githubToken);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "unknown git error";
@@ -204,7 +203,7 @@ async function prepareProjectRepo(projectId: number, userId: number): Promise<Pr
     throw new TerminalHttpError(500, `Failed to prepare GitHub repo: ${redactToken(message, githubToken)}`);
   }
 
-  return { cwd, githubToken };
+  return { sandboxDir, githubToken };
 }
 
 // POST /api/terminal/classify — classify a command before deciding how to run it
@@ -291,7 +290,7 @@ Type any command above to get started.`,
     } catch (err: unknown) {
       const status = err instanceof TerminalHttpError ? err.status : 500;
       const message = err instanceof Error ? err.message : "Failed to prepare GitHub repo";
-      res.status(status).json({ error: message });
+      res.status(status >= 500 ? 400 : status).json({ error: message });
       return;
     }
   }
@@ -318,7 +317,7 @@ Type any command above to get started.`,
       onStderr: (text) => send("stderr", text),
       onProcess: (child) => { proc = child; },
     }, {
-      cwd: preparedRepo?.cwd,
+      cwd: preparedRepo?.sandboxDir,
       githubToken: preparedRepo?.githubToken,
     });
     send("done", JSON.stringify({ output: result.output, exitCode: result.exitCode, durationMs: result.durationMs }));
