@@ -8,6 +8,8 @@ import {
   GetProjectParams,
   UpdateProjectParams,
   DeleteProjectParams,
+  TouchProjectParams,
+  ListRecentProjectsQueryParams,
   GetProjectSummaryParams,
   ListReadinessSnapshotsParams,
   RecordReadinessSnapshotParams,
@@ -67,6 +69,7 @@ function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = f
     ...rest,
     hasGithubToken: !!githubToken,
     ...(includeToken ? { githubToken: plainToken } : {}),
+    lastOpenedAt: p.lastOpenedAt.toISOString(),
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
   };
@@ -178,6 +181,62 @@ router.post("/projects", async (req, res): Promise<void> => {
   }
 
   res.status(201).json(serializeProject(project, true));
+});
+
+router.get("/projects/recent", async (req, res): Promise<void> => {
+  const parsed = ListRecentProjectsQueryParams.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const userId = (req as any).authUser.id as number;
+  const withinHours = parsed.data.withinHours ?? 48;
+  const projects = await db
+    .select({
+      id: projectsTable.id,
+      name: projectsTable.name,
+      status: projectsTable.status,
+      lastOpenedAt: projectsTable.lastOpenedAt,
+    })
+    .from(projectsTable)
+    .where(and(
+      eq(projectsTable.userId, userId),
+      sql`${projectsTable.lastOpenedAt} >= now() - (${withinHours}::int * interval '1 hour')`,
+    ))
+    .orderBy(desc(projectsTable.lastOpenedAt))
+    .limit(20);
+
+  res.json({
+    projects: projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      status: project.status,
+      last_opened_at: project.lastOpenedAt.toISOString(),
+    })),
+  });
+});
+
+router.post("/projects/:projectId/touch", async (req, res): Promise<void> => {
+  const params = TouchProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const userId = (req as any).authUser.id as number;
+  const [project] = await db
+    .update(projectsTable)
+    .set({ lastOpenedAt: sql`now()` })
+    .where(and(eq(projectsTable.id, params.data.projectId), eq(projectsTable.userId, userId)))
+    .returning({ id: projectsTable.id });
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  res.sendStatus(204);
 });
 
 router.get("/projects/:id/map-nodes", async (req, res): Promise<void> => {

@@ -18,6 +18,7 @@ export const projectsTable = pgTable("projects", {
   pushHistory: jsonb("push_history").default([]),
   lastHandoverAt: timestamp("last_handover_at", { withTimezone: true }),
   lastHandoverHash: text("last_handover_hash"),
+  lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
