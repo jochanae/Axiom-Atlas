@@ -1556,8 +1556,7 @@ async function callModel(
   modelId: ModelId,
   systemPrompt: string,
   messages: Array<{ role: "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> }>,
-  imageData?: { base64: string; mediaType: string },
-  onChunk?: (text: string) => void
+  imageData?: { base64: string; mediaType: string }
 ): Promise<ModelCallResult> {
   const startedAt = performance.now();
   if (modelId === "gpt4o") {
@@ -1641,42 +1640,22 @@ async function callModel(
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
   const claudeMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = messages as typeof claudeMessages;
-  const stream = await anthropic.messages.stream({
+  const response = await anthropic.messages.create({
     model,
     max_tokens: 8192,
     system: systemPrompt,
     messages: claudeMessages,
   });
-  const chunks: string[] = [];
-  if (onChunk) {
-    for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        chunks.push(event.delta.text);
-        onChunk(event.delta.text);
-      }
-    }
-  } else {
-    const response = await stream.finalMessage();
-    return {
-      content: response.content[0]?.type === "text" ? response.content[0].text : "",
-      model,
-      usage: {
-        executionTimeMs: Math.round(performance.now() - startedAt),
-        inputTokens: response.usage.input_tokens ?? null,
-        outputTokens: response.usage.output_tokens ?? null,
-        costUsd: calculateModelCostUsd(model, response.usage.input_tokens ?? null, response.usage.output_tokens ?? null),
-      },
-    };
-  }
-  const finalMsg = await stream.finalMessage();
+  const inputTokens = response.usage.input_tokens ?? null;
+  const outputTokens = response.usage.output_tokens ?? null;
   return {
-    content: chunks.join(""),
+    content: response.content[0]?.type === "text" ? response.content[0].text : "",
     model,
     usage: {
       executionTimeMs: Math.round(performance.now() - startedAt),
-      inputTokens: finalMsg.usage.input_tokens ?? null,
-      outputTokens: finalMsg.usage.output_tokens ?? null,
-      costUsd: calculateModelCostUsd(model, finalMsg.usage.input_tokens ?? null, finalMsg.usage.output_tokens ?? null),
+      inputTokens,
+      outputTokens,
+      costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
     },
   };
 }
@@ -2167,20 +2146,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     });
   }
 
-  // Set up SSE for streaming if Claude is the active model
-  let streamingStarted = false;
-  const onChunk = activeModel === "claude" ? (text: string) => {
-    if (!streamingStarted) {
-      streamingStarted = true;
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("X-Accel-Buffering", "no");
-      res.flushHeaders();
-    }
-    res.write(`event: delta\ndata: ${JSON.stringify(text)}\n\n`);
-  } : undefined;
-
-  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData, onChunk);
+  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
   let modelUsed = modelResult.model;
@@ -2451,12 +2417,7 @@ TERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
     ...(autoName ? { autoName } : {}),
   };
 
-  if (streamingStarted) {
-    res.write(`event: done\ndata: ${JSON.stringify(finalPayload)}\n\n`);
-    res.end();
-  } else {
-    res.json(finalPayload);
-  }
+  res.json(finalPayload);
 });
 
 // ── Scenario keep — persist buffered scenario messages to session DB ──────────
