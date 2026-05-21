@@ -50,6 +50,7 @@ vi.mock("@workspace/db", () => {
     atlasErrorLogsTable: makeTable("atlas_error_logs"),
     atlasSelfMapTable: makeTable("atlas_self_map"),
     chatMessagesTable: makeTable("chat_messages"),
+    connectionsTable: makeTable("connections"),
     db: undefined,
     entriesTable: makeTable("entries"),
     projectsTable: makeTable("projects"),
