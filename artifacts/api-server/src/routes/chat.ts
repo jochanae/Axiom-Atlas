@@ -14,6 +14,7 @@ import {
   parseTerminalTier,
   type TerminalTier,
 } from "../lib/terminalExecution";
+import { prepareProjectRepo } from "../lib/terminalSandbox";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
@@ -342,7 +343,9 @@ function extractTerminalCommand(content: string): {
 }
 
 async function runChatTerminalCommand(
-  requested: { command: string; tier?: TerminalTier }
+  requested: { command: string; tier?: TerminalTier },
+  projectId?: number,
+  userId?: number
 ): Promise<{ terminalCmd: ChatTerminalCommand; terminalResult: ChatTerminalResult | null }> {
   const evaluation = evaluateTerminalRequest(requested.command, requested.tier);
   const resolvedTier: TerminalTier = evaluation.tier === "blocked"
@@ -358,7 +361,23 @@ async function runChatTerminalCommand(
     return { terminalCmd, terminalResult: null };
   }
 
-  const result = await executeTerminalCommand(requested.command);
+  let cwd: string | undefined;
+  if (projectId && userId) {
+    try {
+      const { sandboxDir } = await prepareProjectRepo(projectId, userId);
+      cwd = sandboxDir;
+    } catch {
+      // Non-fatal — run without sandbox if prep fails
+    }
+  }
+
+  const result = await executeTerminalCommand(requested.command, {
+    onStart: () => {},
+    onStdout: () => {},
+    onStderr: () => {},
+    onProcess: () => {},
+  }, { cwd });
+
   return {
     terminalCmd,
     terminalResult: {
@@ -2189,7 +2208,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   rawContent = terminalExtraction.content;
   if (terminalExtraction.terminalCmd) {
     try {
-      const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd);
+      const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId, userId);
       terminalCmd = executed.terminalCmd;
       terminalResult = executed.terminalResult;
       if (terminalResult) {
