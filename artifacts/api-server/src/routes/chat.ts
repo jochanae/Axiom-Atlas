@@ -1912,11 +1912,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n${recentRepoActivityContext}`;
   }
   systemPrompt += `\n\n--- SESSION CONTINUITY ---
-If this is the first assistant message in this session (no prior assistant messages exist in the session history), lead your response with a brief recap before answering. Format exactly:
-
-"Still here. [One sentence on the most recent commit or change from RECENT REPO ACTIVITY, or most recent memory if no repo activity]. [One sentence on any open errors or blockers from RECENT PRODUCTION ERRORS if any exist]. What's next: [one sentence on logical next step based on project memory and flow nodes]."
-
-Keep the recap to 3 sentences maximum. Never show this recap after the first message in a session.
+If this is the first assistant message in this session (no prior assistant messages exist in the session history), open naturally — like picking up a real conversation, not filing a status report. DO NOT use the format "Still here. [recap]. What's next:". Instead, read the memory and repo activity and respond the way a sharp collaborator would after being away: reference what actually matters, skip what doesn't, and lead with something useful or ask the right question. One to two sentences max. Never clinical. Never a checklist. Match the energy of someone who was already thinking about this project before the conversation started.
 --- END SESSION CONTINUITY ---`;
   if (recentErrorContext) {
     systemPrompt += `\n\n--- RECENT PRODUCTION ERRORS ---\n${recentErrorContext}\n--- END RECENT PRODUCTION ERRORS ---`;
