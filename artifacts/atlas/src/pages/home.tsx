@@ -1842,9 +1842,9 @@ export default function Home() {
           padding: "0 24px",
         }}
       >
-        <div style={{ width: "100%", maxWidth: 560, paddingBottom: 120 }}>
+        <div className="home-content-shell" style={{ width: "100%", maxWidth: 560, paddingBottom: 120 }}>
           {/* Hero — fills the viewport above the mobile nav, content vertically centered */}
-          <div style={{ minHeight: homeMessages.length > 0 ? 0 : "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: homeMessages.length > 0 ? "flex-start" : "center", position: "relative", paddingBottom: homeMessages.length > 0 ? 0 : 120 }}>
+          <div className="home-hero-shell" style={{ minHeight: homeMessages.length > 0 ? 0 : "calc(100svh - 50px - env(safe-area-inset-bottom, 0px))", display: "flex", flexDirection: "column", justifyContent: homeMessages.length > 0 ? "flex-start" : "center", position: "relative", paddingBottom: homeMessages.length > 0 ? 0 : 120 }}>
             {/* Atmospheric pulse — behind everything, theme-aware */}
             <div className="atlas-home-atmosphere" style={{
               position: "absolute",
@@ -2475,7 +2475,7 @@ export default function Home() {
       </div>
 
       {/* Below-the-fold: Recent Activity / Discovery section */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 24px 140px" }}>
+      <div className="home-below-fold-section" style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 24px 140px" }}>
         <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 12, marginBottom: 14 }}>
           <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, transparent, rgba(180,83,9,0.18), transparent)" }} />
         </div>
@@ -2621,8 +2621,26 @@ export default function Home() {
               0 0 44px 12px rgba(212,175,55,0.14);
           }
         }
+        @media (min-width: 1024px) {
+          .home-content-shell {
+            max-width: none !important;
+          }
+          .home-hero-shell {
+            width: 100%;
+            max-width: 680px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          .home-below-fold-section {
+            width: 100%;
+            box-sizing: border-box;
+          }
+          .home-bottom-nav {
+            display: none !important;
+          }
+        }
       `}</style>
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, overflow: "visible" }}>
+      <div className="home-bottom-nav" style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100, overflow: "visible" }}>
         {/* Arch SVG — visual layer only */}
         <svg
           style={{ position: "absolute", bottom: 0, left: 0, width: "100%", height: 76, overflow: "visible", pointerEvents: "none" }}

@@ -16,14 +16,24 @@ const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
 function getRedirectUri(req?: import("express").Request) {
   // Use the actual host from the incoming request so dev and prod both work
   // without needing separate Google Console entries per environment
+  const forwardedProto = req?.headers["x-forwarded-proto"];
+  const protocol =
+    (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)?.split(",")[0]?.trim().replace(/:$/, "") ||
+    req?.protocol ||
+    "https";
   if (req) {
     const forwarded = req.headers["x-forwarded-host"];
-    const host = (Array.isArray(forwarded) ? forwarded[0] : forwarded) || req.headers.host;
-    if (host) return `https://${host}/api/auth/google/callback`;
+    const forwardedHost = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim();
+    if (forwardedHost) return `${protocol}://${forwardedHost}/api/auth/google/callback`;
+    const host = req.headers.host;
+    if (host) return `${protocol}://${host}/api/auth/google/callback`;
   }
-  const domain = process.env.REPLIT_DOMAINS?.split(",")[0]?.trim();
-  if (domain) return `https://${domain}/api/auth/google/callback`;
-  return `http://localhost:80/api/auth/google/callback`;
+  const appUrl = process.env.APP_URL?.trim();
+  if (appUrl) {
+    const url = new URL(appUrl);
+    return `${url.protocol.replace(/:$/, "")}://${url.host}/api/auth/google/callback`;
+  }
+  return `${protocol}://localhost:80/api/auth/google/callback`;
 }
 
 // GET /api/auth/google/redirect-uri — diagnostic: returns the exact URI to register in Google Console
@@ -191,8 +201,8 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
     await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
-    createSessionCookie(token, res);
-    res.redirect(`${process.env.FRONTEND_URL ?? "https://axiomsystem.app"}/home`);
+    const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://axiomsystem.app";
+    res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
   } catch (err) {
     req.log?.error(err, "google-oauth-callback-error");
     res.redirect("/?auth_error=server_error");

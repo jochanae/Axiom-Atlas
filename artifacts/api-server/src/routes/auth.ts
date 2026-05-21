@@ -73,6 +73,24 @@ export async function getUserFromCookie(req: import("express").Request) {
   return rows[0]?.user ?? null;
 }
 
+// GET /api/auth/session/exchange
+router.get("/auth/session/exchange", async (req, res): Promise<void> => {
+  const token = typeof req.query.token === "string" ? req.query.token : undefined;
+  if (!token) { res.status(400).json({ error: "Token is required" }); return; }
+
+  const now = new Date();
+  const [session] = await db
+    .select({ id: userSessionsTable.id })
+    .from(userSessionsTable)
+    .where(and(eq(userSessionsTable.token, token), gt(userSessionsTable.expiresAt, now)))
+    .limit(1);
+
+  if (!session) { res.status(401).json({ error: "Invalid or expired token" }); return; }
+
+  createSessionCookie(token, res);
+  res.json({ ok: true });
+});
+
 // POST /api/auth/signup
 router.post("/auth/signup", async (req, res): Promise<void> => {
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";

@@ -54,6 +54,17 @@ function resolveApiUrl(input: RequestInfo | URL): RequestInfo | URL {
 const _originalFetch = window.fetch.bind(window);
 window.fetch = async (...args) => {
   args[0] = resolveApiUrl(args[0]);
+  if (API_BASE) {
+    const url = typeof args[0] === "string"
+      ? args[0]
+      : args[0] instanceof URL
+        ? args[0].toString()
+        : args[0].url;
+    const isApiCall = new URL(url, location.origin).pathname.startsWith("/api/");
+    if (isApiCall && args[1]?.credentials === undefined) {
+      args[1] = { ...(args[1] ?? {}), credentials: "include" };
+    }
+  }
   const res = await _originalFetch(...args);
   if (res.status === 401) {
     const url = typeof args[0] === "string" ? args[0] : (args[0] as Request).url;

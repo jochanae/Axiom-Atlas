@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { atlasIncidentsTable, db, projectsTable } from "@workspace/db";
-import { eq, and, isNull, isNotNull } from "drizzle-orm";
+import { atlasIncidentsTable, connectionsTable, db, projectsTable } from "@workspace/db";
+import { eq, and, desc, isNotNull } from "drizzle-orm";
 import { spawn } from "child_process";
 import { writeFile, mkdir, rm } from "fs/promises";
 import { randomBytes } from "crypto";
@@ -39,6 +39,38 @@ function ghHeaders(token: string) {
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "Atlas-Dev-Env/1.0",
   };
+}
+
+function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
+  const plain = storedToken ? decryptToken(storedToken) : null;
+  return plain && plain !== "__server__" ? plain : null;
+}
+
+async function getAccountGithubToken(userId: number | undefined): Promise<string | null> {
+  if (!userId) return null;
+
+  const [connection] = await db
+    .select({ token: connectionsTable.token })
+    .from(connectionsTable)
+    .where(and(
+      eq(connectionsTable.userId, userId),
+      eq(connectionsTable.type, "github"),
+      isNotNull(connectionsTable.token)
+    ))
+    .orderBy(desc(connectionsTable.createdAt))
+    .limit(1);
+
+  return resolveStoredGithubToken(connection?.token);
+}
+
+async function resolveGithubTokenForRequest(
+  userId: number | undefined,
+  projectGithubToken: string | null | undefined
+): Promise<string | null> {
+  const accountToken = await getAccountGithubToken(userId);
+  if (accountToken) return accountToken;
+
+  return resolveStoredGithubToken(projectGithubToken) ?? process.env.GITHUB_TOKEN ?? null;
 }
 
 /** Resolve token: use the header value unless it's the sentinel "__server__", then fall back to env var. */
@@ -272,8 +304,7 @@ router.get("/projects/:projectId/commits", async (req, res): Promise<void> => {
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
   const repo = parseLinkedRepo(project.linkedRepo ?? null);
-  const storedToken = project.githubToken ? decryptToken(project.githubToken) : null;
-  const token = storedToken && storedToken !== "__server__" ? storedToken : process.env.GITHUB_TOKEN ?? null;
+  const token = await resolveGithubTokenForRequest(userId, project.githubToken ?? null);
   if (!repo) { res.json({ commits: [], reason: "parse_error", raw: project.linkedRepo ?? null }); return; }
   if (!token) { res.json({ commits: [], reason: "no_token" }); return; }
   console.log("[github commits] parsed repo", { owner: repo.owner, repo: repo.repo });
