@@ -13,6 +13,10 @@ export type TerminalClassification = {
   reason: string;
 };
 
+export type TerminalClassificationOptions = {
+  sandbox?: boolean;
+};
+
 export type TerminalHistoryEntry = {
   id: string;
   command: string;
@@ -34,6 +38,11 @@ export type TerminalExecutionCallbacks = {
   onStdout?: (text: string) => void;
   onStderr?: (text: string) => void;
   onProcess?: (proc: ChildProcess) => void;
+};
+
+export type TerminalExecutionOptions = {
+  cwd?: string;
+  githubToken?: string | null;
 };
 
 export type TerminalRequestEvaluation = {
@@ -99,7 +108,10 @@ function hasFileWriteOrDeleteOperation(command: string): boolean {
   ]);
 }
 
-export function classifyTerminalCommand(command: string): TerminalClassification {
+export function classifyTerminalCommand(
+  command: string,
+  options: TerminalClassificationOptions = {}
+): TerminalClassification {
   const normalized = normalizeCommand(command);
   if (!normalized) return { tier: "blocked", reason: "Missing command" };
 
@@ -114,12 +126,15 @@ export function classifyTerminalCommand(command: string): TerminalClassification
     return { tier: 3, reason: "Permanent or destructive command requires typing YES to confirm" };
   }
 
+  if (/^npm\s+install\b/i.test(normalized)) {
+    return options.sandbox
+      ? { tier: 1, reason: "Safe read-only command can execute automatically" }
+      : { tier: 2, reason: "Project-affecting command requires confirmation before executing" };
+  }
+
   if (matchesAny(normalized, [
-    /^npm\s+install\b/i,
     /^bun\s+install\b/i,
     /^pnpm\s+install\b/i,
-    /^npm\s+run\s+build\b/i,
-    /^bun\s+run\s+build\b/i,
     /^git\s+(?:add|commit)\b/i,
     /^(?:mkdir|touch|cp|mv)\b/i,
   ])) {
@@ -135,6 +150,8 @@ export function classifyTerminalCommand(command: string): TerminalClassification
     /^npm\s+test\b/i,
     /^bun\s+test\b/i,
     /^vitest\b/i,
+    /^npm\s+run\s+build\b/i,
+    /^bun\s+run\s+build\b/i,
     /^(?:ls|pwd|cat|head|tail|grep)\b/i,
     /^npm\s+run\s+typecheck\b/i,
     /^tsc\s+--noEmit\b/i,
@@ -157,9 +174,10 @@ export function parseTerminalTier(value: unknown): TerminalTier | undefined {
 export function evaluateTerminalRequest(
   command: string,
   requestedTier?: TerminalTier,
-  confirmationToken?: string
+  confirmationToken?: string,
+  options: TerminalClassificationOptions = {}
 ): TerminalRequestEvaluation {
-  const classification = classifyTerminalCommand(command);
+  const classification = classifyTerminalCommand(command, options);
   if (classification.tier === "blocked") {
     return {
       classification,
@@ -189,7 +207,8 @@ export function evaluateTerminalRequest(
 
 export function executeTerminalCommand(
   command: string,
-  callbacks: TerminalExecutionCallbacks = {}
+  callbacks: TerminalExecutionCallbacks = {},
+  options: TerminalExecutionOptions = {}
 ): Promise<TerminalExecutionResult> {
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const start = Date.now();
@@ -197,12 +216,12 @@ export function executeTerminalCommand(
 
   callbacks.onStart?.(command);
 
-  const gitToken = process.env.GITHUB_TOKEN ?? "";
+  const gitToken = options.githubToken ?? process.env.GITHUB_TOKEN ?? "";
   const gitUser = process.env.GIT_USER_NAME ?? "jochanae";
   const gitEmail = process.env.GIT_USER_EMAIL ?? "jochanae@gmail.com";
 
   const proc = spawn("bash", ["-c", command], {
-    cwd: WORK_DIR,
+    cwd: options.cwd ?? WORK_DIR,
     env: {
       ...process.env,
       FORCE_COLOR: "0",
