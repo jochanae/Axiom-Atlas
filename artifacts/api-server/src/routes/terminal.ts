@@ -1,7 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
+import { mkdirSync, existsSync } from "fs";
 import { logger } from "../lib/logger";
 import { requireAuth } from "./auth";
+import { db, projectsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -52,8 +55,8 @@ function isDangerous(cmd: string): string | null {
 }
 
 // POST /api/terminal/exec — execute a command, stream output as SSE
-router.post("/terminal/exec", requireAuth, (req: Request, res: Response): void => {
-  const { command } = req.body as { command?: string };
+router.post("/terminal/exec", requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { command, projectId } = req.body as { command?: string; projectId?: number };
   if (!command?.trim()) {
     res.status(400).json({ error: "Missing command" });
     return;
@@ -88,6 +91,45 @@ Type any command above to get started.`,
     return;
   }
 
+  // Resolve working directory — clone repo into sandbox if projectId provided
+  let cwd = WORK_DIR;
+  if (projectId) {
+    try {
+      const rows = await db
+        .select({ linkedRepo: projectsTable.linkedRepo })
+        .from(projectsTable)
+        .where(eq(projectsTable.id, projectId))
+        .limit(1);
+
+      const raw = rows[0]?.linkedRepo;
+      if (raw) {
+        const parsed = typeof raw === "string" ? JSON.parse(raw) as { fullName?: string } : raw as { fullName?: string };
+        const fullName = parsed.fullName;
+        if (fullName) {
+          const sandboxDir = `/tmp/axiom-sandbox/${projectId}`;
+          if (!existsSync(sandboxDir)) {
+            mkdirSync(sandboxDir, { recursive: true });
+            const gitToken = process.env.GITHUB_TOKEN ?? "";
+            const cloneUrl = `https://${gitToken ? gitToken + "@" : ""}github.com/${fullName}.git`;
+            const clone = spawnSync("git", ["clone", "--depth", "1", cloneUrl, sandboxDir], {
+              encoding: "utf8",
+              timeout: 30000,
+            });
+            if (clone.status !== 0) {
+              logger.warn({ fullName, stderr: clone.stderr }, "Repo clone failed — falling back to WORK_DIR");
+            } else {
+              cwd = sandboxDir;
+            }
+          } else {
+            cwd = sandboxDir;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, projectId }, "Could not resolve sandbox dir — falling back to WORK_DIR");
+    }
+  }
+
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const start = Date.now();
 
@@ -110,7 +152,7 @@ Type any command above to get started.`,
   const gitEmail = process.env.GIT_USER_EMAIL ?? "jochanae@gmail.com";
 
   const proc = spawn("bash", ["-c", command], {
-    cwd: WORK_DIR,
+    cwd,
     env: {
       ...process.env,
       FORCE_COLOR: "0",
