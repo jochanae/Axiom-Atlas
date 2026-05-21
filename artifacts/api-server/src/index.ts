@@ -47,12 +47,16 @@ async function main() {
   });
 
   try {
-    await migrate(db, {
-      migrationsFolder: "../../lib/db/migrations",
-    });
-    console.log("Migrations complete");
-  } catch (err) {
-    console.error("Migration failed:", err);
+    await migrate(db, { migrationsFolder: "./drizzle" });
+    logger.info("Migrations complete");
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("already exists")) {
+      logger.warn("Migration skipped — tables already exist");
+    } else {
+      logger.error({ err }, "Migration failed");
+      throw err;
+    }
   }
 
   app.listen(port, () => {
