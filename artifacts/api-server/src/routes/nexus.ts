@@ -1711,6 +1711,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   let modelStartedAt = performance.now();
   let modelUsage: Partial<NexusRunMetadata> = {};
   let streamDone = false;
+  const activeModel = model === "gemini" ? "gemini" : "claude";
+  const modelUsed = activeModel === "gemini" ? "gemini-2.5-pro" : "claude-sonnet-4-6";
 
   const finishStream = async (rawContent: string) => {
     streamDone = true;
@@ -1773,7 +1775,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     });
     await updateSessionRunMetadata(sessionId, runMetadata);
 
-    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, surface, memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
     res.end();
   };
 
@@ -1796,8 +1798,6 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   });
 
   // Call the selected model
-  const activeModel = model === "gemini" ? "gemini" : "claude";
-
   if (activeModel === "gemini") {
     let rawContent = "";
     const combinedText = [
