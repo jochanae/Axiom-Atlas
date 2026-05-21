@@ -54,3 +54,9 @@ id = "8rjGx_PvxI2Klq9IctaQT"
 uri = "file://.local/exports/cursor-terminal-projectid-fix.txt"
 type = "text"
 title = "Step 2 — cursor-terminal-projectid-fix.txt (apply second)"
+
+[[outputs]]
+id = "cXspDRISgtcn2mcGcyx4N"
+uri = "file://.local/exports/cursor-ipad-cookie-fix.txt"
+type = "text"
+title = "cursor-ipad-cookie-fix.txt — iPad sign-in fix (2 files)"
