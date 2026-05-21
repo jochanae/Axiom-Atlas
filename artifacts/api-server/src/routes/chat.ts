@@ -2027,7 +2027,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       ...runMetadataInsertValues(diveResult.content),
     }).returning();
     await db.update(sessionsTable).set({ messageCount: sql`${sessionsTable.messageCount} + 2` }).where(eq(sessionsTable.id, sessionId));
-    res.json({ content: diveResult.content, terminalCmd: null, terminalResult: null, surface, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
+    res.json({ content: diveResult.content, modelUsed: diveResult.model, terminalCmd: null, terminalResult: null, surface, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
     return;
   }
 
@@ -2130,6 +2130,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
+  let modelUsed = modelResult.model;
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
 
@@ -2178,6 +2179,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
           rawContent = modelResult.content;
           assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
+          modelUsed = modelResult.model;
         }
       } catch { /* Non-fatal — keep rawContent from first call */ }
     }
@@ -2373,6 +2375,7 @@ TERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
 
   res.json({
     content: displayContent,
+    modelUsed,
     terminalCmd,
     terminalResult,
     surface,
