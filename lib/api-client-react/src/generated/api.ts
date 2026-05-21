@@ -32,6 +32,7 @@ import type {
   ForgeResponse,
   HealthStatus,
   ListEntriesParams,
+  ListRecentProjectsParams,
   Message,
   NexusChatRequest,
   NexusChatResponse,
@@ -39,6 +40,7 @@ import type {
   Project,
   ProjectSummary,
   ReadinessSnapshot,
+  RecentProjectsResponse,
   Session,
   SessionWithMessages,
   Thought,
@@ -952,6 +954,187 @@ export const useCreateProject = <
   TContext
 > => {
   return useMutation(getCreateProjectMutationOptions(options));
+};
+
+/**
+ * @summary List recently opened projects
+ */
+export const getListRecentProjectsUrl = (params?: ListRecentProjectsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/projects/recent?${stringifiedParams}`
+    : `/api/projects/recent`;
+};
+
+export const listRecentProjects = async (
+  params?: ListRecentProjectsParams,
+  options?: RequestInit,
+): Promise<RecentProjectsResponse> => {
+  return customFetch<RecentProjectsResponse>(getListRecentProjectsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListRecentProjectsQueryKey = (
+  params?: ListRecentProjectsParams,
+) => {
+  return [`/api/projects/recent`, ...(params ? [params] : [])] as const;
+};
+
+export const getListRecentProjectsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listRecentProjects>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListRecentProjectsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listRecentProjects>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListRecentProjectsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listRecentProjects>>
+  > = ({ signal }) => listRecentProjects(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listRecentProjects>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListRecentProjectsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listRecentProjects>>
+>;
+export type ListRecentProjectsQueryError = ErrorType<void>;
+
+/**
+ * @summary List recently opened projects
+ */
+
+export function useListRecentProjects<
+  TData = Awaited<ReturnType<typeof listRecentProjects>>,
+  TError = ErrorType<void>,
+>(
+  params?: ListRecentProjectsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listRecentProjects>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListRecentProjectsQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark a project as recently opened
+ */
+export const getTouchProjectUrl = (projectId: number) => {
+  return `/api/projects/${projectId}/touch`;
+};
+
+export const touchProject = async (
+  projectId: number,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getTouchProjectUrl(projectId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getTouchProjectMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof touchProject>>,
+    TError,
+    { projectId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof touchProject>>,
+  TError,
+  { projectId: number },
+  TContext
+> => {
+  const mutationKey = ["touchProject"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof touchProject>>,
+    { projectId: number }
+  > = (props) => {
+    const { projectId } = props ?? {};
+
+    return touchProject(projectId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TouchProjectMutationResult = NonNullable<
+  Awaited<ReturnType<typeof touchProject>>
+>;
+
+export type TouchProjectMutationError = ErrorType<void>;
+
+/**
+ * @summary Mark a project as recently opened
+ */
+export const useTouchProject = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof touchProject>>,
+    TError,
+    { projectId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof touchProject>>,
+  TError,
+  { projectId: number },
+  TContext
+> => {
+  return useMutation(getTouchProjectMutationOptions(options));
 };
 
 /**

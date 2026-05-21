@@ -31,6 +31,7 @@ export const mockProject = {
   memory: null,
   linkedRepo: null,
   pushHistory: [],
+  lastOpenedAt: new Date("2025-01-01"),
   createdAt: new Date("2025-01-01"),
   updatedAt: new Date("2025-01-01"),
 };

@@ -47,17 +47,26 @@ export interface Project {
   lastHandoverAt?: string | null;
   /** @nullable */
   lastHandoverHash?: string | null;
+  lastOpenedAt: string;
   /** @nullable */
   latestSnapshotScore?: number | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export type CreateProjectBodyEntityType =
+  (typeof CreateProjectBodyEntityType)[keyof typeof CreateProjectBodyEntityType];
+
+export const CreateProjectBodyEntityType = {
+  project: "project",
+  idea: "idea",
+} as const;
+
 export interface CreateProjectBody {
   name: string;
   /** @nullable */
   description?: string | null;
-  entity_type?: ProjectEntityType;
+  entity_type?: CreateProjectBodyEntityType;
 }
 
 export type UpdateProjectBodyStatus =
@@ -89,6 +98,25 @@ export interface UpdateProjectBody {
   lastHandoverAt?: string | null;
   /** @nullable */
   lastHandoverHash?: string | null;
+}
+
+export type RecentProjectStatus =
+  (typeof RecentProjectStatus)[keyof typeof RecentProjectStatus];
+
+export const RecentProjectStatus = {
+  active: "active",
+  archived: "archived",
+} as const;
+
+export interface RecentProject {
+  id: number;
+  name: string;
+  status: RecentProjectStatus;
+  last_opened_at: string;
+}
+
+export interface RecentProjectsResponse {
+  projects: RecentProject[];
 }
 
 export interface ProjectSummary {
@@ -139,24 +167,25 @@ export const MessageRole = {
 /**
  * @nullable
  */
-export type MessageCatchPayload = { [key: string]: unknown } | null;
+export type MessageRunStatus =
+  | (typeof MessageRunStatus)[keyof typeof MessageRunStatus]
+  | null;
 
-export type RunStatus = (typeof RunStatus)[keyof typeof RunStatus];
-
-export const RunStatus = {
+export const MessageRunStatus = {
   completed: "completed",
   warnings: "warnings",
   failed: "failed",
   cancelled: "cancelled",
 } as const;
 
-export interface RunAction {
-  [key: string]: unknown;
-}
+/**
+ * @nullable
+ */
+export type MessageCatchPayload = { [key: string]: unknown } | null;
 
-export interface RunArtifact {
-  [key: string]: unknown;
-}
+export type MessageRunActionsItem = { [key: string]: unknown };
+
+export type MessageRunArtifactsItem = { [key: string]: unknown };
 
 export interface Message {
   id: number;
@@ -175,11 +204,14 @@ export interface Message {
   outputTokens?: number | null;
   /** @nullable */
   costUsd?: number | null;
-  runStatus?: RunStatus | null;
+  /** @nullable */
+  runStatus?: MessageRunStatus;
   /** @nullable */
   runSummary?: string | null;
-  runActions?: RunAction[] | null;
-  runArtifacts?: RunArtifact[] | null;
+  /** @nullable */
+  runActions?: MessageRunActionsItem[] | null;
+  /** @nullable */
+  runArtifacts?: MessageRunArtifactsItem[] | null;
   createdAt: string;
 }
 
@@ -408,9 +440,43 @@ export interface CreateVaultSaveBody {
   tags?: string[] | null;
 }
 
+/**
+ * @nullable
+ */
+export type ThoughtRunStatus =
+  | (typeof ThoughtRunStatus)[keyof typeof ThoughtRunStatus]
+  | null;
+
+export const ThoughtRunStatus = {
+  completed: "completed",
+  warnings: "warnings",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
+
+export type ThoughtRunActionsItem = { [key: string]: unknown };
+
+export type ThoughtRunArtifactsItem = { [key: string]: unknown };
+
 export interface Thought {
   id: number;
   content: string;
+  /** @nullable */
+  executionTimeMs?: number | null;
+  /** @nullable */
+  inputTokens?: number | null;
+  /** @nullable */
+  outputTokens?: number | null;
+  /** @nullable */
+  costUsd?: number | null;
+  /** @nullable */
+  runStatus?: ThoughtRunStatus;
+  /** @nullable */
+  runSummary?: string | null;
+  /** @nullable */
+  runActions?: ThoughtRunActionsItem[] | null;
+  /** @nullable */
+  runArtifacts?: ThoughtRunArtifactsItem[] | null;
   createdAt: string;
 }
 
@@ -519,19 +585,6 @@ export interface NexusMessage {
   id: number;
   role: NexusMessageRole;
   content: string;
-  /** @nullable */
-  executionTimeMs?: number | null;
-  /** @nullable */
-  inputTokens?: number | null;
-  /** @nullable */
-  outputTokens?: number | null;
-  /** @nullable */
-  costUsd?: number | null;
-  runStatus?: RunStatus | null;
-  /** @nullable */
-  runSummary?: string | null;
-  runActions?: RunAction[] | null;
-  runArtifacts?: RunArtifact[] | null;
   createdAt: string;
 }
 
@@ -555,15 +608,39 @@ export interface NexusChatRequest {
   userProfile?: string | null;
 }
 
+export type NexusChatResponseRunStatus =
+  (typeof NexusChatResponseRunStatus)[keyof typeof NexusChatResponseRunStatus];
+
+export const NexusChatResponseRunStatus = {
+  completed: "completed",
+  warnings: "warnings",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
+
+export type NexusChatResponseRunActionsItem = { [key: string]: unknown };
+
+export type NexusChatResponseRunArtifactsItem = { [key: string]: unknown };
+
 export interface NexusChatResponse {
   response: string;
   memoryUpdated: boolean;
-  runStatus?: RunStatus;
+  runStatus?: NexusChatResponseRunStatus;
   /** @nullable */
   runSummary?: string | null;
-  runActions?: RunAction[] | null;
-  runArtifacts?: RunArtifact[] | null;
+  /** @nullable */
+  runActions?: NexusChatResponseRunActionsItem[] | null;
+  /** @nullable */
+  runArtifacts?: NexusChatResponseRunArtifactsItem[] | null;
 }
+
+export type ListRecentProjectsParams = {
+  /**
+   * @minimum 1
+   * @maximum 720
+   */
+  withinHours?: number;
+};
 
 export type ListEntriesParams = {
   status?: ListEntriesStatus;

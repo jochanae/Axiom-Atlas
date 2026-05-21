@@ -122,6 +122,22 @@ export const DeleteVaultSaveParams = zod.object({
 export const ListThoughtsResponseItem = zod.object({
   id: zod.number(),
   content: zod.string(),
+  executionTimeMs: zod.number().nullish(),
+  inputTokens: zod.number().nullish(),
+  outputTokens: zod.number().nullish(),
+  costUsd: zod.number().nullish(),
+  runStatus: zod
+    .union([
+      zod.literal("completed"),
+      zod.literal("warnings"),
+      zod.literal("failed"),
+      zod.literal("cancelled"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  runSummary: zod.string().nullish(),
+  runActions: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
+  runArtifacts: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
   createdAt: zod.string(),
 });
 export const ListThoughtsResponse = zod.array(ListThoughtsResponseItem);
@@ -157,6 +173,7 @@ export const ListProjectsResponseItem = zod.object({
   pushHistory: zod.array(zod.unknown()).nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
+  lastOpenedAt: zod.string(),
   latestSnapshotScore: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -170,6 +187,38 @@ export const CreateProjectBody = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
   entity_type: zod.enum(["project", "idea"]).optional(),
+});
+
+/**
+ * @summary List recently opened projects
+ */
+export const listRecentProjectsQueryWithinHoursDefault = 48;
+export const listRecentProjectsQueryWithinHoursMax = 720;
+
+export const ListRecentProjectsQueryParams = zod.object({
+  withinHours: zod.coerce
+    .number()
+    .min(1)
+    .max(listRecentProjectsQueryWithinHoursMax)
+    .default(listRecentProjectsQueryWithinHoursDefault),
+});
+
+export const ListRecentProjectsResponse = zod.object({
+  projects: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      status: zod.enum(["active", "archived"]),
+      last_opened_at: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Mark a project as recently opened
+ */
+export const TouchProjectParams = zod.object({
+  projectId: zod.coerce.number(),
 });
 
 /**
@@ -193,6 +242,7 @@ export const GetProjectResponse = zod.object({
   pushHistory: zod.array(zod.unknown()).nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
+  lastOpenedAt: zod.string(),
   latestSnapshotScore: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -233,6 +283,7 @@ export const UpdateProjectResponse = zod.object({
   pushHistory: zod.array(zod.unknown()).nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
+  lastOpenedAt: zod.string(),
   latestSnapshotScore: zod.number().nullish(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
@@ -353,6 +404,24 @@ export const GetSessionResponse = zod.object({
       content: zod.string(),
       intentType: zod.string().nullish(),
       catchPayload: zod.object({}).passthrough().nullish(),
+      executionTimeMs: zod.number().nullish(),
+      inputTokens: zod.number().nullish(),
+      outputTokens: zod.number().nullish(),
+      costUsd: zod.number().nullish(),
+      runStatus: zod
+        .union([
+          zod.literal("completed"),
+          zod.literal("warnings"),
+          zod.literal("failed"),
+          zod.literal("cancelled"),
+          zod.literal(null),
+        ])
+        .nullish(),
+      runSummary: zod.string().nullish(),
+      runActions: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
+      runArtifacts: zod
+        .array(zod.record(zod.string(), zod.unknown()))
+        .nullish(),
       createdAt: zod.string(),
     }),
   ),
@@ -383,10 +452,18 @@ export const ListMessagesResponseItem = zod.object({
   inputTokens: zod.number().nullish(),
   outputTokens: zod.number().nullish(),
   costUsd: zod.number().nullish(),
-  runStatus: zod.enum(["completed", "warnings", "failed", "cancelled"]).nullish(),
+  runStatus: zod
+    .union([
+      zod.literal("completed"),
+      zod.literal("warnings"),
+      zod.literal("failed"),
+      zod.literal("cancelled"),
+      zod.literal(null),
+    ])
+    .nullish(),
   runSummary: zod.string().nullish(),
-  runActions: zod.array(zod.object({}).passthrough()).nullish(),
-  runArtifacts: zod.array(zod.object({}).passthrough()).nullish(),
+  runActions: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
+  runArtifacts: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
   createdAt: zod.string(),
 });
 export const ListMessagesResponse = zod.array(ListMessagesResponseItem);
@@ -596,14 +673,6 @@ export const GetNexusThreadResponseItem = zod.object({
   id: zod.number(),
   role: zod.enum(["user", "assistant"]),
   content: zod.string(),
-  executionTimeMs: zod.number().nullish(),
-  inputTokens: zod.number().nullish(),
-  outputTokens: zod.number().nullish(),
-  costUsd: zod.number().nullish(),
-  runStatus: zod.enum(["completed", "warnings", "failed", "cancelled"]).nullish(),
-  runSummary: zod.string().nullish(),
-  runActions: zod.array(zod.object({}).passthrough()).nullish(),
-  runArtifacts: zod.array(zod.object({}).passthrough()).nullish(),
   createdAt: zod.string(),
 });
 export const GetNexusThreadResponse = zod.array(GetNexusThreadResponseItem);
@@ -627,8 +696,10 @@ export const SendNexusMessageBody = zod.object({
 export const SendNexusMessageResponse = zod.object({
   response: zod.string(),
   memoryUpdated: zod.boolean(),
-  runStatus: zod.enum(["completed", "warnings", "failed", "cancelled"]).optional(),
+  runStatus: zod
+    .enum(["completed", "warnings", "failed", "cancelled"])
+    .optional(),
   runSummary: zod.string().nullish(),
-  runActions: zod.array(zod.object({}).passthrough()).nullish(),
-  runArtifacts: zod.array(zod.object({}).passthrough()).nullish(),
+  runActions: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
+  runArtifacts: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
 });

@@ -7,6 +7,7 @@ const { mockDbState, makeTable } = vi.hoisted(() => {
   const mockDbState = {
     selectResults: [] as any[][],
     insertResult: [] as any[],
+    updateResult: [] as any[],
   };
 
   const makeTable = (name: string) =>
@@ -34,7 +35,7 @@ vi.mock("@workspace/db", () => {
       from: () => chain,
       innerJoin: () => chain,
       where: () => chain,
-      orderBy: () => Promise.resolve(result),
+      orderBy: () => chain,
       limit: () => Promise.resolve(result),
       then: (onFulfilled: any, onRejected: any) =>
         Promise.resolve(result).then(onFulfilled, onRejected),
@@ -52,7 +53,11 @@ vi.mock("@workspace/db", () => {
       })),
       update: vi.fn(() => ({
         set: vi.fn(() => ({
-          where: vi.fn(() => Promise.resolve([])),
+          where: vi.fn(() => ({
+            returning: vi.fn(() => Promise.resolve(mockDbState.updateResult)),
+            then: (onFulfilled: any, onRejected: any) =>
+              Promise.resolve(mockDbState.updateResult).then(onFulfilled, onRejected),
+          })),
         })),
       })),
       execute: vi.fn(() => Promise.resolve([])),
@@ -80,6 +85,7 @@ function withAuth(user: Omit<typeof mockUser, "subscriptionTier"> & { subscripti
 beforeEach(() => {
   mockDbState.selectResults = [];
   mockDbState.insertResult = [];
+  mockDbState.updateResult = [];
   vi.clearAllMocks();
 });
 
@@ -141,6 +147,80 @@ describe("POST /api/projects", () => {
       .send({ name: "Second Project" });
     expect(res.status).toBe(402);
     expect(res.body.code).toBe("PROJECT_LIMIT_REACHED");
+  });
+});
+
+describe("GET /api/projects/recent", () => {
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(createTestApp()).get("/api/projects/recent");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns recently opened projects when authenticated", async () => {
+    const cookie = withAuth();
+    mockDbState.selectResults.push([
+      {
+        id: 42,
+        name: "My Project",
+        status: "active",
+        lastOpenedAt: new Date("2025-01-02"),
+      },
+    ]);
+
+    const res = await request(createTestApp())
+      .get("/api/projects/recent")
+      .set("Cookie", cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      projects: [
+        {
+          id: 42,
+          name: "My Project",
+          status: "active",
+          last_opened_at: "2025-01-02T00:00:00.000Z",
+        },
+      ],
+    });
+  });
+
+  it("rejects withinHours above the maximum", async () => {
+    const cookie = withAuth();
+    const res = await request(createTestApp())
+      .get("/api/projects/recent?withinHours=721")
+      .set("Cookie", cookie);
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("POST /api/projects/:projectId/touch", () => {
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(createTestApp()).post("/api/projects/42/touch");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 204 when the project belongs to the user", async () => {
+    const cookie = withAuth();
+    mockDbState.updateResult = [{ id: 42 }];
+
+    const res = await request(createTestApp())
+      .post("/api/projects/42/touch")
+      .set("Cookie", cookie);
+
+    expect(res.status).toBe(204);
+    expect(res.text).toBe("");
+  });
+
+  it("returns 404 when the project does not belong to the user", async () => {
+    const cookie = withAuth();
+    mockDbState.updateResult = [];
+
+    const res = await request(createTestApp())
+      .post("/api/projects/42/touch")
+      .set("Cookie", cookie);
+
+    expect(res.status).toBe(404);
   });
 });
 
