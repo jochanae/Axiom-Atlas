@@ -96,7 +96,7 @@ Type any command above to get started.`,
       onStderr: (text) => send("stderr", text),
       onProcess: (child) => { proc = child; },
     });
-    send("done", JSON.stringify({ exitCode: result.exitCode, durationMs: result.durationMs }));
+    send("done", JSON.stringify({ output: result.output, exitCode: result.exitCode, durationMs: result.durationMs }));
     res.end();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Terminal command failed";
