@@ -29,7 +29,7 @@ router.get("/health", async (_req, res): Promise<void> => {
     anthropic: envStatus("ANTHROPIC_API_KEY"),
     github: envStatus("GITHUB_TOKEN"),
     stripe: envStatus("STRIPE_SECRET_KEY"),
-    gemini: envStatus("GEMINI_API_KEY"),
+    gemini: envStatus("GOOGLE_GEMINI_API_KEY"),
     openai: envStatus("OPENAI_API_KEY"),
   };
 

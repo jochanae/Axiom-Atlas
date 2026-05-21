@@ -141,6 +141,23 @@ export const MessageRole = {
  */
 export type MessageCatchPayload = { [key: string]: unknown } | null;
 
+export type RunStatus = (typeof RunStatus)[keyof typeof RunStatus];
+
+export const RunStatus = {
+  completed: "completed",
+  warnings: "warnings",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
+
+export interface RunAction {
+  [key: string]: unknown;
+}
+
+export interface RunArtifact {
+  [key: string]: unknown;
+}
+
 export interface Message {
   id: number;
   sessionId: number;
@@ -150,6 +167,19 @@ export interface Message {
   intentType?: string | null;
   /** @nullable */
   catchPayload?: MessageCatchPayload;
+  /** @nullable */
+  executionTimeMs?: number | null;
+  /** @nullable */
+  inputTokens?: number | null;
+  /** @nullable */
+  outputTokens?: number | null;
+  /** @nullable */
+  costUsd?: number | null;
+  runStatus?: RunStatus | null;
+  /** @nullable */
+  runSummary?: string | null;
+  runActions?: RunAction[] | null;
+  runArtifacts?: RunArtifact[] | null;
   createdAt: string;
 }
 
@@ -489,6 +519,19 @@ export interface NexusMessage {
   id: number;
   role: NexusMessageRole;
   content: string;
+  /** @nullable */
+  executionTimeMs?: number | null;
+  /** @nullable */
+  inputTokens?: number | null;
+  /** @nullable */
+  outputTokens?: number | null;
+  /** @nullable */
+  costUsd?: number | null;
+  runStatus?: RunStatus | null;
+  /** @nullable */
+  runSummary?: string | null;
+  runActions?: RunAction[] | null;
+  runArtifacts?: RunArtifact[] | null;
   createdAt: string;
 }
 
@@ -515,6 +558,11 @@ export interface NexusChatRequest {
 export interface NexusChatResponse {
   response: string;
   memoryUpdated: boolean;
+  runStatus?: RunStatus;
+  /** @nullable */
+  runSummary?: string | null;
+  runActions?: RunAction[] | null;
+  runArtifacts?: RunArtifact[] | null;
 }
 
 export type ListEntriesParams = {

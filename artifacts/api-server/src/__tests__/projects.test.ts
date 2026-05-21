@@ -55,6 +55,7 @@ vi.mock("@workspace/db", () => {
           where: vi.fn(() => Promise.resolve([])),
         })),
       })),
+      execute: vi.fn(() => Promise.resolve([])),
     },
     projectsTable: makeTable("projects"),
     sessionsTable: makeTable("sessions"),

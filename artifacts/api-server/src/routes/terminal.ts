@@ -1,64 +1,204 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { spawn, spawnSync } from "child_process";
-import { mkdirSync, existsSync } from "fs";
+import { spawn, type ChildProcess } from "child_process";
+import { access, mkdir } from "fs/promises";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { connectionsTable, db, projectsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { requireAuth } from "./auth";
-import { db, projectsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  classifyTerminalCommand,
+  evaluateTerminalRequest,
+  executeTerminalCommand,
+  getTerminalHistory,
+  parseTerminalTier,
+} from "../lib/terminalExecution";
+import { decryptToken } from "../lib/tokenCrypto";
 
 const router: IRouter = Router();
+const SANDBOX_ROOT = "/tmp/axiom-sandbox";
+const NO_LINKED_REPO_MESSAGE = "No GitHub repo linked to this project. Link one in project settings to run commands.";
 
-const WORK_DIR = process.env.GIT_WORK_DIR ?? process.env.HOME ?? "/home/runner/workspace";
-const MAX_HISTORY = 60;
-const MAX_CMD_LENGTH = 2000;
+type ParsedLinkedRepo = { fullName: string };
+type PreparedProjectRepo = { sandboxDir: string; githubToken: string | null };
 
-type HistoryEntry = {
-  id: string;
-  command: string;
-  output: string;
-  exitCode: number | null;
-  timestamp: string;
-  durationMs: number;
-};
-
-const history: HistoryEntry[] = [];
-
-function addHistory(entry: HistoryEntry) {
-  history.push(entry);
-  if (history.length > MAX_HISTORY) history.shift();
-}
-
-// Commands that could destroy the server environment
-const BLOCKED_PATTERNS: RegExp[] = [
-  /rm\s+-[a-z]*r[a-z]*f?\s+\/(?:\s|$)/i,        // rm -rf /
-  /rm\s+-[a-z]*f[a-z]*r?\s+\/(?:\s|$)/i,        // rm -fr /
-  /:\s*\(\s*\)\s*\{.*\|.*&.*\}/,                 // fork bomb
-  /\|\s*bash\b/i,                                // curl | bash, wget | bash
-  /\|\s*sh\b/i,                                  // pipe into sh
-  /mkfs\b/i,                                     // format filesystem
-  /dd\s+.*of=\/dev\//i,                          // dd to device
-  />\s*\/dev\/sd/i,                              // redirect to block device
-  /chmod\s+-[a-z]*R[a-z]*\s+777\s+\//i,         // chmod -R 777 /
-  /shutdown\b/i,                                  // shutdown
-  /reboot\b/i,                                    // reboot
-  /halt\b/i,                                      // halt
-  /kill\s+-9\s+1\b/,                             // kill init
-  /pkill\s+-9\s+node/i,                          // kill all node processes
-];
-
-function isDangerous(cmd: string): string | null {
-  for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(cmd)) return `Command blocked: matches dangerous pattern (${pattern.source.slice(0, 40)})`;
+class TerminalHttpError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
   }
-  if (cmd.length > MAX_CMD_LENGTH) return `Command too long (max ${MAX_CMD_LENGTH} chars)`;
-  return null;
 }
+
+function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
+  const plain = storedToken ? decryptToken(storedToken) : null;
+  return plain && plain !== "__server__" ? plain : null;
+}
+
+async function getAccountGithubToken(userId: number | undefined): Promise<string | null> {
+  if (!userId) return null;
+
+  const [connection] = await db
+    .select({ token: connectionsTable.token })
+    .from(connectionsTable)
+    .where(and(
+      eq(connectionsTable.userId, userId),
+      eq(connectionsTable.type, "github"),
+      isNotNull(connectionsTable.token)
+    ))
+    .orderBy(desc(connectionsTable.createdAt))
+    .limit(1);
+
+  return resolveStoredGithubToken(connection?.token);
+}
+
+async function resolveGithubTokenForRequest(
+  userId: number | undefined,
+  projectGithubToken: string | null | undefined
+): Promise<string | null> {
+  const accountToken = await getAccountGithubToken(userId);
+  if (accountToken) return accountToken;
+
+  return resolveStoredGithubToken(projectGithubToken) ?? process.env.GITHUB_TOKEN ?? null;
+}
+
+function parseLinkedRepo(raw: string | null): ParsedLinkedRepo | null {
+  if (!raw) return null;
+  try {
+    const repoData = typeof raw === "string" ? JSON.parse(raw) as { fullName?: unknown } : raw;
+    const fullName = repoData?.fullName;
+    return typeof fullName === "string" && fullName.trim()
+      ? { fullName: fullName.trim().replace(/\.git$/, "").replace(/^\/+|\/+$/g, "") }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseProjectId(value: unknown): number | null | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const projectId = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(projectId) && projectId > 0 ? projectId : null;
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await access(targetPath);
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function redactToken(text: string, token: string | null): string {
+  if (!token) return text;
+  return [token, encodeURIComponent(token)].reduce((redacted, secret) => (
+    secret ? redacted.replace(new RegExp(escapeRegExp(secret), "g"), "[REDACTED]") : redacted
+  ), text);
+}
+
+function buildCloneUrl(repo: ParsedLinkedRepo, token: string | null): string {
+  return token
+    ? `https://${encodeURIComponent(token)}@github.com/${repo.fullName}.git`
+    : `https://github.com/${repo.fullName}.git`;
+}
+
+function runGit(args: string[], token: string | null): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("git", args, {
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+      },
+    });
+    const chunks: string[] = [];
+
+    proc.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk.toString()));
+    proc.stderr?.on("data", (chunk: Buffer) => chunks.push(chunk.toString()));
+    proc.on("error", reject);
+    proc.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      const output = redactToken(chunks.join("").trim(), token);
+      reject(new Error(output || `git ${args[0] ?? "command"} failed with exit code ${code ?? "unknown"}`));
+    });
+  });
+}
+
+async function prepareProjectRepo(projectId: number, userId: number): Promise<PreparedProjectRepo> {
+  const [project] = await db
+    .select({
+      id: projectsTable.id,
+      linkedRepo: projectsTable.linkedRepo,
+      githubToken: projectsTable.githubToken,
+    })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+    .limit(1);
+
+  if (!project) throw new TerminalHttpError(404, "Project not found");
+
+  const repo = parseLinkedRepo(project.linkedRepo ?? null);
+  if (!repo) throw new TerminalHttpError(400, NO_LINKED_REPO_MESSAGE);
+
+  const githubToken = await resolveGithubTokenForRequest(userId, project.githubToken ?? null);
+  const sandboxDir = `/tmp/axiom-sandbox/${projectId}`;
+  const cloneUrl = buildCloneUrl(repo, githubToken);
+
+  try {
+    await mkdir(SANDBOX_ROOT, { recursive: true });
+    if (await pathExists(sandboxDir)) {
+      await runGit(["-C", sandboxDir, "remote", "set-url", "origin", cloneUrl], githubToken);
+      await runGit(["-C", sandboxDir, "pull"], githubToken);
+    } else {
+      await runGit(["clone", "--depth", "1", cloneUrl, sandboxDir], githubToken);
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "unknown git error";
+    logger.error({ err, projectId, repo: repo.fullName }, "Failed to prepare terminal project repo");
+    throw new TerminalHttpError(500, `Failed to prepare GitHub repo: ${redactToken(message, githubToken)}`);
+  }
+
+  return { sandboxDir, githubToken };
+}
+
+// POST /api/terminal/classify — classify a command before deciding how to run it
+router.post("/terminal/classify", requireAuth, (req: Request, res: Response): void => {
+  const { command, projectId } = req.body as { command?: string; projectId?: unknown };
+  if (!command?.trim()) {
+    res.status(400).json({ error: "Missing command" });
+    return;
+  }
+  const parsedProjectId = parseProjectId(projectId);
+  if (parsedProjectId === null) {
+    res.status(400).json({ error: "Invalid projectId" });
+    return;
+  }
+
+  res.json(classifyTerminalCommand(command, { sandbox: parsedProjectId !== undefined }));
+});
 
 // POST /api/terminal/exec — execute a command, stream output as SSE
 router.post("/terminal/exec", requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const { command, projectId } = req.body as { command?: string; projectId?: number };
+  const { command, tier, confirmationToken } = req.body as {
+    command?: string;
+    tier?: unknown;
+    confirmationToken?: string;
+    projectId?: unknown;
+  };
   if (!command?.trim()) {
     res.status(400).json({ error: "Missing command" });
+    return;
+  }
+
+  const projectId = parseProjectId(req.body?.projectId);
+  if (projectId === null) {
+    res.status(400).json({ error: "Invalid projectId" });
     return;
   }
 
@@ -85,53 +225,36 @@ Type any command above to get started.`,
     return;
   }
 
-  const danger = isDangerous(command);
-  if (danger) {
-    res.status(403).json({ error: danger });
+  const requestedTier = parseTerminalTier(tier);
+  const evaluation = evaluateTerminalRequest(command, requestedTier, confirmationToken, {
+    sandbox: projectId !== undefined,
+  });
+  if (evaluation.tier === "blocked") {
+    res.status(403).json({ error: evaluation.reason });
+    return;
+  }
+  if (evaluation.requiresConfirmation) {
+    res.json({
+      requiresConfirmation: true,
+      tier: evaluation.tier,
+      command,
+      reason: evaluation.reason,
+    });
     return;
   }
 
-  // Resolve working directory — clone repo into sandbox if projectId provided
-  let cwd = WORK_DIR;
-  if (projectId) {
+  let preparedRepo: PreparedProjectRepo | null = null;
+  if (projectId !== undefined) {
     try {
-      const rows = await db
-        .select({ linkedRepo: projectsTable.linkedRepo })
-        .from(projectsTable)
-        .where(eq(projectsTable.id, projectId))
-        .limit(1);
-
-      const raw = rows[0]?.linkedRepo;
-      if (raw) {
-        const parsed = typeof raw === "string" ? JSON.parse(raw) as { fullName?: string } : raw as { fullName?: string };
-        const fullName = parsed.fullName;
-        if (fullName) {
-          const sandboxDir = `/tmp/axiom-sandbox/${projectId}`;
-          if (!existsSync(sandboxDir)) {
-            mkdirSync(sandboxDir, { recursive: true });
-            const gitToken = process.env.GITHUB_TOKEN ?? "";
-            const cloneUrl = `https://${gitToken ? gitToken + "@" : ""}github.com/${fullName}.git`;
-            const clone = spawnSync("git", ["clone", "--depth", "1", cloneUrl, sandboxDir], {
-              encoding: "utf8",
-              timeout: 30000,
-            });
-            if (clone.status !== 0) {
-              logger.warn({ fullName, stderr: clone.stderr }, "Repo clone failed — falling back to WORK_DIR");
-            } else {
-              cwd = sandboxDir;
-            }
-          } else {
-            cwd = sandboxDir;
-          }
-        }
-      }
-    } catch (err) {
-      logger.warn({ err, projectId }, "Could not resolve sandbox dir — falling back to WORK_DIR");
+      const userId = (req as any).authUser.id as number;
+      preparedRepo = await prepareProjectRepo(projectId, userId);
+    } catch (err: unknown) {
+      const status = err instanceof TerminalHttpError ? err.status : 500;
+      const message = err instanceof Error ? err.message : "Failed to prepare GitHub repo";
+      res.status(status >= 500 ? 400 : status).json({ error: message });
+      return;
     }
   }
-
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const start = Date.now();
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -143,71 +266,33 @@ Type any command above to get started.`,
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  send("start", command);
-
-  const outputChunks: string[] = [];
-
-  const gitToken = process.env.GITHUB_TOKEN ?? "";
-  const gitUser = process.env.GIT_USER_NAME ?? "jochanae";
-  const gitEmail = process.env.GIT_USER_EMAIL ?? "jochanae@gmail.com";
-
-  const proc = spawn("bash", ["-c", command], {
-    cwd,
-    env: {
-      ...process.env,
-      FORCE_COLOR: "0",
-      NO_COLOR: "1",
-      TERM: "dumb",
-      GIT_AUTHOR_NAME: gitUser,
-      GIT_AUTHOR_EMAIL: gitEmail,
-      GIT_COMMITTER_NAME: gitUser,
-      GIT_COMMITTER_EMAIL: gitEmail,
-      GIT_ASKPASS: "echo",
-      GIT_TERMINAL_PROMPT: "0",
-      GITHUB_TOKEN: gitToken,
-    },
-  });
-
-  proc.stdout?.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    outputChunks.push(text);
-    send("output", text);
-  });
-
-  proc.stderr?.on("data", (chunk: Buffer) => {
-    const text = chunk.toString();
-    outputChunks.push(text);
-    send("stderr", text);
-  });
-
-  proc.on("close", (code) => {
-    const durationMs = Date.now() - start;
-    const fullOutput = outputChunks.join("");
-    send("done", JSON.stringify({ exitCode: code, durationMs }));
-    res.end();
-    addHistory({
-      id, command,
-      output: fullOutput.slice(0, 8000),
-      exitCode: code,
-      timestamp: new Date().toISOString(),
-      durationMs,
-    });
-    logger.info({ command, exitCode: code, durationMs }, "Terminal command executed");
-  });
-
-  proc.on("error", (err) => {
-    send("error", err.message);
-    res.end();
-  });
-
+  let proc: ChildProcess | null = null;
   req.on("close", () => {
-    try { proc.kill("SIGTERM"); } catch {}
+    try { proc?.kill("SIGTERM"); } catch {}
   });
+
+  try {
+    const result = await executeTerminalCommand(command, {
+      onStart: (startedCommand) => send("start", startedCommand),
+      onStdout: (text) => send("output", text),
+      onStderr: (text) => send("stderr", text),
+      onProcess: (child) => { proc = child; },
+    }, {
+      cwd: preparedRepo?.sandboxDir,
+      githubToken: preparedRepo?.githubToken,
+    });
+    send("done", JSON.stringify({ output: result.output, exitCode: result.exitCode, durationMs: result.durationMs }));
+    res.end();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Terminal command failed";
+    send("error", message);
+    res.end();
+  }
 });
 
 // GET /api/terminal/history — last N commands with their output
 router.get("/terminal/history", requireAuth, (_req, res): void => {
-  res.json({ history: [...history].reverse() });
+  res.json({ history: getTerminalHistory() });
 });
 
 // POST /api/terminal/explain — scenario mode: explain what a command WOULD do without executing

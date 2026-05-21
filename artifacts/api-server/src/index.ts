@@ -1,4 +1,6 @@
 import app from "./app";
+import { db } from "@workspace/db";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { logger } from "./lib/logger";
 
 const rawPort = process.env["PORT"];
@@ -38,13 +40,26 @@ async function initStripe() {
   }
 }
 
-// Fire and forget — never block startup
-initStripe().catch((err) => {
-  console.warn("Stripe init skipped:", err?.message ?? err);
-});
+async function main() {
+  // Fire and forget — never block startup
+  initStripe().catch((err) => {
+    console.warn("Stripe init skipped:", err?.message ?? err);
+  });
 
-app.listen(port, () => {
-  console.log({ port }, "Server listening");
-  // Signal readiness immediately
-  if (process.send) process.send("ready");
-});
+  try {
+    await migrate(db, {
+      migrationsFolder: "../../lib/db/migrations",
+    });
+    console.log("Migrations complete");
+  } catch (err) {
+    console.error("Migration failed:", err);
+  }
+
+  app.listen(port, () => {
+    console.log({ port }, "Server listening");
+    // Signal readiness immediately
+    if (process.send) process.send("ready");
+  });
+}
+
+main();

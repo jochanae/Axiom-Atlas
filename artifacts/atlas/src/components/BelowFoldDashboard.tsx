@@ -33,7 +33,7 @@ type ActivityItem = {
   timestamp: string;
 };
 
-function RevealOnScroll({ children, delayMs = 0 }: { children: ReactNode; delayMs?: number }) {
+function RevealOnScroll({ children, delayMs = 0, className }: { children: ReactNode; delayMs?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [revealed, setRevealed] = useState(false);
   useEffect(() => {
@@ -48,7 +48,7 @@ function RevealOnScroll({ children, delayMs = 0 }: { children: ReactNode; delayM
     return () => obs.disconnect();
   }, []);
   return (
-    <div ref={ref} style={{
+    <div ref={ref} className={className} style={{
       opacity: revealed ? 1 : 0,
       transform: revealed ? "translateY(0)" : "translateY(14px)",
       transition: `opacity 550ms cubic-bezier(0.4,0,0.2,1) ${delayMs}ms, transform 550ms cubic-bezier(0.4,0,0.2,1) ${delayMs}ms`,
@@ -109,7 +109,8 @@ function ActivityHubCard({ onOpenProject }: { onOpenProject: (id: number) => voi
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-            Activity
+            <span className="bfd-mobile-label">Activity</span>
+            <span className="bfd-desktop-label">Activity feed</span>
           </h3>
           {/* Legend */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, opacity: 0.55 }}>
@@ -242,17 +243,42 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
   const actualParked = parkedCount ?? projects.length;
 
   return (
-    <div style={{ width: "100%", maxWidth: 560, padding: "0 0 120px", display: "flex", flexDirection: "column", gap: 14 }}>
+    <div className="bfd-dashboard" style={{ width: "100%", maxWidth: 560, padding: "0 0 120px", display: "flex", flexDirection: "column", gap: 14 }}>
       <style>{`
         @keyframes briefingSlideDown {
           from { opacity: 0; transform: translateY(-6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes bfd-spin { to { transform: rotate(360deg); } }
+        .bfd-overview-divider { order: 0; }
+        .bfd-where { order: 1; }
+        .bfd-activity { order: 2; }
+        .bfd-momentum { order: 3; }
+        .bfd-connections { order: 4; }
+        .bfd-cognitive { order: 5; }
+        @media (min-width: 1024px) {
+          .bfd-dashboard {
+            max-width: 1100px !important;
+            display: grid !important;
+            grid-template-columns: repeat(20, minmax(0, 1fr));
+            gap: 16px !important;
+          }
+          .bfd-overview-divider { grid-column: 1 / -1; order: 0; }
+          .bfd-connections { grid-column: 1 / -1; order: 1; }
+          .bfd-where { grid-column: span 13; order: 2; }
+          .bfd-momentum { grid-column: span 7; order: 3; }
+          .bfd-activity { grid-column: span 10; order: 4; }
+          .bfd-cognitive { grid-column: span 10; order: 5; }
+          .bfd-mobile-label { display: none; }
+          .bfd-desktop-label { display: inline; }
+        }
+        @media (max-width: 1023px) {
+          .bfd-desktop-label { display: none; }
+        }
       `}</style>
 
       {/* Scroll hint / divider */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+      <div className="bfd-overview-divider" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
         <div style={{ flex: 1, height: 1, background: "var(--atlas-gold-border)" }} />
         <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.18em", textTransform: "uppercase", color: "var(--atlas-muted)", opacity: 0.4 }}>
           Your overview
@@ -260,9 +286,36 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
         <div style={{ flex: 1, height: 1, background: "var(--atlas-gold-border)" }} />
       </div>
 
+      {/* CONNECTIONS DOCK / QUICK PROMPT */}
+      {onOpenQuickPrompt && (
+        <RevealOnScroll delayMs={200} className="bfd-connections">
+          <div className="atlas-discovery-card" style={{ cursor: "pointer", height: "100%", boxSizing: "border-box" }} onClick={onOpenQuickPrompt}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
+                <span className="bfd-mobile-label">Quick Prompt</span>
+                <span className="bfd-desktop-label">Connections Dock</span>
+              </h3>
+              <span style={{ fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em", opacity: 0.75 }}>
+                Open →
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: 12, color: "var(--atlas-muted)", lineHeight: 1.55, opacity: 0.75 }}>
+              Describe what you want to build. Pick your platform. Get a ready-to-paste prompt — no filler.
+            </p>
+            <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+              {["Cursor", "Replit", "Lovable", "Bolt"].map(p => (
+                <span key={p} style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.6)", border: "1px solid rgba(201,162,76,0.15)", borderRadius: 20, padding: "3px 10px" }}>
+                  {p}
+                </span>
+              ))}
+            </div>
+          </div>
+        </RevealOnScroll>
+      )}
+
       {/* 1. WHERE WERE WE */}
-      <RevealOnScroll delayMs={0}>
-        <div className="atlas-discovery-card">
+      <RevealOnScroll delayMs={0} className="bfd-where">
+        <div className="atlas-discovery-card" style={{ height: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showBriefing ? 10 : 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
@@ -385,13 +438,13 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
       </RevealOnScroll>
 
       {/* 2. ACTIVITY HUB */}
-      <RevealOnScroll delayMs={80}>
+      <RevealOnScroll delayMs={80} className="bfd-activity">
         <ActivityHubCard onOpenProject={onOpenProject} />
       </RevealOnScroll>
 
       {/* 3. YOUR MOMENTUM */}
-      <RevealOnScroll delayMs={160}>
-        <div className="atlas-discovery-card">
+      <RevealOnScroll delayMs={160} className="bfd-momentum">
+        <div className="atlas-discovery-card" style={{ height: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
               Your Momentum
@@ -412,38 +465,13 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
         </div>
       </RevealOnScroll>
 
-      {/* QUICK PROMPT */}
-      {onOpenQuickPrompt && (
-        <RevealOnScroll delayMs={200}>
-          <div className="atlas-discovery-card" style={{ cursor: "pointer" }} onClick={onOpenQuickPrompt}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-                Quick Prompt
-              </h3>
-              <span style={{ fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em", opacity: 0.75 }}>
-                Open →
-              </span>
-            </div>
-            <p style={{ margin: 0, fontSize: 12, color: "var(--atlas-muted)", lineHeight: 1.55, opacity: 0.75 }}>
-              Describe what you want to build. Pick your platform. Get a ready-to-paste prompt — no filler.
-            </p>
-            <div style={{ display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
-              {["Cursor", "Replit", "Lovable", "Bolt"].map(p => (
-                <span key={p} style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", color: "rgba(201,162,76,0.6)", border: "1px solid rgba(201,162,76,0.15)", borderRadius: 20, padding: "3px 10px" }}>
-                  {p}
-                </span>
-              ))}
-            </div>
-          </div>
-        </RevealOnScroll>
-      )}
-
       {/* 4. UNFINISHED THOUGHTS */}
-      <RevealOnScroll delayMs={240}>
-        <div className="atlas-discovery-card">
+      <RevealOnScroll delayMs={240} className="bfd-cognitive">
+        <div className="atlas-discovery-card" style={{ height: "100%", boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
             <h3 style={{ margin: 0, fontSize: 9.5, fontWeight: 600, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", letterSpacing: "0.12em", textTransform: "uppercase", opacity: 0.7 }}>
-              Unfinished Thoughts
+              <span className="bfd-mobile-label">Unfinished Thoughts</span>
+              <span className="bfd-desktop-label">Cognitive Momentum</span>
             </h3>
             {onOpenParking && (
               <button type="button" onClick={onOpenParking} style={{ background: "transparent", border: "none", fontSize: 10, color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", cursor: "pointer", letterSpacing: "0.05em", opacity: 0.75 }}>
