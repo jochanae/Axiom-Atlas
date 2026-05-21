@@ -8,6 +8,7 @@ import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { calculateModelCostUsd } from "../pricing";
+import { logger } from "../lib/logger";
 import {
   evaluateTerminalRequest,
   executeTerminalCommand,
@@ -366,9 +367,11 @@ async function runChatTerminalCommand(
     try {
       const { sandboxDir } = await prepareProjectRepo(projectId, userId);
       cwd = sandboxDir;
-    } catch {
-      // Non-fatal — run without sandbox if prep fails
+    } catch (err) {
+      logger.error({ err, projectId, userId }, "prepareProjectRepo failed in runChatTerminalCommand");
     }
+  } else {
+    logger.warn({ projectId, userId }, "runChatTerminalCommand called without projectId or userId");
   }
 
   const result = await executeTerminalCommand(requested.command, {
