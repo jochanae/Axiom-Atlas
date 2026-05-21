@@ -4,7 +4,13 @@ import { classifyTerminalCommand, evaluateTerminalRequest } from "../lib/termina
 describe("terminal command classification", () => {
   it("classifies safe read-only commands as tier 1", () => {
     expect(classifyTerminalCommand("git status")).toMatchObject({ tier: 1 });
+    expect(classifyTerminalCommand("npm test")).toMatchObject({ tier: 1 });
+    expect(classifyTerminalCommand("bun test")).toMatchObject({ tier: 1 });
+    expect(classifyTerminalCommand("vitest")).toMatchObject({ tier: 1 });
+    expect(classifyTerminalCommand("npm run build")).toMatchObject({ tier: 1 });
+    expect(classifyTerminalCommand("bun run build")).toMatchObject({ tier: 1 });
     expect(classifyTerminalCommand("npm run typecheck")).toMatchObject({ tier: 1 });
+    expect(classifyTerminalCommand("tsc --noEmit")).toMatchObject({ tier: 1 });
     expect(classifyTerminalCommand("node --version")).toMatchObject({ tier: 1 });
   });
 
@@ -12,6 +18,11 @@ describe("terminal command classification", () => {
     expect(classifyTerminalCommand("npm install")).toMatchObject({ tier: 2 });
     expect(classifyTerminalCommand("git commit -m test")).toMatchObject({ tier: 2 });
     expect(classifyTerminalCommand("mkdir tmp")).toMatchObject({ tier: 2 });
+  });
+
+  it("allows npm install as tier 1 only in a sandbox", () => {
+    expect(classifyTerminalCommand("npm install", { sandbox: true })).toMatchObject({ tier: 1 });
+    expect(evaluateTerminalRequest("npm install", undefined, undefined, { sandbox: true }).requiresConfirmation).toBe(false);
   });
 
   it("classifies destructive commands and writes as tier 3", () => {
