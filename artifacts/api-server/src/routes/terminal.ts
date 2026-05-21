@@ -18,7 +18,7 @@ const router: IRouter = Router();
 const SANDBOX_ROOT = "/tmp/axiom-sandbox";
 const NO_LINKED_REPO_MESSAGE = "No GitHub repo linked to this project. Link one in project settings to run commands.";
 
-type ParsedLinkedRepo = { owner: string; repo: string; fullName: string };
+type ParsedLinkedRepo = { fullName: string };
 type PreparedProjectRepo = { sandboxDir: string; githubToken: string | null };
 
 class TerminalHttpError extends Error {
@@ -59,54 +59,16 @@ async function resolveGithubTokenForRequest(
   return resolveStoredGithubToken(projectGithubToken) ?? process.env.GITHUB_TOKEN ?? null;
 }
 
-function parseOwnerRepoCandidate(value: string): ParsedLinkedRepo | null {
-  const cleaned = value.trim().replace(/\.git$/, "").replace(/\/+$/, "");
-  if (!cleaned) return null;
-
-  const urlMatch = cleaned.match(/^https?:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s?#]+)/i);
-  const pathMatch = cleaned.match(/^([^/\s]+)\/([^/\s]+)$/);
-  const match = urlMatch ?? pathMatch;
-  if (!match) return null;
-
-  const owner = decodeURIComponent(match[1]).trim();
-  const repo = decodeURIComponent(match[2]).trim().replace(/\.git$/, "");
-  if (!owner || !repo) return null;
-  return { owner, repo, fullName: `${owner}/${repo}` };
-}
-
 function parseLinkedRepo(raw: string | null): ParsedLinkedRepo | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as {
-      owner?: unknown;
-      repo?: unknown;
-      name?: unknown;
-      fullName?: unknown;
-      full_name?: unknown;
-      url?: unknown;
-      html_url?: unknown;
-    };
-    if (typeof parsed.owner === "string" && typeof parsed.repo === "string") {
-      return parseOwnerRepoCandidate(`${parsed.owner}/${parsed.repo}`);
-    }
-    const fullName = typeof parsed.fullName === "string"
-      ? parsed.fullName
-      : typeof parsed.full_name === "string"
-        ? parsed.full_name
-        : null;
-    if (fullName) return parseOwnerRepoCandidate(fullName);
-    const url = typeof parsed.url === "string"
-      ? parsed.url
-      : typeof parsed.html_url === "string"
-        ? parsed.html_url
-        : null;
-    if (url) return parseOwnerRepoCandidate(url);
-    if (typeof parsed.owner === "string" && typeof parsed.name === "string") {
-      return parseOwnerRepoCandidate(`${parsed.owner}/${parsed.name}`);
-    }
-    return null;
+    const repoData = typeof raw === "string" ? JSON.parse(raw) as { fullName?: unknown } : raw;
+    const fullName = repoData?.fullName;
+    return typeof fullName === "string" && fullName.trim()
+      ? { fullName: fullName.trim().replace(/\.git$/, "").replace(/^\/+|\/+$/g, "") }
+      : null;
   } catch {
-    return parseOwnerRepoCandidate(raw);
+    return null;
   }
 }
 
@@ -138,10 +100,9 @@ function redactToken(text: string, token: string | null): string {
 }
 
 function buildCloneUrl(repo: ParsedLinkedRepo, token: string | null): string {
-  const repoPath = `${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}`;
   return token
-    ? `https://${encodeURIComponent(token)}@github.com/${repoPath}.git`
-    : `https://github.com/${repoPath}.git`;
+    ? `https://${encodeURIComponent(token)}@github.com/${repo.fullName}.git`
+    : `https://github.com/${repo.fullName}.git`;
 }
 
 function runGit(args: string[], token: string | null): Promise<void> {
