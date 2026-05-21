@@ -1722,6 +1722,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const activeModel = selectChatModelForMessage(message);
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
+  logger.info({ projectId, userId, hasProjectId: !!projectId, hasUserId: !!userId }, "chat terminal debug");
 
   // Load project memory + repo info + node state from DB
   const [project] = await db
