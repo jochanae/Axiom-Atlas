@@ -9,6 +9,22 @@ Repo: `jochanae/Axiom-Atlas` (private)
 
 ---
 
+## Deployment Architecture (Current)
+
+| Layer | Technology | Notes |
+|---|---|---|
+| **Backend** | `artifacts/api-server/` in this Replit | Deployed to **Render** |
+| **Database** | **Neon** PostgreSQL | `DATABASE_URL` points to Neon |
+| **Frontend** | **Separate repository** | Not in this Replit — Jochanae manages it independently |
+
+**This Replit is the backend codebase.** `artifacts/atlas/` here is a drifted reference copy — do not treat it as the live frontend. All meaningful work happens in `artifacts/api-server/` and `lib/`.
+
+When changes touch the API contract (new routes, new response fields, new DB columns), produce copy-pasteable output files for Jochanae to apply to the frontend repo manually via Cursor.
+
+When DB schema changes are made (`pnpm --filter @workspace/db run push`), also produce a `neon-migration.txt` SQL file for Jochanae to run in the Neon SQL editor.
+
+---
+
 ## Who This Is For
 
 Jochanae — founder of Into Innovations. Builds production SaaS entirely from her phone using Cursor Agent on mobile. Four live products: CoinsBloom, Compani, PresentQ, IntoIQ. Axiom-Atlas is her fifth.
@@ -26,9 +42,9 @@ Jochanae — founder of Into Innovations. Builds production SaaS entirely from h
 ## Architecture
 
 ### Stack
-- **Frontend:** React + Vite (`artifacts/atlas/`) — served at `/`
-- **Backend:** Express 5 (`artifacts/api-server/`) — served at `/api`
-- **Database:** Replit PostgreSQL via Drizzle ORM (`lib/db/`)
+- **Backend:** Express 5 (`artifacts/api-server/`) — deployed to Render, served at `/api`
+- **Database:** Neon PostgreSQL via Drizzle ORM (`lib/db/`)
+- **Frontend:** Separate repository (not in this Replit) — React + Vite, deployed independently
 - **AI:** Anthropic Claude `claude-sonnet-4-6` + Google Gemini `gemini-2.5-pro`
 - **Monorepo:** pnpm workspaces
 
