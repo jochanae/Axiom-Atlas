@@ -1705,6 +1705,17 @@ router.post("/chat", async (req, res): Promise<void> => {
     forgeContext?: string;
   };
 
+  // Set up SSE for agentic narration
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const narrate = (message: string) => {
+    res.write(`event: narration\ndata: ${JSON.stringify(message)}\n\n`);
+  };
+
   const isFlowMode = !!body.flowMode;
   const isScenarioMode = !!body.scenarioMode;
 
@@ -1760,6 +1771,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   let repoTreeContext: string | null = null;
   let recentRepoActivityContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
+  narrate("Connecting to your repository...");
   const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project?.githubToken);
 
   if (project?.linkedRepo) {
@@ -1770,6 +1782,7 @@ router.post("/chat", async (req, res): Promise<void> => {
         : parsedRepo;
       if (repoData.fullName) {
         if (resolvedGithubToken) {
+          narrate("Reading repo structure...");
           repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
         }
         if (process.env.GITHUB_TOKEN) {
@@ -1789,6 +1802,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (BUILD_INTENT_RE.test(message) && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
     try {
       // Fast selector call: ask Claude which files it needs to read (small, cheap)
+      narrate("Identifying relevant files...");
       const selectorResp = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
         max_tokens: 200,
@@ -2146,6 +2160,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     });
   }
 
+  narrate("Atlas is thinking...");
   let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
@@ -2195,6 +2210,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
               content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`,
             },
           ];
+          narrate("Reading files and preparing response...");
           modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
           rawContent = modelResult.content;
           assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
@@ -2205,6 +2221,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   const terminalExtraction = extractTerminalCommand(rawContent);
+  if (terminalExtraction.terminalCmd) narrate("Running terminal command...");
   rawContent = terminalExtraction.content;
   if (terminalExtraction.terminalCmd) {
     try {
@@ -2417,7 +2434,8 @@ TERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
     ...(autoName ? { autoName } : {}),
   };
 
-  res.json(finalPayload);
+  res.write(`event: done\ndata: ${JSON.stringify(finalPayload)}\n\n`);
+  res.end();
 });
 
 // ── Scenario keep — persist buffered scenario messages to session DB ──────────
