@@ -18,7 +18,7 @@ export type ParsedLinkedRepo = { fullName: string };
 export type PreparedProjectRepo = { sandboxDir: string; githubToken: string | null };
 
 export type PrepareRepoOptions = {
-  onStatus?: (msg: string) => void;
+  onStatus?: (message: string) => void;
 };
 
 export function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
@@ -141,12 +141,8 @@ function runInstall(pm: string, cwd: string): Promise<void> {
   });
 }
 
-export async function prepareProjectRepo(
-  projectId: number,
-  userId: number,
-  options: PrepareRepoOptions = {}
-): Promise<PreparedProjectRepo> {
-  const { onStatus } = options;
+export async function prepareProjectRepo(projectId: number, userId: number, options?: PrepareRepoOptions): Promise<PreparedProjectRepo> {
+  const { onStatus } = options ?? {};
 
   const [project] = await db
     .select({
