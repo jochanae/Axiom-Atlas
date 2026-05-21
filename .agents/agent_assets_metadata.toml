@@ -42,3 +42,9 @@ id = "AyeDisGJjYevEdqBPS7wj"
 uri = "file://.local/exports/neon-migrations-0013-0016.txt"
 type = "text"
 title = "neon-migrations-0013-0016.txt — paste into Neon SQL editor"
+
+[[outputs]]
+id = "AcQ3nEHQ8uiTDhvKD5M8M"
+uri = "file://.local/exports/cursor-terminal-lens-fix.txt"
+type = "text"
+title = "cursor-terminal-lens-fix.txt — paste into Cursor Agent"
