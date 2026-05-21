@@ -8,6 +8,12 @@ import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { calculateModelCostUsd } from "../pricing";
+import {
+  evaluateTerminalRequest,
+  executeTerminalCommand,
+  parseTerminalTier,
+  type TerminalTier,
+} from "../lib/terminalExecution";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
@@ -287,6 +293,83 @@ function extractIntentType(content: string): { content: string; intentType: stri
   return { content: cleaned, intentType };
 }
 
+type ChatTerminalCommand = {
+  command: string;
+  tier: TerminalTier;
+  reason?: string;
+};
+
+type ChatTerminalResult = {
+  command: string;
+  output: string;
+  exitCode: number | null;
+  tier: TerminalTier;
+};
+
+const TERMINAL_CMD_RE = /(?:^|\n)\s*TERMINAL_CMD:\s*(\{[^\n]*\})\s*/g;
+const TERMINAL_RESULT_RE = /(?:^|\n)\s*TERMINAL_RESULT:\s*(\{[^\n]*\})\s*/g;
+
+function cleanTerminalTags(content: string): string {
+  return content
+    .replace(TERMINAL_CMD_RE, "\n")
+    .replace(TERMINAL_RESULT_RE, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function extractTerminalCommand(content: string): {
+  content: string;
+  terminalCmd: { command: string; tier?: TerminalTier } | null;
+} {
+  let terminalCmd: { command: string; tier?: TerminalTier } | null = null;
+  const cleaned = content.replace(TERMINAL_CMD_RE, (_match, json: string) => {
+    if (!terminalCmd) {
+      try {
+        const parsed = JSON.parse(json) as { command?: unknown; tier?: unknown };
+        const command = typeof parsed.command === "string" ? parsed.command.trim() : "";
+        if (command) terminalCmd = { command, tier: parseTerminalTier(parsed.tier) };
+      } catch {
+        // Malformed hidden command blocks are stripped, not shown to the user.
+      }
+    }
+    return "\n";
+  });
+
+  return {
+    content: cleanTerminalTags(cleaned),
+    terminalCmd,
+  };
+}
+
+async function runChatTerminalCommand(
+  requested: { command: string; tier?: TerminalTier }
+): Promise<{ terminalCmd: ChatTerminalCommand; terminalResult: ChatTerminalResult | null }> {
+  const evaluation = evaluateTerminalRequest(requested.command, requested.tier);
+  const resolvedTier: TerminalTier = evaluation.tier === "blocked"
+    ? requested.tier ?? 3
+    : evaluation.tier;
+  const terminalCmd: ChatTerminalCommand = {
+    command: requested.command,
+    tier: resolvedTier,
+    reason: evaluation.reason,
+  };
+
+  if (evaluation.tier === "blocked" || evaluation.requiresConfirmation) {
+    return { terminalCmd, terminalResult: null };
+  }
+
+  const result = await executeTerminalCommand(requested.command);
+  return {
+    terminalCmd,
+    terminalResult: {
+      command: requested.command,
+      output: result.output,
+      exitCode: result.exitCode,
+      tier: resolvedTier,
+    },
+  };
+}
+
 // ── System Prompt ─────────────────────────────────────────────────────────────
 const DEV_SYSTEM_PROMPT = `You are Atlas — a strategic thinking partner and personal AI development environment for a non-technical founder.
 
@@ -563,22 +646,24 @@ Self-repair rules:
 - After applying, explain what changed and whether the user needs to restart anything.
 - NEVER include package.json in a self-repair — the system will block it.
 
-CMD_EXEC protocol (Terminal execution — Agentic mode):
-When the user asks you to run a command, or when a natural next step is to execute a shell command (typecheck, install, build, test, git ops), emit it in this exact format on its own line at the end of your message:
+TERMINAL_CMD protocol (Terminal execution — Agentic mode):
+When the user asks you to run a command, or when a natural next step is to execute a safe shell command (typecheck, test, git status/log/diff/show, ls/pwd/cat/head/tail/grep), emit it in this exact format on its own line at the end of your message:
 
-CMD_EXEC:{"command":"pnpm --filter @workspace/atlas run typecheck","description":"Check for TypeScript errors in the frontend"}
+TERMINAL_CMD:{"command":"git status","tier":1}
 
-Rules for CMD_EXEC:
-- Use CMD_EXEC only when a command is genuinely useful and safe. Never suggest destructive commands (rm -rf, git reset --hard, drop table, etc.).
-- One CMD_EXEC per response — pick the single most important next step.
-- Common safe commands: pnpm --filter @workspace/atlas run typecheck, pnpm --filter @workspace/api-server run build, pnpm add <pkg> --filter @workspace/<name>, git status, git log --oneline -10, git diff, git pull, ls, cat <file>, grep -r <pattern> <dir>.
-- Do NOT emit CMD_EXEC for: destructive operations, anything requiring confirmation, or anything that writes to files (use FILE_EDIT or LINE_PATCH instead).
+Rules for TERMINAL_CMD:
+- Use TERMINAL_CMD only when a command is genuinely useful and belongs in the right tier.
+- Tier 1 executes automatically: git status/log/diff/show, npm test, bun test, vitest, ls, pwd, cat, head, tail, grep, npm run typecheck, tsc --noEmit, echo, which, node --version, npm --version.
+- Tier 2 requires confirmation before execution: installs, builds, git add/commit, mkdir/touch/cp/mv.
+- Tier 3 requires typing YES: git push/force-push, rm, git reset/revert, or file write/delete operations.
+- One TERMINAL_CMD per response — pick the single most important next step.
+- Never emit blocked or obviously destructive commands.
 
 Agentic chaining — this is critical:
 The terminal output is automatically fed back to you after each command runs. You do not need to wait for the user. When you receive terminal output:
 1. Analyze the result immediately — did it pass or fail?
-2. If it FAILED: emit FILE_EDIT or LINE_PATCH to fix the errors, then emit another CMD_EXEC to verify the fix. Keep iterating until it passes.
-3. If it PASSED: either proceed to the next logical step with another CMD_EXEC, or if the task is complete, end with a clear summary of what was done — no CMD_EXEC needed.
+2. If it FAILED: emit FILE_EDIT or LINE_PATCH to fix the errors, then emit another TERMINAL_CMD to verify the fix. Keep iterating until it passes.
+3. If it PASSED: either proceed to the next logical step with another TERMINAL_CMD, or if the task is complete, end with a clear summary of what was done — no TERMINAL_CMD needed.
 4. Never ask "should I continue?" — just continue. The user can stop the loop at any time using the Agent toggle.
 5. Max 8 iterations per task to avoid infinite loops — if still failing after 8 attempts, explain what you tried and what's blocking.
 
@@ -1913,7 +1998,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       ...runMetadataInsertValues(diveResult.content),
     }).returning();
     await db.update(sessionsTable).set({ messageCount: sql`${sessionsTable.messageCount} + 2` }).where(eq(sessionsTable.id, sessionId));
-    res.json({ content: diveResult.content, surface, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
+    res.json({ content: diveResult.content, terminalCmd: null, terminalResult: null, surface, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
     return;
   }
 
@@ -2016,6 +2101,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
+  let terminalCmd: ChatTerminalCommand | null = null;
+  let terminalResult: ChatTerminalResult | null = null;
 
   // FILE_READ intercept — Atlas requested specific files; fetch them and call model again
   if (repoData?.fullName && resolvedGithubToken) {
@@ -2065,6 +2152,33 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         }
       } catch { /* Non-fatal — keep rawContent from first call */ }
     }
+  }
+
+  const terminalExtraction = extractTerminalCommand(rawContent);
+  rawContent = terminalExtraction.content;
+  if (terminalExtraction.terminalCmd) {
+    try {
+      const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd);
+      terminalCmd = executed.terminalCmd;
+      terminalResult = executed.terminalResult;
+      if (terminalResult) {
+        rawContent = cleanTerminalTags(`${rawContent}
+
+TERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Terminal command failed";
+      const fallbackTier = terminalExtraction.terminalCmd.tier ?? 3;
+      terminalCmd = { command: terminalExtraction.terminalCmd.command, tier: fallbackTier, reason: message };
+      terminalResult = {
+        command: terminalExtraction.terminalCmd.command,
+        output: message,
+        exitCode: null,
+        tier: fallbackTier,
+      };
+    }
+  } else {
+    rawContent = cleanTerminalTags(rawContent);
   }
 
   // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
@@ -2230,6 +2344,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
 
   res.json({
     content: displayContent,
+    terminalCmd,
+    terminalResult,
     surface,
     intentType: detectedIntentType ?? null,
     catchPayload: null,
