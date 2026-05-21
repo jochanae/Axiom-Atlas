@@ -48,3 +48,9 @@ id = "AcQ3nEHQ8uiTDhvKD5M8M"
 uri = "file://.local/exports/cursor-terminal-lens-fix.txt"
 type = "text"
 title = "cursor-terminal-lens-fix.txt — paste into Cursor Agent"
+
+[[outputs]]
+id = "8rjGx_PvxI2Klq9IctaQT"
+uri = "file://.local/exports/cursor-terminal-projectid-fix.txt"
+type = "text"
+title = "cursor-terminal-projectid-fix.txt — paste into Cursor Agent"
