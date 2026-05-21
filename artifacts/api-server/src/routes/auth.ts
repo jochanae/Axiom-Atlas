@@ -153,7 +153,7 @@ router.post("/auth/logout", async (req, res): Promise<void> => {
   if (token) {
     await db.delete(userSessionsTable).where(eq(userSessionsTable.token, token)).catch(() => {});
   }
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: true, sameSite: "none", path: "/" });
   res.json({ ok: true });
 });
 
@@ -169,7 +169,7 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
     const token = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
     await db.update(usersTable).set({ resetToken: token, resetTokenExpiresAt: expiresAt }).where(eq(usersTable.id, user.id));
-    if (process.env.NODE_ENV !== "production") {
+    if (process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from: "Axiom <onboarding@resend.dev>",
@@ -263,7 +263,7 @@ router.delete("/auth/account", async (req, res): Promise<void> => {
   if (!user) { res.status(401).json({ error: "Not authenticated" }); return; }
 
   await db.delete(usersTable).where(eq(usersTable.id, user.id));
-  res.clearCookie("atlas-session", { path: "/" });
+  res.clearCookie("atlas-session", { httpOnly: true, secure: true, sameSite: "none", path: "/" });
   res.json({ ok: true });
 });
 
