@@ -113,6 +113,20 @@
       "when": 1779121600000,
       "tag": "0015_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1779125200000,
+      "tag": "0016_nexus_session_run_metadata",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779128800000,
+      "tag": "0017_project_last_opened_at",
+      "breakpoints": true
     }
   ]
 }
