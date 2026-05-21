@@ -17,6 +17,10 @@ export class TerminalHttpError extends Error {
 export type ParsedLinkedRepo = { fullName: string };
 export type PreparedProjectRepo = { sandboxDir: string; githubToken: string | null };
 
+export type PrepareRepoOptions = {
+  onStatus?: (msg: string) => void;
+};
+
 export function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
   const plain = storedToken ? decryptToken(storedToken) : null;
   return plain && plain !== "__server__" ? plain : null;
@@ -103,7 +107,47 @@ export function runGit(args: string[], token: string | null): Promise<void> {
   });
 }
 
-export async function prepareProjectRepo(projectId: number, userId: number): Promise<PreparedProjectRepo> {
+function detectPackageManager(sandboxDir: string): Promise<"pnpm" | "yarn" | "npm"> {
+  return Promise.all([
+    pathExists(`${sandboxDir}/pnpm-lock.yaml`),
+    pathExists(`${sandboxDir}/yarn.lock`),
+  ]).then(([hasPnpm, hasYarn]) => {
+    if (hasPnpm) return "pnpm";
+    if (hasYarn) return "yarn";
+    return "npm";
+  });
+}
+
+function runInstall(pm: string, cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(pm, ["install", "--prefer-offline"], {
+      cwd,
+      env: {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+        FORCE_COLOR: "0",
+        NO_COLOR: "1",
+      },
+    });
+    const chunks: string[] = [];
+    proc.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk.toString()));
+    proc.stderr?.on("data", (chunk: Buffer) => chunks.push(chunk.toString()));
+    proc.on("error", reject);
+    proc.on("close", (code) => {
+      if (code === 0) { resolve(); return; }
+      const output = chunks.join("").trim().slice(0, 500);
+      reject(new Error(output || `${pm} install failed with exit code ${code ?? "unknown"}`));
+    });
+  });
+}
+
+export async function prepareProjectRepo(
+  projectId: number,
+  userId: number,
+  options: PrepareRepoOptions = {}
+): Promise<PreparedProjectRepo> {
+  const { onStatus } = options;
+
   const [project] = await db
     .select({
       id: projectsTable.id,
@@ -125,13 +169,33 @@ export async function prepareProjectRepo(projectId: number, userId: number): Pro
 
   try {
     await mkdir(SANDBOX_ROOT, { recursive: true });
+
     if (await pathExists(sandboxDir)) {
+      onStatus?.(`Updating ${repo.fullName}...`);
       await runGit(["-C", sandboxDir, "remote", "set-url", "origin", cloneUrl], githubToken);
       await runGit(["-C", sandboxDir, "pull"], githubToken);
     } else {
+      onStatus?.(`Cloning ${repo.fullName}...`);
       await runGit(["clone", "--depth", "1", cloneUrl, sandboxDir], githubToken);
     }
+
+    const hasPackageJson = await pathExists(`${sandboxDir}/package.json`);
+    const hasNodeModules = await pathExists(`${sandboxDir}/node_modules`);
+
+    if (hasPackageJson && !hasNodeModules) {
+      const pm = await detectPackageManager(sandboxDir);
+      onStatus?.(`Installing dependencies with ${pm}...`);
+      try {
+        await runInstall(pm, sandboxDir);
+        onStatus?.("Dependencies installed.");
+      } catch (installErr: unknown) {
+        const msg = installErr instanceof Error ? installErr.message : "install failed";
+        logger.warn({ projectId, pm, err: installErr }, "Dependency install failed — continuing anyway");
+        onStatus?.(`Warning: ${pm} install failed (${msg.slice(0, 120)}). Some commands may not work.`);
+      }
+    }
   } catch (err: unknown) {
+    if (err instanceof TerminalHttpError) throw err;
     const message = err instanceof Error ? err.message : "unknown git error";
     logger.error({ err, projectId, repo: repo.fullName }, "Failed to prepare terminal project repo");
     throw new TerminalHttpError(500, `Failed to prepare GitHub repo: ${redactToken(message, githubToken)}`);

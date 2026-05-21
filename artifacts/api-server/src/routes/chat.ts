@@ -1728,7 +1728,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const [project] = await db
     .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
     .from(projectsTable)
-    .where(eq(projectsTable.id, projectId));
+    .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId));
 
   // Derive server-side forge foundation from persisted AxiomFlow node state
   // This is the authoritative source — client-sent forgeContext supplements but never replaces it

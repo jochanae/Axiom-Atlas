@@ -47,12 +47,20 @@ async function main() {
   });
 
   try {
-    await migrate(db, { migrationsFolder: "./drizzle" });
+    await migrate(db, { migrationsFolder: "../../lib/db/migrations" });
     logger.info("Migrations complete");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    if (message.includes("already exists")) {
-      logger.warn("Migration skipped — tables already exist");
+    const causeMessage = (err instanceof Error && (err as any).cause instanceof Error)
+      ? (err as any).cause.message as string
+      : "";
+    const pgCode = (err as any)?.cause?.code ?? (err as any)?.code ?? "";
+    const isDuplicateTable =
+      message.includes("already exists") ||
+      causeMessage.includes("already exists") ||
+      pgCode === "42P07";
+    if (isDuplicateTable) {
+      logger.warn("Migration skipped — tables already exist in target database");
     } else {
       logger.error({ err }, "Migration failed");
       throw err;

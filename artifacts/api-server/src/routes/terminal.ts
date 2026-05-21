@@ -13,6 +13,7 @@ import {
 import {
   prepareProjectRepo,
   TerminalHttpError,
+  type PrepareRepoOptions,
 } from "../lib/terminalSandbox";
 
 const router: IRouter = Router();
@@ -99,19 +100,6 @@ Type any command above to get started.`,
     return;
   }
 
-  let preparedRepo: Awaited<ReturnType<typeof prepareProjectRepo>> | null = null;
-  if (projectId !== undefined) {
-    try {
-      const userId = (req as any).authUser.id as number;
-      preparedRepo = await prepareProjectRepo(projectId, userId);
-    } catch (err: unknown) {
-      const status = err instanceof TerminalHttpError ? err.status : 500;
-      const message = err instanceof Error ? err.message : "Failed to prepare GitHub repo";
-      res.status(status >= 500 ? 400 : status).json({ error: message });
-      return;
-    }
-  }
-
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -126,6 +114,20 @@ Type any command above to get started.`,
   req.on("close", () => {
     try { proc?.kill("SIGTERM"); } catch {}
   });
+
+  let preparedRepo: Awaited<ReturnType<typeof prepareProjectRepo>> | null = null;
+  if (projectId !== undefined) {
+    try {
+      const userId = (req as any).authUser.id as number;
+      const repoOptions: PrepareRepoOptions = { onStatus: (msg) => send("status", msg) };
+      preparedRepo = await prepareProjectRepo(projectId, userId, repoOptions);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to prepare GitHub repo";
+      send("error", message);
+      res.end();
+      return;
+    }
+  }
 
   try {
     const result = await executeTerminalCommand(command, {
