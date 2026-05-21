@@ -140,6 +140,7 @@ export function classifyTerminalCommand(command: string): TerminalClassification
     /^tsc\s+--noEmit\b/i,
     /^echo\b/i,
     /^which\b/i,
+    /^git\s+--version\s+&&\s+node\s+--version$/i,
     /^node\s+--version$/i,
     /^npm\s+--version$/i,
   ])) {
