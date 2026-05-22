@@ -114,3 +114,9 @@ id = "OqImbcxLyGq6899Sbr1qG"
 uri = "file://cursor-prompts/product-north-star.md"
 type = "text"
 title = "Axiom Product North Star — locked May 22, 2026"
+
+[[outputs]]
+id = "6hg4CKa6aY_1RsJU0APcI"
+uri = "file://cursor-prompts/connections-token-fix.md"
+type = "text"
+title = "Connections Token Fix — reads project DB instead of localStorage"
