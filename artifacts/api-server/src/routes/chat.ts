@@ -2282,16 +2282,43 @@ router.post("/chat", async (req, res): Promise<void> => {
     forgeContext?: string;
   };
 
-  // Set up SSE for agentic narration
+  const activeLens = (body.lens ?? "builder").toLowerCase();
+
+  // SSE headers for narration + token streaming
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
-  const narrate = (message: string) => {
-    res.write(`event: narration\ndata: ${JSON.stringify(message)}\n\n`);
+  const narrate = (msg: string) => {
+    try { res.write(`event: narration\ndata: ${JSON.stringify(msg)}\n\n`); } catch {}
   };
+
+  const lensNarration = {
+    think: {
+      loading: "Reviewing project context...",
+      memory: "Recalling previous decisions...",
+      model: "Exploring strategic direction...",
+      done: "Synthesizing response...",
+    },
+    build: {
+      loading: "Connecting to repository...",
+      memory: "Loading implementation context...",
+      model: "Inspecting codebase...",
+      done: "Preparing implementation plan...",
+    },
+    flow: {
+      loading: "Loading project structure...",
+      memory: "Mapping relationships...",
+      model: "Organizing operational context...",
+      done: "Updating flow state...",
+    },
+  } as const;
+
+  type LensKey = keyof typeof lensNarration;
+  const lensKey: LensKey = (["think", "build", "flow"].includes(activeLens) ? activeLens : "think") as LensKey;
+  const nar = lensNarration[lensKey];
 
   const narrateToken = (text: string) => {
     res.write(`event: token\ndata: ${JSON.stringify(text)}\n\n`);
@@ -2317,6 +2344,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   logger.info({ projectId, userId, hasProjectId: !!projectId, hasUserId: !!userId }, "chat terminal debug");
 
   // Load project memory + repo info + node state from DB
+  narrate(nar.loading);
   const [project] = await db
     .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
     .from(projectsTable)
@@ -2343,6 +2371,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   store = consolidateIfNeeded(store, now);
 
   // Build memory context + increment retrieval counts
+  narrate(nar.memory);
   const { text: memoryText, retrievedIds } = buildMemoryContext(store);
   if (retrievedIds.length > 0) {
     store = incrementRetrievals(store, retrievedIds, now);
@@ -2611,7 +2640,6 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   systemPrompt += workspaceLensInstructions[workspaceLens] ?? workspaceLensInstructions.flow;
 
   // Legacy project-level lens — style modifier (builder/strategist/reviewer/teacher)
-  const activeLens = (body.lens ?? "builder").toLowerCase();
   const lensInstructions: Record<string, string> = {
     builder: "",
     strategist: `\n\n--- PROJECT STYLE: STRATEGIST ---\nZoom out. Before answering any tactical question, check if there's a strategic implication worth surfacing. Think like a co-founder who's read the whole roadmap.`,
@@ -2759,7 +2787,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
 
   if (isDirect) {
     // ── Direct path: streaming model call ──────────────────────────────────
-    narrate("Atlas is thinking...");
+    narrate(nar.model);
     let modelResult: ModelCallResult;
     if (activeModel === "claude") {
       modelResult = await streamClaude(systemPrompt, dispatchMessages, imageData, narrateToken);
@@ -2883,7 +2911,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     } catch (err) {
       // Fallback: if the agentic loop fails entirely, run a direct Claude call
       logger.warn({ err }, "Agentic loop failed — falling back to direct Claude call");
-      narrate("Atlas is thinking...");
+      narrate(nar.model);
       const modelResult = await callModel("claude", systemPrompt, dispatchMessages, imageData);
       rawContent = cleanTerminalTags(modelResult.content);
       assistantUsage = modelResult.usage;
@@ -3150,6 +3178,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     ...(autoName ? { autoName } : {}),
   };
 
+  narrate(nar.done);
   res.write(`event: done\ndata: ${JSON.stringify(finalPayload)}\n\n`);
   res.end();
 });
