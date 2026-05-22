@@ -84,3 +84,9 @@ id = "WWTxHOzBgScvdRcWcygzn"
 uri = "file://cursor-prompts/db-awareness-phase1-frontend.md"
 type = "text"
 title = "DB Awareness Phase 1 — Frontend Cursor Prompt"
+
+[[outputs]]
+id = "-A_1SmhmUXOhSKbHMPUrT"
+uri = "file://cursor-prompts/db-awareness-phase2-migration-card.md"
+type = "text"
+title = "DB Awareness Phase 2 — Migration Card Cursor Prompt"
