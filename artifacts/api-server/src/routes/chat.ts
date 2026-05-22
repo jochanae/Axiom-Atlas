@@ -2859,40 +2859,70 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     modelUsed = modelResult.model;
 
     // FILE_READ intercept — text-protocol fallback for direct path
-    if (repoData?.fullName && resolvedGithubToken) {
+    {
       const { paths: readPaths, cleanedContent: readCleanedContent } = extractFileReadRequest(rawContent);
       if (readPaths.length > 0) {
-        try {
-          const fetchedFiles = await Promise.all(
-            readPaths.map(async (fp) => {
-              try {
-                const r = await fetch(
-                  `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
-                  { headers: ghHeaders(resolvedGithubToken!) }
-                );
-                if (!r.ok) return null;
-                const d = await r.json() as { encoding?: string; content?: string };
-                if (d.encoding !== "base64" || !d.content) return null;
-                const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
-                const lines = fileContent.split("\n");
-                const truncated = lines.length > 600;
-                return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : fileContent, truncated, lineCount: lines.length };
-              } catch { return null; }
-            })
-          );
-          const validFiles = fetchedFiles.filter(
-            (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
-          );
-          if (validFiles.length > 0) {
-            const filesSummary = validFiles
-              .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
-              .join("\n\n");
+        // Case 1: no linked repo or no token — tell Atlas clearly so it can relay to the user
+        if (!repoData?.fullName || !resolvedGithubToken) {
+          const reason = !repoData?.fullName
+            ? "No GitHub repo is linked to this project. The user needs to link a repo in the Files tab before you can read files."
+            : "No GitHub token is available for this project. The user needs to add their personal GitHub token in the Files tab.";
+          const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+            ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+            { role: "assistant", content: readCleanedContent },
+            { role: "user", content: `[FILE_READ_FAILED] ${reason}\n\nTell the user this directly and clearly in one sentence. Do not try to read the files again.` },
+          ];
+          if (activeModel === "claude") {
+            modelResult = await streamClaude(systemPrompt, followUpMessages, undefined, narrateToken);
+          } else {
+            modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+          }
+          rawContent = modelResult.content;
+          assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
+          modelUsed = modelResult.model;
+        } else {
+          // Case 2: repo and token exist — fetch files from GitHub
+          try {
+            const fetchedFiles = await Promise.all(
+              readPaths.map(async (fp) => {
+                try {
+                  const r = await fetch(
+                    `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
+                    { headers: ghHeaders(resolvedGithubToken!) }
+                  );
+                  if (!r.ok) return null;
+                  const d = await r.json() as { encoding?: string; content?: string };
+                  if (d.encoding !== "base64" || !d.content) return null;
+                  const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
+                  const lines = fileContent.split("\n");
+                  const truncated = lines.length > 600;
+                  return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : fileContent, truncated, lineCount: lines.length };
+                } catch { return null; }
+              })
+            );
+            const validFiles = fetchedFiles.filter(
+              (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
+            );
+
+            let followUpUserContent: string;
+            if (validFiles.length > 0) {
+              // Case 2a: files found — inject content and re-run
+              const filesSummary = validFiles
+                .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
+                .join("\n\n");
+              followUpUserContent = `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`;
+              narrate("Reading files and preparing response...");
+            } else {
+              // Case 2b: paths not found in the linked repo — tell Atlas clearly
+              const notFound = readPaths.join(", ");
+              followUpUserContent = `[FILE_READ_FAILED] The following paths were not found in the linked repo (${repoData!.fullName}, branch: ${repoData!.defaultBranch ?? "main"}): ${notFound}.\n\nPossible reasons: wrong path, wrong branch, or these files live in a different repo (e.g. the backend rather than the linked frontend repo).\n\nTell the user clearly which paths you tried and why they weren't found. Suggest the correct path if you can infer it from the file tree.`;
+            }
+
             const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
               ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
               { role: "assistant", content: readCleanedContent },
-              { role: "user", content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.` },
+              { role: "user", content: followUpUserContent },
             ];
-            narrate("Reading files and preparing response...");
             if (activeModel === "claude") {
               modelResult = await streamClaude(systemPrompt, followUpMessages, undefined, narrateToken);
             } else if (activeModel === "gpt4o") {
@@ -2903,8 +2933,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
             rawContent = modelResult.content;
             assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
             modelUsed = modelResult.model;
-          }
-        } catch { /* Non-fatal */ }
+          } catch { /* Non-fatal — leave rawContent as-is */ }
+        }
       }
     }
 
