@@ -83,22 +83,22 @@ title = "Cursor Prompt — Connections Tool (workshop.tsx)"
 id = "WWTxHOzBgScvdRcWcygzn"
 uri = "file://cursor-prompts/db-awareness-phase1-frontend.md"
 type = "text"
-title = "DB Awareness Phase 1 — Frontend Cursor Prompt"
+title = "2 of 4 — DB Awareness Phase 1 (DB URL input in Files tab)"
 
 [[outputs]]
 id = "-A_1SmhmUXOhSKbHMPUrT"
 uri = "file://cursor-prompts/db-awareness-phase2-migration-card.md"
 type = "text"
-title = "DB Awareness Phase 2 — Migration Card Cursor Prompt"
+title = "4 of 4 — Migration Card (schema change approval card)"
 
 [[outputs]]
 id = "Ii_5sWQ1vwg_7__rs8yga"
 uri = "file://cursor-prompts/github-token-single-source.md"
 type = "text"
-title = "GitHub Token Single Source of Truth — Cursor Prompt"
+title = "1 of 4 — GitHub Token (apply first, one line)"
 
 [[outputs]]
 id = "fEGUo3IXq2-4QOKRhVcaW"
 uri = "file://cursor-prompts/connections-tab-workspace.md"
 type = "text"
-title = "Connections Tab — Workspace Right Pane Cursor Prompt"
+title = "3 of 4 — Connections Tab (new right-pane tab)"
