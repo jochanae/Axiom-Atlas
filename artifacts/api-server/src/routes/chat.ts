@@ -63,12 +63,26 @@ async function resolveGithubTokenForRequest(
   requestToken?: string | null
 ): Promise<string | null> {
   // Request header token (from localStorage) is always most up-to-date — use first
-  if (requestToken && requestToken !== "__server__") return requestToken;
+  if (requestToken && requestToken !== "__server__") {
+    console.log("[token] resolved: request-header");
+    return requestToken;
+  }
 
   const accountToken = await getAccountGithubToken(userId);
-  if (accountToken) return accountToken;
+  if (accountToken) {
+    console.log("[token] resolved: account-connection");
+    return accountToken;
+  }
 
-  return resolveStoredGithubToken(projectGithubToken) ?? process.env.GITHUB_TOKEN ?? null;
+  const stored = resolveStoredGithubToken(projectGithubToken);
+  if (stored) {
+    console.log("[token] resolved: project-db");
+    return stored;
+  }
+
+  const envToken = process.env.GITHUB_TOKEN ?? null;
+  console.log(`[token] resolved: ${envToken ? "env-var" : "null — no token found"}`);
+  return envToken;
 }
 
 // ── Five-Tier Memory System ───────────────────────────────────────────────────
