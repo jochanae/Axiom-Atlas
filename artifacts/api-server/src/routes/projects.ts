@@ -8,13 +8,15 @@ import {
   GetProjectParams,
   UpdateProjectParams,
   DeleteProjectParams,
-  TouchProjectParams,
-  ListRecentProjectsQueryParams,
   GetProjectSummaryParams,
   ListReadinessSnapshotsParams,
   RecordReadinessSnapshotParams,
   RecordReadinessSnapshotBody,
 } from "@workspace/api-zod";
+import { z } from "zod/v4";
+
+const TouchProjectParams = z.object({ projectId: z.coerce.number().int().positive() });
+const ListRecentProjectsQueryParams = z.object({ withinHours: z.coerce.number().int().positive().optional() });
 
 const router: IRouter = Router();
 

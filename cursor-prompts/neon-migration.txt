@@ -1,0 +1,146 @@
+-- Neon migration record — applied via drizzle-kit push
+-- These are the incremental changes applied to the Neon database.
+-- All changes have already been applied. This file is for your records only.
+-- Migrations 0004–0017 (post-initial schema)
+
+-- 0004: atlas_incidents table
+CREATE TABLE IF NOT EXISTS "atlas_incidents" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "project_id" text NOT NULL,
+  "files_changed" text[] NOT NULL,
+  "commit_message" text NOT NULL,
+  "branch_name" text NOT NULL,
+  "pr_url" text NOT NULL,
+  "validation_passed" boolean DEFAULT false NOT NULL,
+  "outcome" text,
+  "notes" text
+);
+
+-- 0005: atlas_error_logs table
+CREATE TABLE IF NOT EXISTS "atlas_error_logs" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "error_message" text NOT NULL,
+  "stack_trace" text,
+  "route" text NOT NULL,
+  "timestamp" timestamp with time zone NOT NULL,
+  "project_id" text NOT NULL
+);
+
+-- 0006: atlas_self_map table
+CREATE TABLE IF NOT EXISTS "atlas_self_map" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "map_json" text NOT NULL,
+  "file_count" integer NOT NULL
+);
+
+-- 0007: atlas_incidents confidence/blast_radius/reasoning columns
+ALTER TABLE "atlas_incidents" ADD COLUMN IF NOT EXISTS "confidence" text;
+ALTER TABLE "atlas_incidents" ADD COLUMN IF NOT EXISTS "blast_radius" text;
+ALTER TABLE "atlas_incidents" ADD COLUMN IF NOT EXISTS "reasoning" text;
+
+-- 0008: nexus_messages message_type column
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "message_type" text DEFAULT 'message';
+
+-- 0009: sessions reflection_mode column
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "reflection_mode" boolean DEFAULT false NOT NULL;
+
+-- 0010: sessions idea_mode column
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "idea_mode" boolean DEFAULT false NOT NULL;
+
+-- 0011: blueprints table + nexus_messages project/session links
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "project_id" integer;
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "session_id" integer;
+DO $$ BEGIN
+  ALTER TABLE "nexus_messages" ADD CONSTRAINT "nexus_messages_project_id_projects_id_fk"
+    FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE "nexus_messages" ADD CONSTRAINT "nexus_messages_session_id_sessions_id_fk"
+    FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+CREATE TABLE IF NOT EXISTS "blueprints" (
+  "id" serial PRIMARY KEY NOT NULL,
+  "project_id" integer NOT NULL,
+  "user_id" integer NOT NULL,
+  "session_id" integer,
+  "title" text NOT NULL,
+  "content" jsonb NOT NULL,
+  "conversation_summary" text,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+DO $$ BEGIN
+  ALTER TABLE "blueprints" ADD CONSTRAINT "blueprints_project_id_projects_id_fk"
+    FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE "blueprints" ADD CONSTRAINT "blueprints_user_id_users_id_fk"
+    FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE "blueprints" ADD CONSTRAINT "blueprints_session_id_sessions_id_fk"
+    FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- 0012: projects entity_type column
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "entity_type" text DEFAULT 'project' NOT NULL;
+DO $$ BEGIN
+  ALTER TABLE "projects" ADD CONSTRAINT "projects_entity_type_check"
+    CHECK ("entity_type" IN ('project', 'idea'));
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- 0013: chat_messages usage columns
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "execution_time_ms" integer;
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "input_tokens" integer;
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "output_tokens" integer;
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "cost_usd" numeric(10,5);
+
+-- 0014: run metadata columns on chat_messages and nexus_messages
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "run_status" text;
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "run_summary" text;
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "run_actions" jsonb;
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "run_artifacts" jsonb;
+
+-- 0015: connections table
+CREATE TABLE IF NOT EXISTS "connections" (
+  "id" serial PRIMARY KEY NOT NULL,
+  "user_id" integer NOT NULL,
+  "type" text NOT NULL,
+  "label" text NOT NULL,
+  "url" text,
+  "token" text,
+  "metadata" jsonb,
+  "status" text DEFAULT 'linked' NOT NULL,
+  "last_checked_at" timestamp with time zone,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+DO $$ BEGIN
+  ALTER TABLE "connections" ADD CONSTRAINT "connections_user_id_users_id_fk"
+    FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- 0016: sessions token/cost/run tracking columns
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "total_input_tokens" integer DEFAULT 0;
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "total_output_tokens" integer DEFAULT 0;
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "total_cost_usd" numeric DEFAULT 0;
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "total_execution_ms" integer DEFAULT 0;
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "run_summary" text;
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "run_actions" jsonb;
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "run_artifacts" jsonb;
+
+-- 0017: projects last_opened_at column
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "last_opened_at" timestamp with time zone DEFAULT now() NOT NULL;
+
+-- Also present in schema but not in migrations (applied via drizzle-kit push directly):
+-- forge_state table, entries context_what/context_why columns
+-- connections.forge_state table for per-project forge/dismiss state
