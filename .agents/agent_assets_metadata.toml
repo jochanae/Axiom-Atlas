@@ -108,3 +108,9 @@ id = "7PdS1gpbGjrq6hrhYW96t"
 uri = "file://cursor-prompts/mobile-more-tab.md"
 type = "text"
 title = "Mobile More ··· Tab — overflow sheet for Memory, Blueprints, Connections, Forge"
+
+[[outputs]]
+id = "OqImbcxLyGq6899Sbr1qG"
+uri = "file://cursor-prompts/product-north-star.md"
+type = "text"
+title = "Axiom Product North Star — locked May 22, 2026"
