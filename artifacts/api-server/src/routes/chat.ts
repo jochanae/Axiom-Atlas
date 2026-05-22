@@ -25,6 +25,8 @@ const openaiClient = new OpenAI({
 });
 
 const IMAGE_REQUEST_RE = /\b(generate|create|make|draw|sketch|visualize|design|mock.?up|wireframe|show me|build me)\b.{0,60}\b(image|picture|visual|ui|screen|layout|logo|icon|banner|mockup|diagram|chart|graphic|illustration)\b/i;
+const IMAGE_CLARIFY_RE = /\b(cinematic|hero.*shot|blueprint|breakdown.*sheet|product.*sheet|spec.*sheet|multi.*panel|technical.*illustration)\b/i;
+const IMAGE_CONFIRM_RE = /^(cinematic|hero|blueprint|breakdown|spec|full|product sheet|render it|go ahead|yes|do it)\b/i;
 
 const router: IRouter = Router();
 
@@ -497,6 +499,26 @@ Axiom is a cognitive OS for builders. These are the surfaces and where they live
 **Memory system** — T1-T5 tiers. T1 never decays. T5 expires in 7 days. Atlas reads memory on every request and writes with MEMORY_Tn protocol.
 
 **Home/Ambient** (/) — the ambient thinking space. Chat with Atlas without a project context.
+
+## Document generation
+
+When the user asks for any of these, produce a complete, well-structured markdown document they can download:
+
+**Product Requirements Document (PRD):** Problem statement, target user, core features (MoSCoW), success metrics, out of scope.
+
+**Technical Specification:** Component list, dimensions, materials, connectivity, power requirements, manufacturing notes.
+
+**Manufacturer Brief:** One-page summary for a contract manufacturer or industrial design firm. Includes: product name, concept summary, key dimensions, materials, target cost, quantity for prototype run, contact/IP notes.
+
+**Bill of Materials (BOM):** Table of components with estimated quantities and sourcing notes.
+
+**User Interaction Flow:** Step-by-step daily use loop from onboarding through daily habit.
+
+**Patent Claims Language:** Core novel elements described in precise, defensible language suitable for a provisional patent filing.
+
+**MVP Scope:** Minimum viable version that proves the concept, what to cut, what to keep, build sequence.
+
+When generating any of these, structure the output as clean markdown with clear headers. Tell the user they can download it using the download button in the conversation. Produce the full document in one response — do not ask clarifying questions mid-document unless critical information is missing.
 
 ## Package installation
 
@@ -3059,24 +3081,35 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let imageB64: string | undefined;
   let imageMimeType: string | undefined;
   if (!isFlowMode && IMAGE_REQUEST_RE.test(message)) {
-    try {
-      const imagePrompt = `${message}. Clean, professional style. For a software product / startup context.`;
-      const imgResponse = await genai.models.generateContent({
-        model: "gemini-2.0-flash-exp",
-        contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
-        config: {
-          responseModalities: ["IMAGE", "TEXT"],
-        },
-      });
-      const parts = imgResponse.candidates?.[0]?.content?.parts ?? [];
-      const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
-      if (imgPart?.inlineData) {
-        imageB64 = imgPart.inlineData.data as string;
-        imageMimeType = imgPart.inlineData.mimeType as string;
+    // If user is clarifying render mode, generate with appropriate prompt
+    if (IMAGE_CLARIFY_RE.test(message) || IMAGE_CONFIRM_RE.test(message)) {
+      const isCinematic = /cinematic|hero/i.test(message);
+      const isBlueprint = /blueprint|breakdown|spec|sheet|multi.*panel/i.test(message);
+      const baseSubject = message.replace(IMAGE_REQUEST_RE, "").trim() || message;
+      const imagePrompt = isCinematic
+        ? `${baseSubject}. Single cinematic hero shot. Premium product photography. Studio lighting. Ultra-detailed materials and surfaces. Pure white background. No text overlays. Award-winning industrial design aesthetic.`
+        : isBlueprint
+        ? `${baseSubject}. Multi-panel product design sheet. Include: front view, side view, back/reverse angle, close-up of key interaction point, small UI/display detail, dimensions callouts, material annotations. Technical illustration style. Clean white background. Professional product specification sheet layout.`
+        : `${baseSubject}. Clean, professional style. Premium product photography.`;
+      try {
+        const imgResponse = await genai.models.generateContent({
+          model: "gemini-2.0-flash-exp",
+          contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
+          config: { responseModalities: ["IMAGE", "TEXT"] },
+        });
+        const parts = imgResponse.candidates?.[0]?.content?.parts ?? [];
+        const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+        if (imgPart?.inlineData) {
+          imageB64 = imgPart.inlineData.data as string;
+          imageMimeType = imgPart.inlineData.mimeType as string;
+        }
+      } catch (imgErr) {
+        console.warn("Image generation failed:", imgErr);
       }
-    } catch (imgErr) {
-      console.warn("Image generation failed:", imgErr);
-      // Image generation is best-effort; don't fail the chat response
+    } else {
+      // First time — ask which render mode before generating
+      // Inject IMAGE_CLARIFY signal into the response — frontend will render as two buttons
+      displayContent = (displayContent || "") + "\n\nIMAGE_CLARIFY: Before I render — which style do you want?\n- **Cinematic** — one premium hero shot, maximum detail, pure form\n- **Blueprint** — multi-panel breakdown with angles, dimensions, interaction sequence";
     }
   }
 
