@@ -102,3 +102,9 @@ id = "fEGUo3IXq2-4QOKRhVcaW"
 uri = "file://cursor-prompts/connections-tab-workspace.md"
 type = "text"
 title = "3 of 4 — Connections Tab (new right-pane tab)"
+
+[[outputs]]
+id = "7PdS1gpbGjrq6hrhYW96t"
+uri = "file://cursor-prompts/mobile-more-tab.md"
+type = "text"
+title = "Mobile More ··· Tab — overflow sheet for Memory, Blueprints, Connections, Forge"
