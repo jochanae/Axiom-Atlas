@@ -59,8 +59,12 @@ async function getAccountGithubToken(userId: number | undefined): Promise<string
 
 async function resolveGithubTokenForRequest(
   userId: number | undefined,
-  projectGithubToken: string | null | undefined
+  projectGithubToken: string | null | undefined,
+  requestToken?: string | null
 ): Promise<string | null> {
+  // Request header token (from localStorage) is always most up-to-date — use first
+  if (requestToken && requestToken !== "__server__") return requestToken;
+
   const accountToken = await getAccountGithubToken(userId);
   if (accountToken) return accountToken;
 
@@ -2423,7 +2427,12 @@ router.post("/chat", async (req, res): Promise<void> => {
   let recentRepoActivityContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
   narrate("Connecting to your repository...");
-  const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project?.githubToken);
+  const requestGithubToken = req.headers["x-github-token"];
+  const resolvedGithubToken = await resolveGithubTokenForRequest(
+    userId,
+    project?.githubToken,
+    typeof requestGithubToken === "string" ? requestGithubToken : null
+  );
 
   if (project?.linkedRepo) {
     try {
