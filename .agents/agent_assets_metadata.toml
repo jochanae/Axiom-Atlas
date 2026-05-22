@@ -66,3 +66,15 @@ id = "8H3-fek-IgiD_xhGOO5vu"
 uri = "file://cursor-prompts/workspace-streaming.md"
 type = "text"
 title = "Cursor Prompt — Workspace Streaming (workspace.tsx)"
+
+[[outputs]]
+id = "89KUXcIxfz0T5gGMvo4gP"
+uri = "file://cursor-prompts/blueprints-workspace.md"
+type = "text"
+title = "Cursor Prompt — Blueprints Tab (workspace.tsx)"
+
+[[outputs]]
+id = "gWoaikRc98ZicmTeLU2CW"
+uri = "file://cursor-prompts/connections-workshop.md"
+type = "text"
+title = "Cursor Prompt — Connections Tool (workshop.tsx)"
