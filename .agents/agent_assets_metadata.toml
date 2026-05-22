@@ -78,3 +78,9 @@ id = "gWoaikRc98ZicmTeLU2CW"
 uri = "file://cursor-prompts/connections-workshop.md"
 type = "text"
 title = "Cursor Prompt — Connections Tool (workshop.tsx)"
+
+[[outputs]]
+id = "WWTxHOzBgScvdRcWcygzn"
+uri = "file://cursor-prompts/db-awareness-phase1-frontend.md"
+type = "text"
+title = "DB Awareness Phase 1 — Frontend Cursor Prompt"

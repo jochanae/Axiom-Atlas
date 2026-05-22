@@ -16,6 +16,7 @@ import {
   type TerminalTier,
 } from "../lib/terminalExecution";
 import { prepareProjectRepo } from "../lib/terminalSandbox";
+import { inspectSchema, formatSchemaForPrompt } from "../lib/schemaInspector";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
@@ -2319,6 +2320,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     flowMode?: boolean;
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
     forgeContext?: string;
+    dbUrl?: string;
   };
 
   const activeLens = (body.lens ?? "builder").toLowerCase();
@@ -2588,6 +2590,22 @@ If this is the first assistant message in this session (no prior assistant messa
   }
   if (combinedFileContext) {
     systemPrompt += `\n\n--- CODE CONTEXT (files Atlas read for this request — use these to write complete FILE_EDIT blocks) ---\n${combinedFileContext}\n--- END CODE CONTEXT ---`;
+  }
+
+  // Database schema inspection — run when client sends a dbUrl
+  const clientDbUrl = body.dbUrl?.trim();
+  if (clientDbUrl) {
+    narrate("Inspecting database schema...");
+    const schemaResult = await inspectSchema(clientDbUrl);
+    const schemaText = formatSchemaForPrompt(schemaResult);
+    systemPrompt += `\n\n--- PROJECT DATABASE SCHEMA (live inspection — use this to reason about what exists before writing queries, migrations, or API code) ---
+${schemaText}
+
+When discussing this project's database:
+- Reference actual table and column names from above. Never guess or invent names.
+- If the user asks about a feature that needs a table or column that doesn't exist, say so clearly and offer to generate the migration SQL.
+- If you propose schema changes, format them as SQL wrapped in DB_MIGRATION_START / DB_MIGRATION_END markers (these will be rendered as an approval card in Phase 2).
+--- END DATABASE SCHEMA ---`;
   }
 
   // Mode-specific instructions — these override the default disposition
