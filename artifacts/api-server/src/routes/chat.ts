@@ -3045,9 +3045,11 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     try {
       const imagePrompt = `${message}. Clean, professional style. For a software product / startup context.`;
       const imgResponse = await genai.models.generateContent({
-        model: "gemini-2.0-flash-preview-image-generation",
-        contents: imagePrompt,
-        config: { responseModalities: ["IMAGE", "TEXT"] },
+        model: "gemini-2.0-flash-exp",
+        contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
+        config: {
+          responseModalities: ["IMAGE", "TEXT"],
+        },
       });
       const parts = imgResponse.candidates?.[0]?.content?.parts ?? [];
       const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
@@ -3055,7 +3057,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         imageB64 = imgPart.inlineData.data as string;
         imageMimeType = imgPart.inlineData.mimeType as string;
       }
-    } catch {
+    } catch (imgErr) {
+      console.warn("Image generation failed:", imgErr);
       // Image generation is best-effort; don't fail the chat response
     }
   }
