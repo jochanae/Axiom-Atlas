@@ -96,3 +96,9 @@ id = "Ii_5sWQ1vwg_7__rs8yga"
 uri = "file://cursor-prompts/github-token-single-source.md"
 type = "text"
 title = "GitHub Token Single Source of Truth — Cursor Prompt"
+
+[[outputs]]
+id = "fEGUo3IXq2-4QOKRhVcaW"
+uri = "file://cursor-prompts/connections-tab-workspace.md"
+type = "text"
+title = "Connections Tab — Workspace Right Pane Cursor Prompt"
