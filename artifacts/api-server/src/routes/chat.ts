@@ -1660,6 +1660,117 @@ async function callModel(
   };
 }
 
+// ── Streaming model helpers ───────────────────────────────────────────────────
+
+async function streamClaude(
+  systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> }>,
+  imageData: { base64: string; mediaType: string } | undefined,
+  onToken: (text: string) => void
+): Promise<ModelCallResult> {
+  const startedAt = performance.now();
+  const model = "claude-sonnet-4-6";
+  type TextBlock = { type: "text"; text: string };
+  type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
+  const claudeMessages = messages as Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }>;
+
+  let fullText = "";
+  let inputTokens: number | null = null;
+  let outputTokens: number | null = null;
+
+  await new Promise<void>((resolve, reject) => {
+    const stream = anthropic.messages.stream({
+      model,
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: claudeMessages,
+    });
+    stream.on("text", (text) => {
+      fullText += text;
+      onToken(text);
+    });
+    stream.on("error", (err) => reject(err));
+    stream.on("finalMessage", (msg) => {
+      inputTokens = (msg as any)?.usage?.input_tokens ?? null;
+      outputTokens = (msg as any)?.usage?.output_tokens ?? null;
+      resolve();
+    });
+  });
+
+  return {
+    content: fullText,
+    model,
+    usage: {
+      executionTimeMs: Math.round(performance.now() - startedAt),
+      inputTokens,
+      outputTokens,
+      costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
+    },
+  };
+}
+
+async function streamGPT4o(
+  systemPrompt: string,
+  messages: Array<{ role: "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> }>,
+  imageData: { base64: string; mediaType: string } | undefined,
+  onToken: (text: string) => void
+): Promise<ModelCallResult> {
+  const startedAt = performance.now();
+  const model = "gpt-4o";
+  type OAIMsg = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> };
+  const oaiMessages: OAIMsg[] = [{ role: "system", content: systemPrompt }];
+  for (const m of messages) {
+    if (m.role === "user" && imageData && m === messages[messages.length - 1]) {
+      oaiMessages.push({
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${imageData.mediaType};base64,${imageData.base64}` } },
+          { type: "text", text: typeof m.content === "string" ? m.content : JSON.stringify(m.content) },
+        ],
+      });
+    } else {
+      oaiMessages.push({
+        role: m.role as "user" | "assistant",
+        content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      });
+    }
+  }
+
+  let fullText = "";
+  let inputTokens: number | null = null;
+  let outputTokens: number | null = null;
+
+  const stream = await openaiClient.chat.completions.create({
+    model,
+    max_tokens: 8192,
+    stream: true,
+    messages: oaiMessages as Parameters<typeof openaiClient.chat.completions.create>[0]["messages"],
+  });
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content ?? "";
+    if (delta) {
+      fullText += delta;
+      onToken(delta);
+    }
+    if (chunk.usage) {
+      inputTokens = chunk.usage.prompt_tokens ?? null;
+      outputTokens = chunk.usage.completion_tokens ?? null;
+    }
+  }
+
+  return {
+    content: fullText,
+    model,
+    usage: {
+      executionTimeMs: Math.round(performance.now() - startedAt),
+      inputTokens,
+      outputTokens,
+      costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
+    },
+  };
+}
+
 // ── Agentic Loop ──────────────────────────────────────────────────────────────
 const MAX_AGENTIC_ITERATIONS = 3;
 
@@ -2182,6 +2293,10 @@ router.post("/chat", async (req, res): Promise<void> => {
     res.write(`event: narration\ndata: ${JSON.stringify(message)}\n\n`);
   };
 
+  const narrateToken = (text: string) => {
+    res.write(`event: token\ndata: ${JSON.stringify(text)}\n\n`);
+  };
+
   const isFlowMode = !!body.flowMode;
   const isScenarioMode = !!body.scenarioMode;
 
@@ -2643,9 +2758,17 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let terminalResult: ChatTerminalResult | null = null;
 
   if (isDirect) {
-    // ── Direct path: single model call (existing behavior) ─────────────────
+    // ── Direct path: streaming model call ──────────────────────────────────
     narrate("Atlas is thinking...");
-    let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+    let modelResult: ModelCallResult;
+    if (activeModel === "claude") {
+      modelResult = await streamClaude(systemPrompt, dispatchMessages, imageData, narrateToken);
+    } else if (activeModel === "gpt4o") {
+      modelResult = await streamGPT4o(systemPrompt, dispatchMessages, imageData, narrateToken);
+    } else {
+      // Gemini — blocking (streaming not yet wired)
+      modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+    }
     rawContent = modelResult.content;
     assistantUsage = modelResult.usage;
     modelUsed = modelResult.model;
@@ -2685,7 +2808,13 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
               { role: "user", content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.` },
             ];
             narrate("Reading files and preparing response...");
-            modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+            if (activeModel === "claude") {
+              modelResult = await streamClaude(systemPrompt, followUpMessages, undefined, narrateToken);
+            } else if (activeModel === "gpt4o") {
+              modelResult = await streamGPT4o(systemPrompt, followUpMessages, undefined, narrateToken);
+            } else {
+              modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+            }
             rawContent = modelResult.content;
             assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
             modelUsed = modelResult.model;
