@@ -2409,6 +2409,79 @@ TERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
     } catch { /* non-fatal — map still updates even if ledger write fails */ }
   }
 
+  // Write resolved nodes back to nodeState in DB
+  if (resolvedNodes.length > 0 && projectId) {
+    try {
+      const currentNodeState = (project?.nodeState ?? {}) as Record<string, unknown>;
+      const updatedNodeState = { ...currentNodeState };
+      for (const nodeId of resolvedNodes) {
+        if (updatedNodeState[nodeId] && typeof updatedNodeState[nodeId] === "object") {
+          updatedNodeState[nodeId] = {
+            ...(updatedNodeState[nodeId] as Record<string, unknown>),
+            resolved: true,
+            resolvedAt: new Date().toISOString(),
+          };
+        } else {
+          updatedNodeState[nodeId] = {
+            resolved: true,
+            resolvedAt: new Date().toISOString(),
+          };
+        }
+      }
+      await db
+        .update(projectsTable)
+        .set({ nodeState: updatedNodeState })
+        .where(eq(projectsTable.id, projectId));
+    } catch (err) {
+      logger.warn({ err }, "Failed to write nodeState back to DB — non-fatal");
+    }
+  }
+
+  // When a ledger entry is committed, also mark the matching flow node as resolved
+  if (savedMsgId && !isScenarioMode && !isFlowMode) {
+    try {
+      const committedEntries = await db
+        .select({ title: entriesTable.title, id: entriesTable.id })
+        .from(entriesTable)
+        .where(
+          and(
+            eq(entriesTable.projectId, projectId),
+            eq(entriesTable.status, "committed"),
+            eq(entriesTable.sourceMessageId, savedMsgId)
+          )
+        );
+      if (committedEntries.length > 0) {
+        const currentNodeState = (project?.nodeState ?? {}) as Record<string, unknown>;
+        const updatedNodeState = { ...currentNodeState };
+        let changed = false;
+        for (const entry of committedEntries) {
+          const matchingNodeId = Object.keys(updatedNodeState).find(nodeId => {
+            const node = updatedNodeState[nodeId] as Record<string, unknown>;
+            return node?.label && typeof node.label === "string" &&
+              node.label.toLowerCase().includes(entry.title.toLowerCase().slice(0, 20));
+          });
+          if (matchingNodeId) {
+            updatedNodeState[matchingNodeId] = {
+              ...(updatedNodeState[matchingNodeId] as Record<string, unknown>),
+              resolved: true,
+              resolvedAt: new Date().toISOString(),
+              ledgerEntryId: entry.id,
+            };
+            changed = true;
+          }
+        }
+        if (changed) {
+          await db
+            .update(projectsTable)
+            .set({ nodeState: updatedNodeState })
+            .where(eq(projectsTable.id, projectId));
+        }
+      }
+    } catch (err) {
+      logger.warn({ err }, "Failed to sync ledger entry to nodeState — non-fatal");
+    }
+  }
+
   const finalPayload = {
     content: displayContent,
     modelUsed,
