@@ -1660,6 +1660,472 @@ async function callModel(
   };
 }
 
+// ── Agentic Loop ──────────────────────────────────────────────────────────────
+const MAX_AGENTIC_ITERATIONS = 3;
+
+type AgenticLoopResult = {
+  rawContent: string;
+  assistantUsage: ModelCallUsage;
+  modelUsed: string;
+  terminalCmd: ChatTerminalCommand | null;
+  terminalResult: ChatTerminalResult | null;
+};
+
+const AGENTIC_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "read_files",
+    description:
+      "Read specific files from the linked GitHub repository. Use for targeted reads of 1-8 files. If you need broad codebase understanding (10+ files or an architectural scan), use deep_read instead.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        paths: {
+          type: "array",
+          items: { type: "string" },
+          description: "File paths to read from the repository (max 8)",
+        },
+      },
+      required: ["paths"],
+    },
+  },
+  {
+    name: "deep_read",
+    description:
+      "Use Gemini to read and synthesize a large set of repository files. Use when you need broad codebase understanding (10+ files) or when an architectural question spans many parts of the repo.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        paths: {
+          type: "array",
+          items: { type: "string" },
+          description: "File paths to analyze (up to 20)",
+        },
+        question: {
+          type: "string",
+          description:
+            "Specific question or analysis task for Gemini to address across these files",
+        },
+      },
+      required: ["paths", "question"],
+    },
+  },
+  {
+    name: "write_code",
+    description:
+      "Use GPT-4o to write or patch precise code when the task requires a specific file implementation or edit. Use only when actual code output is needed, not for strategy or planning.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        task: {
+          type: "string",
+          description: "Precise description of the code to write or patch",
+        },
+        context: {
+          type: "string",
+          description: "Relevant code context, file contents, or constraints",
+        },
+        target_file: {
+          type: "string",
+          description: "The file path being created or modified",
+        },
+      },
+      required: ["task"],
+    },
+  },
+  {
+    name: "run_command",
+    description:
+      "Run a terminal command (build, test, typecheck, git status). Only use when a command is genuinely necessary to validate or complete the task.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        command: {
+          type: "string",
+          description: "The shell command to execute",
+        },
+        tier: {
+          type: "number",
+          description:
+            "Safety tier: 1=auto-run read-only (git status, ls, cat, tsc), 2=project-affecting needs confirmation, 3=destructive needs YES. Use lowest appropriate tier.",
+        },
+      },
+      required: ["command", "tier"],
+    },
+  },
+];
+
+/** Returns true if the message can be answered directly (no tools needed). */
+async function classifyIntent(message: string): Promise<boolean> {
+  try {
+    const resp = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 80,
+      messages: [
+        {
+          role: "user",
+          content: `Does this message require reading code files, running terminal commands, or deep codebase analysis to answer properly?
+Answer with JSON only: {"needs_tools": true/false}
+
+Message: "${message.slice(0, 400)}"
+
+needs_tools=true ONLY if: user asks to read/analyze specific files, run builds/tests, scan a codebase, or do a precise file edit
+needs_tools=false: strategy, planning, advice, explanations, decisions, questions about architecture in general`,
+        },
+      ],
+    });
+    const text =
+      resp.content[0]?.type === "text" ? resp.content[0].text.trim() : "{}";
+    const parsed = JSON.parse(
+      text.replace(/```(?:json)?/g, "").trim()
+    ) as { needs_tools?: boolean };
+    return !parsed.needs_tools;
+  } catch {
+    return true; // Default to direct on classifier failure
+  }
+}
+
+async function executeAgenticTool(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  repoData: { fullName?: string; defaultBranch?: string } | null,
+  resolvedGithubToken: string | null,
+  projectId: number,
+  userId: number | undefined
+): Promise<{ content: string; success: boolean; terminalCmd?: ChatTerminalCommand; terminalResult?: ChatTerminalResult }> {
+  if (toolName === "read_files") {
+    if (!repoData?.fullName || !resolvedGithubToken) {
+      return { content: "No repository linked or no GitHub token available.", success: false };
+    }
+    const paths = ((toolInput.paths as string[]) ?? []).slice(0, 8);
+    const fetched = await Promise.all(
+      paths.map(async (fp) => {
+        try {
+          const r = await fetch(
+            `${GH_API}/repos/${repoData.fullName}/contents/${fp}?ref=${repoData.defaultBranch ?? "main"}`,
+            { headers: ghHeaders(resolvedGithubToken) }
+          );
+          if (!r.ok) return `=== ${fp} ===\n[File not found or inaccessible]`;
+          const d = (await r.json()) as { encoding?: string; content?: string };
+          if (d.encoding !== "base64" || !d.content)
+            return `=== ${fp} ===\n[Could not decode file]`;
+          const content = Buffer.from(
+            d.content.replace(/\n/g, ""),
+            "base64"
+          ).toString("utf-8");
+          const lines = content.split("\n");
+          const truncated = lines.length > 600;
+          return `=== ${fp}${truncated ? ` [first 600 of ${lines.length} lines]` : ""} ===\n${truncated ? lines.slice(0, 600).join("\n") : content}`;
+        } catch {
+          return `=== ${fp} ===\n[Error reading file]`;
+        }
+      })
+    );
+    return { content: fetched.join("\n\n"), success: true };
+  }
+
+  if (toolName === "deep_read") {
+    if (!repoData?.fullName || !resolvedGithubToken) {
+      return { content: "No repository linked or no GitHub token available.", success: false };
+    }
+    const paths = ((toolInput.paths as string[]) ?? []).slice(0, 20);
+    const question =
+      (toolInput.question as string) ??
+      "Analyze these files and summarize their purpose and key patterns.";
+    const fetched = await Promise.all(
+      paths.map(async (fp) => {
+        try {
+          const r = await fetch(
+            `${GH_API}/repos/${repoData.fullName}/contents/${fp}?ref=${repoData.defaultBranch ?? "main"}`,
+            { headers: ghHeaders(resolvedGithubToken) }
+          );
+          if (!r.ok) return null;
+          const d = (await r.json()) as { encoding?: string; content?: string };
+          if (d.encoding !== "base64" || !d.content) return null;
+          const content = Buffer.from(
+            d.content.replace(/\n/g, ""),
+            "base64"
+          ).toString("utf-8");
+          return `=== ${fp} ===\n${content.split("\n").slice(0, 400).join("\n")}`;
+        } catch {
+          return null;
+        }
+      })
+    );
+    const validFiles = fetched.filter(Boolean).join("\n\n");
+    if (!validFiles)
+      return { content: "No files could be read.", success: false };
+
+    try {
+      const geminiResult = await genai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: `You are analyzing a codebase. Answer this question:\n${question}\n\nFiles:\n${validFiles.slice(0, 900000)}`,
+        config: {
+          systemInstruction:
+            "You are a senior engineer analyzing code. Be precise, thorough, and structured. Answer the question directly.",
+        },
+      });
+      return { content: geminiResult.text ?? "No analysis returned.", success: true };
+    } catch {
+      return {
+        content: "Gemini deep read failed — no analysis available.",
+        success: false,
+      };
+    }
+  }
+
+  if (toolName === "write_code") {
+    const task = (toolInput.task as string) ?? "";
+    const context = (toolInput.context as string) ?? "";
+    const targetFile = (toolInput.target_file as string) ?? "";
+    const prompt = `You are an expert software engineer. Write precise, production-quality code.
+
+Task: ${task}
+${targetFile ? `Target file: ${targetFile}` : ""}
+${context ? `\nContext:\n${context}` : ""}
+
+Provide the complete implementation. Include FILE_EDIT_START / FILE_EDIT_CONTENT / FILE_EDIT_END blocks when producing a file edit.`;
+    try {
+      const resp = await openaiClient.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 8192,
+        messages: [{ role: "user", content: prompt }],
+      });
+      return {
+        content: resp.choices[0]?.message?.content ?? "No code returned.",
+        success: true,
+      };
+    } catch {
+      return { content: "GPT-4o code generation failed.", success: false };
+    }
+  }
+
+  if (toolName === "run_command") {
+    const command = (toolInput.command as string) ?? "";
+    const tier = parseTerminalTier(toolInput.tier) ?? 1;
+    const evaluation = evaluateTerminalRequest(command, tier);
+    if (evaluation.tier === "blocked") {
+      return {
+        content: `Command blocked: ${evaluation.reason}`,
+        success: false,
+      };
+    }
+    if (evaluation.requiresConfirmation) {
+      return {
+        content: `Command requires user confirmation (tier ${evaluation.tier}): ${command}\nReason: ${evaluation.reason}`,
+        success: false,
+      };
+    }
+    try {
+      const executed = await runChatTerminalCommand(
+        { command, tier },
+        projectId,
+        userId
+      );
+      const output = executed.terminalResult?.output ?? "No output";
+      const exitCode = executed.terminalResult?.exitCode;
+      return {
+        content: `Command: ${command}\nExit code: ${exitCode ?? "unknown"}\n\nOutput:\n${output.slice(0, 4000)}`,
+        success: exitCode === 0,
+        terminalCmd: executed.terminalCmd,
+        terminalResult: executed.terminalResult ?? undefined,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Command failed";
+      return { content: `Command failed: ${msg}`, success: false };
+    }
+  }
+
+  return { content: `Unknown tool: ${toolName}`, success: false };
+}
+
+async function runAgenticLoop(
+  systemPrompt: string,
+  dispatchMessages: Array<{
+    role: "user" | "assistant";
+    content:
+      | string
+      | Array<{ type: string; [k: string]: unknown }>;
+  }>,
+  imageData: { base64: string; mediaType: string } | undefined,
+  repoData: { fullName?: string; defaultBranch?: string } | null,
+  resolvedGithubToken: string | null,
+  projectId: number,
+  userId: number | undefined,
+  narrate: (msg: string) => void,
+  hasRepo: boolean
+): Promise<AgenticLoopResult> {
+  let assistantUsage = emptyUsage();
+  let terminalCmd: ChatTerminalCommand | null = null;
+  let terminalResult: ChatTerminalResult | null = null;
+
+  const availableTools = AGENTIC_TOOLS.filter((t) => {
+    if (
+      (t.name === "read_files" || t.name === "deep_read") &&
+      !hasRepo
+    )
+      return false;
+    return true;
+  });
+
+  type ClaudeMsg = Parameters<
+    typeof anthropic.messages.create
+  >[0]["messages"][number];
+
+  const loopMessages: ClaudeMsg[] = dispatchMessages.map((m) => ({
+    role: m.role,
+    content: m.content as string,
+  }));
+
+  let iteration = 0;
+  let finalContent = "";
+
+  while (iteration < MAX_AGENTIC_ITERATIONS) {
+    const startedAt = performance.now();
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      system: systemPrompt,
+      tools: availableTools,
+      messages: loopMessages,
+    });
+
+    const elapsed = Math.round(performance.now() - startedAt);
+    assistantUsage = mergeUsage(assistantUsage, {
+      executionTimeMs: elapsed,
+      inputTokens: response.usage.input_tokens ?? null,
+      outputTokens: response.usage.output_tokens ?? null,
+      costUsd: calculateModelCostUsd(
+        "claude-sonnet-4-6",
+        response.usage.input_tokens,
+        response.usage.output_tokens
+      ),
+    });
+
+    if (response.stop_reason === "end_turn") {
+      finalContent = response.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("\n");
+      break;
+    }
+
+    if (response.stop_reason === "tool_use") {
+      const toolUseBlocks = response.content.filter(
+        (b) => b.type === "tool_use"
+      ) as Array<{
+        type: "tool_use";
+        id: string;
+        name: string;
+        input: Record<string, unknown>;
+      }>;
+
+      if (toolUseBlocks.length === 0) {
+        finalContent = response.content
+          .filter((b) => b.type === "text")
+          .map((b) => (b as { type: "text"; text: string }).text)
+          .join("\n");
+        break;
+      }
+
+      loopMessages.push({
+        role: "assistant",
+        content: response.content as Anthropic.ContentBlock[],
+      });
+
+      const toolResultContent: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const toolBlock of toolUseBlocks) {
+        const tname = toolBlock.name;
+        if (tname === "read_files") {
+          const paths = (toolBlock.input.paths as string[]) ?? [];
+          narrate(
+            `Reading ${paths.length} file${paths.length !== 1 ? "s" : ""}...`
+          );
+        } else if (tname === "deep_read") {
+          narrate("Analyzing codebase with Gemini...");
+        } else if (tname === "write_code") {
+          narrate("Writing code with GPT-4o...");
+        } else if (tname === "run_command") {
+          narrate("Running command...");
+        }
+
+        const result = await executeAgenticTool(
+          tname,
+          toolBlock.input,
+          repoData,
+          resolvedGithubToken,
+          projectId,
+          userId
+        );
+
+        if (tname === "run_command" && result.terminalCmd) {
+          terminalCmd = result.terminalCmd;
+          terminalResult = result.terminalResult ?? null;
+        }
+
+        toolResultContent.push({
+          type: "tool_result",
+          tool_use_id: toolBlock.id,
+          content: result.content,
+        });
+      }
+
+      loopMessages.push({ role: "user", content: toolResultContent });
+      narrate("Reviewing results...");
+      iteration++;
+      continue;
+    }
+
+    finalContent = response.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { type: "text"; text: string }).text)
+      .join("\n");
+    break;
+  }
+
+  // If loop exhausted without a final answer, synthesize from what was gathered
+  if (!finalContent) {
+    narrate("Synthesizing findings...");
+    const startedAt = performance.now();
+    const synthResp = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [
+        ...loopMessages,
+        {
+          role: "user",
+          content:
+            "Based on everything gathered, provide your best answer. If the task isn't fully complete, explain what was accomplished and what remains.",
+        },
+      ],
+    });
+    const elapsed = Math.round(performance.now() - startedAt);
+    assistantUsage = mergeUsage(assistantUsage, {
+      executionTimeMs: elapsed,
+      inputTokens: synthResp.usage.input_tokens ?? null,
+      outputTokens: synthResp.usage.output_tokens ?? null,
+      costUsd: calculateModelCostUsd(
+        "claude-sonnet-4-6",
+        synthResp.usage.input_tokens,
+        synthResp.usage.output_tokens
+      ),
+    });
+    finalContent = synthResp.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { type: "text"; text: string }).text)
+      .join("\n");
+  }
+
+  return {
+    rawContent: finalContent,
+    assistantUsage,
+    modelUsed: "claude-sonnet-4-6",
+    terminalCmd,
+    terminalResult,
+  };
+}
+
 // ── Route ─────────────────────────────────────────────────────────────────────
 function extractFlowNodes(content: string): {
   content: string;
@@ -2160,92 +2626,140 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     });
   }
 
-  narrate("Atlas is thinking...");
-  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
-  let rawContent = modelResult.content;
-  let assistantUsage = modelResult.usage;
-  let modelUsed = modelResult.model;
+  // ── Agentic dispatcher ────────────────────────────────────────────────────
+  // Classify intent: direct answer (Claude alone) or needs tools (agentic loop)
+  narrate("Understanding your request...");
+  const hasRepo = !!(repoData?.fullName && resolvedGithubToken);
+  let isDirect = true;
+  // Only classify when there's a repo linked or the mode is audit/deep-dive — otherwise always direct
+  if (hasRepo || body.mode === "audit" || body.mode === "deep-dive") {
+    isDirect = await classifyIntent(message);
+  }
+
+  let rawContent: string;
+  let assistantUsage: ModelCallUsage;
+  let modelUsed: string;
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
 
-  // FILE_READ intercept — Atlas requested specific files; fetch them and call model again
-  if (repoData?.fullName && resolvedGithubToken) {
-    const { paths: readPaths, cleanedContent: readCleanedContent } = extractFileReadRequest(rawContent);
-    if (readPaths.length > 0) {
-      try {
-        const fetchedFiles = await Promise.all(
-          readPaths.map(async (fp) => {
-            try {
-              const r = await fetch(
-                `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
-                { headers: ghHeaders(resolvedGithubToken!) }
-              );
-              if (!r.ok) return null;
-              const d = await r.json() as { encoding?: string; content?: string };
-              if (d.encoding !== "base64" || !d.content) return null;
-              const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
-              const lines = fileContent.split("\n");
-              const truncated = lines.length > 600;
-              return {
-                path: fp,
-                content: truncated ? lines.slice(0, 600).join("\n") : fileContent,
-                truncated,
-                lineCount: lines.length,
-              };
-            } catch { return null; }
-          })
-        );
-        const validFiles = fetchedFiles.filter(
-          (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
-        );
-        if (validFiles.length > 0) {
-          const filesSummary = validFiles
-            .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
-            .join("\n\n");
-          const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
-            ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
-            { role: "assistant", content: readCleanedContent },
-            {
-              role: "user",
-              content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`,
-            },
-          ];
-          narrate("Reading files and preparing response...");
-          modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
-          rawContent = modelResult.content;
-          assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
-          modelUsed = modelResult.model;
-        }
-      } catch { /* Non-fatal — keep rawContent from first call */ }
-    }
-  }
+  if (isDirect) {
+    // ── Direct path: single model call (existing behavior) ─────────────────
+    narrate("Atlas is thinking...");
+    let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+    rawContent = modelResult.content;
+    assistantUsage = modelResult.usage;
+    modelUsed = modelResult.model;
 
-  const terminalExtraction = extractTerminalCommand(rawContent);
-  if (terminalExtraction.terminalCmd) narrate("Running terminal command...");
-  rawContent = terminalExtraction.content;
-  if (terminalExtraction.terminalCmd) {
-    try {
-      const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId, userId);
-      terminalCmd = executed.terminalCmd;
-      terminalResult = executed.terminalResult;
-      if (terminalResult) {
-        rawContent = cleanTerminalTags(`${rawContent}
-
-TERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
+    // FILE_READ intercept — text-protocol fallback for direct path
+    if (repoData?.fullName && resolvedGithubToken) {
+      const { paths: readPaths, cleanedContent: readCleanedContent } = extractFileReadRequest(rawContent);
+      if (readPaths.length > 0) {
+        try {
+          const fetchedFiles = await Promise.all(
+            readPaths.map(async (fp) => {
+              try {
+                const r = await fetch(
+                  `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
+                  { headers: ghHeaders(resolvedGithubToken!) }
+                );
+                if (!r.ok) return null;
+                const d = await r.json() as { encoding?: string; content?: string };
+                if (d.encoding !== "base64" || !d.content) return null;
+                const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
+                const lines = fileContent.split("\n");
+                const truncated = lines.length > 600;
+                return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : fileContent, truncated, lineCount: lines.length };
+              } catch { return null; }
+            })
+          );
+          const validFiles = fetchedFiles.filter(
+            (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
+          );
+          if (validFiles.length > 0) {
+            const filesSummary = validFiles
+              .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
+              .join("\n\n");
+            const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+              ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+              { role: "assistant", content: readCleanedContent },
+              { role: "user", content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.` },
+            ];
+            narrate("Reading files and preparing response...");
+            modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+            rawContent = modelResult.content;
+            assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
+            modelUsed = modelResult.model;
+          }
+        } catch { /* Non-fatal */ }
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Terminal command failed";
-      const fallbackTier = terminalExtraction.terminalCmd.tier ?? 3;
-      terminalCmd = { command: terminalExtraction.terminalCmd.command, tier: fallbackTier, reason: message };
-      terminalResult = {
-        command: terminalExtraction.terminalCmd.command,
-        output: message,
-        exitCode: null,
-        tier: fallbackTier,
-      };
+    }
+
+    // TERMINAL_CMD text-protocol extraction for direct path
+    const terminalExtraction = extractTerminalCommand(rawContent);
+    if (terminalExtraction.terminalCmd) narrate("Running terminal command...");
+    rawContent = terminalExtraction.content;
+    if (terminalExtraction.terminalCmd) {
+      try {
+        const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId, userId);
+        terminalCmd = executed.terminalCmd;
+        terminalResult = executed.terminalResult;
+        if (terminalResult) {
+          rawContent = cleanTerminalTags(`${rawContent}\n\nTERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
+        }
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : "Terminal command failed";
+        const fallbackTier = terminalExtraction.terminalCmd.tier ?? 3;
+        terminalCmd = { command: terminalExtraction.terminalCmd.command, tier: fallbackTier, reason: errMsg };
+        terminalResult = { command: terminalExtraction.terminalCmd.command, output: errMsg, exitCode: null, tier: fallbackTier };
+      }
+    } else {
+      rawContent = cleanTerminalTags(rawContent);
     }
   } else {
-    rawContent = cleanTerminalTags(rawContent);
+    // ── Agentic path: tool_use loop with Claude as orchestrator ────────────
+    narrate("Planning approach...");
+    try {
+      const loopResult = await runAgenticLoop(
+        systemPrompt,
+        dispatchMessages,
+        imageData,
+        repoData,
+        resolvedGithubToken,
+        projectId,
+        userId,
+        narrate,
+        hasRepo
+      );
+      rawContent = loopResult.rawContent;
+      assistantUsage = loopResult.assistantUsage;
+      modelUsed = loopResult.modelUsed;
+      terminalCmd = loopResult.terminalCmd;
+      terminalResult = loopResult.terminalResult;
+
+      // Run text-protocol extraction as safety net for any protocols in the agentic response
+      const terminalExtraction = extractTerminalCommand(rawContent);
+      rawContent = terminalExtraction.content;
+      if (terminalExtraction.terminalCmd && !terminalCmd) {
+        try {
+          const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId, userId);
+          terminalCmd = executed.terminalCmd;
+          terminalResult = executed.terminalResult;
+          if (terminalResult) {
+            rawContent = cleanTerminalTags(`${rawContent}\n\nTERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
+          }
+        } catch { /* Non-fatal */ }
+      } else {
+        rawContent = cleanTerminalTags(rawContent);
+      }
+    } catch (err) {
+      // Fallback: if the agentic loop fails entirely, run a direct Claude call
+      logger.warn({ err }, "Agentic loop failed — falling back to direct Claude call");
+      narrate("Atlas is thinking...");
+      const modelResult = await callModel("claude", systemPrompt, dispatchMessages, imageData);
+      rawContent = cleanTerminalTags(modelResult.content);
+      assistantUsage = modelResult.usage;
+      modelUsed = modelResult.model;
+    }
   }
 
   // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
