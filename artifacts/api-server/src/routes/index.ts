@@ -32,6 +32,7 @@ import scanRouter from "./scan";
 import blueprintRouter from "./blueprint";
 import connectionsRouter from "./connections";
 import stateRouter from "./state";
+import artifactsRouter from "./artifacts";
 
 const router: IRouter = Router();
 
@@ -69,6 +70,7 @@ router.use(requireAuth, scanRouter);
 router.use(requireAuth, blueprintRouter);
 router.use(requireAuth, connectionsRouter);
 router.use(requireAuth, stateRouter);
+router.use(requireAuth, artifactsRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
