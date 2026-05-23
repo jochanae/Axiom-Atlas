@@ -212,7 +212,7 @@ export function ZipPanel({ zipName, entries, truncated, onToggle, onSelectAll, o
       {/* Truncation warning */}
       {truncated && (
         <div style={{ padding: "0 10px 6px", fontSize: 10, color: "rgba(251,146,60,0.7)", fontFamily: "var(--app-font-mono)" }}>
-          ⚠ Some large files were truncated to 300 lines
+          ⚠ Some large files were truncated to 500 lines
         </div>
       )}
 

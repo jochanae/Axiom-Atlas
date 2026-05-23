@@ -98,6 +98,7 @@ router.post(
         totalChars,
         skipped,
         filePaths: files.map(f => f.path),
+        files: files.map(f => ({ path: f.path, content: f.content, lines: f.lines, truncated: f.truncated })),
       });
     } catch (err) {
       logger.error({ err }, "zip parse error");

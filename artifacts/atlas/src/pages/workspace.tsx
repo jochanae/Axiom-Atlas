@@ -19,7 +19,7 @@ import { AccountHubPanel } from "../components/AccountHubPanel";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
 import { StatusGlyph } from "../components/StatusGlyph";
 import { CapsuleTag } from "../components/CapsuleTag";
-import { ZipDragOverlay, ZipPanel, parseZip, assembleContext } from "../components/ZipImport";
+import { ZipDragOverlay, ZipPanel, assembleContext } from "../components/ZipImport";
 import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { CommitCard } from "../components/CommitCard";
 import { PlanCard } from "../components/PlanCard";
@@ -9489,12 +9489,43 @@ export default function Workspace() {
   const [isDragOver, setIsDragOver] = useState(false);
   const processZip = useCallback(async (file: File) => {
     try {
-      const { entries: parsed, truncated } = await parseZip(file);
+      // Upload to server for full extraction (400k chars, 500 lines/file)
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/upload/code-context", {
+        method: "POST",
+        body: form,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({} as Record<string, unknown>));
+        const msg = typeof body.error === "string" ? body.error : `Upload failed (${res.status})`;
+        toast.error(msg);
+        return;
+      }
+      const data = await res.json() as {
+        fileContext: string;
+        summary: string;
+        fileCount: number;
+        totalChars: number;
+        skipped: number;
+        filePaths: string[];
+        files: Array<{ path: string; content: string; lines: number; truncated: boolean }>;
+      };
+      const parsed: ZipEntry[] = data.files.map((f) => ({
+        path: f.path,
+        content: f.content,
+        lines: f.lines,
+        selected: true,
+      }));
       setZipFiles(parsed);
       setZipName(file.name);
-      setZipTruncated(truncated);
-      setFileContext(assembleContext(file.name, parsed));
-    } catch { /* ignore */ }
+      setZipTruncated(data.files.some((f) => f.truncated));
+      setFileContext(data.fileContext);
+      toast.success(data.summary);
+    } catch {
+      toast.error("ZIP upload failed — check connection");
+    }
   }, []);
 
   const clearZip = useCallback(() => {
