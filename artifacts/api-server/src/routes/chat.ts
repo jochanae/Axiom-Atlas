@@ -1659,15 +1659,45 @@ async function callModel(
 
   if (modelId === "gemini") {
     const model = "gemini-2.5-pro";
+
+    // Serialize message history to text, preserving text blocks from array content
     const combinedText = messages.map((m) => {
-      const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
+      let text: string;
+      if (typeof m.content === "string") {
+        text = m.content;
+      } else if (Array.isArray(m.content)) {
+        // Extract text blocks only — image blocks are handled separately below
+        text = m.content
+          .filter((b: any) => b.type === "text")
+          .map((b: any) => b.text as string)
+          .join(" ");
+      } else {
+        text = String(m.content);
+      }
       return `${m.role === "user" ? "User" : "Atlas"}: ${text}`;
     }).join("\n\n");
-    let result: Awaited<ReturnType<typeof genai.models.generateContent>>;
+
+    // Collect all inline images: URL screenshots from the last user message + direct attachment
+    const inlineParts: { inlineData: { mimeType: string; data: string } }[] = [];
+    const lastMsg = messages[messages.length - 1];
+    if (Array.isArray(lastMsg?.content)) {
+      for (const block of lastMsg.content as any[]) {
+        if (block.type === "image" && block.source?.data) {
+          inlineParts.push({
+            inlineData: { mimeType: block.source.media_type as string, data: block.source.data as string },
+          });
+        }
+      }
+    }
     if (imageData?.base64 && imageData?.mediaType) {
+      inlineParts.push({ inlineData: { mimeType: imageData.mediaType, data: imageData.base64 } });
+    }
+
+    let result: Awaited<ReturnType<typeof genai.models.generateContent>>;
+    if (inlineParts.length > 0) {
       result = await genai.models.generateContent({
         model,
-        contents: [{ role: "user", parts: [{ text: combinedText }, { inlineData: { mimeType: imageData.mediaType, data: imageData.base64 } }] }],
+        contents: [{ role: "user", parts: [{ text: combinedText }, ...inlineParts] }],
         config: { systemInstruction: systemPrompt },
       });
     } else {
@@ -2810,12 +2840,14 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     } as ImageBlock);
   }
 
-  // 2. Live URL screenshots (captured from URLs detected in this message)
+  // 2. Live URL screenshots (image blocks only — text fallback blocks go via urlNote)
   for (const ub of urlBlocks) {
-    contentParts.push({
-      type: "image",
-      source: { type: "base64", media_type: ub.source.media_type, data: ub.source.data },
-    } as ImageBlock);
+    if (ub.type === "image") {
+      contentParts.push({
+        type: "image",
+        source: { type: "base64", media_type: ub.source.media_type, data: ub.source.data },
+      } as ImageBlock);
+    }
   }
 
   // 3. User-attached image (if any)

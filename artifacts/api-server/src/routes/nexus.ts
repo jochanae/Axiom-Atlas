@@ -1871,16 +1871,18 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     } as VaultBlock);
   }
 
-  // 2. Live URL screenshots (captured from URLs detected in this message)
+  // 2. Live URL screenshots (image blocks only — text fallback blocks go via urlNote)
   for (const ub of urlBlocks) {
-    contentParts.push({
-      type: "image",
-      source: {
-        type: "base64",
-        media_type: ub.source.media_type,
-        data: ub.source.data,
-      },
-    } as VaultBlock);
+    if (ub.type === "image") {
+      contentParts.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: ub.source.media_type,
+          data: ub.source.data,
+        },
+      } as VaultBlock);
+    }
   }
 
   // 3. User-attached image (if any)
