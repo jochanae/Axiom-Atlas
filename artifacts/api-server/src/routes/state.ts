@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db, entriesTable, nexusMessagesTable, projectsTable, sessionsTable } from "@workspace/db";
+import { z } from "zod";
 
 const router: IRouter = Router();
 
@@ -123,6 +124,63 @@ router.get("/projects/:id/state", async (req, res): Promise<void> => {
       createdAt: message.createdAt.toISOString(),
     })),
   });
+});
+
+// PUT /api/projects/:id/nodeState — persist forge nodes from the frontend
+const ForgeNodeSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  type: z.string(),
+  resolved: z.boolean().optional(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  details: z.string().optional(),
+  meta: z.string().optional(),
+  moscow: z.string().optional(),
+  question: z.string().optional(),
+});
+
+const PutNodeStateBody = z.object({
+  nodes: z.array(ForgeNodeSchema),
+  replace: z.boolean().optional(), // if true, replaces instead of merging
+});
+
+router.put("/projects/:id/nodeState", async (req, res): Promise<void> => {
+  const projectId = Number(req.params.id);
+  if (!Number.isInteger(projectId) || projectId <= 0) {
+    res.status(400).json({ error: "Invalid project id" }); return;
+  }
+
+  const userId = (req as any).authUser.id as number;
+
+  const parsed = PutNodeStateBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() }); return;
+  }
+
+  const [project] = await db
+    .select({ id: projectsTable.id, nodeState: projectsTable.nodeState })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+    .limit(1);
+
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const { nodes, replace = false } = parsed.data;
+
+  // Convert array → keyed map (same shape as chat.ts writes)
+  const incoming = Object.fromEntries(nodes.map((n) => [n.id, n]));
+
+  const updated = replace
+    ? incoming
+    : { ...((project.nodeState as Record<string, unknown>) ?? {}), ...incoming };
+
+  await db
+    .update(projectsTable)
+    .set({ nodeState: updated })
+    .where(eq(projectsTable.id, projectId));
+
+  res.json({ ok: true, count: nodes.length });
 });
 
 export default router;

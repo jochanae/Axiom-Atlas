@@ -2476,7 +2476,6 @@ router.post("/chat", async (req, res): Promise<void> => {
   let repoTreeContext: string | null = null;
   let recentRepoActivityContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
-  narrate("Connecting to your repository...");
   const requestGithubToken = req.headers["x-github-token"];
   const resolvedGithubToken = await resolveGithubTokenForRequest(
     userId,
@@ -2485,6 +2484,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   );
 
   if (project?.linkedRepo) {
+    narrate("Connecting to your repository...");
     try {
       const parsedRepo = JSON.parse(project.linkedRepo) as string | { fullName?: string; defaultBranch?: string };
       repoData = typeof parsedRepo === "string"
