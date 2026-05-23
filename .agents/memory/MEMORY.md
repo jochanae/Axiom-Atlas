@@ -2,3 +2,4 @@
 - [Terminal SSE ordering](terminal-sse-ordering.md) — SSE headers must flush BEFORE prepareProjectRepo or user sees silent freeze during clone
 - [Agentic loop architecture](agentic-loop-architecture.md) — Claude orchestrates tool_use loop; Gemini=deep read, GPT-4o=code write; most messages go direct (classifier-gated).
 - [Repo split](repo-split.md) — Backend: jochanae/Axiom-Atlas (this Replit). Frontend: jochanae/atlas-idk (Lovable/Cursor). Never mix them up.
+- [Drizzle + Neon stale connection](drizzle-neon-stale-connection.md) — Drizzle queryWithCache fails on Neon idle connection reset; fix: pool keepAlive + idleTimeoutMillis=30s + try/catch in routes

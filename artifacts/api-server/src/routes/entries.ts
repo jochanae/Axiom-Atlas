@@ -120,12 +120,16 @@ router.get("/projects/:projectId/entries", async (req, res): Promise<void> => {
     conditions.push(sql`${entriesTable.createdAt} >= ${cutoff.toISOString()}`);
   }
 
-  const entries = await db
-    .select()
-    .from(entriesTable)
-    .where(and(...conditions))
-    .orderBy(entriesTable.createdAt);
-  res.json(entries.map(serializeEntry));
+  try {
+    const entries = await db
+      .select()
+      .from(entriesTable)
+      .where(and(...conditions))
+      .orderBy(entriesTable.createdAt);
+    res.json(entries.map(serializeEntry));
+  } catch {
+    res.json([]);
+  }
 });
 
 router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {

@@ -6,18 +6,22 @@ const router = Router();
 
 router.get("/projects/:projectId/forge-state", async (req, res): Promise<void> => {
   const projectId = Number(req.params.projectId);
-  const rows = await db
-    .select()
-    .from(projectForgeStateTable)
-    .where(eq(projectForgeStateTable.projectId, projectId))
-    .limit(1);
-  const row = rows[0];
-  res.json({
-    forged: !!row?.forgedAt,
-    dismissed: !!row?.dismissedAt,
-    forgedAt: row?.forgedAt?.toISOString() ?? null,
-    dismissedAt: row?.dismissedAt?.toISOString() ?? null,
-  });
+  try {
+    const rows = await db
+      .select()
+      .from(projectForgeStateTable)
+      .where(eq(projectForgeStateTable.projectId, projectId))
+      .limit(1);
+    const row = rows[0];
+    res.json({
+      forged: !!row?.forgedAt,
+      dismissed: !!row?.dismissedAt,
+      forgedAt: row?.forgedAt?.toISOString() ?? null,
+      dismissedAt: row?.dismissedAt?.toISOString() ?? null,
+    });
+  } catch {
+    res.json({ forged: false, dismissed: false, forgedAt: null, dismissedAt: null });
+  }
 });
 
 router.post("/projects/:projectId/forge-state", async (req, res): Promise<void> => {
@@ -27,19 +31,23 @@ router.post("/projects/:projectId/forge-state", async (req, res): Promise<void> 
     action === "forged"
       ? { forgedAt: new Date() }
       : { dismissedAt: new Date() };
-  await db
-    .insert(projectForgeStateTable)
-    .values({ projectId, ...update })
-    .onConflictDoUpdate({
-      target: projectForgeStateTable.projectId,
-      set: update,
-    });
-  const rows = await db
-    .select()
-    .from(projectForgeStateTable)
-    .where(eq(projectForgeStateTable.projectId, projectId))
-    .limit(1);
-  res.json(rows[0]);
+  try {
+    await db
+      .insert(projectForgeStateTable)
+      .values({ projectId, ...update })
+      .onConflictDoUpdate({
+        target: projectForgeStateTable.projectId,
+        set: update,
+      });
+    const rows = await db
+      .select()
+      .from(projectForgeStateTable)
+      .where(eq(projectForgeStateTable.projectId, projectId))
+      .limit(1);
+    res.json(rows[0] ?? { forged: false, dismissed: false });
+  } catch {
+    res.status(500).json({ error: "Failed to update forge state" });
+  }
 });
 
 export default router;
