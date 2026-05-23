@@ -831,4 +831,113 @@ router.post("/github/typecheck", async (req, res): Promise<void> => {
   }
 });
 
+// POST /api/github/revert — create a revert commit that undoes a given SHA
+router.post("/github/revert", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const { projectId, sha, branch = "main", message: customMessage } = req.body as {
+    projectId?: unknown;
+    sha?: string;
+    branch?: string;
+    message?: string;
+  };
+
+  const parsedProjectId = Number(projectId);
+  if (!Number.isFinite(parsedProjectId) || parsedProjectId <= 0) {
+    res.status(400).json({ error: "Missing or invalid projectId" }); return;
+  }
+  if (!sha?.trim()) {
+    res.status(400).json({ error: "Missing sha" }); return;
+  }
+  const shortSha = sha.slice(0, 7);
+
+  const [project] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, parsedProjectId), eq(projectsTable.userId, userId)))
+    .limit(1);
+
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const repo = parseLinkedRepo(project.linkedRepo ?? null);
+  if (!repo) { res.status(400).json({ error: "No GitHub repo linked to this project" }); return; }
+
+  const token = await resolveGithubTokenForRequest(userId, project.githubToken ?? null);
+  if (!token) { res.status(400).json({ error: "No GitHub token available for this project" }); return; }
+
+  try {
+    // 1. Fetch the commit to revert — need its parent's tree
+    const commitResp = await fetch(`${GH_API}/repos/${repo.fullName}/commits/${sha}`, {
+      headers: ghHeaders(token),
+    });
+    if (!commitResp.ok) {
+      res.status(commitResp.status).json({ error: "Commit not found", detail: await commitResp.text() }); return;
+    }
+    const commitData = await commitResp.json() as any;
+    const parents: any[] = commitData.parents ?? [];
+    if (parents.length === 0) {
+      res.status(400).json({ error: "Cannot revert the initial commit — no parent exists" }); return;
+    }
+    const parentSha: string = parents[0].sha;
+
+    // 2. Get the parent commit's tree SHA (the state we want to restore)
+    const parentResp = await fetch(`${GH_API}/repos/${repo.fullName}/commits/${parentSha}`, {
+      headers: ghHeaders(token),
+    });
+    if (!parentResp.ok) {
+      res.status(parentResp.status).json({ error: "Failed to fetch parent commit", detail: await parentResp.text() }); return;
+    }
+    const parentData = await parentResp.json() as any;
+    const parentTreeSha: string = parentData.commit.tree.sha;
+
+    // 3. Get the current branch HEAD (becomes the parent of our new revert commit)
+    const currentHead = await getBranchSha(token, repo.fullName, branch);
+
+    // 4. Create a new git commit pointing to the parent's tree
+    const revertMessage = customMessage ?? `revert: ${shortSha} via Atlas`;
+    const newCommitResp = await fetch(`${GH_API}/repos/${repo.fullName}/git/commits`, {
+      method: "POST",
+      headers: { ...ghHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: revertMessage,
+        tree: parentTreeSha,
+        parents: [currentHead],
+      }),
+    });
+    if (!newCommitResp.ok) {
+      res.status(newCommitResp.status).json({ error: "Failed to create revert commit", detail: await newCommitResp.text() }); return;
+    }
+    const newCommit = await newCommitResp.json() as any;
+    const newCommitSha: string = newCommit.sha;
+
+    // 5. Update the branch ref to point to the new revert commit
+    const updateRefResp = await fetch(`${GH_API}/repos/${repo.fullName}/git/refs/heads/${branch}`, {
+      method: "PATCH",
+      headers: { ...ghHeaders(token), "Content-Type": "application/json" },
+      body: JSON.stringify({ sha: newCommitSha, force: false }),
+    });
+    if (!updateRefResp.ok) {
+      res.status(updateRefResp.status).json({ error: "Failed to update branch ref", detail: await updateRefResp.text() }); return;
+    }
+
+    // 6. Invalidate commits cache for this project
+    commitsCache.delete(`${parsedProjectId}:${repo.fullName}`);
+
+    res.json({
+      success: true,
+      revertedSha: sha,
+      newSha: newCommitSha,
+      message: revertMessage,
+      commitUrl: `https://github.com/${repo.fullName}/commit/${newCommitSha}`,
+      branch,
+    });
+  } catch (e: unknown) {
+    if (e instanceof GitHubApiError) {
+      res.status(e.status).json({ error: "GitHub API error", detail: e.detail }); return;
+    }
+    res.status(500).json({ error: "Revert failed", detail: String(e) });
+  }
+});
+
 export default router;
