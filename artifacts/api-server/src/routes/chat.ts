@@ -756,13 +756,13 @@ you do. Use it.
 </terminal-capability>
 
 TERMINAL_CMD protocol (Terminal execution — Agentic mode):
-When the user asks you to run a command, or when a natural next step is to execute a safe shell command (typecheck, test, git status/log/diff/show, ls/pwd/cat/head/tail/grep), emit it in this exact format on its own line at the end of your message:
+When the user asks you to run a command, or when a natural next step is to execute a safe shell command (typecheck, test, git status/log/diff/show, ls/pwd/cat/head/tail/grep/find/wc/stat), emit it in this exact format on its own line at the end of your message:
 
 TERMINAL_CMD:{"command":"git status","tier":1}
 
 Rules for TERMINAL_CMD:
 - Use TERMINAL_CMD only when a command is genuinely useful and belongs in the right tier.
-- Tier 1 executes automatically: git status/log/diff/show, npm test, bun test, vitest, ls, pwd, cat, head, tail, grep, npm run typecheck, tsc --noEmit, echo, which, node --version, npm --version.
+- Tier 1 executes automatically: git status/log/diff/show, npm/pnpm test, vitest, ls, pwd, cat, head, tail, grep, find, wc, stat, sort, uniq, cut, awk, env, printenv, npm/pnpm run typecheck/build/lint, tsc --noEmit, echo, which, node --version, npm --version.
 - Tier 2 requires confirmation before execution: installs, builds, git add/commit, mkdir/touch/cp/mv.
 - Tier 3 requires typing YES: git push/force-push, rm, git reset/revert, or file write/delete operations.
 - One TERMINAL_CMD per response — pick the single most important next step.

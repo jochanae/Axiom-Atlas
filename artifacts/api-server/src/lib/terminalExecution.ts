@@ -152,14 +152,18 @@ export function classifyTerminalCommand(
     /^vitest\b/i,
     /^npm\s+run\s+build\b/i,
     /^bun\s+run\s+build\b/i,
-    /^(?:ls|pwd|cat|head|tail|grep)\b/i,
+    /^(?:ls|pwd|cat|head|tail|grep|find|wc|stat|file|du|sort|uniq|cut|awk|sed(?!\s.*-i))\b/i,
     /^npm\s+run\s+typecheck\b/i,
+    /^pnpm\s+(?:--filter\s+\S+\s+)?run\s+(?:typecheck|build|lint|test)\b/i,
     /^tsc\s+--noEmit\b/i,
     /^echo\b/i,
     /^which\b/i,
+    /^env\b/i,
+    /^printenv\b/i,
     /^git\s+--version\s+&&\s+node\s+--version$/i,
     /^node\s+--version$/i,
     /^npm\s+--version$/i,
+    /^pnpm\s+--version$/i,
   ])) {
     return { tier: 1, reason: "Safe read-only command can execute automatically" };
   }
