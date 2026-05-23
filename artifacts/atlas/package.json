@@ -79,6 +79,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "html2pdf.js": "^0.14.0",
     "jszip": "^3.10.1"
   }
 }

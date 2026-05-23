@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 interface Artifact {
   id: number;
@@ -129,9 +130,17 @@ export function WorkbenchPanel({ projectId, sessionId }: { projectId: number; se
           <span style={{ fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "var(--atlas-muted)", opacity: 0.6 }}>
             WORKBENCH
           </span>
-          <span style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)" }}>
-            {list.length} artifact{list.length === 1 ? "" : "s"}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 10, color: "var(--atlas-muted)", fontFamily: "var(--app-font-mono)" }}>
+              {list.length} artifact{list.length === 1 ? "" : "s"}
+            </span>
+            {list.length > 0 && (
+              <div style={{ display: "flex", gap: 4 }}>
+                <ExportButton label="MD" onClick={() => exportMarkdown(list)} />
+                <ExportButton label="PDF" onClick={() => exportPdf(list)} />
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Scope toggle */}
@@ -413,4 +422,107 @@ function ArtifactCard({
       )}
     </div>
   );
+}
+
+// ── Export helpers ─────────────────────────────────────────────────────────────
+
+function ExportButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "2px 7px", borderRadius: 4, border: "1px solid var(--atlas-border)",
+        background: "transparent", color: "var(--atlas-muted)", fontSize: 8,
+        fontFamily: "var(--app-font-mono)", cursor: "pointer", transition: "all 160ms ease",
+        letterSpacing: "0.06em", textTransform: "uppercase",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--atlas-gold)"; e.currentTarget.style.color = "var(--atlas-gold)"; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--atlas-border)"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function artifactContentToText(a: Artifact): string {
+  if (a.type === "plan" || a.type === "blueprint") {
+    try {
+      const parsed = JSON.parse(a.content) as Record<string, unknown>;
+      const steps = parsed.steps as Array<{ order: number; description: string; moscow?: string }> | undefined;
+      if (steps && Array.isArray(steps)) {
+        return steps.map(s => `${s.order}. ${s.description}${s.moscow ? ` [${s.moscow.toUpperCase()}]` : ""}`).join("\n");
+      }
+    } catch { /* fall through */ }
+  }
+  return a.content;
+}
+
+function exportMarkdown(artifacts: Artifact[]) {
+  const date = new Date().toLocaleDateString();
+  const lines = [
+    `# Atlas Workbench Export \u2014 ${date}`,
+    ``,
+    `*${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"} exported*`,
+    ``,
+    ...artifacts.flatMap(a => [
+      `---`,
+      ``,
+      `## ${a.title}`,
+      ``,
+      `- **Type:** ${TYPE_LABELS[a.type] ?? a.type}`,
+      `- **Status:** ${a.status}`,
+      `- **ID:** #${a.id}`,
+      `- **Created:** ${new Date(a.createdAt).toLocaleString()}`,
+      a.parentId ? `- **Branch of:** #${a.parentId}` : "",
+      ``,
+      artifactContentToText(a),
+      ``,
+    ]),
+  ].filter(Boolean);
+
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `atlas-workbench-${date.replace(/\//g, "-")}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast.success("Exported as Markdown");
+}
+
+async function exportPdf(artifacts: Artifact[]) {
+  try {
+    const html2pdf = (await import("html2pdf.js")).default;
+    const date = new Date().toLocaleDateString();
+    const container = document.createElement("div");
+    container.style.cssText = "padding: 40px; font-family: system-ui, sans-serif; color: #1c1917; background: #fff; line-height: 1.6;";
+    container.innerHTML = `
+      <h1 style="font-size: 22px; margin-bottom: 8px; color: #0c0a09;">Atlas Workbench Export</h1>
+      <p style="font-size: 12px; color: #78716c; margin-bottom: 24px;">${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"} \u00b7 ${date}</p>
+      ${artifacts.map(a => `
+        <div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #e7e5e4;">
+          <h2 style="font-size: 16px; margin-bottom: 6px; color: #0c0a09;">${a.title}</h2>
+          <div style="font-size: 10px; color: #78716c; margin-bottom: 10px; font-family: monospace;">
+            ${TYPE_LABELS[a.type] ?? a.type} \u00b7 ${a.status} \u00b7 #${a.id} \u00b7 ${new Date(a.createdAt).toLocaleDateString()}
+          </div>
+          <div style="font-size: 12px; white-space: pre-wrap;">${artifactContentToText(a).replace(/</g, "&lt;")}</div>
+        </div>
+      `).join("")}
+    `;
+    document.body.appendChild(container);
+    await html2pdf().from(container).set({
+      margin: 10,
+      filename: `atlas-workbench-${date.replace(/\//g, "-")}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    }).save();
+    document.body.removeChild(container);
+    toast.success("Exported as PDF");
+  } catch (err) {
+    toast.error("PDF export failed");
+    console.error(err);
+  }
 }
