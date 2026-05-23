@@ -2435,7 +2435,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Load project memory + repo info + node state from DB
   narrate(nar.loading);
   const [project] = await db
-    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
+    .select({ memory: projectsTable.memory, linkedRepos: projectsTable.linkedRepos, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
     .from(projectsTable)
     .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId));
 
@@ -2470,6 +2470,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   let repoTreeContext: string | null = null;
   let recentRepoActivityContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
+  const repoList: { fullName: string; defaultBranch: string }[] = [];
   narrate("Connecting to your repository...");
   const requestGithubToken = req.headers["x-github-token"];
   const resolvedGithubToken = await resolveGithubTokenForRequest(
@@ -2478,19 +2479,43 @@ router.post("/chat", async (req, res): Promise<void> => {
     typeof requestGithubToken === "string" ? requestGithubToken : null
   );
 
-  if (project?.linkedRepo) {
+  if (project?.linkedRepos || project?.linkedRepo) {
     try {
-      const parsedRepo = JSON.parse(project.linkedRepo) as string | { fullName?: string; defaultBranch?: string };
-      repoData = typeof parsedRepo === "string"
-        ? { fullName: parsedRepo, defaultBranch: "main" }
-        : parsedRepo;
-      if (repoData.fullName) {
+      if (project.linkedRepos) {
+        const parsedRepos = JSON.parse(project.linkedRepos) as unknown;
+        if (Array.isArray(parsedRepos)) {
+          repoList.push(
+            ...parsedRepos
+              .filter((fullName): fullName is string => typeof fullName === "string" && fullName.trim().length > 0)
+              .map(fullName => ({ fullName, defaultBranch: "main" }))
+          );
+        }
+      }
+
+      if (repoList.length === 0 && project.linkedRepo) {
+        const parsedRepo = JSON.parse(project.linkedRepo) as string | { fullName?: string; defaultBranch?: string };
+        const fallbackRepo = typeof parsedRepo === "string"
+          ? { fullName: parsedRepo, defaultBranch: "main" }
+          : parsedRepo.fullName
+            ? { fullName: parsedRepo.fullName, defaultBranch: parsedRepo.defaultBranch ?? "main" }
+            : null;
+        if (fallbackRepo) repoList.push(fallbackRepo);
+      }
+
+      repoData = repoList[0] ?? null;
+      if (repoList.length > 0) {
         if (resolvedGithubToken) {
           narrate("Reading repo structure...");
-          repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
+          const repoTrees = await Promise.all(
+            repoList.map(async repo => `=== ${repo.fullName} ===\n${await fetchRepoTree(repo.fullName, resolvedGithubToken, repo.defaultBranch)}`)
+          );
+          repoTreeContext = repoTrees.join("\n\n");
         }
         if (process.env.GITHUB_TOKEN) {
-          recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, process.env.GITHUB_TOKEN, now);
+          const recentRepoActivities = await Promise.all(
+            repoList.map(async repo => `=== ${repo.fullName} ===\n${await fetchRecentRepoActivity(repo.fullName, process.env.GITHUB_TOKEN!, now)}`)
+          );
+          recentRepoActivityContext = recentRepoActivities.join("\n\n");
         }
       }
     } catch {
