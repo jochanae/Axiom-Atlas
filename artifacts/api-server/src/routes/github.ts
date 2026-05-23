@@ -197,7 +197,19 @@ async function resolveGithubTokenForRequest(
 /** Resolve token: use the header value unless it's the sentinel "__server__", then fall back to env var. */
 function getToken(req: { headers: Record<string, string | string[] | undefined> }): string | null {
   const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
-  if (h && h !== "__server__") return h;
+  if (h && h !== "__server__") {
+    if (h.startsWith("enc:")) {
+      try {
+        const decrypted = decryptToken(h);
+        return decrypted && decrypted !== "__server__"
+          ? decrypted
+          : process.env.GITHUB_TOKEN ?? null;
+      } catch {
+        return process.env.GITHUB_TOKEN ?? null;
+      }
+    }
+    return h;
+  }
   return process.env.GITHUB_TOKEN ?? null;
 }
 
