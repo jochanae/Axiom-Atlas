@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { eq, and } from "drizzle-orm";
+import { db, projectsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -214,6 +216,99 @@ router.post("/forge", async (req, res) => {
     req.log.error({ err }, "Forge error");
     res.status(500).json({ error: "Forge failed to process transcript" });
   }
+});
+
+// ── Forge Intake — seeds Tier 1 memory from 6-question onboarding ────────────
+
+interface MemoryEntry {
+  tier: 1 | 2 | 3 | 4 | 5;
+  text: string;
+  createdAt: string;
+  retrievalCount: number;
+  lastRetrievedAt: string | null;
+}
+interface MemoryStore { v: 2; entries: MemoryEntry[]; }
+
+function parseMemoryStore(raw: string | null): MemoryStore {
+  if (!raw) return { v: 2, entries: [] };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.v === 2 && Array.isArray(parsed.entries)) return parsed as MemoryStore;
+  } catch { /* fall through */ }
+  return { v: 2, entries: [] };
+}
+
+function appendTier1(store: MemoryStore, facts: string[], now: Date): MemoryStore {
+  const newEntries: MemoryEntry[] = facts.map((text) => ({
+    tier: 1,
+    text,
+    createdAt: now.toISOString(),
+    retrievalCount: 0,
+    lastRetrievedAt: null,
+  }));
+  // Remove any existing Tier 1 intake entries before re-seeding
+  const existing = store.entries.filter(
+    (e) => !(e.tier === 1 && e.text.startsWith("INTAKE:"))
+  );
+  return { v: 2, entries: [...existing, ...newEntries] };
+}
+
+const IntakeSchema = z.object({
+  projectId: z.number().int().positive(),
+  answers: z.object({
+    what: z.string().min(1).max(2000),
+    who: z.string().min(1).max(2000),
+    stage: z.string().min(1).max(500),
+    working: z.string().max(2000).optional(),
+    openQuestion: z.string().min(1).max(2000),
+    thinkingStyle: z.string().max(1000).optional(),
+  }),
+});
+
+router.post("/forge/intake", async (req, res): Promise<void> => {
+  const parsed = IntakeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const userId = (req as any).authUser?.id as number | undefined;
+  const { projectId, answers } = parsed.data;
+
+  const whereClause = userId
+    ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId))
+    : eq(projectsTable.id, projectId);
+
+  const [project] = await db
+    .select({ id: projectsTable.id, memory: projectsTable.memory, name: projectsTable.name })
+    .from(projectsTable)
+    .where(whereClause);
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const now = new Date();
+  const store = parseMemoryStore(project.memory ?? null);
+
+  const facts: string[] = [
+    `INTAKE: What they're building — ${answers.what}`,
+    `INTAKE: Who it's for — ${answers.who}`,
+    `INTAKE: Stage — ${answers.stage}`,
+    ...(answers.working ? [`INTAKE: What's working — ${answers.working}`] : []),
+    `INTAKE: Open question — ${answers.openQuestion}`,
+    ...(answers.thinkingStyle ? [`INTAKE: Thinking style — ${answers.thinkingStyle}`] : []),
+  ];
+
+  const updated = appendTier1(store, facts, now);
+
+  await db
+    .update(projectsTable)
+    .set({ memory: JSON.stringify(updated) })
+    .where(eq(projectsTable.id, projectId));
+
+  res.json({ ok: true, facts: facts.length });
 });
 
 export default router;
