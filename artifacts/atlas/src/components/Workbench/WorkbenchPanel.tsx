@@ -218,7 +218,7 @@ export function WorkbenchPanel({ projectId, sessionId }: { projectId: number; se
             </div>
             No artifacts yet
             <div style={{ fontSize: 10, marginTop: 4, opacity: 0.6 }}>
-              Ask Atlas to plan, blueprint, or research something
+              Ask Atlas to plan, blueprint, research, or generate a visual
             </div>
           </div>
         )}
@@ -260,9 +260,10 @@ function ArtifactCard({
   const typeLabel = TYPE_LABELS[artifact.type] ?? artifact.type;
   const statusColor = STATUS_COLORS[artifact.status] ?? "var(--atlas-muted)";
   const isPlanOrBlueprint = artifact.type === "plan" || artifact.type === "blueprint";
+  const isImageSet = artifact.type === "image_set";
 
   let parsedContent: unknown = null;
-  if (isPlanOrBlueprint) {
+  if (isPlanOrBlueprint || isImageSet) {
     try { parsedContent = JSON.parse(artifact.content); } catch { parsedContent = null; }
   }
 
@@ -333,6 +334,32 @@ function ArtifactCard({
       {expanded && (
         <div style={{ padding: "0 9px 8px", borderTop: "1px solid var(--atlas-border)" }}>
           {(() => {
+            if (isImageSet && parsedContent && typeof parsedContent === "object" && parsedContent !== null) {
+              const content = parsedContent as Record<string, unknown>;
+              const images = content.images as Array<{ b64: string; mime: string; style?: string }> | undefined;
+              if (images && Array.isArray(images) && images.length > 0) {
+                return (
+                  <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 6 }}>
+                    {images.map((img, i) => (
+                      <img
+                        key={i}
+                        src={`data:${img.mime};base64,${img.b64}`}
+                        alt={img.style ?? "Generated visual"}
+                        style={{ width: "100%", borderRadius: 6, border: "1px solid var(--atlas-border)", cursor: "pointer" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const w = window.open("", "_blank");
+                          if (w) {
+                            w.document.write(`<img src="data:${img.mime};base64,${img.b64}" style="max-width:100%">`);
+                            w.document.title = artifact.title;
+                          }
+                        }}
+                      />
+                    ))}
+                  </div>
+                );
+              }
+            }
             if (!isPlanOrBlueprint || !parsedContent) return null;
             if (typeof parsedContent !== "object" || parsedContent === null) return null;
             const content = parsedContent as Record<string, unknown>;
@@ -452,6 +479,15 @@ function artifactContentToText(a: Artifact): string {
       if (steps && Array.isArray(steps)) {
         return steps.map(s => `${s.order}. ${s.description}${s.moscow ? ` [${s.moscow.toUpperCase()}]` : ""}`).join("\n");
       }
+    } catch { /* fall through */ }
+  }
+  if (a.type === "image_set") {
+    try {
+      const parsed = JSON.parse(a.content) as Record<string, unknown>;
+      const images = parsed.images as Array<{ style?: string }> | undefined;
+      return images && Array.isArray(images)
+        ? `Contains ${images.length} generated image${images.length === 1 ? "" : "s"} (${images.map(i => i.style ?? "standard").join(", ")})`
+        : "Generated visual asset";
     } catch { /* fall through */ }
   }
   return a.content;

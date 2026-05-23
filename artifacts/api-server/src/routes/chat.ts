@@ -3280,6 +3280,22 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         if (imgPart?.inlineData) {
           imageB64 = imgPart.inlineData.data as string;
           imageMimeType = imgPart.inlineData.mimeType as string;
+          // Auto-save generated image to Workbench as artifact
+          try {
+            await db.insert(artifactsTable).values({
+              userId,
+              projectId,
+              sessionId,
+              type: "image_set",
+              title: `Generated visual \u2014 ${baseSubject.slice(0, 60)}`,
+              content: JSON.stringify({ images: [{ b64: imageB64, mime: imageMimeType, style: isCinematic ? "cinematic" : isBlueprint ? "blueprint" : "standard" }] }),
+              status: "draft",
+              pinned: false,
+              sources: { model: "gemini-2.0-flash-exp", promptType: isCinematic ? "cinematic" : isBlueprint ? "blueprint" : "standard" },
+            });
+          } catch (err) {
+            logger.warn({ err }, "Failed to auto-save image artifact");
+          }
         }
       } catch (imgErr) {
         console.warn("Image generation failed:", imgErr);

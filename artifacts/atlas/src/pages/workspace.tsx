@@ -8891,6 +8891,23 @@ export default function Workspace() {
               { duration: 5000 }
             );
           }
+          // Notify user when a generated image is saved to Workbench
+          if (res.imageB64) {
+            toast.success(
+              () => (
+                <span
+                  onClick={() => {
+                    if (isMobile) { setMobileTab("workbench"); setRightOpen(true); }
+                    else { setDesktopForceTab("workbench"); setTimeout(() => setDesktopForceTab(undefined), 120); }
+                  }}
+                  style={{ cursor: "pointer", textDecoration: "underline", color: "var(--atlas-gold)" }}
+                >
+                  Visual saved — open Workbench
+                </span>
+              ),
+              { duration: 5000 }
+            );
+          }
           if (cp) { playCatch(); setActiveCatch(cp); }
           if (normalizedChips.length > 0) {
             setMemoryChips((prev) => {
