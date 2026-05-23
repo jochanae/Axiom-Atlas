@@ -33,6 +33,7 @@ import blueprintRouter from "./blueprint";
 import connectionsRouter from "./connections";
 import stateRouter from "./state";
 import uploadRouter from "./upload";
+import artifactsRouter from "./artifacts";
 
 const router: IRouter = Router();
 
@@ -88,6 +89,8 @@ router.use(requireAuth, terminalRouter);
 
 // Zip upload → code context extraction
 router.use(requireAuth, uploadRouter);
+
+router.use(requireAuth, artifactsRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);

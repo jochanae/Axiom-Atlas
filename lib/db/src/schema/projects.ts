@@ -14,6 +14,7 @@ export const projectsTable = pgTable("projects", {
   previewUrl: text("preview_url"),
   githubToken: text("github_token"),
   linkedRepo: text("linked_repo"),
+  linkedRepos: text("linked_repos"),
   nodeState: jsonb("node_state").default({}),
   pushHistory: jsonb("push_history").default([]),
   lastHandoverAt: timestamp("last_handover_at", { withTimezone: true }),
