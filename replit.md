@@ -13,7 +13,7 @@ Repo: `jochanae/Axiom-Atlas` (private)
 
 | Layer | Technology | Notes |
 |---|---|---|
-| **Backend** | `artifacts/api-server/` in this Replit | Deployed to **Render** |
+| **Backend** | `artifacts/api-server/` in this Replit | Deployed to **Google Cloud Run** |
 | **Database** | **Neon** PostgreSQL | `DATABASE_URL` points to Neon |
 | **Frontend** | **Separate repository** | Not in this Replit — Jochanae manages it independently |
 
