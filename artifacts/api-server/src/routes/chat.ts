@@ -3003,13 +3003,30 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         terminalCmd = executed.terminalCmd;
         terminalResult = executed.terminalResult;
         if (terminalResult) {
-          rawContent = cleanTerminalTags(`${rawContent}\n\nTERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
+          // Atlas's message before the terminal result (the text without TERMINAL_CMD tag)
+          const atlasPreResult = rawContent;
+          const trimmedOutput = terminalResult.output.slice(0, 3000).trim() || "(no output)";
+          const feedbackMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+            ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+            { role: "assistant", content: atlasPreResult },
+            { role: "user", content: `[TERMINAL_OUTPUT]\ncommand: ${terminalResult.command}\nexit_code: ${terminalResult.exitCode ?? "null"}\n\n${trimmedOutput}` },
+          ];
+          narrate("Analyzing output...");
+          const feedbackResult = activeModel === "claude"
+            ? await streamClaude(systemPrompt, feedbackMessages, undefined, narrateToken)
+            : await callModel(activeModel, systemPrompt, feedbackMessages, undefined);
+          rawContent = feedbackResult.content;
+          assistantUsage = mergeUsage(assistantUsage, feedbackResult.usage);
+        } else {
+          // Command requires confirmation or was blocked — just clean tags
+          rawContent = cleanTerminalTags(rawContent);
         }
       } catch (err: unknown) {
         const errMsg = err instanceof Error ? err.message : "Terminal command failed";
         const fallbackTier = terminalExtraction.terminalCmd.tier ?? 3;
         terminalCmd = { command: terminalExtraction.terminalCmd.command, tier: fallbackTier, reason: errMsg };
         terminalResult = { command: terminalExtraction.terminalCmd.command, output: errMsg, exitCode: null, tier: fallbackTier };
+        rawContent = cleanTerminalTags(rawContent);
       }
     } else {
       rawContent = cleanTerminalTags(rawContent);
