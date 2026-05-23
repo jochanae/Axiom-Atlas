@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, and, desc } from "drizzle-orm";
+import { eq, sql, and, desc, ne, lt } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { db, sessionsTable, chatMessagesTable, projectsTable } from "@workspace/db";
@@ -53,6 +53,106 @@ function serializeMessage(m: typeof chatMessagesTable.$inferSelect) {
     costUsd: m.costUsd == null ? null : Number(m.costUsd),
     createdAt: m.createdAt.toISOString(),
   };
+}
+
+// ── Background session summarizer ─────────────────────────────────────────────
+// Finds the most recent unsummarized session for a project and writes a T3
+// memory entry + T5 marker. Fire-and-forget — never awaited by callers.
+
+const SUMMARIZE_MIN_MESSAGES = 3; // skip trivially short sessions
+const SUMMARIZED_MARKER_PREFIX = "SESSION_SUMMARIZED:";
+
+function isSessionSummarized(store: MemoryStore, sessionId: number): boolean {
+  const marker = `${SUMMARIZED_MARKER_PREFIX}${sessionId}`;
+  return store.entries.some((e) => e.text === marker);
+}
+
+function appendSummaryAndMarker(
+  store: MemoryStore,
+  sessionId: number,
+  summaryText: string,
+  now: Date
+): MemoryStore {
+  const marker = `${SUMMARIZED_MARKER_PREFIX}${sessionId}`;
+  const t3: MemoryEntry = {
+    tier: 3, text: summaryText,
+    createdAt: now.toISOString(), retrievalCount: 0, lastRetrievedAt: null,
+  };
+  const t5: MemoryEntry = {
+    tier: 5, text: marker,
+    createdAt: now.toISOString(), retrievalCount: 0, lastRetrievedAt: null,
+  };
+  return { v: 2, entries: [...store.entries, t3, t5] };
+}
+
+async function summarizePreviousSession(
+  projectId: number,
+  excludeSessionId: number
+): Promise<void> {
+  try {
+    // Find the most recent session with enough messages (not the one just created)
+    const [prev] = await db
+      .select({ id: sessionsTable.id, messageCount: sessionsTable.messageCount, updatedAt: sessionsTable.updatedAt })
+      .from(sessionsTable)
+      .where(and(
+        eq(sessionsTable.projectId, projectId),
+        ne(sessionsTable.id, excludeSessionId),
+        lt(sessionsTable.messageCount, 1000), // safety cap
+      ))
+      .orderBy(desc(sessionsTable.updatedAt))
+      .limit(1);
+
+    if (!prev || prev.messageCount < SUMMARIZE_MIN_MESSAGES) return;
+
+    // Load project memory and check if already summarized
+    const [proj] = await db
+      .select({ memory: projectsTable.memory })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, projectId))
+      .limit(1);
+
+    const store = parseMemoryStore(proj?.memory ?? null);
+    if (isSessionSummarized(store, prev.id)) return; // already done
+
+    // Fetch messages
+    const rows = await db
+      .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
+      .from(chatMessagesTable)
+      .where(eq(chatMessagesTable.sessionId, prev.id))
+      .orderBy(desc(chatMessagesTable.createdAt))
+      .limit(30);
+
+    const assistantCount = rows.filter((m) => m.role === "assistant").length;
+    if (assistantCount < 2) return; // not enough substance
+
+    const transcript = rows.reverse()
+      .map((m) => `${m.role === "user" ? "You" : "Atlas"}: ${m.content.slice(0, 600)}`)
+      .join("\n\n");
+
+    // Generate summary
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const aiRes = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 220,
+      messages: [{
+        role: "user",
+        content: `You are the memory layer of Atlas, a strategic AI partner for founders. Write a 2-3 sentence session summary covering: (1) what was discussed or decided, (2) any key tensions or open questions, (3) the logical next step. Be specific. Past tense. No markdown, no bullets.\n\nSession transcript:\n${transcript}`,
+      }],
+    });
+
+    const rawSummary = (aiRes.content[0] as { type: "text"; text: string }).text.trim();
+    const label = new Date(prev.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const summaryText = `[Session ${label}] ${rawSummary}`;
+
+    const now = new Date();
+    const updatedStore = appendSummaryAndMarker(store, prev.id, summaryText, now);
+    await db
+      .update(projectsTable)
+      .set({ memory: JSON.stringify(updatedStore) })
+      .where(eq(projectsTable.id, projectId));
+  } catch {
+    // Swallow — this is background work, never block the main flow
+  }
 }
 
 // Verify that a project exists and is owned by the given userId.
@@ -121,11 +221,16 @@ router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => 
       .set({ messageCount: sql`${sessionsTable.messageCount} + 1` })
       .where(eq(sessionsTable.id, session.id));
   }
+
   res.status(201).json({
     ...session,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
   });
+
+  // Fire-and-forget: summarize the previous session in the background.
+  // Runs after the response is sent so it never blocks session creation.
+  void summarizePreviousSession(params.data.projectId, session.id);
 });
 
 router.get("/sessions/:id", async (req, res): Promise<void> => {
@@ -310,15 +415,21 @@ router.post("/sessions/:id/summarize", async (req, res): Promise<void> => {
 
   const rawSummary = (aiRes.content[0] as { type: "text"; text: string }).text.trim();
   const label = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  const summary = `[Session ${label}] ${rawSummary}`;
+  const summaryText = `[Session ${label}] ${rawSummary}`;
 
-  const updatedStore = appendSessionSummary(store, summary);
+  // Check if already summarized (idempotent)
+  if (isSessionSummarized(store, params.data.id)) {
+    res.json({ ok: true, skipped: "already summarized" });
+    return;
+  }
+
+  const updatedStore = appendSummaryAndMarker(store, params.data.id, summaryText, new Date());
   await db
     .update(projectsTable)
     .set({ memory: JSON.stringify(updatedStore) })
     .where(eq(projectsTable.id, session.projectId));
 
-  res.json({ ok: true, summary });
+  res.json({ ok: true, summary: summaryText });
 });
 
 export default router;
