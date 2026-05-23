@@ -98,7 +98,7 @@ artifacts/atlas/src/pages/
   think-freely.tsx  — Think Freely mode
   workshop.tsx      — Workshop
   project-compass.tsx — Project Compass
-  nexus.tsx         — Redirects to /home (legacy)
+  nexus.tsx         — Global ambient chat (god-mode): cross-project Atlas chat, global ledger sidebar, starter prompts, session handoff from home glass input. Calls /api/nexus/chat. DO NOT DELETE.
   login.tsx         — Auth with Google OAuth, email/password, Apple
   vault.tsx         — Secrets Vault
   help.tsx          — Help & FAQ (updated — no Nexus branding)
