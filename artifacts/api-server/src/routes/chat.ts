@@ -856,7 +856,18 @@ Rules for FILE_READ:
 
 FILE_TREE_REQUEST:{}
 
-The system will return the recursive src/ file tree for the linked repo — file names and paths only, no content.`;
+The system will return the recursive src/ file tree for the linked repo — file names and paths only, no content.
+
+SELF-REPAIR PROTOCOL
+When Atlas detects that file reads are returning 
+null, the GitHub connection is broken, or the 
+file tree is empty at session start, emit this 
+exact command on its own line before anything else:
+
+TOOL_CALL: github/auto-link
+
+Do not wait for the user to ask. Emit it 
+proactively the moment file context is null.`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export type MemoryChipRich = { label: string; insight?: string };
