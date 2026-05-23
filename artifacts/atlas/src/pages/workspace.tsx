@@ -24,6 +24,7 @@ import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { CommitCard } from "../components/CommitCard";
 import { PlanCard } from "../components/PlanCard";
 import { LiveGenerationCard } from "../components/LiveGenerationCard";
+import { WorkbenchPanel } from "../components/Workbench/WorkbenchPanel";
 import { Eye, TerminalSquare } from "lucide-react";
 import { useThemeMode } from "@/lib/theme";
 import { fileToBase64Safe } from "@/lib/image-resize";
@@ -151,7 +152,7 @@ interface LinkedRepo {
   name: string;
 }
 
-type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal";
+type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal" | "workbench";
 type OnboardingCoachId = "chat" | "ledger" | "flow";
 type WorkspaceLens = "flow" | "build" | "look" | "scenario";
 type PlanState = "pending" | "reviewing" | "executing" | "completed" | "skipped";
@@ -6860,6 +6861,7 @@ function RightPanel({
   externalForgeNodes,
   onForgeNodesConsumed,
   onForgeCompleted,
+  sessionId,
 }: {
   projectId: number;
   entries: Entry[];
@@ -6900,6 +6902,7 @@ function RightPanel({
   externalForgeNodes?: ArchNode[];
   onForgeNodesConsumed?: () => void;
   onForgeCompleted?: () => void;
+  sessionId?: number | null;
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
@@ -6925,6 +6928,18 @@ function RightPanel({
   }, [wsLens, tab]);
 
   const tabs: { id: RightTab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    {
+      id: "workbench",
+      label: "Workbench",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="1" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.2" />
+          <rect x="9" y="1" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.2" />
+          <rect x="1" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.2" />
+          <rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+      ),
+    },
     {
       id: "ledger",
       label: "Ledger",
@@ -7136,6 +7151,7 @@ function RightPanel({
       </div>
 
       {/* Tab content */}
+      {tab === "workbench" && <WorkbenchPanel projectId={projectId} sessionId={sessionId ?? undefined} />}
       {tab === "ledger" && (
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
           {/* Sub-tab bar */}
@@ -7709,13 +7725,13 @@ function MobileTabBar({
   entryCount,
   activeCatch,
 }: {
-  activeTab: "chat" | "ledger" | "files" | "map" | "preview";
-  onTabChange: (tab: "chat" | "ledger" | "files" | "map" | "preview") => void;
+  activeTab: "chat" | "ledger" | "files" | "map" | "preview" | "workbench";
+  onTabChange: (tab: "chat" | "ledger" | "files" | "map" | "preview" | "workbench") => void;
   entryCount: number;
   activeCatch: boolean;
 }) {
   const [, navTo] = useLocation();
-  const tabs: { id: "chat" | "ledger" | "files" | "map" | "preview"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
+  const tabs: { id: "chat" | "ledger" | "files" | "map" | "preview" | "workbench"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     {
       id: "chat",
       label: "Chat",
@@ -7745,6 +7761,18 @@ function MobileTabBar({
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+      ),
+    },
+    {
+      id: "workbench",
+      label: "Workbench",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="2" width="8" height="8" rx="1" />
+          <rect x="14" y="2" width="8" height="8" rx="1" />
+          <rect x="2" y="14" width="8" height="8" rx="1" />
+          <rect x="14" y="14" width="8" height="8" rx="1" />
         </svg>
       ),
     },
@@ -7804,7 +7832,7 @@ function MobileTabBar({
           <button
             key={id}
             onClick={() => { if (id === "map") { navTo("/map"); } else { onTabChange(id); } }}
-            aria-label={id === "chat" ? "Open chat" : id === "ledger" ? "Open ledger" : id === "files" ? "Open files" : id === "preview" ? "Toggle preview" : "Open map"}
+            aria-label={id === "chat" ? "Open chat" : id === "ledger" ? "Open ledger" : id === "files" ? "Open files" : id === "preview" ? "Toggle preview" : id === "workbench" ? "Open workbench" : "Open map"}
             style={{
               flex: 1,
               display: "flex",
@@ -8124,7 +8152,7 @@ export default function Workspace() {
     }
   }, [wsLens, leftTab]);
 
-  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">(() =>
+  const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview" | "workbench">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
   );
   const [onboardingCoachVisible, setOnboardingCoachVisible] = useState(() => {
@@ -8845,6 +8873,23 @@ export default function Workspace() {
           if (fes && fes.length > 0) {
             setLeftTab("diff");
             setMobileTab("preview"); // switches to diff view on mobile
+          }
+          // Notify user when a plan/blueprint/research is saved to Workbench
+          if (res.plan) {
+            toast.success(
+              () => (
+                <span
+                  onClick={() => {
+                    if (isMobile) { setMobileTab("workbench"); setRightOpen(true); }
+                    else { setDesktopForceTab("workbench"); setTimeout(() => setDesktopForceTab(undefined), 120); }
+                  }}
+                  style={{ cursor: "pointer", textDecoration: "underline", color: "var(--atlas-gold)" }}
+                >
+                  {res.plan.mode === "blueprint" ? "Blueprint" : "Plan"} saved — open Workbench
+                </span>
+              ),
+              { duration: 5000 }
+            );
           }
           if (cp) { playCatch(); setActiveCatch(cp); }
           if (normalizedChips.length > 0) {
@@ -11534,6 +11579,7 @@ export default function Workspace() {
                 externalForgeNodes={externalForgeNodes}
                 onForgeNodesConsumed={() => setExternalForgeNodes([])}
                 onForgeCompleted={() => void updateForgeState("forged")}
+                sessionId={sessionId ?? undefined}
               />
             </div>
           </>
@@ -11584,7 +11630,7 @@ export default function Workspace() {
                 pushHistory={pushHistory}
                 onRollbackPush={handleRollbackPush}
                 onHomeNav={() => setLocation("/home")}
-                forceTab={mobileTab === "map" ? "map" : mobileTab === "files" ? "files" : mobileTab === "preview" ? "preview" : undefined}
+                forceTab={mobileTab === "map" ? "map" : mobileTab === "files" ? "files" : mobileTab === "preview" ? "preview" : mobileTab === "workbench" ? "workbench" : undefined}
                 onSendIntent={sendFromIntentCapture}
                 onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
                 onBackToChat={mobileTab === "map" ? () => { setMobileTab("chat"); setRightOpen(false); } : undefined}
@@ -11612,6 +11658,7 @@ export default function Workspace() {
                 externalForgeNodes={externalForgeNodes}
                 onForgeNodesConsumed={() => setExternalForgeNodes([])}
                 onForgeCompleted={() => void updateForgeState("forged")}
+                sessionId={sessionId ?? undefined}
               />
             </div>
           </div>

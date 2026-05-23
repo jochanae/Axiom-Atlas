@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, artifactsTable } from "@workspace/db";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -3203,6 +3203,32 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       .update(sessionsTable)
       .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
       .where(eq(sessionsTable.id, sessionId));
+
+    // Auto-save plan/blueprint to Workbench artifacts
+    if (responsePlan) {
+      try {
+        const artifactType = responsePlan.mode === "blueprint" ? "blueprint" : "plan";
+        const artifactContent = JSON.stringify({
+          steps: responsePlan.steps,
+          confidence: responsePlan.confidence,
+          estimatedChanges: responsePlan.estimatedChanges,
+          reversible: responsePlan.reversible,
+        });
+        await db.insert(artifactsTable).values({
+          userId,
+          projectId,
+          sessionId,
+          type: artifactType,
+          title: responsePlan.title,
+          content: artifactContent,
+          status: "draft",
+          pinned: false,
+          sources: { model: modelUsed, mode: responsePlan.mode ?? "plan" },
+        });
+      } catch (err) {
+        logger.warn({ err }, "Failed to auto-save artifact from plan");
+      }
+    }
   }
 
   // Auto-name: on first message, generate a real project name from the user's intent
