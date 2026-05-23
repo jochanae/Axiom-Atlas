@@ -64,8 +64,20 @@ async function resolveGithubTokenForRequest(
 ): Promise<string | null> {
   // Request header token (from localStorage) is always most up-to-date — use first
   if (requestToken && requestToken !== "__server__") {
-    console.log("[token] resolved: request-header");
-    return requestToken;
+    if (requestToken.startsWith("enc:")) {
+      try {
+        const decrypted = decryptToken(requestToken);
+        if (decrypted && decrypted !== "__server__") {
+          console.log("[token] resolved: request-header-decrypted");
+          return decrypted;
+        }
+      } catch {
+        // fall through to account token
+      }
+    } else {
+      console.log("[token] resolved: request-header");
+      return requestToken;
+    }
   }
 
   const accountToken = await getAccountGithubToken(userId);
