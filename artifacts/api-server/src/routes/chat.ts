@@ -57,13 +57,19 @@ async function getAccountGithubToken(userId: number | undefined): Promise<string
   return resolveStoredGithubToken(connection?.token);
 }
 
+const GITHUB_TOKEN_RE = /^gh[pousr]_[A-Za-z0-9]{36,}$/;
+
+function looksLikeGithubToken(token: string): boolean {
+  return GITHUB_TOKEN_RE.test(token);
+}
+
 async function resolveGithubTokenForRequest(
   userId: number | undefined,
   projectGithubToken: string | null | undefined,
   requestToken?: string | null
 ): Promise<string | null> {
-  // Request header token (from localStorage) is always most up-to-date — use first
-  if (requestToken && requestToken !== "__server__") {
+  // Request header token (from localStorage) — validate it's a real token shape before trusting it
+  if (typeof requestToken === "string" && looksLikeGithubToken(requestToken)) {
     console.log("[token] resolved: request-header");
     return requestToken;
   }
