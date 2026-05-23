@@ -35,8 +35,18 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
-  const plain = storedToken ? decryptToken(storedToken) : null;
+function resolveStoredGithubToken(
+  storedToken: string | null | undefined
+): string | null {
+  if (!storedToken) return null;
+  if (
+    storedToken.startsWith("ghp_") ||
+    storedToken.startsWith("github_pat_") ||
+    storedToken.startsWith("gho_")
+  ) {
+    return storedToken;
+  }
+  const plain = decryptToken(storedToken);
   return plain && plain !== "__server__" ? plain : null;
 }
 
