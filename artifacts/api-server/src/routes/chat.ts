@@ -2493,14 +2493,28 @@ router.post("/chat", async (req, res): Promise<void> => {
       if (repoData.fullName) {
         if (resolvedGithubToken) {
           narrate("Reading repo structure...");
-          repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
+          try {
+            repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
+          } catch (treeErr: unknown) {
+            // Surface the real error to Atlas — don't swallow it
+            const errMsg = treeErr instanceof Error ? treeErr.message : String(treeErr);
+            repoTreeContext = `[REPO_READ_FAILED] Atlas tried to read the file tree for ${repoData.fullName} but hit an error: ${errMsg}. The stored GitHub token may be expired or lack repo access. Tell the user to refresh their token in the Files tab.`;
+            logger.warn({ err: treeErr, repo: repoData.fullName }, "fetchRepoTree failed — surfacing to Atlas");
+          }
+        } else {
+          // Linked but no token — tell Atlas explicitly so it can relay to the user
+          repoTreeContext = `[REPO_NO_TOKEN] Project has a linked GitHub repo (${repoData.fullName}) but no valid GitHub token is configured. Atlas cannot read this repository. Tell the user to add their GitHub token in the Files tab of this workspace.`;
         }
         if (process.env.GITHUB_TOKEN) {
-          recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, process.env.GITHUB_TOKEN, now);
+          try {
+            recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, process.env.GITHUB_TOKEN, now);
+          } catch {
+            // Non-fatal — recent activity is supplemental
+          }
         }
       }
-    } catch {
-      // Non-fatal: continue without tree context
+    } catch (parseErr) {
+      logger.warn({ err: parseErr, projectId }, "Failed to parse linkedRepo JSON — skipping repo context");
     }
   }
 

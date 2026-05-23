@@ -63,6 +63,18 @@ async function getAccountGithubToken(userId: number | undefined): Promise<string
   return resolveStoredGithubToken(connection?.token);
 }
 
+async function getAnyProjectGithubToken(userId: number | undefined): Promise<string | null> {
+  if (!userId) return null;
+  // Fall back to any project token for this user — used when no specific project context
+  const projects = await db
+    .select({ githubToken: projectsTable.githubToken })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.userId, userId), isNotNull(projectsTable.githubToken)))
+    .orderBy(desc(projectsTable.updatedAt))
+    .limit(1);
+  return resolveStoredGithubToken(projects[0]?.githubToken);
+}
+
 async function resolveGithubTokenForRequest(
   userId: number | undefined,
   projectGithubToken: string | null | undefined
@@ -70,7 +82,12 @@ async function resolveGithubTokenForRequest(
   const accountToken = await getAccountGithubToken(userId);
   if (accountToken) return accountToken;
 
-  return resolveStoredGithubToken(projectGithubToken) ?? process.env.GITHUB_TOKEN ?? null;
+  const projectToken = resolveStoredGithubToken(projectGithubToken);
+  if (projectToken) return projectToken;
+
+  // Last resort: look up any project token stored for this user
+  const anyProjectToken = await getAnyProjectGithubToken(userId);
+  return anyProjectToken ?? process.env.GITHUB_TOKEN ?? null;
 }
 
 /** Resolve token: use the header value unless it's the sentinel "__server__", then fall back to env var. */
