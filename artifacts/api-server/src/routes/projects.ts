@@ -514,6 +514,22 @@ router.post("/projects/:id/clone", async (req, res): Promise<void> => {
   res.status(201).json(serializeProject(clone, false));
 });
 
+// DELETE /api/projects/:id/repo-link — unlink GitHub repo without deleting the project
+router.delete("/projects/:id/repo-link", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const userId = (req as any).authUser.id as number;
+
+  const [project] = await db
+    .update(projectsTable)
+    .set({ linkedRepo: null, githubToken: null })
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)))
+    .returning({ id: projectsTable.id });
+
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  res.json({ ok: true, projectId: id });
+});
+
 router.delete("/projects/:id", async (req, res): Promise<void> => {
   const params = DeleteProjectParams.safeParse(req.params);
   if (!params.success) {

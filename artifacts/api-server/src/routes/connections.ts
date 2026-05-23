@@ -120,18 +120,20 @@ router.post("/connections", async (req, res): Promise<void> => {
   let metadata: Record<string, unknown> | null = null;
 
   if (body.type === "github") {
+    // If a PAT is provided, store it encrypted so resolveGithubTokenForRequest can use it
+    if (body.token) {
+      token = encryptToken(body.token);
+    }
+    // Try to associate with the latest linked repo for metadata — non-fatal if missing
     const project = await getLatestGithubProject(userId);
-    if (!project) {
-      res.status(400).json({ error: "No GitHub repo linked to any project" });
+    const repo = parseLinkedRepo(project?.linkedRepo ?? null);
+    if (repo) {
+      url = url ?? `https://github.com/${repo.fullName}`;
+      metadata = { projectId: project!.id, repo: repo.fullName, projectName: project!.name };
+    } else if (!url && !body.token) {
+      res.status(400).json({ error: "Provide either a GitHub repo URL or a personal access token" });
       return;
     }
-    const repo = parseLinkedRepo(project.linkedRepo ?? null);
-    if (!repo) {
-      res.status(400).json({ error: "Latest GitHub project has an invalid repo link" });
-      return;
-    }
-    url = `https://github.com/${repo.fullName}`;
-    metadata = { projectId: project.id, repo: repo.fullName, projectName: project.name };
   } else if (body.type === "railway") {
     if (!body.token) {
       res.status(400).json({ error: "Railway token is required" });

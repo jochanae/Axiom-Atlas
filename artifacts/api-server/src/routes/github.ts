@@ -225,11 +225,32 @@ router.get("/github/server-token", (_req, res): void => {
 
 // GET /api/github/repos
 router.get("/github/repos", async (req, res): Promise<void> => {
-  const token = getToken(req);
-  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
 
-  const resp = await fetch(`${GH_API}/user/repos?per_page=100&sort=pushed&type=owner`, { headers: ghHeaders(token) });
-  if (!resp.ok) { res.status(resp.status).json({ error: "GitHub API error", detail: await resp.text() }); return; }
+  // Priority: explicit header token → account connection → project tokens → server env
+  const headerToken = (() => {
+    const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
+    return (h && h !== "__server__") ? h : null;
+  })();
+
+  const token = headerToken ?? (userId ? await resolveGithubTokenForRequest(userId, null) : null) ?? process.env.GITHUB_TOKEN ?? null;
+
+  if (!token) {
+    res.status(401).json({
+      error: "TOKEN_REQUIRED",
+      message: "Enter your GitHub personal access token to browse your repositories.",
+    });
+    return;
+  }
+
+  const resp = await fetch(`${GH_API}/user/repos?per_page=100&sort=pushed&type=all&affiliation=owner,collaborator`, { headers: ghHeaders(token) });
+  if (!resp.ok) {
+    const detail = await resp.text();
+    // Return a clear code so the frontend can show a helpful message
+    const code = resp.status === 401 || resp.status === 403 ? "TOKEN_INVALID" : "GITHUB_ERROR";
+    res.status(resp.status).json({ error: code, message: "GitHub rejected this token. Make sure it has repo scope.", detail });
+    return;
+  }
 
   const repos = await resp.json() as any[];
   res.json(repos.map(r => ({
