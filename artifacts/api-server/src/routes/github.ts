@@ -358,8 +358,10 @@ router.get("/github/repos", async (req, res): Promise<void> => {
 
 // GET /api/github/tree
 router.get("/github/tree", async (req, res): Promise<void> => {
-  const token = getToken(req);
-  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  const headerToken = getToken(req);
+  const token = headerToken ?? await getAccountGithubToken(userId);
+  if (!token) { res.status(401).json({ error: "No GitHub token available" }); return; }
 
   const { repo, branch = "main" } = req.query as { repo?: string; branch?: string };
   if (!repo) { res.status(400).json({ error: "Missing repo param" }); return; }
@@ -384,8 +386,10 @@ router.get("/github/tree", async (req, res): Promise<void> => {
 
 // GET /api/github/file
 router.get("/github/file", async (req, res): Promise<void> => {
-  const token = getToken(req);
-  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  const headerToken = getToken(req);
+  const token = headerToken ?? await getAccountGithubToken(userId);
+  if (!token) { res.status(401).json({ error: "No GitHub token available" }); return; }
 
   const { repo, path: filePath, branch = "main" } = req.query as { repo?: string; path?: string; branch?: string };
   if (!repo || !filePath) { res.status(400).json({ error: "Missing repo or path param" }); return; }
@@ -410,8 +414,10 @@ router.get("/github/file", async (req, res): Promise<void> => {
 
 // GET /api/github/src-tree — file names and paths under src/ only
 router.get("/github/src-tree", async (req, res): Promise<void> => {
-  const token = getToken(req);
-  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  const headerToken = getToken(req);
+  const token = headerToken ?? await getAccountGithubToken(userId);
+  if (!token) { res.status(401).json({ error: "No GitHub token available" }); return; }
 
   const { repo, branch = "main" } = req.query as { repo?: string; branch?: string };
   if (!repo) { res.status(400).json({ error: "Missing repo param" }); return; }
@@ -621,8 +627,10 @@ router.post("/github/pr", async (req, res): Promise<void> => {
 
 // POST /api/github/analyze — AI-powered project structure analysis
 router.post("/github/analyze", async (req, res): Promise<void> => {
-  const token = getToken(req);
-  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  const headerToken = getToken(req);
+  const token = headerToken ?? await getAccountGithubToken(userId);
+  if (!token) { res.status(401).json({ error: "No GitHub token available" }); return; }
 
   const { repo, branch = "main" } = req.body as { repo: string; branch?: string };
   if (!repo) { res.status(400).json({ error: "Missing repo" }); return; }
