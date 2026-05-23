@@ -31,6 +31,15 @@ type CommitSummary = {
 };
 
 const commitsCache = new Map<string, { expiresAt: number; payload: { commits: CommitSummary[] } }>();
+const APP_ENTRY_CANDIDATES = [
+  "src/App.tsx",
+  "app/App.tsx",
+  "App.tsx",
+  "src/App.jsx",
+  "app/App.jsx",
+  "App.jsx",
+];
+const ROUTE_FILE_EXTENSIONS = [".tsx", ".jsx", ".ts", ".js"];
 
 function ghHeaders(token: string) {
   return {
@@ -39,6 +48,114 @@ function ghHeaders(token: string) {
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "Atlas-Dev-Env/1.0",
   };
+}
+
+function uniquePaths(paths: string[]): string[] {
+  return Array.from(new Set(paths));
+}
+
+function trimForPrompt(path: string, content: string, lineLimit = 250) {
+  const lines = content.split("\n");
+  return { path, content: lines.slice(0, lineLimit).join("\n"), truncated: lines.length > lineLimit };
+}
+
+function resolveLocalImportPath(importPath: string, fromFile: string, blobPaths: string[]): string | null {
+  let basePath: string | null = null;
+  if (importPath.startsWith(".")) {
+    basePath = nodePath.posix.normalize(nodePath.posix.join(nodePath.posix.dirname(fromFile), importPath));
+  } else if (importPath.startsWith("@/")) {
+    basePath = nodePath.posix.normalize(`src/${importPath.slice(2)}`);
+  } else if (importPath.startsWith("~/")) {
+    basePath = nodePath.posix.normalize(`src/${importPath.slice(2)}`);
+  } else if (importPath.startsWith("src/") || importPath.startsWith("app/")) {
+    basePath = nodePath.posix.normalize(importPath);
+  }
+  if (!basePath) return null;
+
+  const possiblePaths = [
+    basePath,
+    ...ROUTE_FILE_EXTENSIONS.map(ext => `${basePath}${ext}`),
+    ...ROUTE_FILE_EXTENSIONS.map(ext => nodePath.posix.join(basePath, `index${ext}`)),
+  ];
+  return possiblePaths.find(path => blobPaths.includes(path)) ?? null;
+}
+
+function findRouteFilePathsFromApp(appPath: string, appContent: string, blobPaths: string[]): string[] {
+  const routeComponentNames = new Set<string>();
+  const componentPatterns = [
+    /<Route\b[^>]*\belement\s*=\s*{\s*<\s*([A-Z][A-Za-z0-9_]*)/g,
+    /<Route\b[^>]*\b(?:Component|component)\s*=\s*{\s*([A-Z][A-Za-z0-9_]*)\s*}/g,
+    /\b(?:element|Component|component)\s*:\s*(?:<\s*)?([A-Z][A-Za-z0-9_]*)/g,
+  ];
+  for (const pattern of componentPatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(appContent)) !== null) {
+      if (match[1]) routeComponentNames.add(match[1]);
+    }
+  }
+
+  const importBindings = new Map<string, string>();
+  const importPattern = /import\s+([^;]+?)\s+from\s+["']([^"']+)["']/g;
+  let importMatch: RegExpExecArray | null;
+  while ((importMatch = importPattern.exec(appContent)) !== null) {
+    const bindings = importMatch[1]?.trim();
+    const importPath = importMatch[2];
+    if (!bindings || !importPath) continue;
+
+    const defaultBinding = bindings.split(",")[0]?.trim();
+    if (defaultBinding && /^[A-Z][A-Za-z0-9_]*$/.test(defaultBinding)) {
+      importBindings.set(defaultBinding, importPath);
+    }
+
+    const namedBindings = bindings.match(/\{([^}]+)\}/)?.[1];
+    if (namedBindings) {
+      for (const binding of namedBindings.split(",")) {
+        const localName = binding.trim().split(/\s+as\s+/i).pop()?.trim();
+        if (localName && /^[A-Z][A-Za-z0-9_]*$/.test(localName)) {
+          importBindings.set(localName, importPath);
+        }
+      }
+    }
+  }
+
+  const routeImportPaths: string[] = [];
+  for (const componentName of routeComponentNames) {
+    const importPath = importBindings.get(componentName);
+    if (importPath) routeImportPaths.push(importPath);
+  }
+
+  const lazyRoutePattern = /const\s+([A-Z][A-Za-z0-9_]*)\s*=\s*(?:React\.)?lazy\s*\(\s*(?:async\s*)?\(\s*\)\s*=>\s*import\s*\(\s*["']([^"']+)["']\s*\)/g;
+  let lazyMatch: RegExpExecArray | null;
+  while ((lazyMatch = lazyRoutePattern.exec(appContent)) !== null) {
+    if (lazyMatch[1] && routeComponentNames.has(lazyMatch[1]) && lazyMatch[2]) {
+      routeImportPaths.push(lazyMatch[2]);
+    }
+  }
+
+  const directDynamicImportPattern = /import\s*\(\s*["']([^"']+)["']\s*\)/g;
+  let dynamicMatch: RegExpExecArray | null;
+  while ((dynamicMatch = directDynamicImportPattern.exec(appContent)) !== null) {
+    if (dynamicMatch[1]) routeImportPaths.push(dynamicMatch[1]);
+  }
+
+  return uniquePaths(
+    routeImportPaths
+      .map(importPath => resolveLocalImportPath(importPath, appPath, blobPaths))
+      .filter((path): path is string => !!path && path !== appPath)
+  );
+}
+
+function getTopLevelSrcFallbackFiles(blobPaths: string[]): string[] {
+  const preferred = ["src/main.tsx", "src/main.jsx", "src/index.tsx", "src/index.jsx", "src/router.tsx", "src/router.jsx", "src/routes.tsx", "src/routes.jsx"];
+  const srcRootFiles = blobPaths
+    .filter(path => /^src\/[^/]+\.(tsx|jsx|ts|js)$/.test(path))
+    .filter(path => !APP_ENTRY_CANDIDATES.includes(path))
+    .sort((a, b) => a.localeCompare(b));
+
+  return uniquePaths([
+    ...preferred.filter(path => blobPaths.includes(path)),
+    ...srcRootFiles,
+  ]).slice(0, 5);
 }
 
 function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
@@ -480,12 +597,13 @@ router.post("/github/analyze", async (req, res): Promise<void> => {
 
   const { repo, branch = "main" } = req.body as { repo: string; branch?: string };
   if (!repo) { res.status(400).json({ error: "Missing repo" }); return; }
+  const headers = ghHeaders(token);
 
   // 1. Get file tree (main → master fallback)
   let blobPaths: string[] = [];
   let actualBranch = branch;
   for (const b of [branch, branch === "main" ? "master" : "main"]) {
-    const r = await fetch(`${GH_API}/repos/${repo}/git/trees/${b}?recursive=1`, { headers: ghHeaders(token) });
+    const r = await fetch(`${GH_API}/repos/${repo}/git/trees/${b}?recursive=1`, { headers });
     if (r.ok) {
       const data = await r.json() as any;
       blobPaths = (data.tree as any[]).filter(n => n.type === "blob").map(n => n.path as string);
@@ -495,11 +613,28 @@ router.post("/github/analyze", async (req, res): Promise<void> => {
   }
   if (blobPaths.length === 0) { res.status(404).json({ error: "Could not read repo tree" }); return; }
 
-  // 2. Identify key files in priority order
+  async function fetchRepoFileContent(path: string): Promise<string | null> {
+    try {
+      const r = await fetch(`${GH_API}/repos/${repo}/contents/${path}?ref=${actualBranch}`, { headers });
+      if (!r.ok) return null;
+      const data = await r.json() as any;
+      if (data.encoding !== "base64") return null;
+      return Buffer.from(data.content.replace(/\n/g, ""), "base64").toString("utf-8");
+    } catch {
+      return null;
+    }
+  }
+
+  // 2. Identify key files in priority order. Read App first so route files come from actual imports.
+  const appEntryPath = APP_ENTRY_CANDIDATES.find(path => blobPaths.includes(path));
+  const appEntryContent = appEntryPath ? await fetchRepoFileContent(appEntryPath) : null;
+  const routeFiles = appEntryPath && appEntryContent
+    ? findRouteFilePathsFromApp(appEntryPath, appEntryContent, blobPaths)
+    : [];
   const candidates = [
+    ...(appEntryPath ? [appEntryPath] : getTopLevelSrcFallbackFiles(blobPaths)),
     "package.json",
-    "src/App.tsx", "src/App.jsx", "src/app.tsx", "src/app.jsx",
-    "App.tsx", "App.jsx",
+    ...routeFiles,
     "src/main.tsx", "src/main.jsx", "src/index.tsx", "src/index.jsx",
     "src/router.tsx", "src/router.jsx", "src/routes.tsx", "src/routes.jsx",
     "src/routes/index.tsx",
@@ -517,26 +652,15 @@ router.post("/github/analyze", async (req, res): Promise<void> => {
   );
   if (storeFile) candidates.push(storeFile);
 
-  const toFetch = candidates.filter(p => blobPaths.includes(p)).slice(0, 7);
-
-  // Fallback: if no App found, try any capitalized tsx in src root
-  if (!toFetch.some(p => /app/i.test(p))) {
-    const fallback = blobPaths.find(p => /^src\/[A-Z][^/]+\.(tsx|jsx)$/.test(p));
-    if (fallback && !toFetch.includes(fallback)) toFetch.splice(1, 0, fallback);
-  }
+  const toFetch = uniquePaths(candidates.filter(p => blobPaths.includes(p))).slice(0, 7);
 
   // 3. Fetch all key files in parallel (250 lines max each)
   const fileResults = await Promise.all(
     toFetch.map(async (path) => {
-      try {
-        const r = await fetch(`${GH_API}/repos/${repo}/contents/${path}?ref=${actualBranch}`, { headers: ghHeaders(token) });
-        if (!r.ok) return null;
-        const data = await r.json() as any;
-        if (data.encoding !== "base64") return null;
-        const content = Buffer.from(data.content.replace(/\n/g, ""), "base64").toString("utf-8");
-        const lines = content.split("\n");
-        return { path, content: lines.slice(0, 250).join("\n"), truncated: lines.length > 250 };
-      } catch { return null; }
+      const content = path === appEntryPath && appEntryContent
+        ? appEntryContent
+        : await fetchRepoFileContent(path);
+      return content ? trimForPrompt(path, content) : null;
     })
   );
   const validFiles = fileResults.filter(Boolean) as { path: string; content: string; truncated: boolean }[];
