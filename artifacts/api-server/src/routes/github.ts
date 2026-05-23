@@ -59,6 +59,10 @@ function trimForPrompt(path: string, content: string, lineLimit = 250) {
   return { path, content: lines.slice(0, lineLimit).join("\n"), truncated: lines.length > lineLimit };
 }
 
+function fileNotFoundMessage(path: string): string {
+  return `File not found at ${path}. Use FILE_TREE_REQUEST to discover correct paths first.`;
+}
+
 function resolveLocalImportPath(importPath: string, fromFile: string, blobPaths: string[]): string | null {
   let basePath: string | null = null;
   if (importPath.startsWith(".")) {
@@ -396,7 +400,7 @@ router.get("/github/file", async (req, res): Promise<void> => {
 
   const resp = await fetch(`${GH_API}/repos/${repo}/contents/${filePath}?ref=${branch}`, { headers: ghHeaders(token) });
   if (resp.status === 404) {
-    res.status(404).json({ error: `File not found at ${filePath}. Use FILE_TREE_REQUEST to discover correct paths first.` });
+    res.status(404).json({ error: fileNotFoundMessage(filePath) });
     return;
   }
   if (!resp.ok) { res.status(resp.status).json({ error: "GitHub API error", detail: await resp.text() }); return; }
@@ -653,18 +657,29 @@ router.post("/github/analyze", async (req, res): Promise<void> => {
   async function fetchRepoFileContent(path: string): Promise<string | null> {
     try {
       const r = await fetch(`${GH_API}/repos/${repo}/contents/${path}?ref=${actualBranch}`, { headers });
+      if (r.status === 404) throw new GitHubApiError(404, fileNotFoundMessage(path));
       if (!r.ok) return null;
       const data = await r.json() as any;
       if (data.encoding !== "base64") return null;
       return Buffer.from(data.content.replace(/\n/g, ""), "base64").toString("utf-8");
-    } catch {
+    } catch (e) {
+      if (e instanceof GitHubApiError) throw e;
       return null;
     }
   }
 
   // 2. Identify key files in priority order. Read App first so route files come from actual imports.
   const appEntryPath = APP_ENTRY_CANDIDATES.find(path => blobPaths.includes(path));
-  const appEntryContent = appEntryPath ? await fetchRepoFileContent(appEntryPath) : null;
+  let appEntryContent: string | null;
+  try {
+    appEntryContent = appEntryPath ? await fetchRepoFileContent(appEntryPath) : null;
+  } catch (e) {
+    if (e instanceof GitHubApiError && e.status === 404) {
+      res.status(404).json({ error: e.detail });
+      return;
+    }
+    throw e;
+  }
   const routeFiles = appEntryPath && appEntryContent
     ? findRouteFilePathsFromApp(appEntryPath, appEntryContent, blobPaths)
     : [];
@@ -692,14 +707,23 @@ router.post("/github/analyze", async (req, res): Promise<void> => {
   const toFetch = uniquePaths(candidates.filter(p => blobPaths.includes(p))).slice(0, 7);
 
   // 3. Fetch all key files in parallel (250 lines max each)
-  const fileResults = await Promise.all(
-    toFetch.map(async (path) => {
-      const content = path === appEntryPath && appEntryContent
-        ? appEntryContent
-        : await fetchRepoFileContent(path);
-      return content ? trimForPrompt(path, content) : null;
-    })
-  );
+  let fileResults: Array<{ path: string; content: string; truncated: boolean } | null>;
+  try {
+    fileResults = await Promise.all(
+      toFetch.map(async (path) => {
+        const content = path === appEntryPath && appEntryContent
+          ? appEntryContent
+          : await fetchRepoFileContent(path);
+        return content ? trimForPrompt(path, content) : null;
+      })
+    );
+  } catch (e) {
+    if (e instanceof GitHubApiError && e.status === 404) {
+      res.status(404).json({ error: e.detail });
+      return;
+    }
+    throw e;
+  }
   const validFiles = fileResults.filter(Boolean) as { path: string; content: string; truncated: boolean }[];
 
   // 4. Build directory summary for context
