@@ -3517,4 +3517,59 @@ RULES:
   }
 });
 
+// ── Project Greeting — personalized opener from Atlas on workspace load ───────
+
+router.get("/projects/:id/greeting", async (req, res): Promise<void> => {
+  const projectId = parseInt(req.params.id, 10);
+  if (isNaN(projectId)) { res.status(400).json({ error: "Invalid project id" }); return; }
+
+  const userId = (req as any).authUser.id as number;
+
+  const [project] = await db
+    .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory, description: projectsTable.description })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)));
+
+  if (!project) { res.status(404).json({ error: "Not found" }); return; }
+
+  const store = parseMemoryStore(project.memory ?? null);
+  const intakeEntries = store.entries
+    .filter((e) => e.tier === 1 && e.text.startsWith("INTAKE:"))
+    .map((e) => e.text.replace(/^INTAKE:\s*/, ""));
+
+  let greeting: string;
+
+  if (intakeEntries.length > 0) {
+    const intakeSummary = intakeEntries.join("\n");
+    try {
+      const msg = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 180,
+        system: `You are Atlas — a strategic thinking partner inside Axiom. You're opening a project workspace. You already know key facts about this project from intake. Your job: write a single warm, sharp opening message that shows you know this project — without listing facts robotically. Acknowledge one specific thing you know, then ask one precise question to open the work. 2-3 sentences max. No greetings like "Hi" or "Hello". No fluff. Speak like a trusted partner who's been thinking about this.`,
+        messages: [{
+          role: "user",
+          content: `Project: ${project.name}\n\nWhat I know:\n${intakeSummary}\n\nWrite the opening message.`,
+        }],
+      });
+      greeting = msg.content.find((b) => b.type === "text")?.text?.trim() ?? fallbackGreeting(project.name);
+    } catch {
+      greeting = fallbackGreeting(project.name);
+    }
+  } else {
+    greeting = fallbackGreeting(project.name);
+  }
+
+  res.json({ message: greeting });
+});
+
+function fallbackGreeting(projectName: string): string {
+  const openers = [
+    `${projectName} is open. What's the tension you're carrying into this session?`,
+    `Back to ${projectName}. What's the thing you haven't said out loud yet?`,
+    `${projectName} is ready. Where do you want to start — the problem or the plan?`,
+    `Working on ${projectName}. What's the decision that's been sitting on the edge?`,
+  ];
+  return openers[Math.floor(Math.random() * openers.length)];
+}
+
 export default router;
