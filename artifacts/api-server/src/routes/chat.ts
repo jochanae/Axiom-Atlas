@@ -259,6 +259,41 @@ async function fetchRepoTree(fullName: string, token: string, branch = "main"): 
   }
 }
 
+type SrcTreeFile = { name: string; path: string };
+
+async function fetchSrcFileTree(
+  fullName: string,
+  token: string,
+  branch = "main"
+): Promise<{ branch: string; files: SrcTreeFile[]; truncated: boolean } | null> {
+  try {
+    for (const candidateBranch of [branch, branch === "main" ? "master" : "main"]) {
+      const resp = await fetch(`${GH_API}/repos/${fullName}/git/trees/${candidateBranch}?recursive=1`, { headers: ghHeaders(token) });
+      if (!resp.ok) continue;
+
+      const data = await resp.json() as { tree?: Array<{ path?: string; type?: string }>; truncated?: boolean };
+      const files = (data.tree ?? [])
+        .filter((item): item is { path: string; type: string } => item.type === "blob" && typeof item.path === "string" && item.path.startsWith("src/"))
+        .map(item => ({ name: item.path.split("/").pop() ?? item.path, path: item.path }))
+        .sort((a, b) => a.path.localeCompare(b.path));
+
+      return { branch: candidateBranch, files, truncated: !!data.truncated };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function formatSrcFileTree(fullName: string, tree: { branch: string; files: SrcTreeFile[]; truncated: boolean }): string {
+  const files = tree.files.map(file => `- ${file.path} (${file.name})`).join("\n");
+  return `${fullName} src/ tree (branch: ${tree.branch}, ${tree.files.length} files${tree.truncated ? ", truncated by GitHub" : ""}):\n${files || "[No files under src/]"}`;
+}
+
+function fileNotFoundMessage(path: string): string {
+  return `File not found at ${path}. Use FILE_TREE_REQUEST to discover correct paths first.`;
+}
+
 function formatCommitAge(timestamp: string, now: Date): string {
   const elapsedMs = now.getTime() - new Date(timestamp).getTime();
   const hours = Math.max(0, Math.floor(elapsedMs / (60 * 60 * 1000)));
@@ -817,7 +852,11 @@ Rules for FILE_READ:
 - Do NOT request files for planning/conceptual questions where you don't need the implementation.
 - The system fetches them from GitHub automatically and sends you a follow-up with the full content — you will then see the code and can respond with FILE_EDIT or a precise answer.
 - After receiving files you asked for, proceed immediately with your task (build, fix, explain the specific code). Do not ask for permission.
-- If the file tree isn't in context, ask the user to open a workspace with a linked repo first.`;
+- If the file tree isn't in context or you are unsure of the exact path, emit this exact line first:
+
+FILE_TREE_REQUEST:{}
+
+The system will return the recursive src/ file tree for the linked repo — file names and paths only, no content.`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export type MemoryChipRich = { label: string; insight?: string };
@@ -1037,6 +1076,13 @@ function extractFileReadRequest(content: string): { paths: string[]; cleanedCont
     }
   } catch { /* malformed JSON — ignore */ }
   return { paths: [], cleanedContent: content };
+}
+
+function extractFileTreeRequest(content: string): { requested: boolean; cleanedContent: string } {
+  const marker = "FILE_TREE_REQUEST:";
+  const idx = content.lastIndexOf(marker);
+  if (idx === -1) return { requested: false, cleanedContent: content };
+  return { requested: true, cleanedContent: content.slice(0, idx).trim() };
 }
 
 function detectMemoryChips(content: string): { content: string; memoryChips: MemoryChipRich[] } {
@@ -2938,6 +2984,41 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     assistantUsage = modelResult.usage;
     modelUsed = modelResult.model;
 
+    // FILE_TREE intercept — provide exact src/ paths before Atlas reads files
+    {
+      const { requested: treeRequested, cleanedContent: treeCleanedContent } = extractFileTreeRequest(rawContent);
+      if (treeRequested) {
+        let followUpUserContent: string;
+        if (!repoData?.fullName || !resolvedGithubToken) {
+          const reason = !repoData?.fullName
+            ? "No GitHub repo is linked to this project. The user needs to link a repo in the Files tab before you can inspect the file tree."
+            : "No GitHub token is available for this project. The user needs to add their personal GitHub token in the Files tab.";
+          followUpUserContent = `[FILE_TREE_FAILED] ${reason}\n\nTell the user this directly and clearly in one sentence. Do not try to read files yet.`;
+        } else {
+          const srcTree = await fetchSrcFileTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
+          followUpUserContent = srcTree
+            ? `[FILE_TREE_REQUESTED_BY_YOU]\n\n${formatSrcFileTree(repoData.fullName, srcTree)}\n\n[END FILE_TREE]\n\nUse these exact paths before emitting FILE_READ_REQUEST.`
+            : `[FILE_TREE_FAILED] Could not read the src/ directory tree for ${repoData.fullName}.\n\nTell the user this directly. Do not guess file paths.`;
+        }
+
+        const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+          ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+          { role: "assistant", content: treeCleanedContent },
+          { role: "user", content: followUpUserContent },
+        ];
+        if (activeModel === "claude") {
+          modelResult = await streamClaude(systemPrompt, followUpMessages, undefined, narrateToken);
+        } else if (activeModel === "gpt4o") {
+          modelResult = await streamGPT4o(systemPrompt, followUpMessages, undefined, narrateToken);
+        } else {
+          modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+        }
+        rawContent = modelResult.content;
+        assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
+        modelUsed = modelResult.model;
+      }
+    }
+
     // FILE_READ intercept — text-protocol fallback for direct path
     {
       const { paths: readPaths, cleanedContent: readCleanedContent } = extractFileReadRequest(rawContent);
@@ -2970,18 +3051,24 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
                     `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
                     { headers: ghHeaders(resolvedGithubToken!) }
                   );
-                  if (!r.ok) return null;
+                  if (r.status === 404) return { path: fp, error: fileNotFoundMessage(fp) };
+                  if (!r.ok) return { path: fp, error: `Could not read ${fp} from GitHub (${r.status}).` };
                   const d = await r.json() as { encoding?: string; content?: string };
-                  if (d.encoding !== "base64" || !d.content) return null;
+                  if (d.encoding !== "base64" || !d.content) return { path: fp, error: `Could not decode ${fp}.` };
                   const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
                   const lines = fileContent.split("\n");
                   const truncated = lines.length > 600;
                   return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : fileContent, truncated, lineCount: lines.length };
-                } catch { return null; }
+                } catch {
+                  return { path: fp, error: `Error reading ${fp} from GitHub.` };
+                }
               })
             );
             const validFiles = fetchedFiles.filter(
-              (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
+              (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => "content" in f
+            );
+            const fileErrors = fetchedFiles.filter(
+              (f): f is { path: string; error: string } => "error" in f
             );
 
             let followUpUserContent: string;
@@ -2990,12 +3077,21 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
               const filesSummary = validFiles
                 .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
                 .join("\n\n");
-              followUpUserContent = `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`;
+              const errorSummary = fileErrors
+                .map(f => `=== ${f.path} ===\n${f.error}`)
+                .join("\n\n");
+              followUpUserContent = [
+                `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]`,
+                errorSummary ? `[FILE_READ_ERRORS]\n\n${errorSummary}\n\n[END FILE_READ_ERRORS]` : "",
+                "You asked to read these files. Now proceed using the content above. If a requested path was not found, use FILE_TREE_REQUEST before trying another path.",
+              ].filter(Boolean).join("\n\n");
               narrate("Reading files and preparing response...");
             } else {
               // Case 2b: paths not found in the linked repo — tell Atlas clearly
-              const notFound = readPaths.join(", ");
-              followUpUserContent = `[FILE_READ_FAILED] The following paths were not found in the linked repo (${repoData!.fullName}, branch: ${repoData!.defaultBranch ?? "main"}): ${notFound}.\n\nPossible reasons: wrong path, wrong branch, or these files live in a different repo (e.g. the backend rather than the linked frontend repo).\n\nTell the user clearly which paths you tried and why they weren't found. Suggest the correct path if you can infer it from the file tree.`;
+              const errorSummary = fileErrors
+                .map(f => f.error)
+                .join("\n");
+              followUpUserContent = `[FILE_READ_FAILED]\n${errorSummary}\n\nTell the user clearly which path failed. If you still need the file, emit FILE_TREE_REQUEST before trying another path.`;
             }
 
             const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [

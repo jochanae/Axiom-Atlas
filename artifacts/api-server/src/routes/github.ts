@@ -391,6 +391,10 @@ router.get("/github/file", async (req, res): Promise<void> => {
   if (!repo || !filePath) { res.status(400).json({ error: "Missing repo or path param" }); return; }
 
   const resp = await fetch(`${GH_API}/repos/${repo}/contents/${filePath}?ref=${branch}`, { headers: ghHeaders(token) });
+  if (resp.status === 404) {
+    res.status(404).json({ error: `File not found at ${filePath}. Use FILE_TREE_REQUEST to discover correct paths first.` });
+    return;
+  }
   if (!resp.ok) { res.status(resp.status).json({ error: "GitHub API error", detail: await resp.text() }); return; }
 
   const data = await resp.json() as any;
@@ -402,6 +406,31 @@ router.get("/github/file", async (req, res): Promise<void> => {
   } else {
     res.status(422).json({ error: "File encoding not supported", encoding: data.encoding });
   }
+});
+
+// GET /api/github/src-tree — file names and paths under src/ only
+router.get("/github/src-tree", async (req, res): Promise<void> => {
+  const token = getToken(req);
+  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+
+  const { repo, branch = "main" } = req.query as { repo?: string; branch?: string };
+  if (!repo) { res.status(400).json({ error: "Missing repo param" }); return; }
+
+  for (const b of [branch, branch === "main" ? "master" : "main"]) {
+    const resp = await fetch(`${GH_API}/repos/${repo}/git/trees/${b}?recursive=1`, { headers: ghHeaders(token) });
+    if (!resp.ok) continue;
+
+    const data = await resp.json() as { tree?: Array<{ path?: string; type?: string }>; truncated?: boolean };
+    const files = (data.tree ?? [])
+      .filter((item): item is { path: string; type: string } => item.type === "blob" && typeof item.path === "string" && item.path.startsWith("src/"))
+      .map(item => ({ name: item.path.split("/").pop() ?? item.path, path: item.path }))
+      .sort((a, b) => a.path.localeCompare(b.path));
+
+    res.json({ repo, branch: b, files, truncated: !!data.truncated });
+    return;
+  }
+
+  res.status(404).json({ error: "Could not read repo tree" });
 });
 
 // GET /api/projects/:projectId/commits — recent commit history for the linked repo
