@@ -10,6 +10,8 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+const isNeon = process.env.DATABASE_URL?.includes("neon.tech");
+
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 10,
@@ -17,10 +19,15 @@ export const pool = new Pool({
   connectionTimeoutMillis: 10000,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  ssl: process.env.DATABASE_URL?.includes("neon.tech")
-    ? { rejectUnauthorized: false }
-    : undefined,
+  ssl: isNeon ? { rejectUnauthorized: false } : undefined,
 });
+
+// Log Neon SSL status once at startup
+if (isNeon) {
+  console.log("[db] Neon SSL enabled (rejectUnauthorized: false)");
+} else {
+  console.warn("[db] DATABASE_URL does not contain neon.tech — SSL config: undefined");
+}
 
 pool.on("error", (err) => {
   console.error("[db-pool] Unexpected error on idle client — connection will be replaced:", err.message);
