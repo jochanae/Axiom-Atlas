@@ -91,8 +91,8 @@ router.get("/auth/session/exchange", async (req, res): Promise<void> => {
   res.json({ ok: true });
 });
 
-// POST /api/auth/signup
-router.post("/auth/signup", async (req, res): Promise<void> => {
+// POST /api/auth/signup and /api/auth/register
+router.post(["/auth/signup", "/auth/register"], async (req, res): Promise<void> => {
   const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
   if (!checkRateLimit(ip)) { res.status(429).json({ error: "Too many attempts. Try again in 15 minutes." }); return; }
 
