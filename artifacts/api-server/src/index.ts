@@ -70,8 +70,13 @@ async function main() {
 
   const server = http.createServer(app);
 
-  // Initialize Terminal WebSocket server
-  initTerminalWs(server);
+  // Initialize Terminal WebSocket server (node-pty is a native module — skip gracefully if unavailable)
+  try {
+    initTerminalWs(server);
+    logger.info("Terminal WebSocket server initialized");
+  } catch (err) {
+    logger.warn({ err }, "Terminal WebSocket unavailable — node-pty not installed, skipping");
+  }
 
   server.listen(port, () => {
     console.log({ port }, "Server listening");

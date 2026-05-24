@@ -1,4 +1,12 @@
-import * as pty from "node-pty";
+import type * as PtyModule from "node-pty";
+import { createRequire } from "node:module";
+const _require = createRequire(import.meta.url);
+let pty: typeof PtyModule;
+try {
+  pty = _require("node-pty");
+} catch {
+  pty = null as any;
+}
 import { readlinkSync } from "fs";
 import { logger } from "./logger";
 import { evaluateTerminalRequest, type TerminalClassificationTier } from "./terminalExecution";
@@ -8,7 +16,7 @@ export type SafetyLevel = "full" | "nuclear";
 export type PtySession = {
   id: string;
   userId: number;
-  pty: pty.IPty;
+  pty: PtyModule.IPty;
   cwd: string;
   outputBuffer: string[];
   safety: SafetyLevel;
