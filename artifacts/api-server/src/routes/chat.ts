@@ -2424,6 +2424,7 @@ function extractFlowNodes(content: string): {
 }
 
 router.post("/chat", async (req, res): Promise<void> => {
+  try {
   const body = req.body as {
     sessionId?: number;
     projectId: number;
@@ -3527,6 +3528,10 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   narrate(nar.done);
   res.write(`event: done\ndata: ${JSON.stringify(finalPayload)}\n\n`);
   res.end();
+  } catch (err) {
+    logger.error({ err, stack: err instanceof Error ? err.stack : undefined }, "POST /chat fatal error");
+    throw err;
+  }
 });
 
 // ── Scenario keep — persist buffered scenario messages to session DB ──────────
