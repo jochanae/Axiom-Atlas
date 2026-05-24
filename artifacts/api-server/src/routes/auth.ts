@@ -100,29 +100,33 @@ router.post("/auth/signup", async (req, res): Promise<void> => {
   if (!email || !password) { res.status(400).json({ error: "Email and password are required" }); return; }
   if (password.length < 8) { res.status(400).json({ error: "Password must be at least 8 characters" }); return; }
 
-  const existing = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, email.toLowerCase())).limit(1);
-  if (existing.length > 0) { res.status(409).json({ error: "An account with this email already exists" }); return; }
+  try {
+    const existing = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, email.toLowerCase())).limit(1);
+    if (existing.length > 0) { res.status(409).json({ error: "An account with this email already exists" }); return; }
 
-  const passwordHash = await hashPassword(password);
-  // Only grant super_admin if SUPER_ADMIN_EMAIL env var is explicitly set and matches
-  const role = (SUPER_ADMIN_EMAIL && email.toLowerCase() === SUPER_ADMIN_EMAIL) ? "super_admin" : "user";
+    const passwordHash = await hashPassword(password);
+    // Only grant super_admin if SUPER_ADMIN_EMAIL env var is explicitly set and matches
+    const role = (SUPER_ADMIN_EMAIL && email.toLowerCase() === SUPER_ADMIN_EMAIL) ? "super_admin" : "user";
 
-  const [user] = await db.insert(usersTable).values({
-    email: email.toLowerCase(),
-    passwordHash,
-    name: name?.trim() || null,
-    role,
-    subscriptionTier: role === "super_admin" ? "founder" : "free",
-  }).returning();
+    const [user] = await db.insert(usersTable).values({
+      email: email.toLowerCase(),
+      passwordHash,
+      name: name?.trim() || null,
+      role,
+      subscriptionTier: role === "super_admin" ? "founder" : "free",
+    }).returning();
 
-  if (!user) { res.status(500).json({ error: "Failed to create account" }); return; }
+    if (!user) { res.status(500).json({ error: "Failed to create account" }); return; }
 
-  const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+    await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
-  createSessionCookie(token, res);
-  res.status(201).json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+    createSessionCookie(token, res);
+    res.status(201).json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+  } catch (err) {
+    res.status(500).json({ error: "Database error — please try again" });
+  }
 });
 
 // POST /api/auth/login
@@ -133,18 +137,22 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) { res.status(400).json({ error: "Email and password are required" }); return; }
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase())).limit(1);
-  if (!user || !user.passwordHash) { res.status(401).json({ error: "Invalid email or password" }); return; }
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase())).limit(1);
+    if (!user || !user.passwordHash) { res.status(401).json({ error: "Invalid email or password" }); return; }
 
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) { res.status(401).json({ error: "Invalid email or password" }); return; }
+    const valid = await verifyPassword(password, user.passwordHash);
+    if (!valid) { res.status(401).json({ error: "Invalid email or password" }); return; }
 
-  const token = randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
+    const token = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+    await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
-  createSessionCookie(token, res);
-  res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+    createSessionCookie(token, res);
+    res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+  } catch (err) {
+    res.status(500).json({ error: "Database error — please try again" });
+  }
 });
 
 // POST /api/auth/logout
