@@ -64,8 +64,7 @@ async function main() {
     if (isDuplicateTable) {
       logger.warn("Migration skipped — tables already exist in target database");
     } else {
-      logger.error({ err }, "Migration failed");
-      throw err;
+      logger.error({ err }, "Migration failed — continuing");
     }
   }
 
