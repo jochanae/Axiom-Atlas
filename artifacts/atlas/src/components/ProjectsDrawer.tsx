@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, Feather, Hammer, Compass, Archive, LayoutDashboard, Globe, Wand2, KeyRound } from "lucide-react";
+import { Plus, X, ChevronDown, ChevronRight, BookOpen, Inbox, Feather, Hammer, Compass, Archive, LayoutDashboard, Globe, Wand2, KeyRound, LayoutGrid } from "lucide-react";
 import { CompactReadinessRing } from "./ReadinessRing";
 
 export type DrawerProject = {
@@ -266,6 +266,9 @@ export function ProjectsDrawer({ open, onClose, projects, activeProjectId, onOpe
             <NavRow icon={<Wand2 size={14} strokeWidth={1.6} />} label="Quick Prompt" onClick={() => { onOpenQuickPrompt(); onClose(); }} />
           )}
           <NavRow icon={<Hammer size={14} strokeWidth={1.6} />} label="Workshop" onClick={() => navigate("/workshop")} />
+          {activeProjectId && (
+            <NavRow icon={<LayoutGrid size={14} strokeWidth={1.6} />} label="Workbench" onClick={() => { navigate(`/project/${activeProjectId}?tab=workbench`); onClose(); }} />
+          )}
           <NavRow icon={<Compass size={14} strokeWidth={1.6} />} label="Project Compass" onClick={() => navigate("/compass")} />
           <NavRow icon={<Archive size={14} strokeWidth={1.6} />} label="The Vault" onClick={() => navigate("/vault")} />
           <NavRow icon={<KeyRound size={14} strokeWidth={1.6} />} label="Secrets" onClick={() => navigate("/secrets")} />

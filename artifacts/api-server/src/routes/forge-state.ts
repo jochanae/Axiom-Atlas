@@ -39,12 +39,16 @@ router.post("/projects/:projectId/forge-state", async (req, res): Promise<void> 
         target: projectForgeStateTable.projectId,
         set: update,
       });
-    const rows = await db
-      .select()
-      .from(projectForgeStateTable)
-      .where(eq(projectForgeStateTable.projectId, projectId))
-      .limit(1);
-    res.json(rows[0] ?? { forged: false, dismissed: false });
+    try {
+      const rows = await db
+        .select()
+        .from(projectForgeStateTable)
+        .where(eq(projectForgeStateTable.projectId, projectId))
+        .limit(1);
+      res.json(rows[0] ?? { forged: false, dismissed: false });
+    } catch {
+      res.json({ forged: action === "forged", dismissed: action === "dismissed" });
+    }
   } catch {
     res.status(500).json({ error: "Failed to update forge state" });
   }

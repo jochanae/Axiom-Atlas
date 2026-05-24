@@ -7205,8 +7205,25 @@ function MobileTabBar({
   entryCount: number;
   activeCatch: boolean;
 }) {
-  const [, navTo] = useLocation();
-  const tabs: { id: "chat" | "ledger" | "files" | "map" | "preview" | "workbench"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const close = (e: MouseEvent | TouchEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setOverflowOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [overflowOpen]);
+
+  const mainTabs: { id: "chat" | "ledger" | "files" | "map"; label: string; icon: React.ReactNode; badge?: number; alert?: boolean }[] = [
     {
       id: "chat",
       label: "Chat",
@@ -7240,31 +7257,6 @@ function MobileTabBar({
       ),
     },
     {
-      id: "workbench",
-      label: "Workbench",
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="2" width="8" height="8" rx="1" />
-          <rect x="14" y="2" width="8" height="8" rx="1" />
-          <rect x="2" y="14" width="8" height="8" rx="1" />
-          <rect x="14" y="14" width="8" height="8" rx="1" />
-        </svg>
-      ),
-    },
-    {
-      id: "preview",
-      label: "Preview",
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="3" width="20" height="15" rx="2" />
-          <path d="M2 8h20" />
-          <circle cx="5" cy="5.5" r="0.9" fill="currentColor" opacity={0.5} />
-          <circle cx="8" cy="5.5" r="0.9" fill="currentColor" opacity={0.5} />
-          <path d="M8 22h8M12 18v4" />
-        </svg>
-      ),
-    },
-    {
       id: "map",
       label: "Flow",
       icon: (
@@ -7278,6 +7270,34 @@ function MobileTabBar({
           <line x1="18.5" y1="5.5" x2="13.5" y2="10.5" />
           <line x1="5.5" y1="18.5" x2="10.5" y2="13.5" />
           <line x1="18.5" y1="18.5" x2="13.5" y2="13.5" />
+        </svg>
+      ),
+    },
+  ];
+
+  const overflowTabs: { id: "preview" | "workbench"; label: string; icon: React.ReactNode }[] = [
+    {
+      id: "preview",
+      label: "Preview",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="3" width="20" height="15" rx="2" />
+          <path d="M2 8h20" />
+          <circle cx="5" cy="5.5" r="0.9" fill="currentColor" opacity={0.5} />
+          <circle cx="8" cy="5.5" r="0.9" fill="currentColor" opacity={0.5} />
+          <path d="M8 22h8M12 18v4" />
+        </svg>
+      ),
+    },
+    {
+      id: "workbench",
+      label: "Workbench",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="2" y="2" width="8" height="8" rx="1" />
+          <rect x="14" y="2" width="8" height="8" rx="1" />
+          <rect x="2" y="14" width="8" height="8" rx="1" />
+          <rect x="14" y="14" width="8" height="8" rx="1" />
         </svg>
       ),
     },
@@ -7301,13 +7321,13 @@ function MobileTabBar({
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
-      {tabs.map(({ id, label, icon, badge, alert }) => {
+      {mainTabs.map(({ id, label, icon, badge, alert }) => {
         const active = activeTab === id;
         return (
           <button
             key={id}
-            onClick={() => { if (id === "map") { navTo("/map"); } else { onTabChange(id); } }}
-            aria-label={id === "chat" ? "Open chat" : id === "ledger" ? "Open ledger" : id === "files" ? "Open files" : id === "preview" ? "Toggle preview" : id === "workbench" ? "Open workbench" : "Open map"}
+            onClick={() => onTabChange(id)}
+            aria-label={id === "chat" ? "Open chat" : id === "ledger" ? "Open ledger" : id === "files" ? "Open files" : "Open flow map"}
             style={{
               flex: 1,
               display: "flex",
@@ -7324,7 +7344,6 @@ function MobileTabBar({
               WebkitTapHighlightColor: "transparent",
             }}
           >
-            {/* Active indicator bar at top */}
             <div
               style={{
                 position: "absolute",
@@ -7337,7 +7356,6 @@ function MobileTabBar({
                 transition: "background 180ms ease",
               }}
             />
-            {/* Badge / alert dot */}
             {(badge !== undefined || alert) && (
               <div
                 style={{
@@ -7377,6 +7395,103 @@ function MobileTabBar({
           </button>
         );
       })}
+
+      {/* Overflow menu */}
+      <div style={{ flex: 1, position: "relative" }} ref={overflowRef}>
+        <button
+          onClick={() => setOverflowOpen((v) => !v)}
+          aria-label="More tabs"
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 3,
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            color: overflowOpen || activeTab === "preview" || activeTab === "workbench" ? "var(--atlas-gold)" : "var(--atlas-muted)",
+            transition: "color 180ms ease",
+            position: "relative",
+            WebkitTapHighlightColor: "transparent",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: "20%",
+              right: "20%",
+              height: 2,
+              borderRadius: "0 0 2px 2px",
+              background: activeTab === "preview" || activeTab === "workbench" ? "var(--atlas-gold)" : "transparent",
+              transition: "background 180ms ease",
+            }}
+          />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="5" r="1.5" />
+            <circle cx="12" cy="12" r="1.5" />
+            <circle cx="12" cy="19" r="1.5" />
+          </svg>
+          <span
+            style={{
+              fontSize: 9,
+              fontFamily: "var(--app-font-mono)",
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              lineHeight: 1,
+            }}
+          >
+            More
+          </span>
+        </button>
+
+        {overflowOpen && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 68,
+              right: 8,
+              background: "var(--atlas-surface)",
+              border: "1px solid var(--atlas-border)",
+              borderRadius: 10,
+              padding: "6px 0",
+              minWidth: 140,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+              zIndex: 300,
+            }}
+          >
+            {overflowTabs.map(({ id, label, icon }) => {
+              const active = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => { onTabChange(id); setOverflowOpen(false); }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    width: "100%",
+                    padding: "9px 14px",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: active ? "var(--atlas-gold)" : "var(--atlas-fg)",
+                    fontSize: 12,
+                    fontFamily: "var(--app-font-mono)",
+                    textAlign: "left",
+                  }}
+                >
+                  {icon}
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -7400,9 +7515,9 @@ function WorkspaceOnboardingCoach({
 
   const placement: Record<OnboardingCoachId, React.CSSProperties> = isMobile
     ? {
-        chat: { left: 8, bottom: 78, width: "30%" },
-        ledger: { left: "35%", bottom: 78, width: "30%" },
-        flow: { right: 8, bottom: 78, width: "30%" },
+        chat: { left: 8, bottom: 78, width: "22%" },
+        ledger: { left: "26%", bottom: 78, width: "22%" },
+        flow: { right: 8, bottom: 78, width: "22%" },
       }
     : {
         chat: { left: "6vw", bottom: 112, width: 260 },

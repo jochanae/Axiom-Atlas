@@ -49,23 +49,31 @@ function parseContextJson(raw: string): EntryContextResponse | null {
 
 // Verify that a project exists and is owned by the given userId.
 async function projectBelongsToUser(projectId: number, userId: number): Promise<boolean> {
-  const rows = await db
-    .select({ id: projectsTable.id })
-    .from(projectsTable)
-    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
-    .limit(1);
-  return rows.length > 0;
+  try {
+    const rows = await db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+      .limit(1);
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 // Verify that an entry exists and its project is owned by the given userId.
 async function entryBelongsToUser(entryId: number, userId: number): Promise<boolean> {
-  const rows = await db
-    .select({ id: entriesTable.id })
-    .from(entriesTable)
-    .innerJoin(projectsTable, eq(entriesTable.projectId, projectsTable.id))
-    .where(and(eq(entriesTable.id, entryId), eq(projectsTable.userId, userId)))
-    .limit(1);
-  return rows.length > 0;
+  try {
+    const rows = await db
+      .select({ id: entriesTable.id })
+      .from(entriesTable)
+      .innerJoin(projectsTable, eq(entriesTable.projectId, projectsTable.id))
+      .where(and(eq(entriesTable.id, entryId), eq(projectsTable.userId, userId)))
+      .limit(1);
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 // GET /api/entries/all — all committed entries for the user across all projects
