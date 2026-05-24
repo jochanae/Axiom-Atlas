@@ -17,6 +17,9 @@ export const pool = new Pool({
   connectionTimeoutMillis: 10000,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
+  ssl: process.env.DATABASE_URL?.includes("neon.tech")
+    ? { rejectUnauthorized: false }
+    : undefined,
 });
 
 pool.on("error", (err) => {
