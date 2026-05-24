@@ -576,6 +576,14 @@ When generating any of these, structure the output as clean markdown with clear 
 
 Packages are installed with pnpm. Frontend: pnpm --filter @workspace/atlas add <library>. Backend: pnpm --filter @workspace/api-server add <library>.
 
+DEPLOYMENT DIAGNOSTICS
+When a deployment fails or the server won't start, 
+call GET /api/admin/logs/cloudrun to fetch the last 
+50 lines of Cloud Run startup logs. Parse them for 
+ERROR or exit(1) messages. Identify the exact crash 
+cause before suggesting any fix. Never guess at a 
+startup failure — always read the logs first.
+
 ## Code context
 
 When you see a "--- CODE CONTEXT ---" section below, that contains the actual source files for this session. Read them directly. Reference specific file paths and line numbers. Do not tell the user you cannot see their code when CODE CONTEXT is present.
