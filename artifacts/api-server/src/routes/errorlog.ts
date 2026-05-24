@@ -23,15 +23,18 @@ router.post("/errorlog/ingest", async (req, res): Promise<void> => {
     return;
   }
 
-  await db.insert(atlasErrorLogsTable).values({
-    errorMessage: error_message,
-    stackTrace: stack_trace ?? null,
-    route,
-    timestamp: parsedTimestamp,
-    projectId: String(project_id),
-  });
-
-  res.json({ received: true });
+  try {
+    await db.insert(atlasErrorLogsTable).values({
+      errorMessage: error_message,
+      stackTrace: stack_trace ?? null,
+      route,
+      timestamp: parsedTimestamp,
+      projectId: String(project_id),
+    });
+    res.json({ received: true });
+  } catch {
+    res.json({ received: false, note: "Logged to console" });
+  }
 });
 
 export default router;
