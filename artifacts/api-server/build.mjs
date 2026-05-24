@@ -100,6 +100,8 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      "node-pty",
+      "ws",
     ],
     sourcemap: "linked",
     plugins: [

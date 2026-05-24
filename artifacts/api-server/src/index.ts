@@ -1,7 +1,9 @@
+import http from "http";
 import app from "./app";
 import { db } from "@workspace/db";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { logger } from "./lib/logger";
+import { initTerminalWs } from "./routes/terminalWs";
 
 const rawPort = process.env["PORT"];
 
@@ -67,7 +69,12 @@ async function main() {
     }
   }
 
-  app.listen(port, () => {
+  const server = http.createServer(app);
+
+  // Initialize Terminal WebSocket server
+  initTerminalWs(server);
+
+  server.listen(port, () => {
     console.log({ port }, "Server listening");
     // Signal readiness immediately
     if (process.send) process.send("ready");

@@ -15,9 +15,7 @@ export const artifactsTable = pgTable("artifacts", {
   sessionId: integer("session_id")
     .references(() => sessionsTable.id,
       { onDelete: "set null" }),
-  parentId: integer("parent_id")
-    .references(() => artifactsTable.id,
-      { onDelete: "set null" }),
+  parentId: integer("parent_id"), // self-reference enforced at DB level via migration
   type: text("type").notNull().default("document"),
   title: text("title").notNull(),
   content: text("content").notNull(),

@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import shellRouter from "./routes/shell";
 import terminalRouter from "./routes/terminal";
+import terminalWsRouter from "./routes/terminalWs";
 import { logger } from "./lib/logger";
 import { WebhookHandlers } from "./webhookHandlers";
 
@@ -84,6 +85,7 @@ app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 app.use("/api/shell", shellRouter);
 app.use("/api", terminalRouter);
+app.use("/api", terminalWsRouter);
 app.use("/api", router);
 
 export default app;

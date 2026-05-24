@@ -3215,7 +3215,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           reversible: responsePlan.reversible,
         });
         await db.insert(artifactsTable).values({
-          userId,
+          userId: userId!,
           projectId,
           sessionId,
           type: artifactType,
@@ -3283,7 +3283,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           // Auto-save generated image to Workbench as artifact
           try {
             await db.insert(artifactsTable).values({
-              userId,
+              userId: userId!,
               projectId,
               sessionId,
               type: "image_set",
