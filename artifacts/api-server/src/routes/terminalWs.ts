@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { WebSocketServer, WebSocket } from "ws";
+import { db, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { getUserFromCookie } from "./auth";
 import {
@@ -40,6 +42,7 @@ export function initTerminalWs(server: import("http").Server): WebSocketServer {
 
   wss.on("connection", (ws: WebSocket, req: Request) => {
     const userId = (req as any).authUser?.id as number | undefined;
+    const userSafety = (req as any).authUser?.terminalSafety as "full" | "nuclear" | undefined;
     if (!userId) {
       ws.close(4001, "Unauthorized");
       return;
@@ -72,7 +75,7 @@ export function initTerminalWs(server: import("http").Server): WebSocketServer {
       try {
         const text = Buffer.isBuffer(raw) ? raw.toString("utf-8") : String(raw);
         const msg = JSON.parse(text) as WsMessage;
-        handleMessage(client, msg);
+        handleMessage(client, msg, userSafety ?? "full");
       } catch (err) {
         ws.send(JSON.stringify({ type: "error", text: "Invalid message format" }));
       }
@@ -137,10 +140,10 @@ export function initTerminalWs(server: import("http").Server): WebSocketServer {
   return wss;
 }
 
-function handleMessage(client: TerminalWsClient, msg: WsMessage): void {
+function handleMessage(client: TerminalWsClient, msg: WsMessage, userSafety: SafetyLevel = "full"): void {
   switch (msg.type) {
     case "input":
-      handleInput(client, msg.data ?? "");
+      handleInput(client, msg.data ?? "", userSafety);
       break;
     case "resize":
       handleResize(client, msg.cols ?? 120, msg.rows ?? 30);
@@ -149,7 +152,7 @@ function handleMessage(client: TerminalWsClient, msg: WsMessage): void {
       handleSafety(client, msg.safety ?? "full");
       break;
     case "exec":
-      handleExec(client, msg.command ?? "", msg.timeout ?? 30000);
+      handleExec(client, msg.command ?? "", msg.timeout ?? 30000, userSafety);
       break;
     case "kill":
       handleKill(client);
@@ -159,9 +162,9 @@ function handleMessage(client: TerminalWsClient, msg: WsMessage): void {
   }
 }
 
-function getSession(client: TerminalWsClient) {
+function getSession(client: TerminalWsClient, userSafety: SafetyLevel = "full") {
   if (!client.sessionId) {
-    const session = getOrCreatePtySession(client.userId, "full");
+    const session = getOrCreatePtySession(client.userId, userSafety);
     client.sessionId = session.id;
     session.onOutput = (text: string) => {
       if (client.ws.readyState === WebSocket.OPEN) {
@@ -177,7 +180,7 @@ function getSession(client: TerminalWsClient) {
   }
   const session = getPtySessionForUser(client.userId);
   if (!session) {
-    const newSession = getOrCreatePtySession(client.userId, "full");
+    const newSession = getOrCreatePtySession(client.userId, userSafety);
     client.sessionId = newSession.id;
     newSession.onOutput = (text: string) => {
       if (client.ws.readyState === WebSocket.OPEN) {
@@ -189,8 +192,8 @@ function getSession(client: TerminalWsClient) {
   return session;
 }
 
-function handleInput(client: TerminalWsClient, data: string): void {
-  const session = getSession(client);
+function handleInput(client: TerminalWsClient, data: string, userSafety: SafetyLevel = "full"): void {
+  const session = getSession(client, userSafety);
   ptyWrite(session.id, data);
 }
 
@@ -205,23 +208,23 @@ function handleSafety(client: TerminalWsClient, safety: SafetyLevel): void {
   client.ws.send(JSON.stringify({ type: "status", text: `Safety set to ${safety}` }));
 }
 
-async function handleExec(client: TerminalWsClient, command: string, timeout: number): Promise<void> {
-  if (!client.sessionId) return;
-  try {
-    const result = await ptyExecCommand(client.sessionId, command, timeout);
-    client.ws.send(JSON.stringify({
-      type: "exec-done",
-      command,
-      output: result.output,
-      exitCode: result.exitCode,
-    }));
-  } catch (err: any) {
-    client.ws.send(JSON.stringify({
-      type: "exec-error",
-      command,
-      error: err.message ?? String(err),
-    }));
-  }
+function handleExec(client: TerminalWsClient, command: string, timeoutMs: number, userSafety: SafetyLevel = "full"): void {
+  const session = getSession(client, userSafety);
+  ptyExecCommand(session.id, command, timeoutMs)
+    .then((result) => {
+      client.ws.send(JSON.stringify({
+        type: "exec-done",
+        command,
+        output: result.output,
+        exitCode: result.exitCode,
+      }));
+    })
+    .catch((err: any) => {
+      client.ws.send(JSON.stringify({
+        type: "error",
+        text: err?.message ?? "Execution failed",
+      }));
+    });
 }
 
 function handleKill(client: TerminalWsClient): void {
@@ -241,7 +244,7 @@ router.get("/terminal/safety", async (req: Request, res: Response): Promise<void
   if (!user) { res.status(401).json({ error: "Authentication required" }); return; }
   const session = getPtySessionForUser(user.id);
   res.json({
-    safety: session?.safety ?? "full",
+    safety: session?.safety ?? user.terminalSafety ?? "full",
     connected: !!session,
   });
 });
@@ -255,11 +258,13 @@ router.post("/terminal/safety", async (req: Request, res: Response): Promise<voi
     res.status(400).json({ error: "Invalid safety level. Use 'full' or 'nuclear'." });
     return;
   }
+  // Persist to DB
+  await db.update(usersTable).set({ terminalSafety: safety }).where(eq(usersTable.id, user.id));
   const session = getPtySessionForUser(user.id);
   if (session) {
     setPtySafety(session.id, safety);
   }
-  res.json({ safety, applied: !!session });
+  res.json({ safety, applied: true });
 });
 
 export default router;

@@ -11,6 +11,7 @@ export const usersTable = pgTable("users", {
   avatarUrl: text("avatar_url"),
   role: text("role").notNull().default("user"),
   subscriptionTier: text("subscription_tier").notNull().default("free"),
+  terminalSafety: text("terminal_safety").notNull().default("full"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
   resetToken: text("reset_token"),

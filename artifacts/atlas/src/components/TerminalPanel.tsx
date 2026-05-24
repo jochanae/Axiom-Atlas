@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
+import { WebLinksAddon } from "xterm-addon-web-links";
 import "xterm/css/xterm.css";
 import { useThemeMode } from "@/lib/theme";
 
@@ -141,7 +142,9 @@ export default function TerminalPanel({
     });
 
     const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon();
     term.loadAddon(fitAddon);
+    term.loadAddon(webLinksAddon);
     term.open(terminalRef.current);
     fitAddon.fit();
 
@@ -215,15 +218,36 @@ export default function TerminalPanel({
       term.write("\r\n\x1b[91m[Connection error]\x1b[0m\r\n");
     };
 
-    // Wire xterm input to WebSocket
+    // Wire xterm input to WebSocket with smart copy/paste
     const disposable = term.onData((data) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "input", data }));
       }
     });
 
+    // Custom key handler: Ctrl+C copy when selection exists, otherwise send Ctrl+C (SIGINT)
+    const handleCustomKey = term.onKey((e) => {
+      const isCopy = (e.domEvent.ctrlKey || e.domEvent.metaKey) && e.domEvent.key === "c";
+      const isPaste = (e.domEvent.ctrlKey || e.domEvent.metaKey) && e.domEvent.key === "v";
+      if (isCopy && term.hasSelection()) {
+        e.domEvent.preventDefault();
+        navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+        return;
+      }
+      if (isPaste) {
+        e.domEvent.preventDefault();
+        navigator.clipboard.readText().then((text) => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "input", data: text }));
+          }
+        }).catch(() => {});
+        return;
+      }
+    });
+
     return () => {
       disposable.dispose();
+      handleCustomKey.dispose();
       ws.close();
       wsRef.current = null;
     };

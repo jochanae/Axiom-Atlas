@@ -15,6 +15,11 @@ import {
   parseTerminalTier,
   type TerminalTier,
 } from "../lib/terminalExecution";
+import {
+  getOrCreatePtySession,
+  getPtySessionForUser,
+  ptyExecCommand,
+} from "../lib/ptySession";
 import { prepareProjectRepo } from "../lib/terminalSandbox";
 import { inspectSchema, formatSchemaForPrompt } from "../lib/schemaInspector";
 
@@ -389,24 +394,42 @@ async function runChatTerminalCommand(
     return { terminalCmd, terminalResult: null };
   }
 
-  let cwd: string | undefined;
-  if (projectId && userId) {
+  // Route through the persistent PTY session so cd/env persists across commands
+  if (userId) {
+    const existing = getPtySessionForUser(userId);
+    const session = existing ?? getOrCreatePtySession(userId, "full");
     try {
-      const { sandboxDir } = await prepareProjectRepo(projectId, userId);
-      cwd = sandboxDir;
+      const result = await ptyExecCommand(session.id, requested.command, 30000);
+      return {
+        terminalCmd,
+        terminalResult: {
+          command: requested.command,
+          output: result.output,
+          exitCode: result.exitCode,
+          tier: resolvedTier,
+        },
+      };
     } catch (err) {
-      logger.error({ err, projectId, userId }, "prepareProjectRepo failed in runChatTerminalCommand");
+      const msg = err instanceof Error ? err.message : "Command failed";
+      return {
+        terminalCmd,
+        terminalResult: {
+          command: requested.command,
+          output: msg,
+          exitCode: 1,
+          tier: resolvedTier,
+        },
+      };
     }
-  } else {
-    logger.warn({ projectId, userId }, "runChatTerminalCommand called without projectId or userId");
   }
 
+  // Fallback: fresh process (no PTY session available, e.g. unauthenticated)
   const result = await executeTerminalCommand(requested.command, {
     onStart: () => {},
     onStdout: () => {},
     onStderr: () => {},
     onProcess: () => {},
-  }, { cwd });
+  });
 
   return {
     terminalCmd,
@@ -3264,37 +3287,82 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       const isCinematic = /cinematic|hero/i.test(message);
       const isBlueprint = /blueprint|breakdown|spec|sheet|multi.*panel/i.test(message);
       const baseSubject = message.replace(IMAGE_REQUEST_RE, "").trim() || message;
-      const imagePrompt = isCinematic
-        ? `${baseSubject}. Single cinematic hero shot. Premium product photography. Studio lighting. Ultra-detailed materials and surfaces. Pure white background. No text overlays. Award-winning industrial design aesthetic.`
-        : isBlueprint
-        ? `${baseSubject}. Multi-panel product design sheet. Include: front view, side view, back/reverse angle, close-up of key interaction point, small UI/display detail, dimensions callouts, material annotations. Technical illustration style. Clean white background. Professional product specification sheet layout.`
-        : `${baseSubject}. Clean, professional style. Premium product photography.`;
       try {
-        const imgResponse = await genai.models.generateContent({
-          model: "gemini-2.0-flash-exp",
-          contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
-          config: { responseModalities: ["IMAGE", "TEXT"] },
-        });
-        const parts = imgResponse.candidates?.[0]?.content?.parts ?? [];
-        const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
-        if (imgPart?.inlineData) {
-          imageB64 = imgPart.inlineData.data as string;
-          imageMimeType = imgPart.inlineData.mimeType as string;
-          // Auto-save generated image to Workbench as artifact
-          try {
-            await db.insert(artifactsTable).values({
-              userId: userId!,
-              projectId,
-              sessionId,
-              type: "image_set",
-              title: `Generated visual \u2014 ${baseSubject.slice(0, 60)}`,
-              content: JSON.stringify({ images: [{ b64: imageB64, mime: imageMimeType, style: isCinematic ? "cinematic" : isBlueprint ? "blueprint" : "standard" }] }),
-              status: "draft",
-              pinned: false,
-              sources: { model: "gemini-2.0-flash-exp", promptType: isCinematic ? "cinematic" : isBlueprint ? "blueprint" : "standard" },
-            });
-          } catch (err) {
-            logger.warn({ err }, "Failed to auto-save image artifact");
+        if (isBlueprint) {
+          // Multi-panel: parallel generations for different views
+          const panels = [
+            { prompt: `${baseSubject}. Product front view. Studio lighting. Clean white background.`, style: "front" },
+            { prompt: `${baseSubject}. Product side view. Studio lighting. Clean white background.`, style: "side" },
+            { prompt: `${baseSubject}. Product close-up of key interaction point. Macro detail. Studio lighting. Clean white background.`, style: "detail" },
+            { prompt: `${baseSubject}. Product in context/environment. User interaction scenario. Studio lighting. Clean white background.`, style: "context" },
+          ];
+          const panelResults = await Promise.all(
+            panels.map(async (panel) => {
+              try {
+                const r = await genai.models.generateContent({
+                  model: "gemini-2.5-flash-preview-05-20",
+                  contents: [{ role: "user", parts: [{ text: panel.prompt }] }],
+                  config: { responseModalities: ["IMAGE", "TEXT"] },
+                });
+                const parts = r.candidates?.[0]?.content?.parts ?? [];
+                const img = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+                if (img?.inlineData) {
+                  return { b64: img.inlineData.data as string, mime: img.inlineData.mimeType as string, style: panel.style };
+                }
+              } catch { /* one panel fails silently */ }
+              return null;
+            })
+          );
+          const images = panelResults.filter(Boolean) as Array<{ b64: string; mime: string; style: string }>;
+          if (images.length > 0) {
+            imageB64 = images[0].b64;
+            imageMimeType = images[0].mime;
+            try {
+              await db.insert(artifactsTable).values({
+                userId: userId!,
+                projectId,
+                sessionId,
+                type: "image_set",
+                title: `Generated set \u2014 ${baseSubject.slice(0, 60)}`,
+                content: JSON.stringify({ images }),
+                status: "draft",
+                pinned: false,
+                sources: { model: "gemini-2.5-flash-preview-05-20", promptType: "multi-panel", panelCount: images.length },
+              });
+            } catch (err) {
+              logger.warn({ err }, "Failed to auto-save image set artifact");
+            }
+          }
+        } else {
+          // Single image (cinematic or standard)
+          const imagePrompt = isCinematic
+            ? `${baseSubject}. Single cinematic hero shot. Premium product photography. Studio lighting. Ultra-detailed materials and surfaces. Pure white background. No text overlays. Award-winning industrial design aesthetic.`
+            : `${baseSubject}. Clean, professional style. Premium product photography.`;
+          const imgResponse = await genai.models.generateContent({
+            model: "gemini-2.5-flash-preview-05-20",
+            contents: [{ role: "user", parts: [{ text: imagePrompt }] }],
+            config: { responseModalities: ["IMAGE", "TEXT"] },
+          });
+          const parts = imgResponse.candidates?.[0]?.content?.parts ?? [];
+          const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+          if (imgPart?.inlineData) {
+            imageB64 = imgPart.inlineData.data as string;
+            imageMimeType = imgPart.inlineData.mimeType as string;
+            try {
+              await db.insert(artifactsTable).values({
+                userId: userId!,
+                projectId,
+                sessionId,
+                type: "image_set",
+                title: `Generated visual \u2014 ${baseSubject.slice(0, 60)}`,
+                content: JSON.stringify({ images: [{ b64: imageB64, mime: imageMimeType, style: isCinematic ? "cinematic" : "standard" }] }),
+                status: "draft",
+                pinned: false,
+                sources: { model: "gemini-2.5-flash-preview-05-20", promptType: isCinematic ? "cinematic" : "standard" },
+              });
+            } catch (err) {
+              logger.warn({ err }, "Failed to auto-save image artifact");
+            }
           }
         }
       } catch (imgErr) {

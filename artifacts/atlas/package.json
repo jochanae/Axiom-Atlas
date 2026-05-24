@@ -82,6 +82,7 @@
   },
   "dependencies": {
     "html2pdf.js": "^0.14.0",
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.1",
+    "xterm-addon-web-links": "^0.9.0"
   }
 }
