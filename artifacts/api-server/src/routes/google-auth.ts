@@ -31,7 +31,9 @@ function getRedirectUri(req?: import("express").Request) {
   const appUrl = process.env.APP_URL?.trim();
   if (appUrl) {
     const url = new URL(appUrl);
-    return `${url.protocol.replace(/:$/, "")}://${url.host}/api/auth/google/callback`;
+    // Strip www. to match Google Console registered URI
+    const host = url.host.replace(/^www\./, "");
+    return `${url.protocol.replace(/:$/, "")}://${host}/api/auth/google/callback`;
   }
   return `${protocol}://localhost:80/api/auth/google/callback`;
 }
