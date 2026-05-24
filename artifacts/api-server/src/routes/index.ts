@@ -24,6 +24,7 @@ import terminalRouter from "./terminal";
 import galleryRouter from "./gallery";
 import storageRouter from "./storage";
 import errorlogRouter from "./errorlog";
+import cloudlogsRouter from "./cloudlogs";
 import selfmapRouter from "./selfmap";
 import forgeStateRouter from "./forge-state";
 import serverApiRouter from "./server-api";
@@ -94,5 +95,6 @@ router.use(requireAuth, artifactsRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);
+router.use(requireAdmin, cloudlogsRouter);
 
 export default router;
