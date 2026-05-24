@@ -123,7 +123,7 @@ router.post(["/auth/signup", "/auth/register"], async (req, res): Promise<void> 
     await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
     createSessionCookie(token, res);
-    res.status(201).json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+    res.status(201).json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, sessionToken: token });
   } catch (err) {
     res.status(500).json({ error: "Database error — please try again" });
   }
@@ -149,7 +149,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
     createSessionCookie(token, res);
-    res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+    res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, sessionToken: token });
   } catch (err) {
     res.status(500).json({ error: "Database error — please try again" });
   }
