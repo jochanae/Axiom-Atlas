@@ -126,3 +126,9 @@ id = "KxC6nlC9oiST-4OItvOqF"
 uri = "file://cursor-prompts/zip-upload-surface.md"
 type = "text"
 title = "ZIP Upload — surface in Files tab (no GitHub needed)"
+
+[[outputs]]
+id = "EqfT33rjXB-oTpZASuJ6u"
+uri = "file://.local/WorkbenchPanel.tsx.txt"
+type = "text"
+title = "WorkbenchPanel.tsx — download and copy to atlas-idk"
