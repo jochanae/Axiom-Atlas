@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
-import { sql } from "drizzle-orm";
-import { db } from "@workspace/db";
+import { sql, eq } from "drizzle-orm";
+import { db, usersTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -50,6 +50,40 @@ router.get("/health", async (_req, res): Promise<void> => {
 router.get("/healthz", (_req, res) => {
   const data = HealthCheckResponse.parse({ status: "ok" });
   res.json(data);
+});
+
+// DIAGNOSTIC: raw database query test — returns full error object
+router.get("/diag/db-test", async (_req, res): Promise<void> => {
+  try {
+    const result = await db.execute(sql`SELECT id, email FROM users LIMIT 1`);
+    res.json({ ok: true, rows: result.rows?.length || 0 });
+  } catch (err: any) {
+    res.status(500).json({
+      ok: false,
+      message: err?.message,
+      code: err?.code,
+      causeMessage: err?.cause?.message,
+      causeCode: err?.cause?.code,
+      full: String(err),
+    });
+  }
+});
+
+// DIAGNOSTIC: query-builder test — same pattern as login
+router.get("/diag/db-select", async (_req, res): Promise<void> => {
+  try {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, "test@test.com")).limit(1);
+    res.json({ ok: true, found: !!user });
+  } catch (err: any) {
+    res.status(500).json({
+      ok: false,
+      message: err?.message,
+      code: err?.code,
+      causeMessage: err?.cause?.message,
+      causeCode: err?.cause?.code,
+      full: String(err),
+    });
+  }
 });
 
 export default router;
