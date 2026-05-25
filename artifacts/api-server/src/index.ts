@@ -1,7 +1,7 @@
 import http from "http";
 import app from "./app";
 import { db } from "@workspace/db";
-import { migrate } from "drizzle-orm/neon-http/migrator";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { logger } from "./lib/logger";
 import { initTerminalWs } from "./routes/terminalWs";
 
