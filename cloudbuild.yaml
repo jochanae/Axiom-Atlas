@@ -1,50 +1,49 @@
 steps:
-    - name: "gcr.io/cloud-builders/docker"
-      args:
-        ["build", "-t", "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA", "."]
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      ["build", "-t", "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA", "."]
 
-    - name: "gcr.io/cloud-builders/docker"
-      args: ["push", "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA"]
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA"]
 
-    - name: "gcr.io/cloud-builders/gcloud"
-      args:
-        - "run"
-        - "deploy"
-        - "axiom-atlas"
-        - "--image"
-        - "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA"
-        - "--region"
-        - "us-east1"
-        - "--platform"
-        - "managed"
-        - "--allow-unauthenticated"
-        - "--timeout"
-        - "300"
-        - "--memory"
-        - "1Gi"
-        - "--cpu"
-        - "1"
-        - "--max-instances"
-        - "10"
-        - "--no-traffic"
-      id: "deploy-new-revision"
+  - name: "gcr.io/cloud-builders/gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "axiom-atlas"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA"
+      - "--region"
+      - "us-east1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--timeout"
+      - "300"
+      - "--memory"
+      - "1Gi"
+      - "--cpu"
+      - "1"
+      - "--max-instances"
+      - "10"
+      - "--no-traffic"
+    id: "deploy-new-revision"
 
-    - name: "gcr.io/cloud-builders/gcloud"
-      args:
-        - "run"
-        - "services"
-        - "update-traffic"
-        - "axiom-atlas"
-        - "--region"
-        - "us-east1"
-        - "--to-latest"
-        - "--platform"
-        - "managed"
-      id: "route-traffic"
+  - name: "gcr.io/cloud-builders/gcloud"
+    args:
+      - "run"
+      - "services"
+      - "update-traffic"
+      - "axiom-atlas"
+      - "--region"
+      - "us-east1"
+      - "--to-latest"
+      - "--platform"
+      - "managed"
+    id: "route-traffic"
 
-  images:
-    - "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA"
+images:
+  - "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA"
 
-  options:
-    logging: CLOUD_LOGGING_ONLY
-  
+options:
+  logging: CLOUD_LOGGING_ONLY
