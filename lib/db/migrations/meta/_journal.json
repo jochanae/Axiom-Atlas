@@ -127,6 +127,27 @@
       "when": 1779128800000,
       "tag": "0017_project_last_opened_at",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779273600000,
+      "tag": "0018_add_artifacts_and_linkedrepos",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779360000000,
+      "tag": "0019_workbench_enhancements",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779446400000,
+      "tag": "0020_users_missing_columns",
+      "breakpoints": true
     }
   ]
 }
