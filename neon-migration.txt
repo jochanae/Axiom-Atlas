@@ -1,0 +1,12 @@
+-- Migration 0020: Add missing columns to users table
+-- Run this in the Neon SQL Editor (neon.tech) for the production database
+-- Created: 2026-05-25
+
+ALTER TABLE "users"
+  ADD COLUMN IF NOT EXISTS "terminal_safety" text NOT NULL DEFAULT 'full',
+  ADD COLUMN IF NOT EXISTS "reset_token" text,
+  ADD COLUMN IF NOT EXISTS "reset_token_expires_at" timestamp with time zone;
+
+-- Verify:
+-- \d users
+-- You should see all 16 columns including terminal_safety, reset_token, reset_token_expires_at
