@@ -76,7 +76,7 @@ export function redactToken(text: string, token: string | null): string {
 
 export function buildCloneUrl(repo: ParsedLinkedRepo, token: string | null): string {
   return token
-    ? `https://${encodeURIComponent(token)}@github.com/${repo.fullName}.git`
+    ? `https://${token}@github.com/${repo.fullName}.git`
     : `https://github.com/${repo.fullName}.git`;
 }
 
@@ -159,7 +159,8 @@ export async function prepareProjectRepo(projectId: number, userId: number, opti
   const repo = parseLinkedRepo(project.linkedRepo ?? null);
   if (!repo) throw new TerminalHttpError(400, NO_LINKED_REPO_MESSAGE);
 
-  const githubToken = await resolveGithubTokenForRequest(userId, project.githubToken ?? null);
+  const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project.githubToken ?? null);
+  const githubToken = resolvedGithubToken?.startsWith("enc:") ? decryptToken(resolvedGithubToken) : resolvedGithubToken;
   const sandboxDir = `${SANDBOX_ROOT}/${projectId}`;
   const cloneUrl = buildCloneUrl(repo, githubToken);
 
