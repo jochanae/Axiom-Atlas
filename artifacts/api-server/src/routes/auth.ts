@@ -158,7 +158,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     createSessionCookie(token, res);
     res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, sessionToken: token, token });
   } catch (err: any) {
-    console.error("[AUTH LOGIN DB ERROR]", err?.message, err?.code, err?.cause?.message);
+    const fullErr = JSON.stringify({
+      message: err?.message,
+      code: err?.code,
+      causeMessage: err?.cause?.message,
+      causeCode: err?.cause?.code,
+      stack: err?.stack?.split('\n')?.slice(0,3),
+    });
+    console.error("[AUTH LOGIN DB ERROR]", fullErr);
     res.status(500).json({ error: "Database error — please try again", detail: err?.message || String(err) });
   }
 });
