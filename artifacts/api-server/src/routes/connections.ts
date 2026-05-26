@@ -120,6 +120,14 @@ router.post("/connections", async (req, res): Promise<void> => {
   let metadata: Record<string, unknown> | null = null;
 
   if (body.type === "github") {
+    // Upsert — clear stale github connections first
+    await db
+      .delete(connectionsTable)
+      .where(and(
+        eq(connectionsTable.userId, userId),
+        eq(connectionsTable.type, "github")
+      ));
+
     // If a PAT is provided, store it encrypted so resolveGithubTokenForRequest can use it
     if (body.token) {
       token = encryptToken(body.token);
