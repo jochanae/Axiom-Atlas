@@ -93,7 +93,7 @@ async function resolveGithubTokenForRequest(
 /** Resolve token: use the header value unless it's the sentinel "__server__", then fall back to env var. */
 function getToken(req: { headers: Record<string, string | string[] | undefined> }): string | null {
   const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
-  if (h && h !== "__server__") return h;
+  if (h && h !== "__server__" && h !== "__account__") return h;
   return process.env.GITHUB_TOKEN ?? null;
 }
 
@@ -247,7 +247,7 @@ router.get("/github/repos", async (req, res): Promise<void> => {
   // Priority: explicit header token → account connection → project tokens → server env
   const headerToken = (() => {
     const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
-    return (h && h !== "__server__") ? h : null;
+    return (h && h !== "__server__" && h !== "__account__") ? h : null;
   })();
 
   const token = headerToken ?? (userId ? await resolveGithubTokenForRequest(userId, null) : null) ?? process.env.GITHUB_TOKEN ?? null;
