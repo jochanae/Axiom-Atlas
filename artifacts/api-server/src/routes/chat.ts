@@ -2716,14 +2716,45 @@ router.post("/chat", async (req, res): Promise<void> => {
                 `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
                 { headers: ghHeaders(resolvedGithubToken) }
               );
-              if (!r.ok) return null;
+              if (!r.ok) {
+                let errorMessage = r.statusText || "GitHub file read failed";
+                try {
+                  const errorBody = await r.json() as { message?: string };
+                  errorMessage = errorBody.message ?? errorMessage;
+                } catch {
+                  // Keep the original status text if the error body is not JSON.
+                }
+                console.error("[chat:auto-fetch-file-read-empty]", {
+                  repo: repoData!.fullName,
+                  path: fp,
+                  status: r.status,
+                  errorMessage,
+                });
+                return null;
+              }
               const d = await r.json() as { encoding?: string; content?: string };
-              if (d.encoding !== "base64" || !d.content) return null;
+              if (d.encoding !== "base64" || !d.content) {
+                console.error("[chat:auto-fetch-file-read-empty]", {
+                  repo: repoData!.fullName,
+                  path: fp,
+                  status: r.status,
+                  errorMessage: d.encoding !== "base64" ? `Unexpected encoding: ${d.encoding ?? "missing"}` : "Missing file content",
+                });
+                return null;
+              }
               const content = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
               const lines = content.split("\n");
               const truncated = lines.length > 600;
               return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : content, truncated, lineCount: lines.length };
-            } catch { return null; }
+            } catch (err) {
+              console.error("[chat:auto-fetch-file-read-empty]", {
+                repo: repoData!.fullName,
+                path: fp,
+                status: null,
+                errorMessage: err instanceof Error ? err.message : String(err),
+              });
+              return null;
+            }
           })
         );
         const valid = fetched.filter((f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null);
