@@ -2541,6 +2541,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
     forgeContext?: string;
     dbUrl?: string;
+    planMode?: boolean;
   };
 
   const activeLens = (body.lens ?? "builder").toLowerCase();
@@ -2593,7 +2594,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const { sessionId = 0, projectId, message, history = [], entries = [] } = body;
+  const { sessionId = 0, projectId, message, history = [], entries = [], planMode = false } = body;
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
@@ -3000,6 +3001,29 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         systemPrompt += `\n\n--- SECRETS VAULT (key names only — values are encrypted and never exposed) ---\nThis project has these secrets stored: ${secretKeys.join(", ")}\nWhen a build step requires one of these keys, confirm it's already stored rather than asking the user to find it.`;
       }
     } catch { /* secrets unavailable */ }
+  }
+
+  if (planMode) {
+    systemPrompt += `\n\n--- PLAN MODE ACTIVE ---
+The user has activated Plan mode. Your response 
+must produce a structured plan as the primary output.
+
+Structure your plan with:
+- A clear title (one line)
+- Objective (1-2 sentences)  
+- Steps or phases (numbered)
+- Expected outcome
+
+At the END of your response, after the plan content,
+emit an ARTIFACT_WRITE block to save it:
+
+ARTIFACT_WRITE_START
+type: plan
+title: [the plan title you gave above]
+ARTIFACT_WRITE_CONTENT
+[the complete plan content]
+ARTIFACT_WRITE_END
+--- END PLAN MODE ---`;
   }
 
   // ── Build message history for multi-model dispatcher ─────────────────────
