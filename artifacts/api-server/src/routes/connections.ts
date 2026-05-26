@@ -307,4 +307,58 @@ router.get("/connections/status", async (req, res): Promise<void> => {
   res.json({ connections: statuses });
 });
 
+router.post("/connections/sync-all-projects", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+
+  const projects = await db
+    .select({
+      id: projectsTable.id,
+      name: projectsTable.name,
+      linkedRepo: projectsTable.linkedRepo,
+      githubToken: projectsTable.githubToken,
+    })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.userId, userId), isNotNull(projectsTable.linkedRepo)));
+
+  const results = await Promise.all(
+    projects.map(async (project) => {
+      const repo = parseLinkedRepo(project.linkedRepo ?? null);
+      const token = resolveGithubToken(project.githubToken ?? null);
+      if (!repo || !token) {
+        return {
+          name: project.name,
+          repo: repo?.fullName ?? null,
+          status: "failed" as const,
+        };
+      }
+      try {
+        const r = await fetch(`https://api.github.com/repos/${repo.fullName}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "Atlas-Sync/1.0",
+          },
+          signal: AbortSignal.timeout(8000),
+        });
+        return {
+          name: project.name,
+          repo: repo.fullName,
+          status: r.ok ? "ok" as const : "failed" as const,
+        };
+      } catch {
+        return {
+          name: project.name,
+          repo: repo.fullName,
+          status: "failed" as const,
+        };
+      }
+    })
+  );
+
+  const synced = results.filter((r) => r.status === "ok").length;
+  const failed = results.filter((r) => r.status === "failed").length;
+  res.json({ synced, failed, projects: results });
+});
+
 export default router;
