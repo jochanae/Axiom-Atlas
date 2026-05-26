@@ -53,6 +53,7 @@ router.use(invitesRouter);
 router.use(requireAuth, adminRouter);
 
 // Protected — valid session required
+router.use("/projects/tensions", requireAuth, tensionsRouter);
 router.use(requireAuth, projectsRouter);
 router.use(requireAuth, sessionsRouter);
 router.use(requireAuth, entriesRouter);
@@ -67,7 +68,6 @@ router.use(requireAuth, forgeStateRouter);
 router.use(requireAuth, devserverRouter);
 router.use(requireAuth, importRouter);
 router.use(requireAuth, selfmapRouter);
-router.use(requireAuth, tensionsRouter);
 router.use(requireAuth, scanRouter);
 router.use(requireAuth, blueprintRouter);
 router.use(requireAuth, connectionsRouter);

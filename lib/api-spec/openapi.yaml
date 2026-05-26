@@ -184,6 +184,12 @@ paths:
       operationId: listProjects
       tags: [projects]
       summary: List all projects
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ProjectStatus"
       responses:
         "200":
           description: List of projects
@@ -677,6 +683,14 @@ components:
       required:
         - status
 
+    ProjectStatus:
+      type: string
+      enum: [shaping, committed, archived]
+
+    ProjectSurfaceMode:
+      type: string
+      enum: [ambient, operational]
+
     Project:
       type: object
       properties:
@@ -687,8 +701,18 @@ components:
         description:
           type: ["string", "null"]
         status:
-          type: string
-          enum: [active, archived]
+          $ref: "#/components/schemas/ProjectStatus"
+        surfaceMode:
+          $ref: "#/components/schemas/ProjectSurfaceMode"
+        shape:
+          type: object
+          additionalProperties: true
+          nullable: true
+        workingTitle:
+          type: ["string", "null"]
+        committedAt:
+          type: ["string", "null"]
+          format: date-time
         entityType:
           type: string
           enum: [project, idea]
@@ -724,6 +748,10 @@ components:
         - id
         - name
         - status
+        - surfaceMode
+        - shape
+        - workingTitle
+        - committedAt
         - entityType
         - lastOpenedAt
         - createdAt
@@ -739,6 +767,16 @@ components:
         entity_type:
           type: string
           enum: [project, idea]
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+          default: committed
+        surfaceMode:
+          $ref: "#/components/schemas/ProjectSurfaceMode"
+        shape:
+          type: object
+          additionalProperties: true
+        workingTitle:
+          type: ["string", "null"]
       required:
         - name
 
@@ -750,8 +788,14 @@ components:
         description:
           type: ["string", "null"]
         status:
-          type: string
-          enum: [active, archived]
+          $ref: "#/components/schemas/ProjectStatus"
+        surfaceMode:
+          $ref: "#/components/schemas/ProjectSurfaceMode"
+        shape:
+          type: object
+          additionalProperties: true
+        workingTitle:
+          type: ["string", "null"]
         memory:
           type: ["string", "null"]
         previewUrl:
@@ -781,8 +825,7 @@ components:
         name:
           type: string
         status:
-          type: string
-          enum: [active, archived]
+          $ref: "#/components/schemas/ProjectStatus"
         last_opened_at:
           type: string
       required:

@@ -248,7 +248,7 @@ export default function NexusPage() {
     query: { queryKey: getGetNexusThreadQueryKey() },
   });
 
-  const { data: allProjects } = useListProjects({
+  const { data: allProjects } = useListProjects(undefined, {
     query: { queryKey: getListProjectsQueryKey() },
   });
 

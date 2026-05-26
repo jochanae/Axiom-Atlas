@@ -12,9 +12,20 @@ export interface HealthStatus {
 export type ProjectStatus = (typeof ProjectStatus)[keyof typeof ProjectStatus];
 
 export const ProjectStatus = {
-  active: "active",
+  shaping: "shaping",
+  committed: "committed",
   archived: "archived",
 } as const;
+
+export type ProjectSurfaceMode =
+  (typeof ProjectSurfaceMode)[keyof typeof ProjectSurfaceMode];
+
+export const ProjectSurfaceMode = {
+  ambient: "ambient",
+  operational: "operational",
+} as const;
+
+export type ProjectShape = { [key: string]: unknown } | null;
 
 export type ProjectEntityType =
   (typeof ProjectEntityType)[keyof typeof ProjectEntityType];
@@ -32,6 +43,12 @@ export interface Project {
   /** @nullable */
   description?: string | null;
   status: ProjectStatus;
+  surfaceMode: ProjectSurfaceMode;
+  shape: ProjectShape;
+  /** @nullable */
+  workingTitle: string | null;
+  /** @nullable */
+  committedAt: string | null;
   entityType: ProjectEntityType;
   /** @nullable */
   memory?: string | null;
@@ -62,20 +79,21 @@ export const CreateProjectBodyEntityType = {
   idea: "idea",
 } as const;
 
+export type CreateProjectBodyShape = { [key: string]: unknown };
+
 export interface CreateProjectBody {
   name: string;
   /** @nullable */
   description?: string | null;
   entity_type?: CreateProjectBodyEntityType;
+  status?: ProjectStatus;
+  surfaceMode?: ProjectSurfaceMode;
+  shape?: CreateProjectBodyShape;
+  /** @nullable */
+  workingTitle?: string | null;
 }
 
-export type UpdateProjectBodyStatus =
-  (typeof UpdateProjectBodyStatus)[keyof typeof UpdateProjectBodyStatus];
-
-export const UpdateProjectBodyStatus = {
-  active: "active",
-  archived: "archived",
-} as const;
+export type UpdateProjectBodyShape = { [key: string]: unknown };
 
 export type UpdateProjectBodyNodeState = { [key: string]: unknown } | null;
 
@@ -83,7 +101,11 @@ export interface UpdateProjectBody {
   name?: string;
   /** @nullable */
   description?: string | null;
-  status?: UpdateProjectBodyStatus;
+  status?: ProjectStatus;
+  surfaceMode?: ProjectSurfaceMode;
+  shape?: UpdateProjectBodyShape;
+  /** @nullable */
+  workingTitle?: string | null;
   /** @nullable */
   memory?: string | null;
   /** @nullable */
@@ -100,18 +122,10 @@ export interface UpdateProjectBody {
   lastHandoverHash?: string | null;
 }
 
-export type RecentProjectStatus =
-  (typeof RecentProjectStatus)[keyof typeof RecentProjectStatus];
-
-export const RecentProjectStatus = {
-  active: "active",
-  archived: "archived",
-} as const;
-
 export interface RecentProject {
   id: number;
   name: string;
-  status: RecentProjectStatus;
+  status: ProjectStatus;
   last_opened_at: string;
 }
 
@@ -633,6 +647,10 @@ export interface NexusChatResponse {
   /** @nullable */
   runArtifacts?: NexusChatResponseRunArtifactsItem[] | null;
 }
+
+export type ListProjectsParams = {
+  status?: ProjectStatus;
+};
 
 export type ListRecentProjectsParams = {
   /**

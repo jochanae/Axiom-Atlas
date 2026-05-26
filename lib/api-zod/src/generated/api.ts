@@ -159,11 +159,19 @@ export const DeleteThoughtParams = zod.object({
 /**
  * @summary List all projects
  */
+export const ListProjectsQueryParams = zod.object({
+  status: zod.enum(["shaping", "committed", "archived"]).optional(),
+});
+
 export const ListProjectsResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
   description: zod.string().nullish(),
-  status: zod.enum(["active", "archived"]),
+  status: zod.enum(["shaping", "committed", "archived"]),
+  surfaceMode: zod.enum(["ambient", "operational"]),
+  shape: zod.record(zod.string(), zod.unknown()).nullable(),
+  workingTitle: zod.string().nullable(),
+  committedAt: zod.coerce.date().nullable(),
   entityType: zod.enum(["project", "idea"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
@@ -183,10 +191,18 @@ export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
 /**
  * @summary Create a new project
  */
+export const createProjectBodyStatusDefault = `committed`;
+
 export const CreateProjectBody = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
   entity_type: zod.enum(["project", "idea"]).optional(),
+  status: zod
+    .enum(["shaping", "committed", "archived"])
+    .default(createProjectBodyStatusDefault),
+  surfaceMode: zod.enum(["ambient", "operational"]).optional(),
+  shape: zod.record(zod.string(), zod.unknown()).optional(),
+  workingTitle: zod.string().nullish(),
 });
 
 /**
@@ -208,7 +224,7 @@ export const ListRecentProjectsResponse = zod.object({
     zod.object({
       id: zod.number(),
       name: zod.string(),
-      status: zod.enum(["active", "archived"]),
+      status: zod.enum(["shaping", "committed", "archived"]),
       last_opened_at: zod.string(),
     }),
   ),
@@ -232,7 +248,11 @@ export const GetProjectResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   description: zod.string().nullish(),
-  status: zod.enum(["active", "archived"]),
+  status: zod.enum(["shaping", "committed", "archived"]),
+  surfaceMode: zod.enum(["ambient", "operational"]),
+  shape: zod.record(zod.string(), zod.unknown()).nullable(),
+  workingTitle: zod.string().nullable(),
+  committedAt: zod.coerce.date().nullable(),
   entityType: zod.enum(["project", "idea"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
@@ -258,7 +278,10 @@ export const UpdateProjectParams = zod.object({
 export const UpdateProjectBody = zod.object({
   name: zod.string().optional(),
   description: zod.string().nullish(),
-  status: zod.enum(["active", "archived"]).optional(),
+  status: zod.enum(["shaping", "committed", "archived"]).optional(),
+  surfaceMode: zod.enum(["ambient", "operational"]).optional(),
+  shape: zod.record(zod.string(), zod.unknown()).optional(),
+  workingTitle: zod.string().nullish(),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),
   githubToken: zod.string().nullish(),
@@ -273,7 +296,11 @@ export const UpdateProjectResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
   description: zod.string().nullish(),
-  status: zod.enum(["active", "archived"]),
+  status: zod.enum(["shaping", "committed", "archived"]),
+  surfaceMode: zod.enum(["ambient", "operational"]),
+  shape: zod.record(zod.string(), zod.unknown()).nullable(),
+  workingTitle: zod.string().nullable(),
+  committedAt: zod.coerce.date().nullable(),
   entityType: zod.enum(["project", "idea"]),
   memory: zod.string().nullish(),
   previewUrl: zod.string().nullish(),

@@ -8,6 +8,8 @@ const { mockDbState, makeTable } = vi.hoisted(() => {
     selectResults: [] as any[][],
     insertResult: [] as any[],
     updateResult: [] as any[],
+    insertValues: [] as any[],
+    updateValues: [] as any[],
   };
 
   const makeTable = (name: string) =>
@@ -36,6 +38,7 @@ vi.mock("@workspace/db", () => {
       innerJoin: () => chain,
       where: () => chain,
       orderBy: () => chain,
+      groupBy: () => Promise.resolve(result),
       limit: () => Promise.resolve(result),
       then: (onFulfilled: any, onRejected: any) =>
         Promise.resolve(result).then(onFulfilled, onRejected),
@@ -47,24 +50,32 @@ vi.mock("@workspace/db", () => {
     db: {
       select: vi.fn(() => makeChain(mockDbState.selectResults.shift() ?? [])),
       insert: vi.fn(() => ({
-        values: vi.fn(() => ({
+        values: vi.fn((values: any) => {
+          mockDbState.insertValues.push(values);
+          return {
           returning: vi.fn(() => Promise.resolve(mockDbState.insertResult)),
-        })),
+          };
+        }),
       })),
       update: vi.fn(() => ({
-        set: vi.fn(() => ({
+        set: vi.fn((values: any) => {
+          mockDbState.updateValues.push(values);
+          return {
           where: vi.fn(() => ({
             returning: vi.fn(() => Promise.resolve(mockDbState.updateResult)),
             then: (onFulfilled: any, onRejected: any) =>
               Promise.resolve(mockDbState.updateResult).then(onFulfilled, onRejected),
           })),
-        })),
+          };
+        }),
       })),
       execute: vi.fn(() => Promise.resolve([])),
     },
     projectsTable: makeTable("projects"),
     sessionsTable: makeTable("sessions"),
     entriesTable: makeTable("entries"),
+    readinessSnapshotsTable: makeTable("readiness_snapshots"),
+    blueprintsTable: makeTable("blueprints"),
     chatMessagesTable: makeTable("chat_messages"),
     thoughtsTable: makeTable("thoughts"),
     vaultTable: makeTable("vault"),
@@ -86,6 +97,8 @@ beforeEach(() => {
   mockDbState.selectResults = [];
   mockDbState.insertResult = [];
   mockDbState.updateResult = [];
+  mockDbState.insertValues = [];
+  mockDbState.updateValues = [];
   vi.clearAllMocks();
 });
 
@@ -105,6 +118,24 @@ describe("GET /api/projects", () => {
       .set("Cookie", cookie);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it("returns lifecycle fields on projects", async () => {
+    const cookie = withAuth();
+    mockDbState.selectResults.push([mockProject]);
+
+    const res = await request(createTestApp())
+      .get("/api/projects")
+      .set("Cookie", cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({
+      status: "committed",
+      surfaceMode: "operational",
+      shape: { v: 1 },
+      workingTitle: null,
+      committedAt: "2025-01-01T00:00:00.000Z",
+    });
   });
 });
 
@@ -137,6 +168,34 @@ describe("POST /api/projects", () => {
     expect(res.body).toMatchObject({ name: "My Project" });
   });
 
+  it("can create a shaping project with ambient defaults", async () => {
+    const cookie = withAuth();
+    const shapingProject = {
+      ...mockProject,
+      id: 77,
+      name: "New Shape",
+      status: "shaping",
+      surfaceMode: "ambient",
+      committedAt: null,
+    };
+    mockDbState.insertResult = [shapingProject];
+
+    const res = await request(createTestApp())
+      .post("/api/projects")
+      .set("Cookie", cookie)
+      .send({ name: "New Shape", status: "shaping" });
+
+    expect(res.status).toBe(201);
+    expect(mockDbState.insertValues[0]).toMatchObject({
+      name: "New Shape",
+      status: "shaping",
+      surfaceMode: "ambient",
+      shape: { v: 1 },
+      committedAt: null,
+    });
+    expect(res.body).toMatchObject({ status: "shaping", surfaceMode: "ambient", committedAt: null });
+  });
+
   it("returns 402 when free-tier project limit is reached", async () => {
     const freeUser = { ...mockUser, subscriptionTier: "free" as const };
     const cookie = withAuth(freeUser);
@@ -162,7 +221,7 @@ describe("GET /api/projects/recent", () => {
       {
         id: 42,
         name: "My Project",
-        status: "active",
+        status: "committed",
         lastOpenedAt: new Date("2025-01-02"),
       },
     ]);
@@ -177,7 +236,7 @@ describe("GET /api/projects/recent", () => {
         {
           id: 42,
           name: "My Project",
-          status: "active",
+          status: "committed",
           last_opened_at: "2025-01-02T00:00:00.000Z",
         },
       ],
@@ -245,5 +304,53 @@ describe("GET /api/projects/:id", () => {
       .get("/api/projects/999")
       .set("Cookie", cookie);
     expect(res.status).toBe(404);
+  });
+});
+
+describe("PATCH /api/projects/:id", () => {
+  it("can commit a shaping project and preserve merged shape", async () => {
+    const cookie = withAuth();
+    const committedAt = new Date("2025-01-03T00:00:00.000Z");
+    const shapingProject = {
+      ...mockProject,
+      status: "shaping",
+      surfaceMode: "ambient",
+      shape: { v: 1, nested: { keep: true } },
+      committedAt: null,
+    };
+    mockDbState.selectResults.push([shapingProject]);
+    mockDbState.updateResult = [{
+      ...shapingProject,
+      status: "committed",
+      shape: { v: 1, nested: { keep: true, add: true } },
+      committedAt,
+    }];
+
+    const res = await request(createTestApp())
+      .patch("/api/projects/42")
+      .set("Cookie", cookie)
+      .send({ status: "committed", shape: { nested: { add: true } } });
+
+    expect(res.status).toBe(200);
+    expect(mockDbState.updateValues[0]).toMatchObject({
+      status: "committed",
+      shape: { v: 1, nested: { keep: true, add: true } },
+    });
+    expect(mockDbState.updateValues[0].committedAt).toBeInstanceOf(Date);
+    expect(res.body.committedAt).toBe("2025-01-03T00:00:00.000Z");
+  });
+});
+
+describe("GET /api/projects/tensions", () => {
+  it("returns no tensions when fewer than two committed projects are available", async () => {
+    const cookie = withAuth();
+    mockDbState.selectResults.push([{ id: 42, name: "Committed Project" }]);
+
+    const res = await request(createTestApp())
+      .get("/api/projects/tensions")
+      .set("Cookie", cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ tensions: [] });
   });
 });

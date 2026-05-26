@@ -155,13 +155,13 @@ export function findSemanticTensionsForProject(
 }
 
 // GET /api/projects/tensions — compare committed decisions across projects.
-router.get("/projects/tensions", async (req, res): Promise<void> => {
+router.get("/", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
     const projects = await db
       .select({ id: projectsTable.id, name: projectsTable.name })
       .from(projectsTable)
-      .where(eq(projectsTable.userId, userId));
+      .where(and(eq(projectsTable.userId, userId), eq(projectsTable.status, "committed")));
 
     if (projects.length < 2) {
       res.json({ tensions: [] });

@@ -216,7 +216,7 @@ function PageTransition() {
 function OnboardingGate() {
   const [location, setLocation] = useLocation();
   const shouldCheck = location !== "/" && !["/landing", "/login", "/reset-password", "/onboarding", "/terms", "/privacy", "/help"].some((path) => location.startsWith(path));
-  const { data: projects, isLoading } = useListProjects({
+  const { data: projects, isLoading } = useListProjects(undefined, {
     query: { enabled: shouldCheck, queryKey: getListProjectsQueryKey() },
   });
 

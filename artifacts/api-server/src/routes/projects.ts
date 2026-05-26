@@ -8,6 +8,7 @@ import {
   GetProjectParams,
   UpdateProjectParams,
   DeleteProjectParams,
+  ListProjectsQueryParams,
   GetProjectSummaryParams,
   ListReadinessSnapshotsParams,
   RecordReadinessSnapshotParams,
@@ -16,7 +17,8 @@ import {
 import { z } from "zod/v4";
 
 const TouchProjectParams = z.object({ projectId: z.coerce.number().int().positive() });
-const ListRecentProjectsQueryParams = z.object({ withinHours: z.coerce.number().int().positive().optional() });
+const ListRecentProjectsQueryParams = z.object({ withinHours: z.coerce.number().int().positive().max(720).optional() });
+type JsonRecord = Record<string, unknown>;
 
 const router: IRouter = Router();
 
@@ -63,6 +65,20 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeJsonRecords(base: unknown, patch: JsonRecord): JsonRecord {
+  const merged: JsonRecord = isJsonRecord(base) ? { ...base } : {};
+  for (const [key, value] of Object.entries(patch)) {
+    merged[key] = isJsonRecord(value) && isJsonRecord(merged[key])
+      ? mergeJsonRecords(merged[key], value)
+      : value;
+  }
+  return merged;
+}
+
 // Strip GitHub token from outbound project objects — never expose it in list responses.
 // The token is returned in single-project GET only (owner-scoped via tenant isolation).
 function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = false) {
@@ -73,6 +89,7 @@ function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = f
     hasGithubToken: !!githubToken,
     ...(includeToken ? { githubToken: plainToken } : {}),
     lastOpenedAt: p.lastOpenedAt.toISOString(),
+    committedAt: p.committedAt ? p.committedAt.toISOString() : null,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
   };
@@ -88,12 +105,22 @@ router.use("/projects", async (_req, _res, next) => {
 });
 
 router.get("/projects", async (req, res): Promise<void> => {
+  const parsedQuery = ListProjectsQueryParams.safeParse(req.query);
+  if (!parsedQuery.success) {
+    res.status(400).json({ error: parsedQuery.error.message });
+    return;
+  }
+
   const userId = (req as any).authUser.id as number;
+  const whereClauses = [eq(projectsTable.userId, userId)];
+  if (parsedQuery.data.status) {
+    whereClauses.push(eq(projectsTable.status, parsedQuery.data.status));
+  }
 
   const projects = await db
     .select()
     .from(projectsTable)
-    .where(eq(projectsTable.userId, userId))
+    .where(and(...whereClauses))
     .orderBy(desc(projectsTable.updatedAt));
 
   let latestScores: Array<{ projectId: number; score: number }> = [];
@@ -149,6 +176,8 @@ router.post("/projects", async (req, res): Promise<void> => {
 
   const userId = (req as any).authUser.id as number;
   const authUser = (req as any).authUser;
+  const status = parsed.data.status ?? "committed";
+  const surfaceMode = parsed.data.surfaceMode ?? (status === "shaping" ? "ambient" : "operational");
 
   if (authUser?.subscriptionTier === "free" && authUser?.role !== "super_admin") {
     const [{ count }] = await db
@@ -170,6 +199,11 @@ router.post("/projects", async (req, res): Promise<void> => {
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       entityType: parsed.data.entity_type ?? "project",
+      status,
+      surfaceMode,
+      shape: { v: 1, ...(parsed.data.shape ?? {}) },
+      workingTitle: parsed.data.workingTitle ?? null,
+      committedAt: status === "committed" ? new Date() : null,
       userId,
     })
     .returning();
@@ -409,9 +443,30 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
     return;
   }
   const userId = (req as any).authUser.id as number;
-  const { lastHandoverAt, githubToken: rawToken, ...rest } = parsed.data;
+  const [currentProject] = await db
+    .select({
+      id: projectsTable.id,
+      status: projectsTable.status,
+      shape: projectsTable.shape,
+      committedAt: projectsTable.committedAt,
+    })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)))
+    .limit(1);
+
+  if (!currentProject) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const { lastHandoverAt, githubToken: rawToken, shape, status, ...rest } = parsed.data;
   const updateValues = {
     ...rest,
+    ...(status !== undefined ? { status } : {}),
+    ...(shape !== undefined ? { shape: mergeJsonRecords(currentProject.shape, shape) } : {}),
+    ...(currentProject.status === "shaping" && status === "committed" && currentProject.committedAt === null
+      ? { committedAt: new Date() }
+      : {}),
     ...(lastHandoverAt !== undefined
       ? { lastHandoverAt: lastHandoverAt === null ? null : new Date(lastHandoverAt) }
       : {}),
@@ -424,10 +479,6 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
     .set(updateValues)
     .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)))
     .returning();
-  if (!project) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
   res.json(serializeProject(project, true));
 });
 
