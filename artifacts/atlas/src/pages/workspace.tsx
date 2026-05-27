@@ -7936,6 +7936,13 @@ export default function Workspace() {
   const [activityStream, setActivityStream] = useState<{ active: boolean; content: string }>({ active: false, content: "" });
   const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
   const [linkedRepo, setLinkedRepo] = useState<LinkedRepo | null>(null);
+  const BRANCH_STORAGE_KEY = `atlas-branch-${id}`;
+  const [activeBranch, setActiveBranch] = useState<string>(() => {
+    try { return localStorage.getItem(`atlas-branch-${id}`) ?? ""; } catch { return ""; }
+  });
+  const [branches, setBranches] = useState<string[]>([]);
+  const [showBranchPicker, setShowBranchPicker] = useState(false);
+  const [branchesLoading, setBranchesLoading] = useState(false);
 
   const PENDING_PHRASES = [
     "Loading context…",
@@ -8165,6 +8172,48 @@ export default function Workspace() {
       setLinkedRepo(repo);
     } catch {}
   }, [project?.linkedRepo]);
+
+  // Sync activeBranch from linkedRepo defaultBranch when repo loads
+  useEffect(() => {
+    if (!linkedRepo) return;
+    const stored = localStorage.getItem(BRANCH_STORAGE_KEY);
+    setActiveBranch(stored ?? linkedRepo.defaultBranch ?? "main");
+  }, [linkedRepo?.fullName, linkedRepo?.defaultBranch]);
+
+  const getAuthHeaders = (): HeadersInit => {
+    const token =
+      project?.githubToken ??
+      (() => { try { return localStorage.getItem("atlas-github-token"); } catch { return null; } })() ??
+      "__server__";
+    return { "x-github-token": token };
+  };
+
+  const fetchBranches = async () => {
+    if (!linkedRepo?.fullName) return;
+    setBranchesLoading(true);
+    try {
+      const res = await fetch(`/api/github/branches?repo=${encodeURIComponent(linkedRepo.fullName)}`, {
+        credentials: "include",
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json() as { name: string }[];
+        setBranches(data.map((b: { name: string }) => b.name));
+      }
+    } catch {} finally {
+      setBranchesLoading(false);
+    }
+  };
+
+  const handleBranchSelect = (branch: string) => {
+    setActiveBranch(branch);
+    try { localStorage.setItem(BRANCH_STORAGE_KEY, branch); } catch {}
+    setShowBranchPicker(false);
+    // Update linkedRepo so file fetches use the new branch
+    if (linkedRepo) {
+      setLinkedRepo({ ...linkedRepo, defaultBranch: branch });
+    }
+  };
 
   // Load push history from DB on project load (FIX 2)
   const pushHistoryLoaded = useRef(false);
@@ -9697,6 +9746,64 @@ export default function Workspace() {
 
           {/* Right: vault + % score + mode + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {linkedRepo && activeBranch && (
+              <div style={{ position: "relative", flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowBranchPicker(v => !v); if (!branches.length) fetchBranches(); }}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    padding: "4px 8px", borderRadius: 6, cursor: "pointer",
+                    background: "rgba(201,162,76,0.07)",
+                    border: "1px solid rgba(201,162,76,0.2)",
+                    color: "var(--atlas-muted)",
+                    fontFamily: "var(--app-font-mono)", fontSize: 9,
+                    letterSpacing: "0.08em", flexShrink: 0,
+                    transition: "background 140ms ease",
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style={{ opacity: 0.6 }}>
+                    <path d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 019 8.5H7a1 1 0 000 2h2a2.5 2.5 0 012.5 2.5v.628a2.251 2.251 0 11-1.5 0V13A1 1 0 009 12H7a2.5 2.5 0 01-2.5-2.5V5.372A2.25 2.25 0 114.75 1a2.25 2.25 0 011.5 2.122V9.5A1 1 0 007 10.5h2a2.5 2.5 0 002.5-2.5v-.628A2.251 2.251 0 019.5 3.25zM4.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm0 9.5a.75.75 0 100 1.5.75.75 0 000-1.5zm7 0a.75.75 0 100 1.5.75.75 0 000-1.5z"/>
+                  </svg>
+                  {activeBranch.length > 14 ? activeBranch.slice(0, 12) + "…" : activeBranch}
+                  <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor" style={{ opacity: 0.5 }}>
+                    <path d="M4.427 7.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 7H4.604a.25.25 0 00-.177.427z"/>
+                  </svg>
+                </button>
+
+                {showBranchPicker && (
+                  <>
+                    <div onClick={() => setShowBranchPicker(false)} style={{ position: "fixed", inset: 0, zIndex: 9998 }} />
+                    <div style={{
+                      position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 9999,
+                      background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)",
+                      borderRadius: 10, minWidth: 180, maxHeight: 240, overflowY: "auto",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.4)", padding: "6px 0",
+                    }}>
+                      {branchesLoading ? (
+                        <div style={{ padding: "10px 14px", fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.6 }}>Loading…</div>
+                      ) : branches.length === 0 ? (
+                        <div style={{ padding: "10px 14px", fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", opacity: 0.6 }}>No branches found</div>
+                      ) : branches.map(b => (
+                        <button
+                          key={b}
+                          onClick={() => handleBranchSelect(b)}
+                          style={{
+                            width: "100%", display: "flex", alignItems: "center", gap: 8,
+                            padding: "8px 14px", background: "transparent", border: "none",
+                            cursor: "pointer", color: b === activeBranch ? "var(--atlas-gold)" : "var(--atlas-fg)",
+                            fontFamily: "var(--app-font-mono)", fontSize: 11, textAlign: "left",
+                          }}
+                        >
+                          {b === activeBranch && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0 }} />}
+                          {b}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             {/* Lens chip — dot-only on tiny screens */}
             <button
               title={`Lens: ${LENS_CONFIG[wsLens].sub}`}
