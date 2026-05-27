@@ -5,6 +5,7 @@ import type React from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useRequireAuth } from "@/hooks/useAuth";
 import { useSound } from "@/hooks/useSound";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { AxiomFlow } from "../components/AxiomFlow";
 import type { ArchNode, NodeStateMap, HandoverSnapshot } from "../components/AxiomFlow";
 import { SystemMap } from "../components/SystemMap";
@@ -7609,6 +7610,12 @@ export default function Workspace() {
   const [, setLocation] = useLocation();
   const id = Number(projectId);
   const queryClient = useQueryClient();
+  const { pulling: ptr_pulling, distance: ptr_distance, refreshing: ptr_refreshing } = usePullToRefresh(
+    async () => {
+      await queryClient.invalidateQueries();
+    },
+    true,
+  );
   const isMobile = useIsMobile();
   const isTinyScreen = useIsTinyScreen();
   useRequireAuth();
@@ -9295,6 +9302,24 @@ export default function Workspace() {
         if (file && file.name.toLowerCase().endsWith(".zip")) await processZip(file);
       }}
     >
+      {(ptr_pulling || ptr_refreshing) && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+          display: "flex", justifyContent: "center", alignItems: "flex-end",
+          height: Math.min(ptr_distance, 72) + 16,
+          pointerEvents: "none",
+        }}>
+          <div style={{
+            width: 26, height: 26, borderRadius: "50%",
+            border: "1.5px solid rgba(201,162,76,0.25)",
+            borderTopColor: ptr_distance >= 96 || ptr_refreshing ? "var(--atlas-gold)" : "rgba(201,162,76,0.5)",
+            opacity: Math.min(ptr_distance / 60, 1),
+            animation: ptr_refreshing ? "ptr-spin 700ms linear infinite" : "none",
+            transform: ptr_refreshing ? "none" : `rotate(${Math.min((ptr_distance / 96) * 270, 270)}deg)`,
+          }} />
+        </div>
+      )}
+      <style>{`@keyframes ptr-spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* ── Header ── */}
       <div className="atlas-app-header" style={{ flexShrink: 0, backdropFilter: "blur(16px)" }}>
