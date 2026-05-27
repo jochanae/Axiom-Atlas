@@ -393,6 +393,24 @@ router.get("/github/repos", async (req, res): Promise<void> => {
   })));
 });
 
+// GET /api/github/branches
+router.get("/github/branches", async (req, res): Promise<void> => {
+  const { repo } = req.query as { repo?: string };
+  if (!repo) { res.status(400).json({ error: "repo required" }); return; }
+
+  const token = getToken(req) ?? await getAccountGithubToken((req as any).authUser?.id as number | undefined);
+  if (!token) { res.status(401).json({ error: "no token" }); return; }
+
+  const r = await fetch(
+    `${GH_API}/repos/${repo}/branches?per_page=30`,
+    { headers: ghHeaders(token) }
+  );
+  if (!r.ok) { res.status(r.status).json({ error: "github error" }); return; }
+
+  const data = await r.json();
+  res.json(data);
+});
+
 // GET /api/github/tree
 router.get("/github/tree", async (req, res): Promise<void> => {
   const token = getToken(req);
