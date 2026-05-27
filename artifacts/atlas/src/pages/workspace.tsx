@@ -978,6 +978,7 @@ function GitHubPushModal({
   fileEdits,
   linkedRepo,
   projectId,
+  sessionId,
   onClose,
   onPushSuccess,
   onPrCreated,
@@ -986,6 +987,7 @@ function GitHubPushModal({
   fileEdits: FileEdit[];
   linkedRepo: LinkedRepo | null;
   projectId: number;
+  sessionId?: number | null;
   onClose: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
   onPrCreated?: (prUrl: string) => void;
@@ -1082,6 +1084,7 @@ function GitHubPushModal({
           headers: { "Content-Type": "application/json", "x-github-token": token },
           body: JSON.stringify({
             repo: linkedRepo.fullName, branch: targetBranch, path: fe.path, content: fe.content,
+            projectId, sessionId,
             message: `${commitMsg}${fileEdits.length > 1 ? ` (${i + 1}/${fileEdits.length})` : ""}`,
           }),
         });
@@ -1151,7 +1154,7 @@ function GitHubPushModal({
           headers: { "Content-Type": "application/json", "x-github-token": token },
           body: JSON.stringify({
             repo: linkedRepo.fullName, branch: success.branch, path: fileEdits[i].path,
-            content: orig, message: `Atlas: rollback ${fileEdits[i].path.split("/").pop()}`,
+            content: orig, projectId, sessionId, message: `Atlas: rollback ${fileEdits[i].path.split("/").pop()}`,
           }),
         });
         if (!r.ok) { const d = await r.json().catch(() => ({})) as any; throw new Error(d.error || "Rollback failed"); }
@@ -1607,12 +1610,14 @@ function LinePatchReviewCard({
   linePatches,
   linkedRepo,
   projectId,
+  sessionId,
   onPushSuccess,
   onPrCreated,
 }: {
   linePatches: LinePatch[];
   linkedRepo: LinkedRepo | null;
   projectId: number;
+  sessionId?: number | null;
   onPushSuccess: (records: PushRecord[]) => void;
   onPrCreated?: (prUrl: string) => void;
 }) {
@@ -1732,6 +1737,7 @@ function LinePatchReviewCard({
           fileEdits={patchedEdits}
           linkedRepo={linkedRepo}
           projectId={projectId}
+          sessionId={sessionId}
           onClose={() => setShowPushModal(false)}
           onPushSuccess={(records) => { onPushSuccess(records); setShowPushModal(false); }}
           onPrCreated={onPrCreated}
@@ -1748,6 +1754,7 @@ function InlineDiffCard({
   linePatches,
   linkedRepo,
   projectId,
+  sessionId,
   trustMode,
   onReviewDiff,
   onPushSuccess,
@@ -1758,6 +1765,7 @@ function InlineDiffCard({
   linePatches: LinePatch[];
   linkedRepo: LinkedRepo | null;
   projectId: number;
+  sessionId?: number | null;
   trustMode: "review" | "auto";
   onReviewDiff: () => void;
   onPushSuccess: (records: PushRecord[]) => void;
@@ -1977,6 +1985,7 @@ function InlineDiffCard({
           fileEdits={modalEdits}
           linkedRepo={linkedRepo}
           projectId={projectId}
+          sessionId={sessionId}
           onClose={() => { setShowPushModal(false); if (!pushSucceededRef.current) onEditDeclined?.(); }}
           onPushSuccess={(records) => { pushSucceededRef.current = true; onPushSuccess(records); setShowPushModal(false); }}
           onPrCreated={onPrCreated}
@@ -2499,6 +2508,7 @@ function AssistantBubble({
             fileEdits={planPushEdits}
             linkedRepo={linkedRepo}
             projectId={projectId}
+            sessionId={sessionId}
             onClose={() => {
               setShowPlanPushModal(false);
               setPlanStatus("pending");
@@ -2583,6 +2593,7 @@ function AssistantBubble({
             linePatches={message.linePatches ?? []}
             linkedRepo={linkedRepo}
             projectId={projectId}
+            sessionId={sessionId}
             trustMode={trustMode}
             onReviewDiff={onReviewDiff}
             onPushSuccess={onPushSuccess}
@@ -2776,6 +2787,7 @@ function AssistantBubble({
           fileEdits={activeEdits}
           linkedRepo={linkedRepo}
           projectId={projectId}
+          sessionId={sessionId}
           onClose={() => setShowPushModal(false)}
           onPushSuccess={(records) => { onPushSuccess(records); setShowPushModal(false); }}
           onPrCreated={onPrCreated}
@@ -8066,6 +8078,7 @@ export default function Workspace() {
           headers: { "Content-Type": "application/json", "x-github-token": token },
           body: JSON.stringify({
             repo: linkedRepo.fullName, branch, path: fe.path, content: fe.content,
+            projectId: id, sessionId,
             message: fileEdits.length === 1
               ? `Atlas: update ${fe.path.split("/").pop()}`
               : `Atlas: update ${fileEdits.length} files (${i + 1}/${fileEdits.length})`,
@@ -8103,7 +8116,7 @@ export default function Workspace() {
     } catch (e: unknown) {
       toast.error(`AUTO push failed: ${e instanceof Error ? e.message : "unknown error"}`);
     }
-  }, [linkedRepo, project, autoRunCmd]);
+  }, [linkedRepo, project, autoRunCmd, id, sessionId]);
 
   useEffect(() => {
     if (trustMode !== "auto") return;
@@ -8844,11 +8857,12 @@ export default function Workspace() {
       body: JSON.stringify({
         repo: linkedRepo.fullName, branch: record.branch,
         path: record.path, content: record.originalContent,
+        projectId: id, sessionId,
         message: `Atlas: rollback ${record.filename}`,
       }),
     });
     setPushHistory((prev) => prev.map((r) => r.id === record.id ? { ...r, rolledBack: true } : r));
-  }, [linkedRepo]);
+  }, [linkedRepo, project?.githubToken, id, sessionId]);
 
   const handleVoiceTranscript = useCallback((text: string) => {
     setInput((prev) => (prev ? `${prev} ${text}` : text));
