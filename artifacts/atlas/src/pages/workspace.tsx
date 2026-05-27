@@ -7618,7 +7618,7 @@ export default function Workspace() {
   );
   const isMobile = useIsMobile();
   const isTinyScreen = useIsTinyScreen();
-  useRequireAuth();
+  const { user } = useRequireAuth();
 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -7703,6 +7703,7 @@ export default function Workspace() {
   const [showWsModelSheet, setShowWsModelSheet] = useState(false);
   const [rightFullscreen, setRightFullscreen] = useState(false);
   const [showSrcPicker, setShowSrcPicker] = useState(false);
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   const [srcReadLoading, setSrcReadLoading] = useState(false);
   const [showDeepDiveMenu, setShowDeepDiveMenu] = useState(false);
   const [deepDiveCopied, setDeepDiveCopied] = useState(false);
@@ -10835,33 +10836,35 @@ export default function Workspace() {
                   )}
 
                   {/* Wrench — read Atlas source into context */}
-                  <button
-                    onClick={() => setShowSrcPicker((v) => !v)}
-                    title="Read Atlas source file into context"
-                    aria-label="Read Atlas source file into context"
-                    style={{
-                      minWidth: 44, minHeight: 44, padding: 7, borderRadius: 7,
-                      background: showSrcPicker ? "rgba(56,189,248,0.1)" : "transparent",
-                      border: showSrcPicker ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
-                      color: showSrcPicker ? "rgba(56,189,248,0.9)" : "var(--atlas-muted)",
-                      cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                      opacity: srcReadLoading ? 0.5 : (showSrcPicker ? 1 : 0.4), transition: "all 160ms ease",
-                      flexShrink: 0,
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
-                    onMouseLeave={(e) => { if (!showSrcPicker) e.currentTarget.style.opacity = "0.4"; }}
-                  >
-                    {srcReadLoading ? (
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ animation: "spin 1s linear infinite" }}>
-                        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="10 6" />
-                      </svg>
-                    ) : (
-                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-                        <path d="M10.5 1.5A3.5 3.5 0 007 5c0 .36.05.71.14 1.04L2.5 10.5A1.5 1.5 0 004.5 12.5l4.46-4.64c.33.09.68.14 1.04.14a3.5 3.5 0 000-7z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                        <circle cx="10.5" cy="4.5" r="1" fill="currentColor" />
-                      </svg>
-                    )}
-                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setShowSrcPicker((v) => !v)}
+                      title="Read Atlas source file into context"
+                      aria-label="Read Atlas source file into context"
+                      style={{
+                        minWidth: 44, minHeight: 44, padding: 7, borderRadius: 7,
+                        background: showSrcPicker ? "rgba(56,189,248,0.1)" : "transparent",
+                        border: showSrcPicker ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
+                        color: showSrcPicker ? "rgba(56,189,248,0.9)" : "var(--atlas-muted)",
+                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                        opacity: srcReadLoading ? 0.5 : (showSrcPicker ? 1 : 0.4), transition: "all 160ms ease",
+                        flexShrink: 0,
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+                      onMouseLeave={(e) => { if (!showSrcPicker) e.currentTarget.style.opacity = "0.4"; }}
+                    >
+                      {srcReadLoading ? (
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ animation: "spin 1s linear infinite" }}>
+                          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="10 6" />
+                        </svg>
+                      ) : (
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                          <path d="M10.5 1.5A3.5 3.5 0 007 5c0 .36.05.71.14 1.04L2.5 10.5A1.5 1.5 0 004.5 12.5l4.46-4.64c.33.09.68.14 1.04.14a3.5 3.5 0 000-7z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                          <circle cx="10.5" cy="4.5" r="1" fill="currentColor" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
 
                   {/* Deep Dive button */}
                   <div style={{ position: "relative" }}>
