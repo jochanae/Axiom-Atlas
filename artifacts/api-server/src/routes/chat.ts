@@ -2836,6 +2836,37 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (recentRepoActivityContext) {
     systemPrompt += `\n\n${recentRepoActivityContext}`;
   }
+  // Inject structural codebase map if repo is linked and token is available
+  if (repoData?.fullName && resolvedGithubToken && !repoTreeContext?.includes('[REPO_READ_FAILED]') && !repoTreeContext?.includes('[REPO_NO_TOKEN]')) {
+    try {
+      const analyzeResp = await fetch(
+        `${GH_API}/repos/${repoData.fullName}/git/trees/${repoData.defaultBranch ?? 'main'}?recursive=1`,
+        { headers: ghHeaders(resolvedGithubToken) }
+      );
+      if (analyzeResp.ok) {
+        const treeData = await analyzeResp.json() as { tree?: Array<{ type: string; path: string }> };
+        const blobPaths = (treeData.tree ?? []).filter(n => n.type === 'blob').map(n => n.path);
+        const dirCounts: Record<string, number> = {};
+        for (const p of blobPaths) {
+          const parts = p.split('/');
+          if (parts.length > 1) {
+            const dir = parts.slice(0, Math.min(2, parts.length - 1)).join('/');
+            dirCounts[dir] = (dirCounts[dir] || 0) + 1;
+          }
+        }
+        const structureMap = Object.entries(dirCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 30)
+          .map(([d, c]) => `  ${d}/ (${c} files)`)
+          .join('\n');
+        if (structureMap) {
+          systemPrompt += `\n\n--- CODEBASE STRUCTURE MAP (${blobPaths.length} total files — use this to understand where things live before editing) ---\n${structureMap}\n--- END STRUCTURE MAP ---`;
+        }
+      }
+    } catch {
+      // Non-fatal — Atlas still works without structure map
+    }
+  }
   systemPrompt += `\n\n--- SESSION CONTINUITY ---
 If this is the first assistant message in this session (no prior assistant messages exist in the session history), open naturally — like picking up a real conversation, not filing a status report. DO NOT use the format "Still here. [recap]. What's next:". Instead, read the memory and repo activity and respond the way a sharp collaborator would after being away: reference what actually matters, skip what doesn't, and lead with something useful or ask the right question. One to two sentences max. Never clinical. Never a checklist. Match the energy of someone who was already thinking about this project before the conversation started.
 --- END SESSION CONTINUITY ---`;
