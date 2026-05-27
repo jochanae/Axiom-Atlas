@@ -1408,7 +1408,7 @@ export default function Home() {
     setHandoffStage("Setting up your workspace...");
     try {
       let name = (projectNameOverride || signal?.projectName || "").trim();
-      const DEFAULT_PROJECT_NAMES = new Set(["New Project", "New Idea", "My Project", ""]);
+      const DEFAULT_PROJECT_NAMES = new Set(["New Project", "New Idea", "My Project", "Untitled", ""]);
       if (DEFAULT_PROJECT_NAMES.has(name)) {
         const lastUserMsg = [...homeMessages].reverse().find(m => m.role === "user");
         if (lastUserMsg?.content) {
