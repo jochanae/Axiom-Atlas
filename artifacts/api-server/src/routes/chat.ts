@@ -2833,6 +2833,33 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
   }
+  // Inject recent commits for this project's repo
+  if (repoData?.fullName && resolvedGithubToken) {
+    try {
+      const commitsResp = await fetch(
+        `https://api.github.com/repos/${repoData.fullName}/commits?per_page=5`,
+        {
+          headers: ghHeaders(resolvedGithubToken),
+          signal: AbortSignal.timeout(5000),
+        }
+      );
+      if (commitsResp.ok) {
+        const commits = await commitsResp.json() as any[];
+        const commitLines = commits.slice(0, 5).map((c: any) => {
+          const msg = ((c.commit?.message ?? "") as string).split("\n")[0].slice(0, 80);
+          const sha = (c.sha as string)?.slice(0, 7);
+          const author = c.commit?.author?.name ?? "";
+          const date = c.commit?.author?.date ? new Date(c.commit.author.date).toLocaleDateString() : "";
+          return `  ${sha} — ${msg} · ${author} (${date})`;
+        });
+        if (commitLines.length > 0) {
+          systemPrompt += `\n\n--- RECENT COMMITS (${repoData.fullName}) ---\n${commitLines.join("\n")}\n--- END RECENT COMMITS ---`;
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+  }
   if (recentRepoActivityContext) {
     systemPrompt += `\n\n${recentRepoActivityContext}`;
   }
