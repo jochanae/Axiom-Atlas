@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { atlasIncidentsTable, connectionsTable, db, projectsTable } from "@workspace/db";
+import { atlasIncidentsTable, connectionsTable, db, projectsTable, sessionsTable } from "@workspace/db";
 import { eq, and, desc, isNotNull } from "drizzle-orm";
 import { spawn } from "child_process";
 import { writeFile, mkdir, rm } from "fs/promises";
@@ -213,6 +213,120 @@ async function openPullRequest(token: string, repo: string, head: string, base: 
 
   const pr = await prResp.json() as any;
   return { prUrl: pr.html_url, prNumber: pr.number, title: pr.title };
+}
+
+function parsePositiveInteger(value: unknown): number | null {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function buildFileCommittedMessage(filePath: string, branch: string): string {
+  return `[FILE_COMMITTED] ${filePath} committed to ${branch}`;
+}
+
+function firstHeaderValue(req: Request, name: string): string | undefined {
+  const value = req.headers[name.toLowerCase()];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function requestOrigin(req: Request): string | null {
+  const host = firstHeaderValue(req, "host");
+  if (!host) return null;
+  const proto = firstHeaderValue(req, "x-forwarded-proto")?.split(",")[0]?.trim() || req.protocol || "http";
+  return `${proto}://${host}`;
+}
+
+async function resolveCommitChatTarget(
+  userId: number | undefined,
+  rawSessionId: unknown,
+  rawProjectId: unknown
+): Promise<{ sessionId: number; projectId: number } | null> {
+  if (!userId) return null;
+
+  const sessionId = parsePositiveInteger(rawSessionId);
+  const projectId = parsePositiveInteger(rawProjectId);
+
+  if (sessionId) {
+    const [session] = await db
+      .select({ sessionId: sessionsTable.id, projectId: sessionsTable.projectId })
+      .from(sessionsTable)
+      .innerJoin(projectsTable, eq(sessionsTable.projectId, projectsTable.id))
+      .where(projectId
+        ? and(eq(sessionsTable.id, sessionId), eq(sessionsTable.projectId, projectId), eq(projectsTable.userId, userId))
+        : and(eq(sessionsTable.id, sessionId), eq(projectsTable.userId, userId)))
+      .limit(1);
+    return session ? { sessionId: session.sessionId, projectId: session.projectId } : null;
+  }
+
+  if (!projectId) return null;
+
+  const [session] = await db
+    .select({ sessionId: sessionsTable.id, projectId: sessionsTable.projectId })
+    .from(sessionsTable)
+    .innerJoin(projectsTable, eq(sessionsTable.projectId, projectsTable.id))
+    .where(and(eq(sessionsTable.projectId, projectId), eq(projectsTable.userId, userId), eq(sessionsTable.status, "active")))
+    .orderBy(desc(sessionsTable.updatedAt))
+    .limit(1);
+
+  return session ? { sessionId: session.sessionId, projectId: session.projectId } : null;
+}
+
+function triggerChatFollowup(req: Request, target: { sessionId: number; projectId: number }, message: string, githubToken: string): boolean {
+  const origin = requestOrigin(req);
+  if (!origin) return false;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const cookie = firstHeaderValue(req, "cookie");
+  if (cookie) headers.Cookie = cookie;
+
+  const requestGithubToken = firstHeaderValue(req, "x-github-token");
+  headers["x-github-token"] = requestGithubToken || githubToken;
+
+  void fetch(`${origin}/api/chat`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      sessionId: target.sessionId,
+      projectId: target.projectId,
+      message,
+      history: [],
+    }),
+  }).then(async (chatResp) => {
+    const body = await chatResp.text().catch(() => "");
+    if (!chatResp.ok) {
+      console.warn("[github commit] FILE_COMMITTED chat follow-up failed", {
+        status: chatResp.status,
+        sessionId: target.sessionId,
+        projectId: target.projectId,
+        detail: body.slice(0, 500),
+      });
+    }
+  }).catch((err: unknown) => {
+    console.warn("[github commit] FILE_COMMITTED chat follow-up failed", err);
+  });
+
+  return true;
+}
+
+async function createFileCommittedSignal(
+  req: Request,
+  userId: number | undefined,
+  githubToken: string,
+  filePath: string,
+  branch: string,
+  rawSessionId: unknown,
+  rawProjectId: unknown
+): Promise<{ message: string; triggered: boolean; sessionId?: number; projectId?: number }> {
+  const message = buildFileCommittedMessage(filePath, branch);
+  const target = await resolveCommitChatTarget(userId, rawSessionId, rawProjectId);
+  if (!target) return { message, triggered: false };
+
+  return {
+    message,
+    triggered: triggerChatFollowup(req, target, message, githubToken),
+    sessionId: target.sessionId,
+    projectId: target.projectId,
+  };
 }
 
 async function runWorkspaceTypecheck(): Promise<{ ok: true } | { ok: false; message: string }> {
@@ -431,8 +545,8 @@ router.put("/github/commit", async (req, res): Promise<void> => {
   const token = getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
-  const { repo, branch = "main", path: filePath, content, message, forceDirect = false, projectId, project_id, confidence, blast_radius, blastRadius, reasoning } = req.body as {
-    repo: string; branch?: string; path?: string; content?: string; message: string; forceDirect?: boolean; projectId?: string; project_id?: string; confidence?: string; blast_radius?: string; blastRadius?: string; reasoning?: string;
+  const { repo, branch = "main", path: filePath, content, message, forceDirect = false, projectId, project_id, sessionId, session_id, chatSessionId, confidence, blast_radius, blastRadius, reasoning } = req.body as {
+    repo: string; branch?: string; path?: string; content?: string; message: string; forceDirect?: boolean; projectId?: string | number; project_id?: string | number; sessionId?: string | number; session_id?: string | number; chatSessionId?: string | number; confidence?: string; blast_radius?: string; blastRadius?: string; reasoning?: string;
   };
   if (!repo || !filePath || content === undefined || !message) {
     res.status(400).json({ error: "Missing required fields: repo, path, content, message" }); return;
@@ -441,7 +555,16 @@ router.put("/github/commit", async (req, res): Promise<void> => {
   try {
     if (branch !== "main" || forceDirect) {
       const commit = await commitFile(token, repo, branch, filePath, content, message);
-      res.json({ ...commit, path: filePath, branch, direct: true });
+      const fileCommitted = await createFileCommittedSignal(
+        req,
+        (req as any).authUser?.id as number | undefined,
+        token,
+        filePath,
+        branch,
+        sessionId ?? session_id ?? chatSessionId,
+        projectId ?? project_id
+      );
+      res.json({ ...commit, path: filePath, branch, direct: true, fileCommittedMessage: fileCommitted.message, chatFollowup: fileCommitted });
       return;
     }
 
@@ -476,7 +599,16 @@ router.put("/github/commit", async (req, res): Promise<void> => {
       notes: null,
     });
 
-    res.json({ ...commit, ...pr, path: filePath, branch: pullBranch, base: "main", direct: false });
+    const fileCommitted = await createFileCommittedSignal(
+      req,
+      (req as any).authUser?.id as number | undefined,
+      token,
+      filePath,
+      pullBranch,
+      sessionId ?? session_id ?? chatSessionId,
+      projectId ?? project_id
+    );
+    res.json({ ...commit, ...pr, path: filePath, branch: pullBranch, base: "main", direct: false, fileCommittedMessage: fileCommitted.message, chatFollowup: fileCommitted });
   } catch (e: unknown) {
     if (e instanceof GitHubApiError) {
       res.status(e.status).json({ error: "GitHub API error", detail: e.detail });
