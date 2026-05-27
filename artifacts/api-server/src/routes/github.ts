@@ -242,15 +242,10 @@ router.get("/github/server-token", (_req, res): void => {
 
 // GET /api/github/repos
 router.get("/github/repos", async (req, res): Promise<void> => {
-  const userId = (req as any).authUser?.id as number | undefined;
-
-  // Priority: explicit header token → account connection → project tokens → server env
-  const headerToken = (() => {
+  const token = (() => {
     const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
     return (h && h !== "__server__" && h !== "__account__") ? h : null;
   })();
-
-  const token = headerToken ?? (userId ? await resolveGithubTokenForRequest(userId, null) : null) ?? process.env.GITHUB_TOKEN ?? null;
 
   if (!token) {
     res.status(401).json({
@@ -260,12 +255,19 @@ router.get("/github/repos", async (req, res): Promise<void> => {
     return;
   }
 
-  const resp = await fetch(`${GH_API}/user/repos?per_page=100&sort=pushed&type=all&affiliation=owner,collaborator`, { headers: ghHeaders(token) });
+  const resp = await fetch(`${GH_API}/user/repos?per_page=100&sort=pushed&type=all`, { headers: ghHeaders(token) });
   if (!resp.ok) {
+    if (resp.status === 401 || resp.status === 403 || resp.status === 422) {
+      res.status(401).json({
+        code: "TOKEN_INVALID",
+        message: "GitHub token is invalid or missing required scopes.",
+      });
+      return;
+    }
+
     const detail = await resp.text();
     // Return a clear code so the frontend can show a helpful message
-    const code = resp.status === 401 || resp.status === 403 ? "TOKEN_INVALID" : "GITHUB_ERROR";
-    res.status(resp.status).json({ error: code, message: "GitHub rejected this token. Make sure it has repo scope.", detail });
+    res.status(resp.status).json({ error: "GITHUB_ERROR", message: "GitHub rejected this token. Make sure it has repo scope.", detail });
     return;
   }
 
