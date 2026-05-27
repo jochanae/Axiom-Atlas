@@ -1607,6 +1607,48 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
   // Always inject the full project roster so Atlas knows every room, even empty ones
   systemPrompt += `\n\n--- YOUR PROJECT PORTFOLIO (${projects.length} project${projects.length !== 1 ? "s" : ""}) ---\n${projectRoster}`;
+  // Inject recent GitHub activity across all linked repos (global view — no focusProjectId needed)
+  const linkedProjects = projects.filter(p => p.linkedRepo);
+  if (linkedProjects.length > 0 && process.env.GITHUB_TOKEN) {
+    try {
+      const recentCommits = await Promise.allSettled(
+        linkedProjects.slice(0, 5).map(async (p) => {
+          const repoFull = parseRepo(p.linkedRepo ?? null);
+          if (!repoFull) return null;
+          const r = await fetch(
+            `https://api.github.com/repos/${repoFull}/commits?per_page=3`,
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                Accept: "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "Atlas-Nexus/1.0",
+              },
+              signal: AbortSignal.timeout(5000),
+            }
+          );
+          if (!r.ok) return null;
+          const data = await r.json() as any[];
+          const lines = data.slice(0, 3).map((c: any) => {
+            const msg = ((c.commit?.message ?? "") as string).split("\n")[0].slice(0, 80);
+            const sha = (c.sha as string)?.slice(0, 7);
+            const date = c.commit?.author?.date ? new Date(c.commit.author.date).toLocaleDateString() : "";
+            return `  ${sha} — ${msg} (${date})`;
+          });
+          return `${p.name}:\n${lines.join("\n")}`;
+        })
+      );
+      const activityLines = recentCommits
+        .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled" && r.value !== null)
+        .map(r => r.value)
+        .join("\n\n");
+      if (activityLines) {
+        systemPrompt += `\n\n--- RECENT GITHUB ACTIVITY ACROSS PORTFOLIO ---\n${activityLines}\n--- END RECENT GITHUB ACTIVITY ---`;
+      }
+    } catch {
+      // non-fatal — Atlas still works without GitHub activity
+    }
+  }
   if (committedLedger) {
     systemPrompt += `\n\n--- COMMITTED DECISIONS ACROSS PORTFOLIO (use for cross-project tension detection) ---\n${committedLedger}\n--- END COMMITTED DECISIONS ---`;
   }
