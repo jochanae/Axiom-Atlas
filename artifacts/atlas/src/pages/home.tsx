@@ -1603,8 +1603,12 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }, [homeMessages]);
 
-  const handleKeyDown = (_e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter adds a new line naturally — send via the send button
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter") return;
+    const isMobile = window.innerWidth < 768 || /Mobi|Android/i.test(navigator.userAgent);
+    if (isMobile || e.shiftKey) return;
+    e.preventDefault();
+    void handleSubmit();
   };
 
   const autoResize = () => {
@@ -2395,6 +2399,8 @@ export default function Home() {
                   disabled={isLoading}
                   style={{
                     width: 40, height: 40, flexShrink: 0,
+                    position: "relative",
+                    zIndex: 10,
                     background: hasInput && !isLoading ? "var(--atlas-ember)" : "var(--atlas-surface-alt)",
                     border: hasInput ? "none" : "1px solid var(--atlas-border)",
                     boxShadow: hasInput && !isLoading ? "0 0 18px -3px rgba(146,64,14,0.55)" : "none",
