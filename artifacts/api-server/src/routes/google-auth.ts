@@ -10,6 +10,19 @@ const CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const SESSION_COOKIE = "atlas-session";
 const SESSION_DAYS = 90;
+
+function getStateCookieDomain(): string | undefined {
+  const appUrl = process.env.APP_URL?.trim();
+  if (!appUrl) return undefined;
+  try {
+    return new URL(appUrl).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+const STATE_COOKIE_DOMAIN = getStateCookieDomain();
+
 // Super-admin email from env only — no hardcoded fallback
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
 
@@ -60,13 +73,22 @@ router.get("/auth/google", (req, res): void => {
   const state = randomBytes(16).toString("hex");
   const isLink = req.query.link === "1";
 
-  res.cookie("oauth_state", state, { httpOnly: true, secure: true, sameSite: "none", maxAge: 600_000, path: "/" });
+  const stateCookieOpts: Parameters<typeof res.cookie>[2] = {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    maxAge: 600_000,
+    path: "/",
+    ...(STATE_COOKIE_DOMAIN ? { domain: STATE_COOKIE_DOMAIN } : {}),
+  };
+
+  res.cookie("oauth_state", state, stateCookieOpts);
 
   // If linking, carry the existing session token so the callback can find the user
   if (isLink) {
     const existingSession = req.cookies?.[SESSION_COOKIE];
     if (existingSession) {
-      res.cookie("oauth_link_session", existingSession, { httpOnly: true, secure: true, sameSite: "none", maxAge: 600_000, path: "/" });
+      res.cookie("oauth_link_session", existingSession, stateCookieOpts);
     }
   }
 
@@ -89,8 +111,8 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
   const storedState = req.cookies?.oauth_state;
   const linkSessionToken = req.cookies?.oauth_link_session as string | undefined;
 
-  res.clearCookie("oauth_state", { path: "/" });
-  res.clearCookie("oauth_link_session", { path: "/" });
+  res.clearCookie("oauth_state", { path: "/", ...(STATE_COOKIE_DOMAIN ? { domain: STATE_COOKIE_DOMAIN } : {}) });
+  res.clearCookie("oauth_link_session", { path: "/", ...(STATE_COOKIE_DOMAIN ? { domain: STATE_COOKIE_DOMAIN } : {}) });
 
   if (error || !code) {
     res.redirect("/?auth_error=" + encodeURIComponent(error ?? "no_code"));
