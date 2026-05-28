@@ -14,8 +14,15 @@ const SESSION_DAYS = 90;
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
 
 function getRedirectUri(req?: import("express").Request) {
-  // Use the actual host from the incoming request so dev and prod both work
-  // without needing separate Google Console entries per environment
+  // APP_URL takes priority — guarantees consistent redirect URI regardless of
+  // how the request was proxied (Vercel → Cloud Run headers are inconsistent).
+  const appUrl = process.env.APP_URL?.trim();
+  if (appUrl) {
+    const url = new URL(appUrl);
+    const host = url.host.replace(/^www\./, "");
+    return `${url.protocol.replace(/:$/, "")}://${host}/api/auth/google/callback`;
+  }
+  // Fallback for local dev only
   const forwardedProto = req?.headers["x-forwarded-proto"];
   const protocol =
     (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)?.split(",")[0]?.trim().replace(/:$/, "") ||
@@ -27,13 +34,6 @@ function getRedirectUri(req?: import("express").Request) {
     if (forwardedHost) return `${protocol}://${forwardedHost}/api/auth/google/callback`;
     const host = req.headers.host;
     if (host) return `${protocol}://${host}/api/auth/google/callback`;
-  }
-  const appUrl = process.env.APP_URL?.trim();
-  if (appUrl) {
-    const url = new URL(appUrl);
-    // Strip www. to match Google Console registered URI
-    const host = url.host.replace(/^www\./, "");
-    return `${url.protocol.replace(/:$/, "")}://${host}/api/auth/google/callback`;
   }
   return `${protocol}://localhost:80/api/auth/google/callback`;
 }
