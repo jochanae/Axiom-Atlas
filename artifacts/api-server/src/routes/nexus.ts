@@ -2103,16 +2103,9 @@ If no clear project name was discussed, use "New Project".`,
       ideaModeActive = session?.ideaMode === true;
     }
     if (!targetProjectId) {
-      const [newProject] = await db
-        .insert(projectsTable)
-        .values({
-          name: brief.projectName,
-          description: brief.description,
-          entityType: ideaModeActive ? "idea" : "project",
-          userId,
-        })
-        .returning();
-      targetProjectId = newProject.id;
+      // Return the brief for frontend to confirm — never silently auto-create a project.
+      res.json({ ok: false, requiresProject: true, brief });
+      return;
     }
 
     const [targetProject] = await db
