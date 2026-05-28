@@ -35,6 +35,7 @@ import connectionsRouter from "./connections";
 import stateRouter from "./state";
 import uploadRouter from "./upload";
 import artifactsRouter from "./artifacts";
+import mentalShredderRouter from "./mental-shredder";
 
 const router: IRouter = Router();
 
@@ -92,6 +93,7 @@ router.use(requireAuth, terminalRouter);
 router.use(requireAuth, uploadRouter);
 
 router.use(requireAuth, artifactsRouter);
+router.use(requireAuth, mentalShredderRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);
