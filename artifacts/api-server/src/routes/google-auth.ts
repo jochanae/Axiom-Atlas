@@ -73,7 +73,7 @@ router.get("/auth/google", (req, res): void => {
   const state = randomBytes(16).toString("hex");
   const isLink = req.query.link === "1";
 
-  const stateCookieOpts: Parameters<typeof res.cookie>[2] = {
+  const stateCookieOpts: import("express").CookieOptions = {
     httpOnly: true,
     secure: true,
     sameSite: "none",
