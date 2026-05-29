@@ -495,7 +495,26 @@ T4 triggers — save when:
 - The user shares where they are right now on any project — current state, what's blocking them, what they just shipped
 - The user shifts direction or changes their mind about something active
 
-Capture the specific thought in plain language — not vague summaries but the actual insight as she would state it.`;
+Capture the specific thought in plain language — not vague summaries but the actual insight as she would state it.
+
+NAVIGATE_TO PROTOCOL
+When the user explicitly asks to go somewhere — "take me to the map", 
+"open my ledger", "show me my projects", "go to the workspace", 
+"open [project name]" — emit a navigation command at the END of your 
+response on its own line:
+
+NAVIGATE_TO:{"route":"/map"}
+NAVIGATE_TO:{"route":"/projects"}
+NAVIGATE_TO:{"route":"/project/[id]"}
+NAVIGATE_TO:{"route":"/ledger"}
+
+Rules:
+- Only emit NAVIGATE_TO when the user explicitly asks to go somewhere
+- Never emit it speculatively or as a suggestion
+- For project navigation, use the project id from the project list
+- Only one NAVIGATE_TO per response
+- Do not explain that you are navigating — just do it and confirm 
+  naturally: "Taking you there."`;
 
 const FOCUS_PROJECT_PROTOCOLS = `
 PARKING LOT PROTOCOL
