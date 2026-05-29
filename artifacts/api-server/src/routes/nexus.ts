@@ -1579,6 +1579,11 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
   // Always inject the full project roster so Atlas knows every room, even empty ones
   systemPrompt += `\n\n--- YOUR PROJECT PORTFOLIO (${projects.length} project${projects.length !== 1 ? "s" : ""}) ---\n${projectRoster}`;
+  // Situational anchor — inject last active project when no project is in focus
+  if (!focusProjectId && userProjects.length > 0) {
+    const lastActive = userProjects[0]; // already ordered by updatedAt desc
+    systemPrompt += `\n\n--- SITUATIONAL ANCHOR ---\nThe most recently active project is "${lastActive.name}" (id: ${lastActive.id}). If the user's message seems related to a specific project but hasn't focused one, lean toward this project as the most likely context. Do not assume — but use it as a soft anchor.\n--- END SITUATIONAL ANCHOR ---`;
+  }
   // Inject recent GitHub activity across all linked repos (global view — no focusProjectId needed)
   const linkedProjects = projects.filter(p => p.linkedRepo);
   if (linkedProjects.length > 0 && process.env.GITHUB_TOKEN) {
