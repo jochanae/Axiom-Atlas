@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { readdir, readFile, stat } from "fs/promises";
 import * as nodePath from "path";
 import { atlasSelfMapTable, db } from "@workspace/db";
+import { desc } from "drizzle-orm";
 
 type IndexedFile = {
   path: string;
@@ -140,6 +141,58 @@ export async function buildSelfMap(): Promise<{ file_count: number; created_at: 
 router.post("/selfmap/refresh", async (_req, res): Promise<void> => {
   const result = await buildSelfMap();
   res.json({ file_count: result.file_count, created_at: result.created_at.toISOString() });
+});
+
+router.get("/selfmap/dependencies", async (req, res): Promise<void> => {
+  const filePath = req.query.file as string | undefined;
+  
+  // Load the stored selfmap
+  const rows = await db.select().from(atlasSelfMapTable)
+    .orderBy(desc(atlasSelfMapTable.createdAt)).limit(1);
+  
+  if (!rows[0]) {
+    res.status(404).json({ error: "No selfmap found. Run /api/selfmap/refresh first." });
+    return;
+  }
+  
+  const selfMap = JSON.parse(rows[0].mapJson) as {
+    files: Array<{ path: string; exports: string[]; internalImports: string[] }>;
+    relationships: Array<{ from: string; to: string }>;
+  };
+  
+  if (!filePath) {
+    // Return full dependency summary — most connected files
+    const connectionCount = new Map<string, number>();
+    for (const rel of selfMap.relationships) {
+      connectionCount.set(rel.from, (connectionCount.get(rel.from) ?? 0) + 1);
+      connectionCount.set(rel.to, (connectionCount.get(rel.to) ?? 0) + 1);
+    }
+    const hotspots = [...connectionCount.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([path, count]) => ({ path, connections: count }));
+    res.json({ hotspots, totalFiles: selfMap.files.length, totalRelationships: selfMap.relationships.length });
+    return;
+  }
+  
+  // Return dependencies for a specific file
+  const dependencies = selfMap.relationships
+    .filter(r => r.from === filePath)
+    .map(r => r.to);
+  
+  const dependents = selfMap.relationships
+    .filter(r => r.to === filePath)
+    .map(r => r.from);
+  
+  const fileInfo = selfMap.files.find(f => f.path === filePath);
+  
+  res.json({
+    file: filePath,
+    exports: fileInfo?.exports ?? [],
+    dependencies,
+    dependents,
+    impactRadius: dependents.length,
+  });
 });
 
 export default router;

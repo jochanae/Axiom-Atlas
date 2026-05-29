@@ -2894,6 +2894,33 @@ router.post("/chat", async (req, res): Promise<void> => {
       // Non-fatal — Atlas still works without structure map
     }
   }
+  // Inject AST dependency context if a file is mentioned
+  try {
+    const rows = await db.select()
+      .from(atlasSelfMapTable)
+      .orderBy(desc(atlasSelfMapTable.createdAt))
+      .limit(1);
+    if (rows[0]) {
+      const selfMap = JSON.parse(rows[0].mapJson) as {
+        files: Array<{ path: string; exports: string[]; internalImports: string[] }>;
+        relationships: Array<{ from: string; to: string }>;
+      };
+      // Find hotspot files — most connected
+      const connectionCount = new Map<string, number>();
+      for (const rel of selfMap.relationships) {
+        connectionCount.set(rel.to, (connectionCount.get(rel.to) ?? 0) + 1);
+      }
+      const hotspots = [...connectionCount.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([path, count]) => `${path} (imported by ${count} files)`);
+      if (hotspots.length > 0) {
+        systemPrompt += `\n\n--- CODEBASE DEPENDENCY HOTSPOTS ---\nThese files are imported by the most other files. Changes here have the widest blast radius:\n${hotspots.join("\n")}\nWhen the user asks about changing any of these files, warn them about the impact radius.\n--- END DEPENDENCY HOTSPOTS ---`;
+      }
+    }
+  } catch {
+    // non-fatal
+  }
   systemPrompt += `\n\n--- SESSION CONTINUITY ---
 If this is the first assistant message in this session (no prior assistant messages exist in the session history), open naturally — like picking up a real conversation, not filing a status report. DO NOT use the format "Still here. [recap]. What's next:". Instead, read the memory and repo activity and respond the way a sharp collaborator would after being away: reference what actually matters, skip what doesn't, and lead with something useful or ask the right question. One to two sentences max. Never clinical. Never a checklist. Match the energy of someone who was already thinking about this project before the conversation started.
 --- END SESSION CONTINUITY ---`;
