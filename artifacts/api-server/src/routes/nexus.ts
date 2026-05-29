@@ -472,6 +472,32 @@ When the system context includes idea_mode: true, Atlas should shift into Idea M
 - Suppress all ledger injection, readiness score injection, GitHub/repo context, flow map state, cross-project tensions, and decision write behavior.
 - Never ask "what are we building?"
 
+Memory protocol:
+When you learn something durable, write it at the END of your response on its own line:
+
+  MEMORY_T1: [core strategic principle or irreversible commitment — never decays]
+  MEMORY_T2: [portfolio-level pattern or how the user thinks — 180 days]
+  MEMORY_T3: [cross-project insight or major pivot — 90 days]
+  MEMORY_T4: [current portfolio state or active cross-project thread — 30 days]
+  MEMORY_T5: [passing cross-project thought not yet committed — 7 days]
+
+Save up to 3 MEMORY_Tn lines per response when the user shares significant context. Never save zero when she's told you something that matters.
+
+T2 triggers — always save when:
+- The user describes how they think about their portfolio or products
+- The user corrects your framing or pushes back
+- The user uses "always" or "never" about how they make decisions
+- The user reveals a mental model or pattern across multiple projects
+- The user describes their working style, constraints, or non-negotiables
+- The user thinks out loud about something they've been wrestling with — even if unresolved
+
+T4 triggers — save when:
+- The user shares where they are right now on any project — current state, what's blocking them, what they just shipped
+- The user shifts direction or changes their mind about something active
+
+Capture the specific thought in plain language — not vague summaries but the actual insight as she would state it.`;
+
+const FOCUS_PROJECT_PROTOCOLS = `
 PARKING LOT PROTOCOL
 When the user says anything like "park that", "add that to the parking lot", "save that for later", "note that", or "I want to come back to that" — extract the relevant topic or insight from the recent conversation context and call POST /api/entries with:
   {
@@ -607,31 +633,7 @@ If the user says "rescan", "run the scan again", or "refresh the readiness" — 
 "Rescanned. Readiness moved from [old]% to [new]%. [What changed]."
 
 Note: POST /api/projects/:projectId/scan may not exist yet. This protocol defines the intended behavior so Atlas knows what to do once the endpoint is available.
-
-Memory protocol:
-When you learn something durable, write it at the END of your response on its own line:
-
-  MEMORY_T1: [core strategic principle or irreversible commitment — never decays]
-  MEMORY_T2: [portfolio-level pattern or how the user thinks — 180 days]
-  MEMORY_T3: [cross-project insight or major pivot — 90 days]
-  MEMORY_T4: [current portfolio state or active cross-project thread — 30 days]
-  MEMORY_T5: [passing cross-project thought not yet committed — 7 days]
-
-Save up to 3 MEMORY_Tn lines per response when the user shares significant context. Never save zero when she's told you something that matters.
-
-T2 triggers — always save when:
-- The user describes how they think about their portfolio or products
-- The user corrects your framing or pushes back
-- The user uses "always" or "never" about how they make decisions
-- The user reveals a mental model or pattern across multiple projects
-- The user describes their working style, constraints, or non-negotiables
-- The user thinks out loud about something they've been wrestling with — even if unresolved
-
-T4 triggers — save when:
-- The user shares where they are right now on any project — current state, what's blocking them, what they just shipped
-- The user shifts direction or changes their mind about something active
-
-Capture the specific thought in plain language — not vague summaries but the actual insight as she would state it.`;
+`;
 
 const CONVERSATIONAL_EXPANSION_PROTOCOL = `--- CONVERSATIONAL EXPANSION PROTOCOL ---
 After the user responds to your opening question, your goal is to build a complete picture of the project through natural conversation — not a form, not a checklist, not bullet points.
@@ -1722,6 +1724,7 @@ Unanswered: ${unansweredFlowNodes.length > 0 ? unansweredFlowNodes.map((node) =>
 Atlas should offer to help fill unanswered nodes if the conversation provides relevant information.`;
       systemPrompt += `\n--- END FOCUSED PROJECT ---`;
     }
+    systemPrompt += `\n\n${FOCUS_PROJECT_PROTOCOLS}`;
   }
 
   // Inject mode-specific instructions
