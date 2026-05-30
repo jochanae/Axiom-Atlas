@@ -356,10 +356,13 @@ router.get("/github/server-token", (_req, res): void => {
 
 // GET /api/github/repos
 router.get("/github/repos", async (req, res): Promise<void> => {
-  const token = (() => {
+  const headerToken = (() => {
     const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
     return (h && h !== "__server__" && h !== "__account__") ? h : null;
   })();
+
+  const userId = (req as any).authUser?.id as number | undefined;
+  const token = headerToken ?? await getAccountGithubToken(userId);
 
   if (!token) {
     res.status(401).json({
@@ -369,23 +372,32 @@ router.get("/github/repos", async (req, res): Promise<void> => {
     return;
   }
 
-  const resp = await fetch(`${GH_API}/user/repos?per_page=100&sort=pushed&type=all`, { headers: ghHeaders(token) });
-  if (!resp.ok) {
-    if (resp.status === 401 || resp.status === 403 || resp.status === 422) {
-      res.status(401).json({
-        code: "TOKEN_INVALID",
-        message: "GitHub token is invalid or missing required scopes.",
-      });
+  let allRepos: any[] = [];
+  let page = 1;
+  while (true) {
+    const resp = await fetch(
+      `${GH_API}/user/repos?per_page=100&sort=pushed&type=all&page=${page}`,
+      { headers: ghHeaders(token) }
+    );
+    if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403 || resp.status === 422) {
+        res.status(401).json({
+          code: "TOKEN_INVALID",
+          message: "GitHub token is invalid or missing required scopes.",
+        });
+        return;
+      }
+      const detail = await resp.text();
+      res.status(resp.status).json({ error: "GITHUB_ERROR", message: "GitHub rejected this token.", detail });
       return;
     }
-
-    const detail = await resp.text();
-    // Return a clear code so the frontend can show a helpful message
-    res.status(resp.status).json({ error: "GITHUB_ERROR", message: "GitHub rejected this token. Make sure it has repo scope.", detail });
-    return;
+    const batch = await resp.json() as any[];
+    allRepos = [...allRepos, ...batch];
+    if (batch.length < 100) break;
+    page++;
   }
+  const repos = allRepos;
 
-  const repos = await resp.json() as any[];
   res.json(repos.map(r => ({
     id: r.id, name: r.name, fullName: r.full_name, private: r.private,
     description: r.description, language: r.language,
