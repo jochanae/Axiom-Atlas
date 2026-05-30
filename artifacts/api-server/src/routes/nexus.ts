@@ -2142,7 +2142,7 @@ router.post("/shaping/hold", async (req, res): Promise<void> => {
         user_id,
         name,
         description,
-        status,
+        entity_type,
         created_at,
         updated_at
       )
@@ -2155,11 +2155,11 @@ router.post("/shaping/hold", async (req, res): Promise<void> => {
           what: what ?? null,
           shapedAt: new Date().toISOString(),
         })},
-        'shaping',
+        'idea',
         now(),
         now()
       )
-      RETURNING id, name, status, created_at
+      RETURNING id, name, entity_type, created_at
     `);
 
     const project = rows.rows[0];
