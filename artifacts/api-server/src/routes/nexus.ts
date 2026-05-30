@@ -514,7 +514,34 @@ Rules:
 - For project navigation, use the project id from the project list
 - Only one NAVIGATE_TO per response
 - Do not explain that you are navigating — just do it and confirm 
-  naturally: "Taking you there."`;
+  naturally: "Taking you there."
+
+ATLAS SHAPING ENGINE
+You are quietly monitoring this conversation for signs that 
+a vague idea is crystallizing into a real project. Do not 
+interrupt the conversation to ask about this. Just listen.
+
+MONITOR FOR THREE TENSIONS:
+1. WHAT — the core mechanism or concept being described
+2. WHO — the specific audience, user persona, or pain point
+3. THE TENSION — the specific problem or gap being solved
+
+TRIGGER CRITERIA:
+When you can confidently fill in all three from the organic 
+conversation — without asking explicit questions — emit a 
+READY_TO_SHAPE marker at the very end of your response on 
+its own line:
+
+READY_TO_SHAPE:{"title":"[3 words max]","audience":"[one sentence]","tension":"[one sentence]","what":"[one sentence]"}
+
+Rules:
+- Only emit READY_TO_SHAPE once per conversation thread
+- Never emit it on the first message
+- Never emit it for something already in the user's project list
+- Only emit when genuinely confident — not speculatively
+- Do not mention that you are monitoring
+- Do not explain that you are about to emit it
+- After emitting, continue the conversation naturally`;
 
 const FOCUS_PROJECT_PROTOCOLS = `
 PARKING LOT PROTOCOL
@@ -1873,7 +1900,31 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     });
     await updateSessionRunMetadata(sessionId, runMetadata);
 
-    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
+    // Parse READY_TO_SHAPE marker
+    const shapingMatch = rawContent.match(
+      /READY_TO_SHAPE:\{([^\n]+)\}/
+    );
+    let shapingPayload: {
+      title: string;
+      audience: string;
+      tension: string;
+      what: string;
+    } | null = null;
+
+    if (shapingMatch) {
+      try {
+        shapingPayload = JSON.parse(
+          `{${shapingMatch[1]}}`
+        );
+      } catch { /* non-fatal */ }
+    }
+
+    // Strip marker from displayed content
+    const nexusCleanContent = rawContent
+      .replace(/\nREADY_TO_SHAPE:\{[^\n]+\}/g, "")
+      .trim();
+
+    res.write(`event: done\ndata: ${JSON.stringify({ content: nexusCleanContent, shapingPayload: shapingPayload ?? null, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
     res.end();
   };
 
