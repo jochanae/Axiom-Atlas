@@ -2294,6 +2294,72 @@ Provide the complete implementation. Include FILE_EDIT_START / FILE_EDIT_CONTENT
     }
   }
 
+  // MCP tool execution
+  if (toolName.startsWith("mcp__")) {
+    const parts = toolName.split("__");
+    const connectionId = Number(parts[1]);
+    const mcpToolName = parts.slice(2).join("__");
+
+    try {
+      // Load the connection
+      const rows = await db.execute(sql`
+        SELECT url, token FROM connections
+        WHERE id = ${connectionId} AND user_id = ${userId}
+          AND type = 'mcp'
+        LIMIT 1
+      `);
+
+      const conn = rows.rows[0] as { url: string; token?: string } | undefined;
+      if (!conn) {
+        return { content: `MCP connection ${connectionId} not found`, success: false };
+      }
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      };
+      if (conn.token) headers["Authorization"] = `Bearer ${conn.token}`;
+
+      const res = await fetch(conn.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: Date.now(),
+          method: "tools/call",
+          params: {
+            name: mcpToolName,
+            arguments: toolInput,
+          }
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!res.ok) {
+        return { content: `MCP tool call failed: ${res.status}`, success: false };
+      }
+
+      const data = await res.json() as {
+        result?: { content?: Array<{ type: string; text?: string }> };
+        error?: { message?: string };
+      };
+
+      if (data.error) {
+        return { content: `MCP error: ${data.error.message ?? "Unknown"}`, success: false };
+      }
+
+      const content = data.result?.content
+        ?.filter(c => c.type === "text")
+        .map(c => c.text ?? "")
+        .join("\n") ?? "Tool executed successfully";
+
+      return { content, success: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "MCP call failed";
+      return { content: message, success: false };
+    }
+  }
+
   return { content: `Unknown tool: ${toolName}`, success: false };
 }
 
@@ -2317,7 +2383,46 @@ async function runAgenticLoop(
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
 
-  const availableTools = AGENTIC_TOOLS.filter((t) => {
+  // Load user's MCP connections and inject as available tools
+  const mcpTools: Anthropic.Tool[] = [];
+  try {
+    const mcpRows = await db.execute(sql`
+      SELECT id, label, metadata
+      FROM connections
+      WHERE user_id = ${userId} AND type = 'mcp'
+        AND status = 'linked'
+    `);
+
+    for (const row of mcpRows.rows as Array<{
+      id: number;
+      label: string;
+      metadata: { tools?: Array<{ name: string; description?: string; inputSchema?: object }> }
+    }>) {
+      const tools = row.metadata?.tools ?? [];
+      for (const tool of tools) {
+        mcpTools.push({
+          name: `mcp__${row.id}__${tool.name}`,
+          description: `[${row.label}] ${tool.description ?? tool.name}`,
+          input_schema: (tool.inputSchema as Anthropic.Tool["input_schema"]) ?? {
+            type: "object" as const,
+            properties: {},
+          },
+        });
+      }
+    }
+  } catch {
+    // non-fatal — continue without MCP tools
+  }
+
+  if (mcpTools.length > 0) {
+    const mcpSummary = mcpTools
+      .slice(0, 10)
+      .map(t => `- ${t.name}: ${t.description}`)
+      .join("\n");
+    systemPrompt += `\n\n--- MCP TOOLS AVAILABLE ---\nYou have access to these external tools via MCP connections. Use them when the user asks you to interact with these services:\n${mcpSummary}\n--- END MCP TOOLS ---`;
+  }
+
+  const availableTools = [...AGENTIC_TOOLS, ...mcpTools].filter((t) => {
     if (
       (t.name === "read_files" || t.name === "deep_read") &&
       !hasRepo
