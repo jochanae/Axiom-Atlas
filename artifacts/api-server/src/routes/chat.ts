@@ -235,6 +235,16 @@ function appendMemoryFacts(
   return { ...store, entries: [...store.entries, ...newEntries] };
 }
 
+function addMemoryFact(
+  store: MemoryStore,
+  text: string,
+  tier: 1 | 2 | 3 | 4 | 5
+): { updatedStore: MemoryStore } {
+  return {
+    updatedStore: appendMemoryFacts(store, [{ tier, text }], new Date()),
+  };
+}
+
 // ── GitHub File Tree Helper ───────────────────────────────────────────────────
 const GH_API = "https://api.github.com";
 
@@ -2028,6 +2038,7 @@ type AgenticLoopResult = {
   modelUsed: string;
   terminalCmd: ChatTerminalCommand | null;
   terminalResult: ChatTerminalResult | null;
+  mcpToolResults: Array<{ tool: string; summary: string }>;
 };
 
 const AGENTIC_TOOLS: Anthropic.Tool[] = [
@@ -2379,6 +2390,7 @@ async function runAgenticLoop(
   narrate: (msg: string) => void,
   hasRepo: boolean
 ): Promise<AgenticLoopResult> {
+  const mcpToolResults: Array<{ tool: string; summary: string }> = [];
   let assistantUsage = emptyUsage();
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
@@ -2522,6 +2534,16 @@ async function runAgenticLoop(
           userId
         );
 
+        // Collect MCP tool results for session memory
+        if (tname.startsWith("mcp__")) {
+          const parts = tname.split("__");
+          const toolLabel = parts.slice(2).join("__");
+          mcpToolResults.push({
+            tool: toolLabel,
+            summary: result.content.slice(0, 300),
+          });
+        }
+
         if (tname === "run_command" && result.terminalCmd) {
           terminalCmd = result.terminalCmd;
           terminalResult = result.terminalResult ?? null;
@@ -2587,6 +2609,7 @@ async function runAgenticLoop(
     modelUsed: "claude-sonnet-4-6",
     terminalCmd,
     terminalResult,
+    mcpToolResults,
   };
 }
 
@@ -3316,6 +3339,7 @@ ARTIFACT_WRITE_END
   let modelUsed: string;
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
+  let mcpToolResults: Array<{ tool: string; summary: string }> = [];
 
   if (isDirect) {
     // ── Direct path: streaming model call ──────────────────────────────────
@@ -3467,6 +3491,7 @@ ARTIFACT_WRITE_END
         hasRepo
       );
       rawContent = loopResult.rawContent;
+      mcpToolResults = loopResult.mcpToolResults ?? [];
       assistantUsage = loopResult.assistantUsage;
       modelUsed = loopResult.modelUsed;
       terminalCmd = loopResult.terminalCmd;
@@ -3534,6 +3559,31 @@ ARTIFACT_WRITE_END
       .update(projectsTable)
       .set({ memory: JSON.stringify(updatedStore) })
       .where(eq(projectsTable.id, projectId));
+  }
+
+  // Write MCP tool results as Tier 4 session memory
+  if (mcpToolResults.length > 0) {
+    const mcpMemoryLine = mcpToolResults
+      .map(r => `Used ${r.tool}: ${r.summary}`)
+      .join(". ");
+    try {
+      const store = parseMemoryStore(
+        (await db.select({ memory: projectsTable.memory })
+          .from(projectsTable)
+          .where(eq(projectsTable.id, projectId))
+          .limit(1))[0]?.memory ?? null
+      );
+      const { updatedStore: mcpUpdated } = addMemoryFact(
+        store,
+        mcpMemoryLine,
+        4
+      );
+      await db.update(projectsTable)
+        .set({ memory: JSON.stringify(mcpUpdated) })
+        .where(eq(projectsTable.id, projectId));
+    } catch {
+      // non-fatal
+    }
   }
 
   // Extract FLOW_NODE lines before persisting
