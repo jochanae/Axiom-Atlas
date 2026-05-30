@@ -313,7 +313,7 @@ When ALL of these are true:
 - This is NOT a strategic, pricing, or emotional topic
 
 Emit this marker at the END of your response, after your text:
-VISUALIZE:{"prompt":"[a detailed image generation prompt describing what the concept looks like, max 100 words]","caption":"[one short sentence describing what this sketch shows]"}
+VISUALIZE:{"prompt":"[detailed image generation prompt describing the concept, max 100 words]","caption":"[one short sentence describing what this sketch shows]"}
 
 Rules:
 - Only emit once per conversation
