@@ -2116,6 +2116,62 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   }
 });
 
+router.post("/shaping/hold", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const { title, audience, tension, what } = req.body as {
+    title?: string;
+    audience?: string;
+    tension?: string;
+    what?: string;
+  };
+
+  if (!title?.trim()) {
+    res.status(400).json({ error: "title is required" });
+    return;
+  }
+
+  try {
+    // Create a shaping project
+    const rows = await db.execute(sql`
+      INSERT INTO projects (
+        user_id,
+        name,
+        description,
+        status,
+        created_at,
+        updated_at
+      )
+      VALUES (
+        ${userId},
+        ${title.trim()},
+        ${JSON.stringify({
+          audience: audience ?? null,
+          tension: tension ?? null,
+          what: what ?? null,
+          shapedAt: new Date().toISOString(),
+        })},
+        'shaping',
+        now(),
+        now()
+      )
+      RETURNING id, name, status, created_at
+    `);
+
+    const project = rows.rows[0];
+    res.status(201).json({ project });
+  } catch (err) {
+    const message = err instanceof Error
+      ? err.message
+      : "Failed to hold shaping";
+    res.status(500).json({ error: message });
+  }
+});
+
 router.post("/nexus/handoff", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
