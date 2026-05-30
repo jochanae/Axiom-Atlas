@@ -36,6 +36,7 @@ import stateRouter from "./state";
 import uploadRouter from "./upload";
 import artifactsRouter from "./artifacts";
 import mentalShredderRouter from "./mental-shredder";
+import jobsRouter from "./jobs";
 
 const router: IRouter = Router();
 
@@ -73,6 +74,7 @@ router.use(requireAuth, scanRouter);
 router.use(requireAuth, blueprintRouter);
 router.use(requireAuth, connectionsRouter);
 router.use(requireAuth, stateRouter);
+router.use(requireAuth, jobsRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
