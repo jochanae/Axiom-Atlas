@@ -3883,8 +3883,22 @@ ARTIFACT_WRITE_END
     }
   }
 
+  // Parse contextual chips from Atlas response
+  const chipMatches = [...rawContent.matchAll(
+    /CHIP:\{"label":"([^"]+)","insight":"([^"]+)"(?:,"type":"([^"]+)")?\}/g
+  )];
+  const parsedChips = chipMatches.map(m => ({
+    label: m[1],
+    insight: m[2],
+    type: m[3] ?? "insight",
+  }));
+  // Strip chip markers from displayed content
+  const cleanContent = rawContent
+    .replace(/\nCHIP:\{[^\n]+\}/g, "")
+    .trim();
+
   const finalPayload = {
-    content: displayContent,
+    content: cleanContent,
     modelUsed,
     terminalCmd,
     terminalResult,
@@ -3893,7 +3907,7 @@ ARTIFACT_WRITE_END
     catchPayload: null,
     alertPayload: alertPayload ?? undefined,
     model: activeModel,
-    memoryChips: allChips.length > 0 ? allChips : undefined,
+    memoryChips: parsedChips,
     messageId: savedMsgId,
     memoryUpdated: newFacts.length > 0,
     confidenceAssessment: confidenceAssessment ?? undefined,
