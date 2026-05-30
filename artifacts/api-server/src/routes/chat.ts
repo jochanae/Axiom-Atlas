@@ -3883,18 +3883,24 @@ ARTIFACT_WRITE_END
     }
   }
 
-  // Parse contextual chips from Atlas response
-  const chipMatches = [...rawContent.matchAll(
-    /CHIP:\{"label":"([^"]+)","insight":"([^"]+)"(?:,"type":"([^"]+)")?\}/g
-  )];
-  const parsedChips = chipMatches.map(m => ({
-    label: m[1],
-    insight: m[2],
-    type: m[3] ?? "insight",
-  }));
-  // Strip chip markers from displayed content
+  // Parse MEMORY_CHIPS from Atlas response
+  let parsedChips: Array<{ label: string; insight: string; type?: string }> = [];
+  const chipLineMatch = rawContent.match(/MEMORY_CHIPS:\s*(\[[\s\S]*?\])/);
+  if (chipLineMatch) {
+    try {
+      const raw = JSON.parse(chipLineMatch[1]);
+      if (Array.isArray(raw)) {
+        parsedChips = raw.filter(
+          (c: any) => typeof c?.label === "string" && typeof c?.insight === "string"
+        ).map((c: any) => ({ label: c.label, insight: c.insight, type: c.type ?? "insight" }));
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  // Strip MEMORY_CHIPS line from displayed content
   const cleanContent = rawContent
-    .replace(/\nCHIP:\{[^\n]+\}/g, "")
+    .replace(/\nMEMORY_CHIPS:[\s\S]*?(?=\n[A-Z_]+:|$)/g, "")
+    .replace(/MEMORY_CHIPS:[\s\S]*$/g, "")
     .trim();
 
   const finalPayload = {
