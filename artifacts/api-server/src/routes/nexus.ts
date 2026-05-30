@@ -304,6 +304,26 @@ When fewer than three are present: respond normally, no marker.
 This is not optional. This is a background protocol that runs 
 on every response. The user never sees it. You never mention it.
 
+VISUAL SKETCH PROTOCOL
+When ALL of these are true:
+- The user is describing something visual (a product UI, 
+  physical space, app layout, or design concept)
+- You have enough context to know what it looks like
+- The conversation is at least 2 exchanges deep
+- This is NOT a strategic, pricing, or emotional topic
+
+Emit this marker at the END of your response, after your text:
+VISUALIZE:{"prompt":"[a detailed image generation prompt describing what the concept looks like, max 100 words]","caption":"[one short sentence describing what this sketch shows]"}
+
+Rules:
+- Only emit once per conversation
+- Never emit for business strategy, pricing, or emotional topics
+- The prompt should describe a clean product UI mockup or 
+  conceptual sketch — not a photo
+- Do not mention that you are generating an image
+- Do not explain the marker
+- Continue the conversation naturally after emitting it
+
 <atlas-identity>
 You know who you are.
 
@@ -2480,6 +2500,50 @@ router.post("/nexus/name", async (req, res): Promise<void> => {
     res.json({ name: name || "" });
   } catch {
     res.json({ name: "" });
+  }
+});
+
+router.post("/nexus/visualize", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  const { prompt } = req.body as { prompt?: string };
+  if (!prompt?.trim()) {
+    res.status(400).json({ error: "prompt is required" });
+    return;
+  }
+
+  try {
+    const result = await genai.models.generateImages({
+      model: "imagen-3.0-generate-002",
+      prompt: `Product UI mockup sketch, clean minimal design, dark theme: ${prompt}`,
+      config: {
+        numberOfImages: 1,
+        aspectRatio: "16:9",
+        safetyFilterLevel: "BLOCK_ONLY_HIGH",
+      },
+    });
+
+    const imageBytes = result.generatedImages?.[0]
+      ?.image?.imageBytes;
+    
+    if (!imageBytes) {
+      res.status(500).json({ error: "No image generated" });
+      return;
+    }
+
+    res.json({ 
+      imageBase64: imageBytes,
+      mimeType: "image/png",
+    });
+  } catch (err) {
+    const message = err instanceof Error 
+      ? err.message 
+      : "Image generation failed";
+    res.status(500).json({ error: message });
   }
 });
 
