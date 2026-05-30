@@ -32,6 +32,7 @@ import tensionsRouter from "./tensions";
 import scanRouter from "./scan";
 import blueprintRouter from "./blueprint";
 import connectionsRouter from "./connections";
+import mcpRouter from "./mcp";
 import stateRouter from "./state";
 import uploadRouter from "./upload";
 import artifactsRouter from "./artifacts";
@@ -73,6 +74,7 @@ router.use(requireAuth, selfmapRouter);
 router.use(requireAuth, scanRouter);
 router.use(requireAuth, blueprintRouter);
 router.use(requireAuth, connectionsRouter);
+router.use(requireAuth, mcpRouter);
 router.use(requireAuth, stateRouter);
 router.use(requireAuth, jobsRouter);
 
