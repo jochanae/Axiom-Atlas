@@ -8,7 +8,7 @@ const router: IRouter = Router();
 
 const ConnectionBody = z.object({
   type: z.enum(["github", "railway", "lovable", "cursor"]),
-  label: z.string().min(1),
+  label: z.string().min(1).optional(),
   url: z.string().url().optional(),
   token: z.string().min(1).optional(),
 });
@@ -120,14 +120,6 @@ router.post("/connections", async (req, res): Promise<void> => {
   let metadata: Record<string, unknown> | null = null;
 
   if (body.type === "github") {
-    // Upsert — clear stale github connections first
-    await db
-      .delete(connectionsTable)
-      .where(and(
-        eq(connectionsTable.userId, userId),
-        eq(connectionsTable.type, "github")
-      ));
-
     // If a PAT is provided, store it encrypted so resolveGithubTokenForRequest can use it
     if (body.token) {
       token = encryptToken(body.token);
@@ -160,7 +152,7 @@ router.post("/connections", async (req, res): Promise<void> => {
     .values({
       userId,
       type: body.type,
-      label: body.label.trim(),
+      label: (body.label ?? (body.type === "github" ? "GitHub" : body.type)).trim(),
       url,
       token,
       metadata,
@@ -313,60 +305,6 @@ router.get("/connections/status", async (req, res): Promise<void> => {
   }));
 
   res.json({ connections: statuses });
-});
-
-router.post("/connections/sync-all-projects", async (req, res): Promise<void> => {
-  const userId = (req as any).authUser.id as number;
-
-  const projects = await db
-    .select({
-      id: projectsTable.id,
-      name: projectsTable.name,
-      linkedRepo: projectsTable.linkedRepo,
-      githubToken: projectsTable.githubToken,
-    })
-    .from(projectsTable)
-    .where(and(eq(projectsTable.userId, userId), isNotNull(projectsTable.linkedRepo)));
-
-  const results = await Promise.all(
-    projects.map(async (project) => {
-      const repo = parseLinkedRepo(project.linkedRepo ?? null);
-      const token = resolveGithubToken(project.githubToken ?? null);
-      if (!repo || !token) {
-        return {
-          name: project.name,
-          repo: repo?.fullName ?? null,
-          status: "failed" as const,
-        };
-      }
-      try {
-        const r = await fetch(`https://api.github.com/repos/${repo.fullName}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "Atlas-Sync/1.0",
-          },
-          signal: AbortSignal.timeout(8000),
-        });
-        return {
-          name: project.name,
-          repo: repo.fullName,
-          status: r.ok ? "ok" as const : "failed" as const,
-        };
-      } catch {
-        return {
-          name: project.name,
-          repo: repo.fullName,
-          status: "failed" as const,
-        };
-      }
-    })
-  );
-
-  const synced = results.filter((r) => r.status === "ok").length;
-  const failed = results.filter((r) => r.status === "failed").length;
-  res.json({ synced, failed, projects: results });
 });
 
 export default router;
