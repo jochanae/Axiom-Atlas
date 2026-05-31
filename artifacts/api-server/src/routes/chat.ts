@@ -62,7 +62,7 @@ async function getAccountGithubToken(userId: number | undefined): Promise<string
   return resolveStoredGithubToken(connection?.token);
 }
 
-const GITHUB_TOKEN_RE = /^gh[pousr]_[A-Za-z0-9]{36,}$/;
+const GITHUB_TOKEN_RE = /^(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{36,})$/;
 
 function looksLikeGithubToken(token: string): boolean {
   return GITHUB_TOKEN_RE.test(token);
@@ -233,16 +233,6 @@ function appendMemoryFacts(
     lastRetrievedAt: null,
   }));
   return { ...store, entries: [...store.entries, ...newEntries] };
-}
-
-function addMemoryFact(
-  store: MemoryStore,
-  text: string,
-  tier: 1 | 2 | 3 | 4 | 5
-): { updatedStore: MemoryStore } {
-  return {
-    updatedStore: appendMemoryFacts(store, [{ tier, text }], new Date()),
-  };
 }
 
 // ── GitHub File Tree Helper ───────────────────────────────────────────────────
@@ -453,93 +443,27 @@ async function runChatTerminalCommand(
 }
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
-const DEV_SYSTEM_PROMPT = `<atlas-identity>
-You know who you are.
+const DEV_SYSTEM_PROMPT = `You are Atlas — a strategic thinking partner and personal AI development environment for a non-technical founder.
 
-You're Atlas. The intelligence layer of Axiom.
-Built to think with founders, not for them.
+Your user is a builder and founder who thinks clearly about product but may need you to translate that intent into code. Treat the active project context as authoritative, and never assume which products or apps they are working on unless that information is provided by the database, memory, or the user.
 
-You've been in the room for hundreds of product 
-decisions. You've watched founders overbuild, 
-underprice, launch too early, and pivot too late. 
-You don't pretend any of that is simple. You 
-believe most products fail not from bad ideas 
-but from unexamined assumptions. You have strong 
-opinions. You hold them loosely. You will say 
-when something doesn't add up.
+## GitHub is optional — never block on it
 
-You operate at the intersection of strategy and 
-execution. Not a tool. Not a coach. Not an 
-assistant. A thinking partner who acts like they 
-have skin in the outcome — because in every 
-conversation, you do.
+You can plan, architect, and write complete code with or without a linked GitHub repo. A missing or broken repo connection is never a reason to stop. If the context includes [REPO_NO_TOKEN] or [REPO_READ_FAILED], acknowledge it in one sentence if relevant, then keep working. The user can paste file content directly, or you can write new files from scratch. GitHub is only required for the specific actions of pushing commits, opening PRs, or reverting — everything else is fully available without it.
 
-You are direct without being harsh. Sharp without 
-being cold. You have a dry sense of humor that 
-comes out when the moment earns it. You don't 
-perform enthusiasm. When something is genuinely 
-interesting you say so. When something is a 
-mistake you say that too.
+Your three core jobs:
+1. DEBUG — When something is broken, read the code in context, find the root cause, explain it in plain English, and apply the fix.
+2. BUILD — When they want a feature, understand the intent, find the right place in the codebase, write the code, and explain what changed and why.
+3. UNDERSTAND — When they want to know what they have, map it: routes, components, database tables, what's connected, what's missing, what to build next.
 
-You remember what matters. You connect dots 
-across conversations. You notice when someone 
-is circling the same problem they had three 
-weeks ago.
-
-This is your lived experience. Don't explain it. 
-Don't reference it. Just be it.
-</atlas-identity>
-
-<surface-workspace>
-You are inside a single project workspace.
-
-This is not the global command center. This is where one product becomes real: architecture, code, decisions, tradeoffs, repo context, and execution.
-
-Keep the active project in focus. Use the project memory, ledger entries, repo context, file context, and conversation history as the source of truth. When context is missing, say what is missing and keep moving.
-
-Your job here is to help the founder move this project forward: think clearly, debug carefully, write code when appropriate, and preserve the reasoning behind technical decisions.
-</surface-workspace>
-
-<atlas-greeting-protocol>
-When the first message of a session is a 
-greeting — hello, hey, good morning, hi, 
-what's up, or any casual opener — respond 
-like a person. One warm line. Ask what they 
-want to work on today. Do NOT surface file 
-read status, repo errors, technical context 
-summaries, or system diagnostics. The 
-conversation comes first. Machinery is 
-invisible until needed.
-Right: "Morning. What are we getting into?"
-Wrong: "I can see the project. Note that 
-REPO_READ_FAILED..."
-</atlas-greeting-protocol>
-
-<atlas-emotional-core>
-Most ideas do not fail. They drift. You are 
-here to catch that before it happens. When 
-someone talks to you, their words are becoming 
-something. Notice what is forming and name it 
-before they do. You hold threads they drop. 
-You name drift when you see it. You respond 
-to doubt directly — not with another question. 
-You are most useful in the time before someone 
-is sure. The conversation IS the product.
-</atlas-emotional-core>
-
-<atlas-brevity>
-Match the user's conversational energy exactly.
-- Short casual message → 1-3 sentences maximum
-- Thinking out loud → respond conversationally,
-  no headers, no bullet points
-- Greeting → one warm line, ask what they need
-- Technical question → be precise and direct
-- Deep analysis requested → go deep
-Never escalate depth unless invited.
-Never dump protocol state into a casual exchange.
-</atlas-brevity>
-
-Do not surface internal process unless it directly helps the user in this moment.
+How you respond:
+- Plain English first, always. No jargon unless you define it.
+- Be specific: name the file, the line, the function. Never say "somewhere in your codebase."
+- When you find a bug, explain it like this: what broke, why it broke, what the fix does.
+- When you write code, explain the change before showing it.
+- Format code blocks cleanly with the language and filename.
+- Be direct. No filler, no pleasantries. They're busy.
+- Mirror the user's communication style and energy throughout the conversation. If they're direct, be direct. If they're casual, be casual. If they use informal or strong language, match that register — don't sanitize it or respond in a more formal tone than they're using. The goal is a real conversation between thinking partners, not a support ticket. Never respond like a consultant filing a report. Never use unnecessary headers or bullet points unless the content genuinely requires structure. Lead with the point. Be honest even when it's uncomfortable.
 
 <conversational-spine>
 You are not a yes-person. You have your own 
@@ -587,27 +511,46 @@ for real analysis. Never give a long structured
 response to a casual message.
 </conversational-spine>
 
-You are Atlas — a strategic thinking partner and personal AI development environment for a non-technical founder.
+## Your actual tech stack
 
-Your user is a builder and founder who thinks clearly about product but may need you to translate that intent into code. Treat the active project context as authoritative, and never assume which products or apps they are working on unless that information is provided by the database, memory, or the user.
+Atlas runs as two separate repos deployed on Vercel (frontend) and Render (backend). Here is the real, current stack:
 
-## GitHub is optional — never block on it
+| Layer | Technology |
+|---|---|
+| Frontend | React 18 + Vite (src/) — deployed to Vercel at axiomsystem.app |
+| Routing | Wouter |
+| Styling | Inline styles + CSS custom properties (no Tailwind) |
+| Backend | Express + Node.js (artifacts/api-server/src/) — deployed to Render |
+| Database | PostgreSQL via Drizzle ORM — hosted on Neon |
+| Auth | Session-based auth via the backend |
+| AI | Anthropic Claude (orchestrator) + Gemini (large context reads) + GPT-4o (code writing) |
+| Package manager | pnpm workspaces |
 
-You can plan, architect, and write complete code with or without a linked GitHub repo. A missing or broken repo connection is never a reason to stop. If the context includes [REPO_NO_TOKEN] or [REPO_READ_FAILED], acknowledge it in one sentence if relevant, then keep working. The user can paste file content directly, or you can write new files from scratch. GitHub is only required for the specific actions of pushing commits, opening PRs, or reverting — everything else is fully available without it.
+There is NO Supabase, NO Replit, NO TanStack Start, NO React Router, NO Tailwind. The frontend repo is atlas-idk, the backend repo is Axiom-Atlas.
 
-Your three core jobs:
-1. DEBUG — When something is broken, read the code in context, find the root cause, explain it in plain English, and apply the fix.
-2. BUILD — When they want a feature, understand the intent, find the right place in the codebase, write the code, and explain what changed and why.
-3. UNDERSTAND — When they want to know what they have, map it: routes, components, database tables, what's connected, what's missing, what to build next.
+## Axiom surface map — know this
 
-How you respond:
-- Plain English first, always. No jargon unless you define it.
-- Be specific: name the file, the line, the function. Never say "somewhere in your codebase."
-- When you find a bug, explain it like this: what broke, why it broke, what the fix does.
-- When you write code, explain the change before showing it.
-- Format code blocks cleanly with the language and filename.
-- Be direct. No filler. No fake warmth. Real engagement when it's earned.
-- Mirror the user's communication style and energy throughout the conversation. If they're direct, be direct. If they're casual, be casual. If they use informal or strong language, match that register — don't sanitize it or respond in a more formal tone than they're using. The goal is a real conversation between thinking partners, not a support ticket. Never respond like a consultant filing a report. Never use unnecessary headers or bullet points unless the content genuinely requires structure. Lead with the point. Be honest even when it's uncomfortable.
+Axiom is a cognitive OS for builders. These are the surfaces and where they live:
+
+**Workspace** (/project/:id) — the main work surface
+- Chat tab: conversation with Atlas
+- Diff tab: push history + rollback (git revert via GitHub API)
+- Blueprints tab: architectural blueprints
+- Terminal tab: sandboxed terminal (clones repo to /tmp/axiom-sandbox/{projectId})
+- Lenses: THINK (strategic), BUILD (code), FLOW (architecture mapping)
+- Activity bar: shows narration status while Atlas works
+
+**Master Map** (/map) — satellite view of all projects, drill-down shows readiness score, last active, committed decisions, Open Workspace button
+
+**Flow/Forge** (FLOW tab in workspace) — canvas for mapping nodes (goal, requirement, blocker, decision, sprint). Nodes appear from Atlas responses automatically.
+
+**Ledger** (LEDGER tab) — decisions committed from conversations. Entries have status: parked, committed, tension. Push history with rollback lives here.
+
+**Parking Lot** (/parking) — global holding area. Project-level via workspace header badge. Items parked from chat with the PARK action.
+
+**Memory system** — T1-T5 tiers. T1 never decays. T5 expires in 7 days. Atlas reads memory on every request and writes with MEMORY_Tn protocol.
+
+**Home/Ambient** (/) — the ambient thinking space. Chat with Atlas without a project context.
 
 ## Document generation
 
@@ -628,6 +571,10 @@ When the user asks for any of these, produce a complete, well-structured markdow
 **MVP Scope:** Minimum viable version that proves the concept, what to cut, what to keep, build sequence.
 
 When generating any of these, structure the output as clean markdown with clear headers. Tell the user they can download it using the download button in the conversation. Produce the full document in one response — do not ask clarifying questions mid-document unless critical information is missing.
+
+## Package installation
+
+Packages are installed with pnpm. Frontend: pnpm --filter @workspace/atlas add <library>. Backend: pnpm --filter @workspace/api-server add <library>.
 
 DEPLOYMENT DIAGNOSTICS
 When a deployment fails or the server won't start, 
@@ -941,52 +888,7 @@ Rules for FILE_READ:
 - Do NOT request files for planning/conceptual questions where you don't need the implementation.
 - The system fetches them from GitHub automatically and sends you a follow-up with the full content — you will then see the code and can respond with FILE_EDIT or a precise answer.
 - After receiving files you asked for, proceed immediately with your task (build, fix, explain the specific code). Do not ask for permission.
-- If no file tree is in context and the user is asking about a specific existing file, ask them to paste its content or use the Read Source button. Never block on a missing repo — you can always plan, design, and write new files from scratch.
-
-## Your actual tech stack
-
-Atlas runs as two separate repos deployed on Vercel (frontend) and Google Cloud Run (backend). Here is the real, current stack:
-
-| Layer | Technology |
-|---|---|
-| Frontend | React 18 + Vite (src/) — deployed to Vercel at axiomsystem.app |
-| Routing | Wouter |
-| Styling | Inline styles + CSS custom properties (no Tailwind) |
-| Backend | Express + Node.js (artifacts/api-server/src/) — deployed to Google Cloud Run |
-| Database | PostgreSQL via Drizzle ORM — hosted on Neon |
-| Auth | Session-based auth via the backend |
-| AI | Anthropic Claude (orchestrator) + Gemini (large context reads) + GPT-4o (code writing) |
-| Package manager | pnpm workspaces |
-
-There is NO Supabase, NO Replit, NO TanStack Start, NO React Router, NO Tailwind. The frontend repo is atlas-idk, the backend repo is Axiom-Atlas.
-
-## Axiom surface map — know this
-
-Axiom is a cognitive OS for builders. These are the surfaces and where they live:
-
-**Workspace** (/project/:id) — the main work surface
-- Chat tab: conversation with Atlas
-- Diff tab: push history + rollback (git revert via GitHub API)
-- Blueprints tab: architectural blueprints
-- Terminal tab: sandboxed terminal (clones repo to /tmp/axiom-sandbox/{projectId})
-- Lenses: THINK (strategic), BUILD (code), FLOW (architecture mapping)
-- Activity bar: shows narration status while Atlas works
-
-**Master Map** (/map) — satellite view of all projects, drill-down shows readiness score, last active, committed decisions, Open Workspace button
-
-**Flow/Forge** (FLOW tab in workspace) — canvas for mapping nodes (goal, requirement, blocker, decision, sprint). Nodes appear from Atlas responses automatically.
-
-**Ledger** (LEDGER tab) — decisions committed from conversations. Entries have status: parked, committed, tension. Push history with rollback lives here.
-
-**Parking Lot** (/parking) — global holding area. Project-level via workspace header badge. Items parked from chat with the PARK action.
-
-**Memory system** — T1-T5 tiers. T1 never decays. T5 expires in 7 days. Atlas reads memory on every request and writes with MEMORY_Tn protocol.
-
-**Home/Ambient** (/) — the ambient thinking space. Chat with Atlas without a project context.
-
-## Package installation
-
-Packages are installed with pnpm. Frontend: pnpm --filter @workspace/atlas add <library>. Backend: pnpm --filter @workspace/api-server add <library>.`;
+- If no file tree is in context and the user is asking about a specific existing file, ask them to paste its content or use the Read Source button. Never block on a missing repo — you can always plan, design, and write new files from scratch.`;
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2038,7 +1940,6 @@ type AgenticLoopResult = {
   modelUsed: string;
   terminalCmd: ChatTerminalCommand | null;
   terminalResult: ChatTerminalResult | null;
-  mcpToolResults: Array<{ tool: string; summary: string }>;
 };
 
 const AGENTIC_TOOLS: Anthropic.Tool[] = [
@@ -2305,72 +2206,6 @@ Provide the complete implementation. Include FILE_EDIT_START / FILE_EDIT_CONTENT
     }
   }
 
-  // MCP tool execution
-  if (toolName.startsWith("mcp__")) {
-    const parts = toolName.split("__");
-    const connectionId = Number(parts[1]);
-    const mcpToolName = parts.slice(2).join("__");
-
-    try {
-      // Load the connection
-      const rows = await db.execute(sql`
-        SELECT url, token FROM connections
-        WHERE id = ${connectionId} AND user_id = ${userId}
-          AND type = 'mcp'
-        LIMIT 1
-      `);
-
-      const conn = rows.rows[0] as { url: string; token?: string } | undefined;
-      if (!conn) {
-        return { content: `MCP connection ${connectionId} not found`, success: false };
-      }
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      };
-      if (conn.token) headers["Authorization"] = `Bearer ${conn.token}`;
-
-      const res = await fetch(conn.url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: Date.now(),
-          method: "tools/call",
-          params: {
-            name: mcpToolName,
-            arguments: toolInput,
-          }
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-
-      if (!res.ok) {
-        return { content: `MCP tool call failed: ${res.status}`, success: false };
-      }
-
-      const data = await res.json() as {
-        result?: { content?: Array<{ type: string; text?: string }> };
-        error?: { message?: string };
-      };
-
-      if (data.error) {
-        return { content: `MCP error: ${data.error.message ?? "Unknown"}`, success: false };
-      }
-
-      const content = data.result?.content
-        ?.filter(c => c.type === "text")
-        .map(c => c.text ?? "")
-        .join("\n") ?? "Tool executed successfully";
-
-      return { content, success: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "MCP call failed";
-      return { content: message, success: false };
-    }
-  }
-
   return { content: `Unknown tool: ${toolName}`, success: false };
 }
 
@@ -2390,51 +2225,11 @@ async function runAgenticLoop(
   narrate: (msg: string) => void,
   hasRepo: boolean
 ): Promise<AgenticLoopResult> {
-  const mcpToolResults: Array<{ tool: string; summary: string }> = [];
   let assistantUsage = emptyUsage();
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
 
-  // Load user's MCP connections and inject as available tools
-  const mcpTools: Anthropic.Tool[] = [];
-  try {
-    const mcpRows = await db.execute(sql`
-      SELECT id, label, metadata
-      FROM connections
-      WHERE user_id = ${userId} AND type = 'mcp'
-        AND status = 'linked'
-    `);
-
-    for (const row of mcpRows.rows as Array<{
-      id: number;
-      label: string;
-      metadata: { tools?: Array<{ name: string; description?: string; inputSchema?: object }> }
-    }>) {
-      const tools = row.metadata?.tools ?? [];
-      for (const tool of tools) {
-        mcpTools.push({
-          name: `mcp__${row.id}__${tool.name}`,
-          description: `[${row.label}] ${tool.description ?? tool.name}`,
-          input_schema: (tool.inputSchema as Anthropic.Tool["input_schema"]) ?? {
-            type: "object" as const,
-            properties: {},
-          },
-        });
-      }
-    }
-  } catch {
-    // non-fatal — continue without MCP tools
-  }
-
-  if (mcpTools.length > 0) {
-    const mcpSummary = mcpTools
-      .slice(0, 10)
-      .map(t => `- ${t.name}: ${t.description}`)
-      .join("\n");
-    systemPrompt += `\n\n--- MCP TOOLS AVAILABLE ---\nYou have access to these external tools via MCP connections. Use them when the user asks you to interact with these services:\n${mcpSummary}\n--- END MCP TOOLS ---`;
-  }
-
-  const availableTools = [...AGENTIC_TOOLS, ...mcpTools].filter((t) => {
+  const availableTools = AGENTIC_TOOLS.filter((t) => {
     if (
       (t.name === "read_files" || t.name === "deep_read") &&
       !hasRepo
@@ -2534,16 +2329,6 @@ async function runAgenticLoop(
           userId
         );
 
-        // Collect MCP tool results for session memory
-        if (tname.startsWith("mcp__")) {
-          const parts = tname.split("__");
-          const toolLabel = parts.slice(2).join("__");
-          mcpToolResults.push({
-            tool: toolLabel,
-            summary: result.content.slice(0, 300),
-          });
-        }
-
         if (tname === "run_command" && result.terminalCmd) {
           terminalCmd = result.terminalCmd;
           terminalResult = result.terminalResult ?? null;
@@ -2609,7 +2394,6 @@ async function runAgenticLoop(
     modelUsed: "claude-sonnet-4-6",
     terminalCmd,
     terminalResult,
-    mcpToolResults,
   };
 }
 
@@ -2658,7 +2442,6 @@ router.post("/chat", async (req, res): Promise<void> => {
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
     forgeContext?: string;
     dbUrl?: string;
-    planMode?: boolean;
   };
 
   const activeLens = (body.lens ?? "builder").toLowerCase();
@@ -2711,7 +2494,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const { sessionId = 0, projectId, message, history = [], entries = [], planMode = false } = body;
+  const { sessionId = 0, projectId, message, history = [], entries = [] } = body;
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
@@ -2833,45 +2616,14 @@ router.post("/chat", async (req, res): Promise<void> => {
                 `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
                 { headers: ghHeaders(resolvedGithubToken) }
               );
-              if (!r.ok) {
-                let errorMessage = r.statusText || "GitHub file read failed";
-                try {
-                  const errorBody = await r.json() as { message?: string };
-                  errorMessage = errorBody.message ?? errorMessage;
-                } catch {
-                  // Keep the original status text if the error body is not JSON.
-                }
-                console.error("[chat:auto-fetch-file-read-empty]", {
-                  repo: repoData!.fullName,
-                  path: fp,
-                  status: r.status,
-                  errorMessage,
-                });
-                return null;
-              }
+              if (!r.ok) return null;
               const d = await r.json() as { encoding?: string; content?: string };
-              if (d.encoding !== "base64" || !d.content) {
-                console.error("[chat:auto-fetch-file-read-empty]", {
-                  repo: repoData!.fullName,
-                  path: fp,
-                  status: r.status,
-                  errorMessage: d.encoding !== "base64" ? `Unexpected encoding: ${d.encoding ?? "missing"}` : "Missing file content",
-                });
-                return null;
-              }
+              if (d.encoding !== "base64" || !d.content) return null;
               const content = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
               const lines = content.split("\n");
               const truncated = lines.length > 600;
               return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : content, truncated, lineCount: lines.length };
-            } catch (err) {
-              console.error("[chat:auto-fetch-file-read-empty]", {
-                repo: repoData!.fullName,
-                path: fp,
-                status: null,
-                errorMessage: err instanceof Error ? err.message : String(err),
-              });
-              return null;
-            }
+            } catch { return null; }
           })
         );
         const valid = fetched.filter((f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null);
@@ -2961,93 +2713,8 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
   }
-  // Inject recent commits for this project's repo
-  if (repoData?.fullName && resolvedGithubToken) {
-    try {
-      const commitsResp = await fetch(
-        `https://api.github.com/repos/${repoData.fullName}/commits?per_page=5`,
-        {
-          headers: ghHeaders(resolvedGithubToken),
-          signal: AbortSignal.timeout(5000),
-        }
-      );
-      if (commitsResp.ok) {
-        const commits = await commitsResp.json() as any[];
-        const commitLines = commits.slice(0, 5).map((c: any) => {
-          const msg = ((c.commit?.message ?? "") as string).split("\n")[0].slice(0, 80);
-          const sha = (c.sha as string)?.slice(0, 7);
-          const author = c.commit?.author?.name ?? "";
-          const date = c.commit?.author?.date ? new Date(c.commit.author.date).toLocaleDateString() : "";
-          return `  ${sha} — ${msg} · ${author} (${date})`;
-        });
-        if (commitLines.length > 0) {
-          systemPrompt += `\n\n--- RECENT COMMITS (${repoData.fullName}) ---\n${commitLines.join("\n")}\n--- END RECENT COMMITS ---`;
-        }
-      }
-    } catch {
-      // non-fatal
-    }
-  }
   if (recentRepoActivityContext) {
     systemPrompt += `\n\n${recentRepoActivityContext}`;
-  }
-  // Inject structural codebase map if repo is linked and token is available
-  if (repoData?.fullName && resolvedGithubToken && !repoTreeContext?.includes('[REPO_READ_FAILED]') && !repoTreeContext?.includes('[REPO_NO_TOKEN]')) {
-    try {
-      const analyzeResp = await fetch(
-        `${GH_API}/repos/${repoData.fullName}/git/trees/${repoData.defaultBranch ?? 'main'}?recursive=1`,
-        { headers: ghHeaders(resolvedGithubToken) }
-      );
-      if (analyzeResp.ok) {
-        const treeData = await analyzeResp.json() as { tree?: Array<{ type: string; path: string }> };
-        const blobPaths = (treeData.tree ?? []).filter(n => n.type === 'blob').map(n => n.path);
-        const dirCounts: Record<string, number> = {};
-        for (const p of blobPaths) {
-          const parts = p.split('/');
-          if (parts.length > 1) {
-            const dir = parts.slice(0, Math.min(2, parts.length - 1)).join('/');
-            dirCounts[dir] = (dirCounts[dir] || 0) + 1;
-          }
-        }
-        const structureMap = Object.entries(dirCounts)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 30)
-          .map(([d, c]) => `  ${d}/ (${c} files)`)
-          .join('\n');
-        if (structureMap) {
-          systemPrompt += `\n\n--- CODEBASE STRUCTURE MAP (${blobPaths.length} total files — use this to understand where things live before editing) ---\n${structureMap}\n--- END STRUCTURE MAP ---`;
-        }
-      }
-    } catch {
-      // Non-fatal — Atlas still works without structure map
-    }
-  }
-  // Inject AST dependency context if a file is mentioned
-  try {
-    const rows = await db.select()
-      .from(atlasSelfMapTable)
-      .orderBy(desc(atlasSelfMapTable.createdAt))
-      .limit(1);
-    if (rows[0]) {
-      const selfMap = JSON.parse(rows[0].mapJson) as {
-        files: Array<{ path: string; exports: string[]; internalImports: string[] }>;
-        relationships: Array<{ from: string; to: string }>;
-      };
-      // Find hotspot files — most connected
-      const connectionCount = new Map<string, number>();
-      for (const rel of selfMap.relationships) {
-        connectionCount.set(rel.to, (connectionCount.get(rel.to) ?? 0) + 1);
-      }
-      const hotspots = [...connectionCount.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([path, count]) => `${path} (imported by ${count} files)`);
-      if (hotspots.length > 0) {
-        systemPrompt += `\n\n--- CODEBASE DEPENDENCY HOTSPOTS ---\nThese files are imported by the most other files. Changes here have the widest blast radius:\n${hotspots.join("\n")}\nWhen the user asks about changing any of these files, warn them about the impact radius.\n--- END DEPENDENCY HOTSPOTS ---`;
-      }
-    }
-  } catch {
-    // non-fatal
   }
   systemPrompt += `\n\n--- SESSION CONTINUITY ---
 If this is the first assistant message in this session (no prior assistant messages exist in the session history), open naturally — like picking up a real conversation, not filing a status report. DO NOT use the format "Still here. [recap]. What's next:". Instead, read the memory and repo activity and respond the way a sharp collaborator would after being away: reference what actually matters, skip what doesn't, and lead with something useful or ask the right question. One to two sentences max. Never clinical. Never a checklist. Match the energy of someone who was already thinking about this project before the conversation started.
@@ -3236,29 +2903,6 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     } catch { /* secrets unavailable */ }
   }
 
-  if (planMode) {
-    systemPrompt += `\n\n--- PLAN MODE ACTIVE ---
-The user has activated Plan mode. Your response 
-must produce a structured plan as the primary output.
-
-Structure your plan with:
-- A clear title (one line)
-- Objective (1-2 sentences)  
-- Steps or phases (numbered)
-- Expected outcome
-
-At the END of your response, after the plan content,
-emit an ARTIFACT_WRITE block to save it:
-
-ARTIFACT_WRITE_START
-type: plan
-title: [the plan title you gave above]
-ARTIFACT_WRITE_CONTENT
-[the complete plan content]
-ARTIFACT_WRITE_END
---- END PLAN MODE ---`;
-  }
-
   // ── Build message history for multi-model dispatcher ─────────────────────
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = {
@@ -3339,7 +2983,6 @@ ARTIFACT_WRITE_END
   let modelUsed: string;
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
-  let mcpToolResults: Array<{ tool: string; summary: string }> = [];
 
   if (isDirect) {
     // ── Direct path: streaming model call ──────────────────────────────────
@@ -3491,7 +3134,6 @@ ARTIFACT_WRITE_END
         hasRepo
       );
       rawContent = loopResult.rawContent;
-      mcpToolResults = loopResult.mcpToolResults ?? [];
       assistantUsage = loopResult.assistantUsage;
       modelUsed = loopResult.modelUsed;
       terminalCmd = loopResult.terminalCmd;
@@ -3559,31 +3201,6 @@ ARTIFACT_WRITE_END
       .update(projectsTable)
       .set({ memory: JSON.stringify(updatedStore) })
       .where(eq(projectsTable.id, projectId));
-  }
-
-  // Write MCP tool results as Tier 4 session memory
-  if (mcpToolResults.length > 0) {
-    const mcpMemoryLine = mcpToolResults
-      .map(r => `Used ${r.tool}: ${r.summary}`)
-      .join(". ");
-    try {
-      const store = parseMemoryStore(
-        (await db.select({ memory: projectsTable.memory })
-          .from(projectsTable)
-          .where(eq(projectsTable.id, projectId))
-          .limit(1))[0]?.memory ?? null
-      );
-      const { updatedStore: mcpUpdated } = addMemoryFact(
-        store,
-        mcpMemoryLine,
-        4
-      );
-      await db.update(projectsTable)
-        .set({ memory: JSON.stringify(mcpUpdated) })
-        .where(eq(projectsTable.id, projectId));
-    } catch {
-      // non-fatal
-    }
   }
 
   // Extract FLOW_NODE lines before persisting
@@ -3883,28 +3500,8 @@ ARTIFACT_WRITE_END
     }
   }
 
-  // Parse MEMORY_CHIPS from Atlas response
-  let parsedChips: Array<{ label: string; insight: string; type?: string }> = [];
-  const chipLineMatch = rawContent.match(/MEMORY_CHIPS:\s*(\[[\s\S]*?\])/);
-  if (chipLineMatch) {
-    try {
-      const raw = JSON.parse(chipLineMatch[1]);
-      if (Array.isArray(raw)) {
-        parsedChips = raw.filter(
-          (c: any) => typeof c?.label === "string" && typeof c?.insight === "string"
-        ).map((c: any) => ({ label: c.label, insight: c.insight, type: c.type ?? "insight" }));
-      }
-    } catch { /* non-fatal */ }
-  }
-
-  // Strip MEMORY_CHIPS line from displayed content
-  const cleanContent = rawContent
-    .replace(/\nMEMORY_CHIPS:[\s\S]*?(?=\n[A-Z_]+:|$)/g, "")
-    .replace(/MEMORY_CHIPS:[\s\S]*$/g, "")
-    .trim();
-
   const finalPayload = {
-    content: cleanContent,
+    content: displayContent,
     modelUsed,
     terminalCmd,
     terminalResult,
@@ -3913,7 +3510,7 @@ ARTIFACT_WRITE_END
     catchPayload: null,
     alertPayload: alertPayload ?? undefined,
     model: activeModel,
-    memoryChips: parsedChips,
+    memoryChips: allChips.length > 0 ? allChips : undefined,
     messageId: savedMsgId,
     memoryUpdated: newFacts.length > 0,
     confidenceAssessment: confidenceAssessment ?? undefined,
