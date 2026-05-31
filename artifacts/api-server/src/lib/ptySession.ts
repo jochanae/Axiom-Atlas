@@ -107,6 +107,10 @@ export function getOrCreatePtySession(
     }
   }
 
+  if (!pty) {
+    throw new Error("Terminal not available: native PTY module failed to load. The server needs to be rebuilt with build tools (build-essential, python3, make).");
+  }
+
   const id = generateSessionId();
   const shell = process.env.SHELL ?? "/bin/bash";
 
