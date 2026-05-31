@@ -1,4 +1,6 @@
 import { Router, type IRouter } from "express";
+import { sql } from "drizzle-orm";
+import { db } from "@workspace/db";
 import healthRouter from "./health";
 import projectsRouter from "./projects";
 import sessionsRouter from "./sessions";
@@ -38,10 +40,43 @@ import uploadRouter from "./upload";
 import artifactsRouter from "./artifacts";
 import mentalShredderRouter from "./mental-shredder";
 import jobsRouter from "./jobs";
+import { supabaseAuth } from "../middleware/supabaseAuth";
+
+// Supabase URL for JWT validation
+// process.env.SUPABASE_URL should be set in 
+// Cloud Run environment variables
 
 const router: IRouter = Router();
 
 // Fully public — no auth
+router.get("/auth/me", supabaseAuth, async (req: any, res: any) => {
+  const { supabaseId, email } = req.supabaseUser;
+  
+  try {
+    const rows = await db.execute(sql`
+      SELECT * FROM users 
+      WHERE supabase_id = ${supabaseId} 
+        OR email = ${email}
+      LIMIT 1
+    `);
+
+    if (!rows.rows[0]) {
+      const created = await db.execute(sql`
+        INSERT INTO users (supabase_id, email)
+        VALUES (${supabaseId}, ${email})
+        ON CONFLICT (email) 
+        DO UPDATE SET 
+          supabase_id = EXCLUDED.supabase_id
+        RETURNING *
+      `);
+      return res.json(created.rows[0]);
+    }
+
+    res.json(rows.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
 router.use(stripeRouter);
 router.use(authRouter);
 router.use(googleAuthRouter);
