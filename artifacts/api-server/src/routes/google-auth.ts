@@ -137,9 +137,9 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
       }),
     });
 
-    const tokens = await tokenRes.json() as { access_token?: string; error?: string };
+    const tokens = await tokenRes.json() as { access_token?: string; error?: string; error_description?: string };
     if (!tokens.access_token) {
-      res.json({ error: "token_exchange_failed", step: "google token exchange did not return an access token" });
+      res.json({ error: "token_exchange_failed", step: "google token exchange did not return an access token", google_error: tokens.error, google_error_description: tokens.error_description });
       return;
     }
 
