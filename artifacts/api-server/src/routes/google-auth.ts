@@ -115,12 +115,12 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
   res.clearCookie("oauth_link_session", { path: "/", ...(STATE_COOKIE_DOMAIN ? { domain: STATE_COOKIE_DOMAIN } : {}) });
 
   if (error || !code) {
-    res.redirect("/?auth_error=" + encodeURIComponent(error ?? "no_code"));
+    res.json({ error: error ?? "no_code", step: "google returned an error or no authorization code" });
     return;
   }
 
   if (!state || state !== storedState) {
-    res.redirect("/?auth_error=state_mismatch");
+    res.json({ error: "state_mismatch", step: "oauth state cookie did not match callback state" });
     return;
   }
 
@@ -139,7 +139,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
 
     const tokens = await tokenRes.json() as { access_token?: string; error?: string };
     if (!tokens.access_token) {
-      res.redirect("/?auth_error=token_exchange_failed");
+      res.json({ error: "token_exchange_failed", step: "google token exchange did not return an access token" });
       return;
     }
 
@@ -149,7 +149,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     const profile = await profileRes.json() as { id?: string; email?: string; name?: string; picture?: string };
 
     if (!profile.id || !profile.email) {
-      res.redirect("/?auth_error=missing_profile");
+      res.json({ error: "missing_profile", step: "google profile response was missing id or email" });
       return;
     }
 
@@ -217,7 +217,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     }
 
     if (!user) {
-      res.redirect("/?auth_error=user_create_failed");
+      res.json({ error: "user_create_failed", step: "user lookup or creation did not produce a user" });
       return;
     }
 
@@ -229,7 +229,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     res.redirect(`/auth/token-bridge?token=${encodeURIComponent(token)}`);
   } catch (err) {
     req.log?.error(err, "google-oauth-callback-error");
-    res.redirect("/?auth_error=server_error");
+    res.json({ error: "server_error", step: "google oauth callback threw an exception" });
   }
 });
 
