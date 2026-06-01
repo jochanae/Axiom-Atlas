@@ -7,6 +7,7 @@ import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { findSemanticTensionsForProject } from "./tensions";
 import { calculateModelCostUsd } from "../pricing";
+import { resolveGithubTokenForUser } from "../lib/githubToken";
 
 const router: IRouter = Router();
 
@@ -1577,6 +1578,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       hasMessageType,
     ),
   ]);
+  const githubToken = await resolveGithubTokenForUser(userId);
 
   const shouldEnableIdeaMode = !reflectionMode && !ideaMode && (
     hasExplicitIdeaModeSignal(message) || (dbMessages.length === 0 && hasIdeaModeSignal(message))
@@ -1670,7 +1672,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
   // Inject recent GitHub activity across all linked repos (global view — no focusProjectId needed)
   const linkedProjects = projects.filter(p => p.linkedRepo);
-  if (linkedProjects.length > 0 && process.env.GITHUB_TOKEN) {
+  if (linkedProjects.length > 0 && githubToken) {
     try {
       const recentCommits = await Promise.allSettled(
         linkedProjects.slice(0, 5).map(async (p) => {
@@ -1680,7 +1682,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
             `https://api.github.com/repos/${repoFull}/commits?per_page=3`,
             {
               headers: {
-                Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                Authorization: `Bearer ${githubToken}`,
                 Accept: "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
                 "User-Agent": "Atlas-Nexus/1.0",
@@ -1722,13 +1724,12 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       if (focusProject?.linkedRepo) {
         try {
           const repoFull = parseRepo(focusProject.linkedRepo ?? null);
-          const ghToken = process.env.GITHUB_TOKEN ?? null;
-          if (repoFull && ghToken) {
+          if (repoFull && githubToken) {
             const treeResp = await fetch(
               `https://api.github.com/repos/${repoFull}/git/trees/main?recursive=1`,
               {
                 headers: {
-                  Authorization: `Bearer ${ghToken}`,
+                  Authorization: `Bearer ${githubToken}`,
                   Accept: "application/vnd.github+json",
                   "X-GitHub-Api-Version": "2022-11-28",
                   "User-Agent": "Atlas-Nexus/1.0",
@@ -2424,7 +2425,7 @@ router.get("/nexus/activity", async (req, res): Promise<void> => {
   };
 
   const items: ActivityItem[] = [];
-  const ghToken = process.env.GITHUB_TOKEN ?? null;
+  const ghToken = await resolveGithubTokenForUser(userId);
   const linkedProjects = projects.filter(p => p.linkedRepo);
 
   // Fetch commits for all linked repos in parallel (with timeout)

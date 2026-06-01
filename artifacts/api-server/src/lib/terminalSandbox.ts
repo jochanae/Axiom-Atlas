@@ -1,7 +1,7 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm";
-import { connectionsTable, db, projectsTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import { db, projectsTable } from "@workspace/db";
 import { logger } from "./logger";
-import { decryptToken } from "./tokenCrypto";
+import { resolveGithubTokenForUser } from "./githubToken";
 import { spawn } from "child_process";
 import { access, mkdir } from "fs/promises";
 
@@ -20,35 +20,6 @@ export type PreparedProjectRepo = { sandboxDir: string; githubToken: string | nu
 export type PrepareRepoOptions = {
   onStatus?: (message: string) => void;
 };
-
-export function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
-  const plain = storedToken ? decryptToken(storedToken) : null;
-  return plain && plain !== "__server__" ? plain : null;
-}
-
-export async function getAccountGithubToken(userId: number | undefined): Promise<string | null> {
-  if (!userId) return null;
-  const [connection] = await db
-    .select({ token: connectionsTable.token })
-    .from(connectionsTable)
-    .where(and(
-      eq(connectionsTable.userId, userId),
-      eq(connectionsTable.type, "github"),
-      isNotNull(connectionsTable.token)
-    ))
-    .orderBy(desc(connectionsTable.createdAt))
-    .limit(1);
-  return resolveStoredGithubToken(connection?.token);
-}
-
-export async function resolveGithubTokenForRequest(
-  userId: number | undefined,
-  projectGithubToken: string | null | undefined
-): Promise<string | null> {
-  const accountToken = await getAccountGithubToken(userId);
-  if (accountToken) return accountToken;
-  return resolveStoredGithubToken(projectGithubToken) ?? process.env.GITHUB_TOKEN ?? null;
-}
 
 export function parseLinkedRepo(raw: string | null): ParsedLinkedRepo | null {
   if (!raw) return null;
@@ -148,7 +119,6 @@ export async function prepareProjectRepo(projectId: number, userId: number, opti
     .select({
       id: projectsTable.id,
       linkedRepo: projectsTable.linkedRepo,
-      githubToken: projectsTable.githubToken,
     })
     .from(projectsTable)
     .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
@@ -159,8 +129,7 @@ export async function prepareProjectRepo(projectId: number, userId: number, opti
   const repo = parseLinkedRepo(project.linkedRepo ?? null);
   if (!repo) throw new TerminalHttpError(400, NO_LINKED_REPO_MESSAGE);
 
-  const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project.githubToken ?? null);
-  const githubToken = resolvedGithubToken?.startsWith("enc:") ? decryptToken(resolvedGithubToken) : resolvedGithubToken;
+  const githubToken = await resolveGithubTokenForUser(userId);
   const sandboxDir = `${SANDBOX_ROOT}/${projectId}`;
   const cloneUrl = buildCloneUrl(repo, githubToken);
 

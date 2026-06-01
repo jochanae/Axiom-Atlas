@@ -4,6 +4,7 @@ import http from "http";
 import { mkdirSync, existsSync, readFileSync, rmSync } from "fs";
 import path from "path";
 import { logger } from "../lib/logger";
+import { resolveGithubTokenForUser } from "../lib/githubToken";
 
 type DevStatus = "idle" | "cloning" | "installing" | "starting" | "running" | "error";
 
@@ -104,10 +105,12 @@ function runCommand(cmd: string, args: string[], cwd?: string): Promise<void> {
 
 const router = Router();
 
-router.post("/devserver/start", (req, res): void => {
+router.post("/devserver/start", async (req, res): Promise<void> => {
   const { repoFullName, branch = "main", envVars = {} } = req.body as { repoFullName: string; branch?: string; envVars?: Record<string, string> };
   const rawToken = req.headers["x-github-token"] as string | undefined;
-  const token = (rawToken && rawToken !== "__server__") ? rawToken : (process.env.GITHUB_TOKEN ?? undefined);
+  const token = (rawToken && rawToken !== "__server__" && rawToken !== "__account__")
+    ? rawToken
+    : await resolveGithubTokenForUser((req as any).authUser?.id as number | undefined);
 
   if (!repoFullName) {
     res.status(400).json({ error: "Missing repoFullName" });

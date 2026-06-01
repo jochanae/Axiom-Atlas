@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { db, projectsTable, readinessSnapshotsTable } from "@workspace/db";
-import { decryptToken } from "../lib/tokenCrypto";
+import { resolveGithubTokenForUser } from "../lib/githubToken";
 
 const router: IRouter = Router();
 
@@ -62,12 +62,6 @@ function parseLinkedRepo(raw: string | null): ParsedRepo | null {
   } catch {
     return parseOwnerRepoCandidate(raw);
   }
-}
-
-function getProjectGithubToken(storedToken: string | null): string | null {
-  const plainToken = storedToken ? decryptToken(storedToken) : null;
-  if (plainToken && plainToken !== "__server__") return plainToken;
-  return process.env.GITHUB_TOKEN ?? null;
 }
 
 function githubHeaders(token: string) {
@@ -214,7 +208,7 @@ router.post("/projects/:id/scan", async (req, res): Promise<void> => {
     }
 
     const [project] = await db
-      .select({ linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken })
+      .select({ linkedRepo: projectsTable.linkedRepo })
       .from(projectsTable)
       .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
       .limit(1);
@@ -230,7 +224,7 @@ router.post("/projects/:id/scan", async (req, res): Promise<void> => {
       return;
     }
 
-    const token = getProjectGithubToken(project.githubToken ?? null);
+    const token = await resolveGithubTokenForUser(userId);
     if (!token) {
       res.status(400).json({ error: "No GitHub token available for this project" });
       return;

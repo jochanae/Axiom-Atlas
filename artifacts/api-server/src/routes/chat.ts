@@ -2,9 +2,9 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, artifactsTable, nexusMessagesTable } from "@workspace/db";
-import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
-import { decryptToken } from "../lib/tokenCrypto";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, artifactsTable, nexusMessagesTable } from "@workspace/db";
+import { eq, sql, and, gte, desc, ne } from "drizzle-orm";
+import { resolveGithubTokenForUser } from "../lib/githubToken";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { calculateModelCostUsd } from "../pricing";
@@ -41,28 +41,6 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
-  const plain = storedToken ? decryptToken(storedToken) : null;
-  return plain && plain !== "__server__" ? plain : null;
-}
-
-async function getAccountGithubToken(userId: number | undefined): Promise<string | null> {
-  if (!userId) return null;
-
-  const [connection] = await db
-    .select({ token: connectionsTable.token })
-    .from(connectionsTable)
-    .where(and(
-      eq(connectionsTable.userId, userId),
-      eq(connectionsTable.type, "github"),
-      isNotNull(connectionsTable.token)
-    ))
-    .orderBy(desc(connectionsTable.createdAt))
-    .limit(1);
-
-  return resolveStoredGithubToken(connection?.token);
-}
-
 const GITHUB_TOKEN_RE = /^(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{36,})$/;
 
 function looksLikeGithubToken(token: string): boolean {
@@ -71,7 +49,6 @@ function looksLikeGithubToken(token: string): boolean {
 
 async function resolveGithubTokenForRequest(
   userId: number | undefined,
-  projectGithubToken: string | null | undefined,
   requestToken?: string | null
 ): Promise<string | null> {
   // Request header token (from localStorage) — validate it's a real token shape before trusting it
@@ -80,21 +57,9 @@ async function resolveGithubTokenForRequest(
     return requestToken;
   }
 
-  const accountToken = await getAccountGithubToken(userId);
-  if (accountToken) {
-    console.log("[token] resolved: account-connection");
-    return accountToken;
-  }
-
-  const stored = resolveStoredGithubToken(projectGithubToken);
-  if (stored) {
-    console.log("[token] resolved: project-db");
-    return stored;
-  }
-
-  const envToken = process.env.GITHUB_TOKEN ?? null;
-  console.log(`[token] resolved: ${envToken ? "env-var" : "null — no token found"}`);
-  return envToken;
+  const resolved = await resolveGithubTokenForUser(userId);
+  console.log(`[token] resolved: ${resolved ? "authoritative-user-token" : "null — no token found"}`);
+  return resolved;
 }
 
 // ── Five-Tier Memory System ───────────────────────────────────────────────────
@@ -2518,7 +2483,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Load project memory + repo info + node state from DB — skipped in global/ambient mode
   narrate(nar.loading);
   const [project] = projectId !== null ? await db
-    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
+    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, nodeState: projectsTable.nodeState, name: projectsTable.name })
     .from(projectsTable)
     .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)) : [];
 
@@ -2556,7 +2521,6 @@ router.post("/chat", async (req, res): Promise<void> => {
   const requestGithubToken = req.headers["x-github-token"];
   const resolvedGithubToken = await resolveGithubTokenForRequest(
     userId,
-    project?.githubToken,
     typeof requestGithubToken === "string" ? requestGithubToken : null
   );
 
@@ -2582,9 +2546,9 @@ router.post("/chat", async (req, res): Promise<void> => {
           // Linked but no token — tell Atlas explicitly so it can relay to the user
           repoTreeContext = `[REPO_NO_TOKEN] Project has a linked GitHub repo (${repoData.fullName}) but no valid GitHub token is configured. Atlas cannot read this repository. Tell the user to add their GitHub token in the Files tab of this workspace.`;
         }
-        if (process.env.GITHUB_TOKEN) {
+        if (resolvedGithubToken) {
           try {
-            recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, process.env.GITHUB_TOKEN, now);
+            recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, resolvedGithubToken, now);
           } catch {
             // Non-fatal — recent activity is supplemental
           }

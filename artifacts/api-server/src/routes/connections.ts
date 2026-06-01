@@ -3,6 +3,7 @@ import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod/v4";
 import { connectionsTable, db, projectsTable } from "@workspace/db";
 import { decryptToken, encryptToken } from "../lib/tokenCrypto";
+import { resolveGithubTokenDetailsForUser, resolveGithubTokenForUser } from "../lib/githubToken";
 
 const router: IRouter = Router();
 
@@ -63,12 +64,6 @@ function parseLinkedRepo(raw: string | null): ParsedLinkedRepo | null {
   return null;
 }
 
-function resolveGithubToken(storedToken: string | null): string | null {
-  const plain = storedToken ? decryptToken(storedToken) : null;
-  if (plain && plain !== "__server__") return plain;
-  return process.env.GITHUB_TOKEN ?? null;
-}
-
 function serializeConnection(row: typeof connectionsTable.$inferSelect) {
   const { token: _token, ...rest } = row;
   return {
@@ -79,13 +74,69 @@ function serializeConnection(row: typeof connectionsTable.$inferSelect) {
   };
 }
 
+async function githubConnectionAuth(userId: number) {
+  const resolution = await resolveGithubTokenDetailsForUser(userId);
+  if (!resolution.token) {
+    return {
+      hasToken: false,
+      hasResolvedToken: false,
+      tokenSource: resolution.source,
+      githubStatus: "missing",
+      githubUser: null,
+    };
+  }
+
+  try {
+    const response = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${resolution.token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "Atlas-Connections/1.0",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!response.ok) {
+      return {
+        hasToken: true,
+        hasResolvedToken: true,
+        tokenSource: resolution.source,
+        githubStatus: "failed",
+        githubStatusCode: response.status,
+        githubUser: null,
+      };
+    }
+
+    const user = await response.json() as { login?: unknown; id?: unknown; html_url?: unknown };
+    return {
+      hasToken: true,
+      hasResolvedToken: true,
+      tokenSource: resolution.source,
+      githubStatus: "active",
+      githubUser: {
+        login: typeof user.login === "string" ? user.login : null,
+        id: typeof user.id === "number" ? user.id : null,
+        url: typeof user.html_url === "string" ? user.html_url : null,
+      },
+    };
+  } catch {
+    return {
+      hasToken: true,
+      hasResolvedToken: true,
+      tokenSource: resolution.source,
+      githubStatus: "failed",
+      githubUser: null,
+    };
+  }
+}
+
 async function getLatestGithubProject(userId: number) {
   const [project] = await db
     .select({
       id: projectsTable.id,
       name: projectsTable.name,
       linkedRepo: projectsTable.linkedRepo,
-      githubToken: projectsTable.githubToken,
       updatedAt: projectsTable.updatedAt,
     })
     .from(projectsTable)
@@ -103,7 +154,17 @@ router.get("/connections", async (req, res): Promise<void> => {
     .where(eq(connectionsTable.userId, userId))
     .orderBy(desc(connectionsTable.createdAt));
 
-  res.json(connections.map(serializeConnection));
+  const serialized = await Promise.all(connections.map(async (connection) => {
+    const base = serializeConnection(connection);
+    if (connection.type !== "github") return base;
+    return {
+      ...base,
+      ...(await githubConnectionAuth(userId)),
+      hasStoredToken: base.hasToken,
+    };
+  }));
+
+  res.json(serialized);
 });
 
 router.post("/connections", async (req, res): Promise<void> => {
@@ -120,7 +181,7 @@ router.post("/connections", async (req, res): Promise<void> => {
   let metadata: Record<string, unknown> | null = null;
 
   if (body.type === "github") {
-    // If a PAT is provided, store it encrypted so resolveGithubTokenForRequest can use it
+    // If a PAT is provided, store it encrypted so the authoritative resolver can use it.
     if (body.token) {
       token = encryptToken(body.token);
     }
@@ -179,7 +240,7 @@ router.delete("/connections/:id", async (req, res): Promise<void> => {
 async function githubStatus(userId: number) {
   const project = await getLatestGithubProject(userId);
   const repo = parseLinkedRepo(project?.linkedRepo ?? null);
-  const token = resolveGithubToken(project?.githubToken ?? null);
+  const token = await resolveGithubTokenForUser(userId);
   if (!project || !repo || !token) return { type: "github", status: "missing" };
 
   const response = await fetch(`https://api.github.com/repos/${repo.fullName}/commits?per_page=1`, {
