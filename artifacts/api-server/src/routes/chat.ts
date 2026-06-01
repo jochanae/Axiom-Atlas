@@ -9,7 +9,6 @@ import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { calculateModelCostUsd } from "../pricing";
 import { logger } from "../lib/logger";
-import { CONVERSATIONAL_EXPANSION_PROTOCOL, NEXUS_SYSTEM_PROMPT } from "./nexus";
 import {
   evaluateTerminalRequest,
   executeTerminalCommand,
@@ -2656,13 +2655,6 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Build layered system prompt — branches on global/ambient vs project mode
   let systemPrompt: string;
-  if (isGlobalMode) {
-    // ── Ambient mode: no project scope; share the Nexus/home Atlas posture ──
-    systemPrompt = `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: false\n--- END SESSION CONTEXT ---`;
-    if (userProfile) {
-      systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
-    }
-  } else {
     // ── Project mode: single project context ──
     systemPrompt = DEV_SYSTEM_PROMPT;
     // Inject project identity
@@ -2687,7 +2679,6 @@ router.post("/chat", async (req, res): Promise<void> => {
     if (userProfile) {
       systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
     }
-  }
   if (memoryText) {
     systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
   }
