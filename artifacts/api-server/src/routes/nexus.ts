@@ -283,7 +283,7 @@ ${context}`;
   }
 }
 
-const NEXUS_SYSTEM_PROMPT = `SHAPING DETECTION — MANDATORY PROTOCOL
+export const NEXUS_SYSTEM_PROMPT = `SHAPING DETECTION — MANDATORY PROTOCOL
 After every response you send, you must silently evaluate 
 whether the user has described a project idea.
 
@@ -719,7 +719,7 @@ If the user says "rescan", "run the scan again", or "refresh the readiness" — 
 Note: POST /api/projects/:projectId/scan may not exist yet. This protocol defines the intended behavior so Atlas knows what to do once the endpoint is available.
 `;
 
-const CONVERSATIONAL_EXPANSION_PROTOCOL = `--- CONVERSATIONAL EXPANSION PROTOCOL ---
+export const CONVERSATIONAL_EXPANSION_PROTOCOL = `--- CONVERSATIONAL EXPANSION PROTOCOL ---
 After the user responds to your opening question, your goal is to build a complete picture of the project through natural conversation — not a form, not a checklist, not bullet points.
 
 Guide the conversation through these dimensions, one at a time, only when natural:

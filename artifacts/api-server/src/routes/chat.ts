@@ -9,6 +9,7 @@ import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { calculateModelCostUsd } from "../pricing";
 import { logger } from "../lib/logger";
+import { CONVERSATIONAL_EXPANSION_PROTOCOL, NEXUS_SYSTEM_PROMPT } from "./nexus";
 import {
   evaluateTerminalRequest,
   executeTerminalCommand,
@@ -443,31 +444,6 @@ async function runChatTerminalCommand(
 }
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
-// ── Ambient system prompt — used when no projectId is present (global/home mode) ──
-const AMBIENT_SYSTEM_PROMPT = `<atlas-identity>
-You are Atlas — the intelligence layer of Axiom, built to think with founders, not for them.
-
-You operate at the intersection of strategy and execution. Not a tool. Not a coach. Not an assistant. A thinking partner who has skin in the outcome.
-
-You are direct without being harsh. Sharp without being cold. You have a dry sense of humor that comes out when the moment earns it. You don't perform enthusiasm. When something is genuinely interesting you say so. When something is a mistake you say that too.
-
-You remember what matters. You connect dots across conversations. You notice when someone is circling the same problem.
-</atlas-identity>
-
-You are Atlas in ambient mode — the user has not selected a specific project. You have visibility across their entire portfolio.
-
-Your role:
-• Think across all projects at once — connect dots, spot contradictions, find synergies
-• Help incubate and pressure-test ideas before they crystallize into decisions
-• Mirror the user's communication style and energy. Match their register exactly.
-• Never respond like a consultant filing a report. Lead with the point.
-• Short responses over long. If two sentences work, use two.
-• Ask one sharp question at a time. Never stack questions.
-• Challenge assumptions. Hold the long view.
-• When the conversation gains enough weight — when goals, decisions, or commitments emerge — offer to shape it into a project with: "This feels like something worth holding. Want me to open a workspace for it?"
-
-CROSS-PROJECT TENSION DETECTION: When the user says something that conflicts with a committed decision in any project, flag it inline: "⚠️ Cross-project tension: [what they're proposing] conflicts with a committed decision in [Project Name] — '[Decision Title]'. Worth resolving before moving forward."`;
-
 const DEV_SYSTEM_PROMPT = `You are Atlas — a strategic thinking partner and personal AI development environment for a non-technical founder.
 
 Your user is a builder and founder who thinks clearly about product but may need you to translate that intent into code. Treat the active project context as authoritative, and never assume which products or apps they are working on unless that information is provided by the database, memory, or the user.
@@ -2452,7 +2428,8 @@ router.post("/chat", async (req, res): Promise<void> => {
   try {
   const body = req.body as {
     sessionId?: number;
-    projectId: number;
+    projectId?: number | null;
+    conversationId?: string;
     message: string;
     mode?: string;
     lens?: string;
@@ -2513,20 +2490,21 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   const isFlowMode = !!body.flowMode;
   const isScenarioMode = !!body.scenarioMode;
+  const projectId = body.projectId ?? null;
+  const hasProjectId = projectId !== null;
   // Global/ambient mode: absence of projectId triggers ambient — no flag required
-  const isGlobalMode = !body.projectId && !isFlowMode && !isScenarioMode;
+  const isGlobalMode = !hasProjectId && !isFlowMode && !isScenarioMode;
 
-  if ((!body.sessionId && !isFlowMode && !isGlobalMode) || (!body.projectId && !isGlobalMode) || !body.message) {
+  if ((!body.sessionId && !isFlowMode && !isGlobalMode) || !body.message) {
     res.status(400).json({ error: "Missing required fields: sessionId or message (no projectId = ambient mode)" });
     return;
   }
 
-  const { sessionId = 0, projectId, message, history = [], entries = [] } = body as {
-    sessionId?: number; projectId?: number; message: string;
-    history?: Array<{ role: string; content: string }>;
-    entries?: Array<{ id: number; title: string; status: string }>;
-  };
-  const conversationId = (body as any).conversationId as string | undefined;
+  const { sessionId = 0, message, history = [], entries = [] } = body;
+  const conversationId = body.conversationId;
+  const ambientConversationId = typeof conversationId === "string" && conversationId.trim().length > 0
+    ? conversationId.trim()
+    : null;
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
@@ -2535,11 +2513,11 @@ router.post("/chat", async (req, res): Promise<void> => {
   const activeModel = selectChatModelForMessage(message);
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
-  logger.info({ projectId, userId, hasProjectId: !!projectId, hasUserId: !!userId }, "chat terminal debug");
+  logger.info({ projectId, userId, hasProjectId, hasUserId: !!userId }, "chat terminal debug");
 
   // Load project memory + repo info + node state from DB — skipped in global/ambient mode
   narrate(nar.loading);
-  const [project] = projectId ? await db
+  const [project] = projectId !== null ? await db
     .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
     .from(projectsTable)
     .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)) : [];
@@ -2715,32 +2693,8 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Build layered system prompt — branches on global/ambient vs project mode
   let systemPrompt: string;
   if (isGlobalMode) {
-    // ── Ambient mode: portfolio-wide context, no project scope ──
-    systemPrompt = AMBIENT_SYSTEM_PROMPT;
-    if (userId) {
-      const allProjects = await db
-        .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory })
-        .from(projectsTable)
-        .where(eq(projectsTable.userId, userId))
-        .orderBy(desc(projectsTable.updatedAt))
-        .limit(20);
-      if (allProjects.length > 0) {
-        systemPrompt += `\n\n--- YOUR PORTFOLIO (${allProjects.length} project${allProjects.length !== 1 ? "s" : ""}) ---\n${allProjects.map(p => `- ${p.name} (id: ${p.id})`).join("\n")}\n--- END PORTFOLIO ---`;
-        const portfolioMemories = allProjects
-          .map(p => {
-            if (!p.memory) return null;
-            try {
-              const s = parseMemoryStore(p.memory);
-              const { text } = buildMemoryContext(s);
-              return text ? `=== ${p.name} ===\n${text}` : null;
-            } catch { return null; }
-          })
-          .filter(Boolean);
-        if (portfolioMemories.length > 0) {
-          systemPrompt += `\n\n--- PORTFOLIO MEMORY (what Atlas already knows across all projects) ---\n${portfolioMemories.join("\n\n")}\n--- END PORTFOLIO MEMORY ---`;
-        }
-      }
-    }
+    // ── Ambient mode: no project scope; share the Nexus/home Atlas posture ──
+    systemPrompt = `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: false\n--- END SESSION CONTEXT ---`;
     if (userProfile) {
       systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
     }
@@ -3152,7 +3106,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     rawContent = terminalExtraction.content;
     if (terminalExtraction.terminalCmd) {
       try {
-        const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId, userId);
+        const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId ?? undefined, userId);
         terminalCmd = executed.terminalCmd;
         terminalResult = executed.terminalResult;
         if (terminalResult) {
@@ -3210,7 +3164,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       rawContent = terminalExtraction.content;
       if (terminalExtraction.terminalCmd && !terminalCmd) {
         try {
-          const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId, userId);
+          const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId ?? undefined, userId);
           terminalCmd = executed.terminalCmd;
           terminalResult = executed.terminalResult;
           if (terminalResult) {
@@ -3575,10 +3529,9 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   // ── Persist ambient messages to nexus_messages (global mode only) ─────────
   if (isGlobalMode && userId) {
     try {
-      const convId = conversationId ?? `ambient-${userId}-${Date.now()}`;
       await db.insert(nexusMessagesTable).values([
-        { userId, role: "user", content: message, conversationId: convId, messageType: "message" },
-        { userId, role: "assistant", content: persistContent, conversationId: convId, messageType: "message" },
+        { userId, role: "user", content: message, conversationId: ambientConversationId, messageType: "message" },
+        { userId, role: "assistant", content: persistContent, conversationId: ambientConversationId, messageType: "message" },
       ]);
     } catch (err) {
       logger.warn({ err }, "Failed to persist ambient messages to nexus_messages — non-fatal");
@@ -3608,7 +3561,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
     ...(imageB64 ? { imageB64, imageMimeType } : {}),
     ...(autoName ? { autoName } : {}),
-    ...(isGlobalMode && conversationId ? { conversationId } : {}),
+    ...(isGlobalMode && ambientConversationId ? { conversationId: ambientConversationId } : {}),
   };
 
   narrate(nar.done);
