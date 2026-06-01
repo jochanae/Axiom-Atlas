@@ -21,7 +21,6 @@ import adminRouter from "./admin";
 import invitesRouter from "./invites";
 import stripeRouter from "./stripe";
 import statsRouter from "./stats";
-import nexusRouter from "./nexus";
 import terminalRouter from "./terminal";
 import galleryRouter from "./gallery";
 import storageRouter from "./storage";
@@ -115,9 +114,6 @@ router.use(requireAuth, jobsRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
-
-// Nexus — global command space (mode, not a project)
-router.use(requireAuth, nexusRouter);
 
 // Gallery — visual vault (global + per-project)
 router.use(requireAuth, galleryRouter);
