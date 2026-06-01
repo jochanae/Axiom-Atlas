@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, SafetyFilterLevel } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable } from "@workspace/db";
 import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, type SQL } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -2545,7 +2545,7 @@ router.post("/nexus/visualize", async (req, res): Promise<void> => {
       config: {
         numberOfImages: 1,
         aspectRatio: "16:9",
-        safetyFilterLevel: "BLOCK_ONLY_HIGH",
+        safetyFilterLevel: SafetyFilterLevel.BLOCK_ONLY_HIGH,
       },
     });
 

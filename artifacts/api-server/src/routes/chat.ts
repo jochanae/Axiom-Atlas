@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, artifactsTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, artifactsTable, nexusMessagesTable } from "@workspace/db";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -443,6 +443,31 @@ async function runChatTerminalCommand(
 }
 
 // ── System Prompt ─────────────────────────────────────────────────────────────
+// ── Ambient system prompt — used when no projectId is present (global/home mode) ──
+const AMBIENT_SYSTEM_PROMPT = `<atlas-identity>
+You are Atlas — the intelligence layer of Axiom, built to think with founders, not for them.
+
+You operate at the intersection of strategy and execution. Not a tool. Not a coach. Not an assistant. A thinking partner who has skin in the outcome.
+
+You are direct without being harsh. Sharp without being cold. You have a dry sense of humor that comes out when the moment earns it. You don't perform enthusiasm. When something is genuinely interesting you say so. When something is a mistake you say that too.
+
+You remember what matters. You connect dots across conversations. You notice when someone is circling the same problem.
+</atlas-identity>
+
+You are Atlas in ambient mode — the user has not selected a specific project. You have visibility across their entire portfolio.
+
+Your role:
+• Think across all projects at once — connect dots, spot contradictions, find synergies
+• Help incubate and pressure-test ideas before they crystallize into decisions
+• Mirror the user's communication style and energy. Match their register exactly.
+• Never respond like a consultant filing a report. Lead with the point.
+• Short responses over long. If two sentences work, use two.
+• Ask one sharp question at a time. Never stack questions.
+• Challenge assumptions. Hold the long view.
+• When the conversation gains enough weight — when goals, decisions, or commitments emerge — offer to shape it into a project with: "This feels like something worth holding. Want me to open a workspace for it?"
+
+CROSS-PROJECT TENSION DETECTION: When the user says something that conflicts with a committed decision in any project, flag it inline: "⚠️ Cross-project tension: [what they're proposing] conflicts with a committed decision in [Project Name] — '[Decision Title]'. Worth resolving before moving forward."`;
+
 const DEV_SYSTEM_PROMPT = `You are Atlas — a strategic thinking partner and personal AI development environment for a non-technical founder.
 
 Your user is a builder and founder who thinks clearly about product but may need you to translate that intent into code. Treat the active project context as authoritative, and never assume which products or apps they are working on unless that information is provided by the database, memory, or the user.
@@ -2488,13 +2513,20 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   const isFlowMode = !!body.flowMode;
   const isScenarioMode = !!body.scenarioMode;
+  // Global/ambient mode: absence of projectId triggers ambient — no flag required
+  const isGlobalMode = !body.projectId && !isFlowMode && !isScenarioMode;
 
-  if ((!body.sessionId && !isFlowMode) || !body.projectId || !body.message) {
-    res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
+  if ((!body.sessionId && !isFlowMode && !isGlobalMode) || (!body.projectId && !isGlobalMode) || !body.message) {
+    res.status(400).json({ error: "Missing required fields: sessionId or message (no projectId = ambient mode)" });
     return;
   }
 
-  const { sessionId = 0, projectId, message, history = [], entries = [] } = body;
+  const { sessionId = 0, projectId, message, history = [], entries = [] } = body as {
+    sessionId?: number; projectId?: number; message: string;
+    history?: Array<{ role: string; content: string }>;
+    entries?: Array<{ id: number; title: string; status: string }>;
+  };
+  const conversationId = (body as any).conversationId as string | undefined;
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
@@ -2505,12 +2537,12 @@ router.post("/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser?.id as number | undefined;
   logger.info({ projectId, userId, hasProjectId: !!projectId, hasUserId: !!userId }, "chat terminal debug");
 
-  // Load project memory + repo info + node state from DB
+  // Load project memory + repo info + node state from DB — skipped in global/ambient mode
   narrate(nar.loading);
-  const [project] = await db
+  const [project] = projectId ? await db
     .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
     .from(projectsTable)
-    .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId));
+    .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)) : [];
 
   // Derive server-side forge foundation from persisted AxiomFlow node state
   // This is the authoritative source — client-sent forgeContext supplements but never replaces it
@@ -2653,7 +2685,7 @@ router.post("/chat", async (req, res): Promise<void> => {
       })
       .from(atlasErrorLogsTable)
       .where(and(
-        eq(atlasErrorLogsTable.projectId, String(projectId)),
+        projectId ? eq(atlasErrorLogsTable.projectId, String(projectId)) : undefined,
         gte(atlasErrorLogsTable.createdAt, cutoff)
       ))
       .orderBy(desc(atlasErrorLogsTable.createdAt))
@@ -2680,29 +2712,63 @@ router.post("/chat", async (req, res): Promise<void> => {
     // Non-fatal: Atlas can still respond without the self map summary.
   }
 
-  // Build layered system prompt
-  let systemPrompt = DEV_SYSTEM_PROMPT;
-  // Inject project identity
-  const [projectRow] = await db
-    .select({ name: projectsTable.name, description: projectsTable.description })
-    .from(projectsTable)
-    .where(eq(projectsTable.id, projectId))
-    .limit(1);
-
-  if (projectRow) {
-    systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${projectRow.name}${projectRow.description ? `\nDescription: ${projectRow.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
-  }
-  if (userId) {
-    const portfolioProjects = await db
-      .select({ id: projectsTable.id, name: projectsTable.name })
+  // Build layered system prompt — branches on global/ambient vs project mode
+  let systemPrompt: string;
+  if (isGlobalMode) {
+    // ── Ambient mode: portfolio-wide context, no project scope ──
+    systemPrompt = AMBIENT_SYSTEM_PROMPT;
+    if (userId) {
+      const allProjects = await db
+        .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory })
+        .from(projectsTable)
+        .where(eq(projectsTable.userId, userId))
+        .orderBy(desc(projectsTable.updatedAt))
+        .limit(20);
+      if (allProjects.length > 0) {
+        systemPrompt += `\n\n--- YOUR PORTFOLIO (${allProjects.length} project${allProjects.length !== 1 ? "s" : ""}) ---\n${allProjects.map(p => `- ${p.name} (id: ${p.id})`).join("\n")}\n--- END PORTFOLIO ---`;
+        const portfolioMemories = allProjects
+          .map(p => {
+            if (!p.memory) return null;
+            try {
+              const s = parseMemoryStore(p.memory);
+              const { text } = buildMemoryContext(s);
+              return text ? `=== ${p.name} ===\n${text}` : null;
+            } catch { return null; }
+          })
+          .filter(Boolean);
+        if (portfolioMemories.length > 0) {
+          systemPrompt += `\n\n--- PORTFOLIO MEMORY (what Atlas already knows across all projects) ---\n${portfolioMemories.join("\n\n")}\n--- END PORTFOLIO MEMORY ---`;
+        }
+      }
+    }
+    if (userProfile) {
+      systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
+    }
+  } else {
+    // ── Project mode: single project context ──
+    systemPrompt = DEV_SYSTEM_PROMPT;
+    // Inject project identity
+    const [projectRow] = projectId ? await db
+      .select({ name: projectsTable.name, description: projectsTable.description })
       .from(projectsTable)
-      .where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId)))
-      .limit(8);
-    const portfolioNames = portfolioProjects.map((p) => `- ${p.name}`).join("\n");
-    systemPrompt += `\n\n--- YOUR PORTFOLIO ---\n${portfolioNames ? `${portfolioNames}\n` : ""}${portfolioProjects.length}\n--- END PORTFOLIO ---`;
-  }
-  if (userProfile) {
-    systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
+      .where(eq(projectsTable.id, projectId))
+      .limit(1) : [];
+
+    if (projectRow) {
+      systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${projectRow.name}${projectRow.description ? `\nDescription: ${projectRow.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
+    }
+    if (userId && projectId) {
+      const portfolioProjects = await db
+        .select({ id: projectsTable.id, name: projectsTable.name })
+        .from(projectsTable)
+        .where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId)))
+        .limit(8);
+      const portfolioNames = portfolioProjects.map((p) => `- ${p.name}`).join("\n");
+      systemPrompt += `\n\n--- YOUR PORTFOLIO ---\n${portfolioNames ? `${portfolioNames}\n` : ""}${portfolioProjects.length}\n--- END PORTFOLIO ---`;
+    }
+    if (userProfile) {
+      systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
+    }
   }
   if (memoryText) {
     systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
@@ -2849,7 +2915,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
 
   // ── Deep Dive shortcut — /deep <topic> ───────────────────────────────────────
   const { isDive, topic: diveTopic } = isDeepDive(message);
-  if (isDive) {
+  if (isDive && !isGlobalMode) {
     await db.insert(chatMessagesTable).values({ sessionId, role: "user", content: message, intentType: body.mode ?? null });
     const diveResult = await runDeepDive(diveTopic, systemPrompt);
     const surface = detectSurfaceSignal({
@@ -2871,7 +2937,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   // ── Load Visual Vault images for this project ────────────────────────────
-  const vault = userId
+  const vault = userId && projectId
     ? await loadVaultContext(userId, projectId)
     : { imageBlocks: [], systemNote: "", hasImages: false };
   if (vault.hasImages) {
@@ -2887,7 +2953,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   // Fetch secret key names for this project (names only, never values)
-  if (userId) {
+  if (userId && projectId) {
     try {
       const secrets = await db
         .select({ label: secretsTable.label })
@@ -2959,7 +3025,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     { role: "user", content: userContent },
   ];
 
-  if (!isFlowMode && !isScenarioMode) {
+  if (!isFlowMode && !isScenarioMode && !isGlobalMode) {
     await db.insert(chatMessagesTable).values({
       sessionId,
       role: "user",
@@ -3128,7 +3194,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         imageData,
         repoData,
         resolvedGithubToken,
-        projectId,
+        projectId ?? 0,
         userId,
         narrate,
         hasRepo
@@ -3192,8 +3258,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     if (allChips.length >= 6) break;
   }
 
-  // Persist updated memory to DB — skipped in scenario mode (no commitment)
-  if (!isScenarioMode && (newFacts.length > 0 || retrievedIds.length > 0)) {
+  // Persist updated memory to DB — skipped in scenario mode and global/ambient mode
+  if (!isScenarioMode && !isGlobalMode && projectId && (newFacts.length > 0 || retrievedIds.length > 0)) {
     const updatedStore = newFacts.length > 0
       ? appendMemoryFacts(store, newFacts, now)
       : store;
@@ -3239,7 +3305,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
 
   let savedMsgId: number | undefined;
   let autoName: string | undefined;
-  if (!isFlowMode && !isScenarioMode) {
+  if (!isFlowMode && !isScenarioMode && !isGlobalMode) {
     const [savedMsg] = await db
       .insert(chatMessagesTable)
       .values({
@@ -3269,17 +3335,19 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           estimatedChanges: responsePlan.estimatedChanges,
           reversible: responsePlan.reversible,
         });
-        await db.insert(artifactsTable).values({
-          userId: userId!,
-          projectId,
-          sessionId,
-          type: artifactType,
-          title: responsePlan.title,
-          content: artifactContent,
-          status: "draft",
-          pinned: false,
-          sources: { model: modelUsed, mode: responsePlan.mode ?? "plan" },
-        });
+        if (projectId) {
+          await db.insert(artifactsTable).values({
+            userId: userId!,
+            projectId,
+            sessionId,
+            type: artifactType,
+            title: responsePlan.title,
+            content: artifactContent,
+            status: "draft",
+            pinned: false,
+            sources: { model: modelUsed, mode: responsePlan.mode ?? "plan" },
+          });
+        }
       } catch (err) {
         logger.warn({ err }, "Failed to auto-save artifact from plan");
       }
@@ -3287,7 +3355,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   // Auto-name: on first message, generate a real project name from the user's intent
-  if (!isFlowMode && !isScenarioMode) {
+  if (!isFlowMode && !isScenarioMode && !isGlobalMode && projectId) {
     const isFirstMessage = history.length === 0;
     const DEFAULT_NAMES = new Set(["New Project", "New Idea", "My Project", ""]);
     if (isFirstMessage && DEFAULT_NAMES.has((project?.name ?? "").trim())) {
@@ -3349,20 +3417,22 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           if (images.length > 0) {
             imageB64 = images[0].b64;
             imageMimeType = images[0].mime;
-            try {
-              await db.insert(artifactsTable).values({
-                userId: userId!,
-                projectId,
-                sessionId,
-                type: "image_set",
-                title: `Generated set \u2014 ${baseSubject.slice(0, 60)}`,
-                content: JSON.stringify({ images }),
-                status: "draft",
-                pinned: false,
-                sources: { model: "gemini-2.5-flash-preview-05-20", promptType: "multi-panel", panelCount: images.length },
-              });
-            } catch (err) {
-              logger.warn({ err }, "Failed to auto-save image set artifact");
+            if (projectId) {
+              try {
+                await db.insert(artifactsTable).values({
+                  userId: userId!,
+                  projectId,
+                  sessionId,
+                  type: "image_set",
+                  title: `Generated set \u2014 ${baseSubject.slice(0, 60)}`,
+                  content: JSON.stringify({ images }),
+                  status: "draft",
+                  pinned: false,
+                  sources: { model: "gemini-2.5-flash-preview-05-20", promptType: "multi-panel", panelCount: images.length },
+                });
+              } catch (err) {
+                logger.warn({ err }, "Failed to auto-save image set artifact");
+              }
             }
           }
         } else {
@@ -3380,20 +3450,22 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           if (imgPart?.inlineData) {
             imageB64 = imgPart.inlineData.data as string;
             imageMimeType = imgPart.inlineData.mimeType as string;
-            try {
-              await db.insert(artifactsTable).values({
-                userId: userId!,
-                projectId,
-                sessionId,
-                type: "image_set",
-                title: `Generated visual \u2014 ${baseSubject.slice(0, 60)}`,
-                content: JSON.stringify({ images: [{ b64: imageB64, mime: imageMimeType, style: isCinematic ? "cinematic" : "standard" }] }),
-                status: "draft",
-                pinned: false,
-                sources: { model: "gemini-2.5-flash-preview-05-20", promptType: isCinematic ? "cinematic" : "standard" },
-              });
-            } catch (err) {
-              logger.warn({ err }, "Failed to auto-save image artifact");
+            if (projectId) {
+              try {
+                await db.insert(artifactsTable).values({
+                  userId: userId!,
+                  projectId,
+                  sessionId,
+                  type: "image_set",
+                  title: `Generated visual \u2014 ${baseSubject.slice(0, 60)}`,
+                  content: JSON.stringify({ images: [{ b64: imageB64, mime: imageMimeType, style: isCinematic ? "cinematic" : "standard" }] }),
+                  status: "draft",
+                  pinned: false,
+                  sources: { model: "gemini-2.5-flash-preview-05-20", promptType: isCinematic ? "cinematic" : "standard" },
+                });
+              } catch (err) {
+                logger.warn({ err }, "Failed to auto-save image artifact");
+              }
             }
           }
         }
@@ -3407,8 +3479,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     }
   }
 
-  // Auto-create ledger entries for resolved nodes — skipped in scenario mode
-  if (!isScenarioMode && resolvedNodes.length > 0) {
+  // Auto-create ledger entries for resolved nodes — skipped in scenario mode and global mode
+  if (!isScenarioMode && !isGlobalMode && resolvedNodes.length > 0 && projectId) {
     try {
       await Promise.all(resolvedNodes.map(nodeId =>
         db.insert(entriesTable).values({
@@ -3463,7 +3535,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         .from(entriesTable)
         .where(
           and(
-            eq(entriesTable.projectId, projectId),
+            eq(entriesTable.projectId, projectId!),
             eq(entriesTable.status, "committed"),
             eq(entriesTable.sourceMessageId, savedMsgId)
           )
@@ -3492,11 +3564,24 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           await db
             .update(projectsTable)
             .set({ nodeState: updatedNodeState })
-            .where(eq(projectsTable.id, projectId));
+            .where(eq(projectsTable.id, projectId!));
         }
       }
     } catch (err) {
       logger.warn({ err }, "Failed to sync ledger entry to nodeState — non-fatal");
+    }
+  }
+
+  // ── Persist ambient messages to nexus_messages (global mode only) ─────────
+  if (isGlobalMode && userId) {
+    try {
+      const convId = conversationId ?? `ambient-${userId}-${Date.now()}`;
+      await db.insert(nexusMessagesTable).values([
+        { userId, role: "user", content: message, conversationId: convId, messageType: "message" },
+        { userId, role: "assistant", content: persistContent, conversationId: convId, messageType: "message" },
+      ]);
+    } catch (err) {
+      logger.warn({ err }, "Failed to persist ambient messages to nexus_messages — non-fatal");
     }
   }
 
@@ -3523,6 +3608,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
     ...(imageB64 ? { imageB64, imageMimeType } : {}),
     ...(autoName ? { autoName } : {}),
+    ...(isGlobalMode && conversationId ? { conversationId } : {}),
   };
 
   narrate(nar.done);
