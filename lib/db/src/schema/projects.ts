@@ -16,6 +16,7 @@ export const projectsTable = pgTable("projects", {
   linkedRepo: text("linked_repo"),
   nodeState: jsonb("node_state").default({}),
   pushHistory: jsonb("push_history").default([]),
+  shape: jsonb("shape").notNull().default({ identity: [], constraints: [], formats: [] }),
   lastHandoverAt: timestamp("last_handover_at", { withTimezone: true }),
   lastHandoverHash: text("last_handover_hash"),
   lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }).notNull().defaultNow(),

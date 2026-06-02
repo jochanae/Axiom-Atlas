@@ -24,6 +24,7 @@ async function ensureProjectSchema(): Promise<void> {
   if (projectSchemaReady) return;
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "entity_type" text DEFAULT 'project' NOT NULL`);
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "last_opened_at" timestamp with time zone DEFAULT now() NOT NULL`);
+  await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "shape" JSONB NOT NULL DEFAULT '{"identity":[],"constraints":[],"formats":[]}'::jsonb`);
   await db.execute(sql`
     DO $$ BEGIN
       ALTER TABLE "projects" ADD CONSTRAINT "projects_entity_type_check" CHECK ("entity_type" IN ('project', 'idea'));
@@ -59,6 +60,10 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
     : [];
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 // Strip GitHub token from outbound project objects — never expose it in list responses.
@@ -374,6 +379,55 @@ router.get("/projects/:id/map-nodes", async (req, res): Promise<void> => {
   }
 
   res.json({ projectId, entityType, nodes });
+});
+
+router.get("/projects/:id/shape", async (req, res): Promise<void> => {
+  const params = GetProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const userId = (req as any).authUser.id as number;
+  const [project] = await db
+    .select({ shape: projectsTable.shape })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)))
+    .limit(1);
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  res.json({ shape: project.shape });
+});
+
+router.put("/projects/:id/shape", async (req, res): Promise<void> => {
+  const params = GetProjectParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  if (!isPlainObject(req.body) || !isPlainObject(req.body.shape)) {
+    res.status(400).json({ error: "Shape must be an object" });
+    return;
+  }
+
+  const userId = (req as any).authUser.id as number;
+  const [project] = await db
+    .update(projectsTable)
+    .set({ shape: req.body.shape })
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)))
+    .returning({ shape: projectsTable.shape });
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  res.json({ shape: project.shape });
 });
 
 router.get("/projects/:id", async (req, res): Promise<void> => {
