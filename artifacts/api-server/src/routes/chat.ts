@@ -1780,12 +1780,19 @@ router.post("/chat", async (req, res): Promise<void> => {
         ? { fullName: parsedRepo, defaultBranch: "main" }
         : parsedRepo;
       if (repoData.fullName) {
-        if (resolvedGithubToken) {
-          repoTreeContext = await fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main");
-        }
-        if (process.env.GITHUB_TOKEN) {
-          recentRepoActivityContext = await fetchRecentRepoActivity(repoData.fullName, process.env.GITHUB_TOKEN, now);
-        }
+        const repoContextFetches: [Promise<string | null>, Promise<string | null>] = [
+          resolvedGithubToken
+            ? fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main")
+            : Promise.resolve(null),
+          process.env.GITHUB_TOKEN
+            ? fetchRecentRepoActivity(repoData.fullName, process.env.GITHUB_TOKEN, now)
+            : Promise.resolve(null),
+        ];
+
+        [repoTreeContext, recentRepoActivityContext] = await Promise.race([
+          Promise.all(repoContextFetches),
+          new Promise<[string | null, string | null]>((resolve) => setTimeout(() => resolve(["", ""]), 3000)),
+        ]);
       }
     } catch {
       // Non-fatal: continue without tree context
