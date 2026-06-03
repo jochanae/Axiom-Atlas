@@ -73,11 +73,17 @@ async function resolveGithubTokenForRequest(
   return resolveStoredGithubToken(projectGithubToken) ?? process.env.GITHUB_TOKEN ?? null;
 }
 
-/** Resolve token: use the header value unless it's the sentinel "__server__", then fall back to env var. */
-function getToken(req: { headers: Record<string, string | string[] | undefined> }): string | null {
+type GithubTokenRequest = {
+  headers: Record<string, string | string[] | undefined>;
+  authUser?: { id?: number } | null;
+};
+
+/** Resolve token: use the header value unless it's the sentinel "__server__", then fall back to account/env token. */
+async function getToken(req: GithubTokenRequest): Promise<string | null> {
   const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
   if (h && h !== "__server__") return h;
-  return process.env.GITHUB_TOKEN ?? null;
+  const accountToken = await getAccountGithubToken(req.authUser?.id);
+  return accountToken ?? process.env.GITHUB_TOKEN ?? null;
 }
 
 type ParsedLinkedRepo = { owner: string; repo: string; fullName: string };
@@ -225,7 +231,7 @@ router.get("/github/server-token", (_req, res): void => {
 
 // GET /api/github/repos
 router.get("/github/repos", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const resp = await fetch(`${GH_API}/user/repos?per_page=100&sort=pushed&type=owner`, { headers: ghHeaders(token) });
@@ -241,7 +247,7 @@ router.get("/github/repos", async (req, res): Promise<void> => {
 
 // GET /api/github/tree
 router.get("/github/tree", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const { repo, branch = "main" } = req.query as { repo?: string; branch?: string };
@@ -267,7 +273,7 @@ router.get("/github/tree", async (req, res): Promise<void> => {
 
 // GET /api/github/file
 router.get("/github/file", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const { repo, path: filePath, branch = "main" } = req.query as { repo?: string; path?: string; branch?: string };
@@ -358,7 +364,7 @@ router.get("/projects/:projectId/commits", async (req, res): Promise<void> => {
 
 // POST /api/github/branch
 router.post("/github/branch", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const { repo, branch, baseBranch = "main" } = req.body as { repo: string; branch: string; baseBranch?: string };
@@ -388,7 +394,7 @@ router.post("/github/branch", async (req, res): Promise<void> => {
 
 // PUT /api/github/commit
 router.put("/github/commit", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const { repo, branch = "main", path: filePath, content, message, forceDirect = false, projectId, project_id, confidence, blast_radius, blastRadius, reasoning } = req.body as {
@@ -448,7 +454,7 @@ router.put("/github/commit", async (req, res): Promise<void> => {
 
 // POST /api/github/pr
 router.post("/github/pr", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const { repo, head, base, title, body = "" } = req.body as {
@@ -475,7 +481,7 @@ router.post("/github/pr", async (req, res): Promise<void> => {
 
 // POST /api/github/analyze — AI-powered project structure analysis
 router.post("/github/analyze", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const { repo, branch = "main" } = req.body as { repo: string; branch?: string };
@@ -614,7 +620,7 @@ ${fileBlock}`;
 
 // GET /api/github/deployment — auto-detect live deployment URL from repo
 router.get("/github/deployment", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const { repo } = req.query as { repo?: string };
@@ -698,7 +704,7 @@ router.get("/github/deployment", async (req, res): Promise<void> => {
 
 // POST /api/github/auto-link — match all unlinked projects to GitHub repos by name
 router.post("/github/auto-link", async (req, res): Promise<void> => {
-  const token = getToken(req);
+  const token = await getToken(req);
   if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
 
   const userId = (req as any).authUser?.id as number | undefined;
