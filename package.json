@@ -18,6 +18,10 @@
   },
   "dependencies": {
     "@replit/connectors-sdk": "^0.4.0",
+    "openai": "^6.41.0",
+    "p-limit": "^7.3.0",
+    "p-retry": "^7.1.1",
+    "react": "catalog:",
     "stripe": "20.0.0",
     "stripe-replit-sync": "1.0.0"
   }
