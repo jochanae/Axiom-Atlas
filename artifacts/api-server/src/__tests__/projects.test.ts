@@ -162,7 +162,7 @@ describe("GET /api/projects/recent", () => {
       {
         id: 42,
         name: "My Project",
-        status: "active",
+        status: "shaping",
         lastOpenedAt: new Date("2025-01-02"),
       },
     ]);
@@ -177,7 +177,7 @@ describe("GET /api/projects/recent", () => {
         {
           id: 42,
           name: "My Project",
-          status: "active",
+          status: "shaping",
           last_opened_at: "2025-01-02T00:00:00.000Z",
         },
       ],

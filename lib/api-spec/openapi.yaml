@@ -688,7 +688,7 @@ components:
           type: ["string", "null"]
         status:
           type: string
-          enum: [active, archived]
+          enum: [shaping, committed, archived]
         entityType:
           type: string
           enum: [project, idea]
@@ -751,7 +751,7 @@ components:
           type: ["string", "null"]
         status:
           type: string
-          enum: [active, archived]
+          enum: [shaping, committed, archived]
         memory:
           type: ["string", "null"]
         previewUrl:
@@ -782,7 +782,7 @@ components:
           type: string
         status:
           type: string
-          enum: [active, archived]
+          enum: [shaping, committed, archived]
         last_opened_at:
           type: string
       required:

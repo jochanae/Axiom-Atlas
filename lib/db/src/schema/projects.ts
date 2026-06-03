@@ -8,7 +8,7 @@ export const projectsTable = pgTable("projects", {
   userId: integer("user_id").references(() => usersTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
-  status: text("status").notNull().default("active"),
+  status: text("status").notNull().default("shaping"),
   entityType: text("entity_type").notNull().default("project"),
   memory: text("memory"),
   previewUrl: text("preview_url"),

@@ -12,7 +12,8 @@ export interface HealthStatus {
 export type ProjectStatus = (typeof ProjectStatus)[keyof typeof ProjectStatus];
 
 export const ProjectStatus = {
-  active: "active",
+  shaping: "shaping",
+  committed: "committed",
   archived: "archived",
 } as const;
 
@@ -73,7 +74,8 @@ export type UpdateProjectBodyStatus =
   (typeof UpdateProjectBodyStatus)[keyof typeof UpdateProjectBodyStatus];
 
 export const UpdateProjectBodyStatus = {
-  active: "active",
+  shaping: "shaping",
+  committed: "committed",
   archived: "archived",
 } as const;
 
@@ -104,7 +106,8 @@ export type RecentProjectStatus =
   (typeof RecentProjectStatus)[keyof typeof RecentProjectStatus];
 
 export const RecentProjectStatus = {
-  active: "active",
+  shaping: "shaping",
+  committed: "committed",
   archived: "archived",
 } as const;
 
