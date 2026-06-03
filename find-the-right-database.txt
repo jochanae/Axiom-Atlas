@@ -1,0 +1,39 @@
+-- ============================================================
+-- STEP 1 — FIND THE RIGHT DATABASE (the one Cloud Run actually uses)
+--
+-- You have more than one database. The SQL you ran added "shape" to the
+-- WRONG one. Cloud Run reads a different database that still has no "shape".
+--
+-- Run this SAME query in EACH SQL editor you have access to:
+--   * Neon dashboard -> SQL Editor
+--   * Supabase dashboard -> SQL Editor   (your frontend .env shows a
+--     Supabase project: lmrpnsjckljdwqudtelk.supabase.co)
+--
+-- The RIGHT database is the one that shows YOUR real data:
+--   project_count is your real number (around 11),
+--   admins shows YOUR email,
+--   and has_shape_column = false   <-- this is the broken one to fix.
+-- ============================================================
+
+SELECT
+  current_database()                                    AS db_name,
+  (SELECT count(*) FROM projects)                       AS project_count,
+  (SELECT count(*) FROM users)                          AS user_count,
+  (SELECT string_agg(email, ', ')
+     FROM users WHERE role = 'super_admin')             AS admins,
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'projects' AND column_name = 'shape'
+  )                                                     AS has_shape_column;
+
+-- ============================================================
+-- STEP 2 — On the database that showed YOUR real data with
+-- has_shape_column = false, run THIS:
+-- ============================================================
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS shape jsonb NOT NULL
+  DEFAULT '{"identity": [], "constraints": [], "formats": []}'::jsonb;
+
+-- Then re-run the STEP 1 query on that same database.
+-- has_shape_column should now be true. Open the app and create a project.
