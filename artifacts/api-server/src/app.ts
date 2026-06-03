@@ -75,6 +75,8 @@ app.use(
       callback(new Error(`CORS: origin not allowed — ${origin}`));
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Authorization", "Content-Type", "X-GitHub-Token", "X-Requested-With"],
   }),
 );
 app.use(cookieParser());
