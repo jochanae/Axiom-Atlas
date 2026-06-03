@@ -201,8 +201,10 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
     await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
-    const FRONTEND_URL = process.env.FRONTEND_URL ?? "https://axiomsystem.app";
-    res.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
+    createSessionCookie(token, res);
+    const callbackUrl = new URL("https://axiomsystem.app/auth/callback");
+    callbackUrl.searchParams.set("token", token);
+    res.redirect(callbackUrl.toString());
   } catch (err) {
     req.log?.error(err, "google-oauth-callback-error");
     res.redirect("/?auth_error=server_error");
