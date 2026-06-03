@@ -1,2 +1,3 @@
 - [Migration path & error handling](migration-path.md) — migration folder is `../../lib/db/migrations`, not `./drizzle`; catch needs Postgres code 42P07 not just message string
 - [Terminal SSE ordering](terminal-sse-ordering.md) — SSE headers must flush BEFORE prepareProjectRepo or user sees silent freeze during clone
+- [helium vs Neon prod DB](helium-vs-neon-db.md) — this Replit's DATABASE_URL=helium (Replit-managed), NOT Neon. Cloud Run prod uses its own Neon URL unreachable here; prod schema fixes must run in Neon SQL editor.

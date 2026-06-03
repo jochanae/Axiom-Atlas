@@ -60,3 +60,9 @@ id = "cXspDRISgtcn2mcGcyx4N"
 uri = "file://.local/exports/cursor-ipad-cookie-fix.txt"
 type = "text"
 title = "cursor-ipad-cookie-fix.txt — iPad sign-in fix (2 files)"
+
+[[outputs]]
+id = "ubmiazUAA2NT6Qgovtdc9"
+uri = "file://neon-migration.txt"
+type = "text"
+title = "Neon migration — fixes Failed to create project"

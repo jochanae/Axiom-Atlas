@@ -1,0 +1,30 @@
+-- ============================================================
+-- Axiom-Atlas — Neon migration
+-- FIX: "Failed to create project" + briefing/handoff failures
+--
+-- CAUSE: the code added a `shape` column to the projects table,
+-- but the live Neon database never got that column. Every project
+-- read/insert references `shape`, so the database rejects them.
+--
+-- HOW TO RUN: open the Neon dashboard -> SQL Editor -> paste this
+-- whole block -> Run. Safe to run more than once (idempotent).
+-- It backfills all existing projects with an empty default; no data loss.
+-- ============================================================
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS shape jsonb NOT NULL
+  DEFAULT '{"identity": [], "constraints": [], "formats": []}'::jsonb;
+
+-- Defensive: these almost certainly already exist on Neon.
+-- IF NOT EXISTS makes them harmless no-ops if they do.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS node_state jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS push_history jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_handover_at timestamptz;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_handover_hash text;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_opened_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS entity_type text NOT NULL DEFAULT 'project';
+
+-- Verify the fix (optional — should return one row showing the shape column):
+-- SELECT column_name, data_type, is_nullable
+-- FROM information_schema.columns
+-- WHERE table_name = 'projects' AND column_name = 'shape';
