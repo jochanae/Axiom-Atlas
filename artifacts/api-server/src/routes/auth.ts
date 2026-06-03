@@ -61,14 +61,19 @@ function createSessionCookie(token: string, res: import("express").Response) {
 }
 
 export async function getUserFromCookie(req: import("express").Request) {
+  // 1. Try cookie first
   const token = req.cookies?.[SESSION_COOKIE];
-  if (!token) return null;
+  // 2. Fall back to Bearer token for cross-domain auth
+  const bearer = req.headers.authorization;
+  const bearerToken = typeof bearer === "string" && bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : null;
+  const effectiveToken = token || bearerToken;
+  if (!effectiveToken) return null;
   const now = new Date();
   const rows = await db
     .select({ user: usersTable })
     .from(userSessionsTable)
     .innerJoin(usersTable, eq(userSessionsTable.userId, usersTable.id))
-    .where(and(eq(userSessionsTable.token, token), gt(userSessionsTable.expiresAt, now)))
+    .where(and(eq(userSessionsTable.token, effectiveToken), gt(userSessionsTable.expiresAt, now)))
     .limit(1);
   return rows[0]?.user ?? null;
 }
@@ -122,7 +127,7 @@ router.post("/auth/signup", async (req, res): Promise<void> => {
   await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
   createSessionCookie(token, res);
-  res.status(201).json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+  res.status(201).json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, token });
 });
 
 // POST /api/auth/login
@@ -144,7 +149,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   await db.insert(userSessionsTable).values({ userId: user.id, token, expiresAt });
 
   createSessionCookie(token, res);
-  res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier });
+  res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, token });
 });
 
 // POST /api/auth/logout
