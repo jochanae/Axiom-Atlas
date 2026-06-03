@@ -229,6 +229,48 @@ router.get("/github/server-token", (_req, res): void => {
   res.json({ available: !!process.env.GITHUB_TOKEN });
 });
 
+// GET /api/github/status?projectId=N — unified GitHub connection status
+// Returns one clear answer covering account-level, project-level, and server tokens.
+// hasUserToken = true means writes/commits are possible.
+// hasServerToken = true means reads work (but NOT private repos the user owns).
+router.get("/github/status", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const projectId = req.query.projectId ? Number(req.query.projectId) : null;
+
+  const accountToken = await getAccountGithubToken(userId);
+
+  let projectToken: string | null = null;
+  let linkedRepoRaw: string | null = null;
+  if (projectId && Number.isFinite(projectId)) {
+    const [project] = await db
+      .select({ githubToken: projectsTable.githubToken, linkedRepo: projectsTable.linkedRepo })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+      .limit(1);
+    if (project) {
+      projectToken = resolveStoredGithubToken(project.githubToken);
+      linkedRepoRaw = project.linkedRepo ?? null;
+    }
+  }
+
+  const userToken = accountToken ?? projectToken;
+  const hasServerToken = !!process.env.GITHUB_TOKEN;
+  const linkedRepo = parseLinkedRepo(linkedRepoRaw)?.fullName ?? null;
+
+  res.json({
+    hasUserToken: !!userToken,
+    hasProjectToken: !!projectToken,
+    hasAccountToken: !!accountToken,
+    hasServerToken,
+    canRead: !!(userToken ?? hasServerToken),
+    canWrite: !!userToken,
+    source: userToken ? (accountToken ? "account" : "project") : (hasServerToken ? "server" : null),
+    linkedRepo,
+  });
+});
+
 // GET /api/github/repos
 router.get("/github/repos", async (req, res): Promise<void> => {
   const token = await getToken(req);
