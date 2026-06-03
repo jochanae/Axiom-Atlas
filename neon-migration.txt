@@ -1,32 +1,25 @@
 -- ============================================================
--- Axiom-Atlas — Neon migration  (THE fix for "Failed to create project")
---
--- PROVEN CAUSE (tested live against your Cloud Run backend):
---   Creating a project runs:  insert into "projects" (... "shape" ...)
---   Your live Neon database has NO "shape" column, so it rejects every
---   project insert. This cascades to the briefing and home->workspace
---   handoff. Auth, CORS, and Cloud Run itself are all healthy.
---   It is NOT Cloud Armor and NOT a code bug.
+-- Axiom-Atlas — Neon migration
+-- Run ALL of this in the Neon SQL Editor at console.neon.tech
+-- Safe to run more than once — IF NOT EXISTS guards everything.
 --
 -- IMPORTANT — RUN IT ON THE RIGHT DATABASE:
---   Earlier this looked "already done" because it was likely run on a
---   different Neon project/branch than the one Cloud Run uses.
---   1. Google Cloud Console -> Cloud Run -> your service -> "Edit & deploy
---      new revision" -> Variables & Secrets -> find DATABASE_URL.
---   2. Note its host (looks like  ep-xxxxx-xxxx.<region>.aws.neon.tech )
+--   1. Google Cloud Console → Cloud Run → your service → "Edit & deploy
+--      new revision" → Variables & Secrets → find DATABASE_URL.
+--   2. Note its host (looks like  ep-xxxxx-xxxx.<region>.aws.neon.tech)
 --      and the database name at the end of the URL.
 --   3. In Neon, open the project/branch whose host MATCHES that exactly,
---      then SQL Editor -> paste this whole block -> Run.
---
--- Safe to run more than once. Backfills existing projects. No data loss.
--- No redeploy needed — it works the instant the column exists.
+--      then SQL Editor → paste this whole block → Run.
 -- ============================================================
+
+
+-- ── projects table ────────────────────────────────────────────────────────────
+-- (from previous migration — safe no-ops if already applied)
 
 ALTER TABLE projects
   ADD COLUMN IF NOT EXISTS shape jsonb NOT NULL
   DEFAULT '{"identity": [], "constraints": [], "formats": []}'::jsonb;
 
--- Defensive no-ops (already exist on Neon; harmless if so):
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS node_state jsonb DEFAULT '{}'::jsonb;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS push_history jsonb DEFAULT '[]'::jsonb;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_handover_at timestamptz;
@@ -34,11 +27,26 @@ ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_handover_hash text;
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_opened_at timestamptz NOT NULL DEFAULT now();
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS entity_type text NOT NULL DEFAULT 'project';
 
--- VERIFY (this query runs automatically): you should see one row -> column "shape".
--- If you get one row back, the fix landed on the correct database.
-SELECT column_name, data_type, is_nullable
-FROM information_schema.columns
-WHERE table_name = 'projects' AND column_name = 'shape';
 
--- OPTIONAL cleanup of throwaway test accounts created while diagnosing:
--- DELETE FROM users WHERE email LIKE 'diag%@example.com';
+-- ── connections table ─────────────────────────────────────────────────────────
+-- These 3 columns exist in the app code but were NEVER added to Neon.
+-- Root cause of every dead button related to GitHub / connections:
+-- every INSERT into connections was crashing with "column does not exist".
+
+ALTER TABLE connections ADD COLUMN IF NOT EXISTS label    text NOT NULL DEFAULT '';
+ALTER TABLE connections ADD COLUMN IF NOT EXISTS url      text;
+ALTER TABLE connections ADD COLUMN IF NOT EXISTS metadata jsonb;
+
+-- Back-fill label for existing rows so they read sensibly
+UPDATE connections SET label = type WHERE label = '';
+
+
+-- ── VERIFY ────────────────────────────────────────────────────────────────────
+-- Run this after the ALTER statements to confirm it landed on the right DB.
+-- You should see rows for: shape, label, url, metadata
+
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_name IN ('projects', 'connections')
+  AND column_name IN ('shape', 'label', 'url', 'metadata')
+ORDER BY table_name, column_name;
