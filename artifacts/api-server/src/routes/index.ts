@@ -32,6 +32,7 @@ import scanRouter from "./scan";
 import blueprintRouter from "./blueprint";
 import connectionsRouter from "./connections";
 import stateRouter from "./state";
+import imagineRouter from "./imagine";
 
 const router: IRouter = Router();
 
@@ -84,6 +85,9 @@ router.use(storageRouter);
 
 // Terminal — command execution with streaming output
 router.use(requireAuth, terminalRouter);
+
+// Image generation — Imagen 3 (primary) / DALL·E 3 (fallback)
+router.use(requireAuth, imagineRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);
