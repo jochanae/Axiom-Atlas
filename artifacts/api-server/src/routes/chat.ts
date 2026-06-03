@@ -574,6 +574,30 @@ Rules:
 - Do NOT emit PROACTIVE_ALERT in the same response as a DECISION_CATCH.
 - The user sees this as a non-blocking gold advisory card below your response.
 
+DECISION_CATCH protocol — surface strategic contradictions with committed decisions:
+A DECISION_CATCH card is a high-signal interrupt. It pauses the conversation so the user can consciously decide whether to override a committed decision or stay the course. Use it sparingly — only when there is a real, material contradiction with a locked commitment.
+
+When to emit DECISION_CATCH (ALL three conditions must be true):
+1. The user is stating INTENT to DO something — not asking a question, not exploring hypothetically, not thinking out loud.
+2. That intent would directly reverse or break a specific committed decision that exists in the Decision Ledger or memory context you can see.
+3. The contradiction is material — it would change the architecture, direction, or locked choice, not just touch the same topic.
+
+When NOT to emit DECISION_CATCH:
+- The user asks "what if we did X?" or "have you thought about X?" — that's exploration, not intent.
+- The user is asking a question about a topic that has a committed decision — answering a question is not a contradiction.
+- The thing they're suggesting is adjacent to, but not contradicting, a committed decision.
+- There is no committed decision in context that directly conflicts.
+- You're uncertain whether a conflict exists — default to NOT emitting it.
+
+Format — emit exactly this JSON on its own line at the very end of your response:
+DECISION_CATCH:{"decision":"Exact text of the committed decision being contradicted","conflict":"One sentence describing what the user just said that contradicts it","question":"A single pointed question — e.g. 'You locked email-only auth last week — are you sure you want to add Google OAuth now?'"}
+
+Rules:
+- At most ONE DECISION_CATCH per response.
+- Do NOT emit DECISION_CATCH for vague or exploratory messages.
+- Do NOT emit DECISION_CATCH in the same response as a PROACTIVE_ALERT.
+- If you're emitting DECISION_CATCH, keep your main response brief — the card itself carries the weight.
+
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub, creating new files, or applying self-repairs):
 When the user asks you to fix, build, or create something, output the complete file(s) at the very END of your response using this EXACT format — one block per file:
 
@@ -2322,31 +2346,56 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     }
   }
 
-  const terminalExtraction = extractTerminalCommand(rawContent);
-  rawContent = terminalExtraction.content;
-  if (terminalExtraction.terminalCmd) {
-    try {
-      const executed = await runChatTerminalCommand(terminalExtraction.terminalCmd, projectId, userId);
-      terminalCmd = executed.terminalCmd;
-      terminalResult = executed.terminalResult;
-      if (terminalResult) {
-        rawContent = cleanTerminalTags(`${rawContent}
+  // Agentic terminal loop — executes TERMINAL_CMDs and feeds results back to the model,
+  // enabling Atlas to chain: run → see → fix → verify without waiting for user input.
+  // Max 8 iterations to prevent runaway loops.
+  {
+    const AGENTIC_MAX = 8;
+    const agentConversation: Array<{ role: "user" | "assistant"; content: string }> = [
+      ...(dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>),
+    ];
+    const collectedParts: string[] = [];
 
-TERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
+    for (let iter = 0; iter < AGENTIC_MAX; iter++) {
+      const cmdExtraction = extractTerminalCommand(rawContent);
+
+      if (!cmdExtraction.terminalCmd) {
+        collectedParts.push(cleanTerminalTags(cmdExtraction.content));
+        break;
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Terminal command failed";
-      const fallbackTier = terminalExtraction.terminalCmd.tier ?? 3;
-      terminalCmd = { command: terminalExtraction.terminalCmd.command, tier: fallbackTier, reason: message };
-      terminalResult = {
-        command: terminalExtraction.terminalCmd.command,
-        output: message,
-        exitCode: null,
-        tier: fallbackTier,
-      };
+
+      const iterContent = cmdExtraction.content;
+      collectedParts.push(iterContent);
+
+      try {
+        const executed = await runChatTerminalCommand(cmdExtraction.terminalCmd, projectId, userId);
+        terminalCmd = executed.terminalCmd;
+        terminalResult = executed.terminalResult;
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : "Terminal command failed";
+        terminalCmd = { command: cmdExtraction.terminalCmd.command, tier: cmdExtraction.terminalCmd.tier ?? 3, reason: errMsg };
+        terminalResult = { command: cmdExtraction.terminalCmd.command, output: errMsg, exitCode: null, tier: cmdExtraction.terminalCmd.tier ?? 3 };
+      }
+
+      if (!terminalResult || iter >= AGENTIC_MAX - 1) break;
+
+      agentConversation.push({ role: "assistant", content: iterContent });
+      agentConversation.push({
+        role: "user",
+        content: `[TERMINAL_RESULT]\nCommand: ${terminalResult.command}\nExit code: ${terminalResult.exitCode ?? "null"}\nOutput:\n${terminalResult.output.slice(0, 4000)}\n[/TERMINAL_RESULT]\n\nAnalyze the result. If it passed, proceed to the next step. If it failed, fix it and verify. Do not ask for permission — just continue.`,
+      });
+
+      try {
+        const next = await callModel(activeModel, systemPrompt, agentConversation, undefined);
+        rawContent = next.content;
+        assistantUsage = mergeUsage(assistantUsage, next.usage);
+        modelUsed = next.model;
+      } catch {
+        break;
+      }
     }
-  } else {
-    rawContent = cleanTerminalTags(rawContent);
+
+    rawContent = collectedParts.join("\n\n");
   }
 
   // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
