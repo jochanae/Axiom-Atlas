@@ -229,6 +229,75 @@ router.get("/github/server-token", (_req, res): void => {
   res.json({ available: !!process.env.GITHUB_TOKEN });
 });
 
+// POST /api/github/token — save (or update) the user-level GitHub personal access token.
+// Validates the token against GitHub, then upserts a github connection row with it.
+// This is what the Account settings "Save GitHub Token" button calls.
+router.post("/github/token", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const token = typeof req.body?.token === "string" ? req.body.token.trim() : null;
+  if (!token) { res.status(400).json({ error: "token is required" }); return; }
+
+  // Validate against GitHub
+  const ghRes = await fetch(`${GH_API}/user`, { headers: ghHeaders(token), signal: AbortSignal.timeout(8000) });
+  if (!ghRes.ok) {
+    res.status(422).json({ error: "Invalid GitHub token — make sure it is a classic PAT with repo scope" });
+    return;
+  }
+  const ghUser = await ghRes.json() as { login?: string; avatar_url?: string };
+  const username = ghUser.login ?? "GitHub";
+
+  const { encryptToken } = await import("../lib/tokenCrypto");
+  const encrypted = encryptToken(token);
+
+  // Upsert: find the newest existing github connection for this user, update its token.
+  // Delete all other github connections to clean up duplicates.
+  const existing = await db
+    .select({ id: connectionsTable.id })
+    .from(connectionsTable)
+    .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "github")))
+    .orderBy(desc(connectionsTable.createdAt));
+
+  if (existing.length > 0) {
+    // Keep the first (newest), delete the rest
+    const [keep, ...dupes] = existing;
+    if (dupes.length > 0) {
+      const dupeIds = dupes.map((d) => d.id);
+      for (const dupeId of dupeIds) {
+        await db.delete(connectionsTable).where(and(eq(connectionsTable.id, dupeId), eq(connectionsTable.userId, userId)));
+      }
+    }
+    await db
+      .update(connectionsTable)
+      .set({ token: encrypted, label: username, url: `https://github.com/${username}`, status: "linked", lastCheckedAt: new Date() })
+      .where(and(eq(connectionsTable.id, keep.id), eq(connectionsTable.userId, userId)));
+  } else {
+    await db.insert(connectionsTable).values({
+      userId,
+      type: "github",
+      label: username,
+      url: `https://github.com/${username}`,
+      token: encrypted,
+      status: "linked",
+    });
+  }
+
+  res.json({ connected: true, username });
+});
+
+// DELETE /api/github/token — disconnect the user-level GitHub token
+router.delete("/github/token", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  await db
+    .delete(connectionsTable)
+    .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "github")));
+
+  res.json({ connected: false });
+});
+
 // GET /api/github/status?projectId=N — unified GitHub connection status
 // Returns one clear answer covering account-level, project-level, and server tokens.
 // hasUserToken = true means writes/commits are possible.

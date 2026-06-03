@@ -97,13 +97,31 @@ async function getLatestGithubProject(userId: number) {
 
 router.get("/connections", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
-  const connections = await db
+  const all = await db
     .select()
     .from(connectionsTable)
     .where(eq(connectionsTable.userId, userId))
     .orderBy(desc(connectionsTable.createdAt));
 
-  res.json(connections.map(serializeConnection));
+  // Deduplicate: keep only the newest row per type, auto-delete older dupes
+  const seen = new Set<string>();
+  const toKeep: typeof all = [];
+  const toDelete: number[] = [];
+  for (const row of all) {
+    if (seen.has(row.type)) {
+      toDelete.push(row.id);
+    } else {
+      seen.add(row.type);
+      toKeep.push(row);
+    }
+  }
+  if (toDelete.length > 0) {
+    for (const id of toDelete) {
+      await db.delete(connectionsTable).where(and(eq(connectionsTable.id, id), eq(connectionsTable.userId, userId)));
+    }
+  }
+
+  res.json(toKeep.map(serializeConnection));
 });
 
 router.post("/connections", async (req, res): Promise<void> => {
@@ -121,17 +139,27 @@ router.post("/connections", async (req, res): Promise<void> => {
 
   if (body.type === "github") {
     const project = await getLatestGithubProject(userId);
-    if (!project) {
-      res.status(400).json({ error: "No GitHub repo linked to any project" });
+    const repo = project ? parseLinkedRepo(project.linkedRepo ?? null) : null;
+    url = repo ? `https://github.com/${repo.fullName}` : null;
+    metadata = repo && project ? { projectId: project.id, repo: repo.fullName, projectName: project.name } : null;
+
+    // Upsert: update existing github connection instead of creating duplicate
+    const [existing] = await db
+      .select({ id: connectionsTable.id })
+      .from(connectionsTable)
+      .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "github")))
+      .orderBy(desc(connectionsTable.createdAt))
+      .limit(1);
+
+    if (existing) {
+      const [updated] = await db
+        .update(connectionsTable)
+        .set({ label: body.label.trim(), url, metadata, status: "linked" })
+        .where(and(eq(connectionsTable.id, existing.id), eq(connectionsTable.userId, userId)))
+        .returning();
+      res.status(200).json(serializeConnection(updated));
       return;
     }
-    const repo = parseLinkedRepo(project.linkedRepo ?? null);
-    if (!repo) {
-      res.status(400).json({ error: "Latest GitHub project has an invalid repo link" });
-      return;
-    }
-    url = `https://github.com/${repo.fullName}`;
-    metadata = { projectId: project.id, repo: repo.fullName, projectName: project.name };
   } else if (body.type === "railway") {
     if (!body.token) {
       res.status(400).json({ error: "Railway token is required" });
