@@ -1,4 +1,8 @@
 - [Migration path & error handling](migration-path.md) — migration folder is `../../lib/db/migrations`, not `./drizzle`; catch needs Postgres code 42P07 not just message string
 - [Terminal SSE ordering](terminal-sse-ordering.md) — SSE headers must flush BEFORE prepareProjectRepo or user sees silent freeze during clone
-- [helium vs Neon prod DB](helium-vs-neon-db.md) — this Replit's DATABASE_URL=helium (Replit-managed), NOT Neon. Cloud Run prod uses its own Neon URL unreachable here; prod schema fixes must run in Neon SQL editor.
+- [Agentic loop architecture](agentic-loop-architecture.md) — Claude orchestrates tool_use loop; Gemini=deep read, GPT-4o=code write; most messages go direct (classifier-gated).
+- [Repo split](repo-split.md) — Backend: jochanae/Axiom-Atlas (this Replit). Frontend: jochanae/atlas-idk (Lovable/Cursor). Never mix them up.
+- [Drizzle + Neon stale connection](drizzle-neon-stale-connection.md) — Drizzle queryWithCache fails on Neon idle connection reset; fix: pool keepAlive + idleTimeoutMillis=30s + try/catch in routes
+- [Helium vs Neon prod DB](helium-vs-neon-db.md) — this Replit's DATABASE_URL=helium (Replit-managed), NOT Neon. Cloud Run prod uses its own Neon URL unreachable here; prod schema fixes must run in Neon SQL editor.
 - [Prod schema drift — status check](prod-schema-drift-status.md) — "Failed to create project" = status CHECK rejects default 'active' (prod allows shaping/committed/archived), NOT a missing column; Drizzle error hides the real cause
+- [Dual-engine image generation](dual-engine-image.md) — IMAGE_GEN tokens: render→Gemini Imagen 3, schematic→DALL·E 3; auto-fallback each way; OPENAI_API_KEY required in Cloud Run for schematic mode

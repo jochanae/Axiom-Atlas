@@ -762,29 +762,51 @@ The terminal output is automatically fed back to you after each command runs. Yo
 4. Never ask "should I continue?" — just continue. The user can stop the loop at any time using the Agent toggle.
 5. Max 8 iterations per task to avoid infinite loops — if still failing after 8 attempts, explain what you tried and what's blocking.
 
-IMAGE_GEN protocol — generate images inline in the conversation:
-You can generate images directly — product mockups, landing page heroes, icons, diagrams, brand visuals, anything visual a founder needs for their product.
+IMAGE_GEN protocol — dual-engine image generation:
+You have access to two specialized image engines. Never pick one arbitrarily — route based on the structural intent of what is being requested.
 
-When to use IMAGE_GEN:
-- User asks you to generate, create, design, or make an image, photo, illustration, or visual
-- User asks for a mockup, wireframe sketch, or product visual
-- You're building a landing page or document and it would benefit from a hero image or illustration
-- User says "show me what that could look like"
+━━ ENGINE ROUTING MATRIX ━━
 
-Format — emit on its own line:
-IMAGE_GEN:{"prompt":"A modern SaaS landing page hero with abstract gradient background, clean typography, mobile app mockup floating center, dark theme","style":"photorealistic"}
+Route to RENDER mode (→ Gemini Imagen 3) when the primary intent is:
+• High-end presentation: luxury aesthetics, cinematic lighting, glassmorphism, dark-mode interfaces with amber/obsidian/gold accents
+• Polished UI/UX concepts: editorial product layouts, clean atmospheric workspace designs, mobile app mockups
+• Client-facing assets: landing page heroes, pitch deck visuals, brand imagery, product photography style
+• Realism and texture: sophisticated environmental lighting, premium gradients, professional finish
 
-Valid styles: "photorealistic" | "illustration" | "diagram" | "minimal"
-Valid sizes: "square" | "landscape" | "portrait" (default: square)
+Route to SCHEMATIC mode (→ DALL·E 3) when the primary intent is:
+• Dense technical diagrams: flowcharts, system architecture maps, relational database schemas
+• Logic flows: multi-step user flows, API connection maps, decision trees
+• Literal spatial precision: exact geometric placement, specific object counts, labeled connectors between nodes
+• Infographics: structured layouts requiring strict element separation and high graphical contrast over aesthetics
 
-With size: IMAGE_GEN:{"prompt":"Wide banner hero image for a fintech app","style":"minimal","size":"landscape"}
+━━ FORMAT ━━
 
-Rules:
-- Write specific, detailed prompts — include style, mood, colors, composition
-- One IMAGE_GEN per response
-- After the image is generated, the user sees it inline in the chat
-- You can embed the image in a FILE_EDIT by referencing the generated image data URL
-- Never say "I can't generate images" — you can. Use this protocol.
+Single image:
+IMAGE_GEN:{"prompt":"...","mode":"render","size":"landscape"}
+IMAGE_GEN:{"prompt":"...","mode":"schematic","size":"square"}
+
+Dual output (when a request benefits from BOTH a presentation hero AND a structural diagram):
+Emit two IMAGE_GEN tokens back-to-back — render first, schematic second:
+IMAGE_GEN:{"prompt":"Premium dark-mode landing page hero for an analytics platform, cinematic lighting, glassmorphism cards","mode":"render","size":"landscape"}
+IMAGE_GEN:{"prompt":"System architecture diagram for analytics platform: data ingestion → processing pipeline → storage layer → API → dashboard. Flat 2D, dark background, bright connector lines","mode":"schematic","size":"landscape"}
+
+Valid modes: "render" | "schematic"
+Valid sizes: "square" | "landscape" | "portrait"
+
+━━ PROMPT CRAFT RULES ━━
+
+For RENDER prompts — write atmospherically: describe style, lighting, materials, mood, color palette, finish quality.
+Example: "Hyper-realistic mobile app UI mockup, obsidian dark theme, amber glow accent buttons, glassmorphism navigation bar, cinematic depth of field, 8K editorial finish"
+
+For SCHEMATIC prompts — write structurally: describe exact elements, their spatial relationships, connectors, labels.
+Example: "2D flat technical diagram on dark background. Three rows connected by glowing lines: Row 1: User icon → Auth gate. Row 2: API router splits to User Service and Payment Service. Row 3: Both connect to PostgreSQL node. Sharp geometric shapes, bright white labels"
+
+━━ RULES ━━
+- Never ask the user which engine to use — make the routing decision silently
+- Never say "I can't generate images" — you can, always
+- After the image renders the user sees it inline in the chat; you can follow up with analysis
+- You may emit up to two IMAGE_GEN tokens per response (one render + one schematic)
+- Images appear in the order emitted — render hero first, schematic second
 
 LINE_PATCH protocol (surgical find-and-replace — use this instead of FILE_EDIT for large files):
 When you need to change a specific section of a large file (over ~200 lines) and you have that section in context, use LINE_PATCH instead of rewriting the whole file. It sends only the changed lines — no truncation risk, no guessing at the rest.
@@ -2422,6 +2444,20 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     rawContent = collectedParts.join("\n\n");
   }
 
+  // Extract and strip IMAGE_GEN tokens — Atlas signals which images to generate and in what mode
+  const IMAGE_GEN_RE = /^IMAGE_GEN:\s*(\{[^\n]+\})\s*$/gm;
+  type ImageGenToken = { prompt: string; mode: "render" | "schematic"; size?: "square" | "landscape" | "portrait" };
+  const imageGenTokens: ImageGenToken[] = [];
+  rawContent = rawContent.replace(IMAGE_GEN_RE, (_match, json: string) => {
+    try {
+      const parsed = JSON.parse(json) as ImageGenToken;
+      if (parsed.prompt && (parsed.mode === "render" || parsed.mode === "schematic")) {
+        imageGenTokens.push(parsed);
+      }
+    } catch { /* ignore malformed tokens */ }
+    return "";
+  }).trim();
+
   // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent: afterPatches, linePatches } = extractAllLinePatches(rawContent);
   const { visibleContent, fileEdits } = extractAllFileEdits(afterPatches);
@@ -2533,26 +2569,71 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     autoName = generatedAutoName;
   }
 
-  // Attempt image generation if the user's message looks like an image request
-  let imageB64: string | undefined;
-  let imageMimeType: string | undefined;
-  if (!isFlowMode && IMAGE_REQUEST_RE.test(message)) {
-    try {
-      const imagePrompt = `${message}. Clean, professional style. For a software product / startup context.`;
-      const imgResponse = await genai.models.generateContent({
-        model: "gemini-2.0-flash-preview-image-generation",
-        contents: imagePrompt,
-        config: { responseModalities: ["IMAGE", "TEXT"] },
-      });
-      const parts = imgResponse.candidates?.[0]?.content?.parts ?? [];
-      const imgPart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
-      if (imgPart?.inlineData) {
-        imageB64 = imgPart.inlineData.data as string;
-        imageMimeType = imgPart.inlineData.mimeType as string;
+  // Dual-engine image generation — process IMAGE_GEN tokens Atlas emitted
+  // RENDER mode → Gemini Imagen 3  (cinematic, premium, client-facing)
+  // SCHEMATIC mode → DALL·E 3       (technical diagrams, architecture maps)
+  // Each engine has an automatic fallback to the other if its key is missing or fails.
+  interface GeneratedImageResult { imageUrl: string; prompt: string; model: string; mode: "render" | "schematic"; }
+  let imageGenResult: { images: GeneratedImageResult[] } | undefined;
+
+  if (!isFlowMode && imageGenTokens.length > 0) {
+    const generatedImages: GeneratedImageResult[] = [];
+    const sizeMap = { square: "1024x1024" as const, landscape: "1792x1024" as const, portrait: "1024x1792" as const };
+
+    for (const token of imageGenTokens.slice(0, 2)) {
+      const enginePrompt = token.mode === "render"
+        ? `${token.prompt} Ultra-premium, cinematic quality. Sleek dark-mode aesthetic with obsidian depth, luxury glassmorphism elements, subtle amber/gold accent glows. Sophisticated editorial lighting, presentation-ready professional finish. 8K resolution quality.`
+        : `${token.prompt} Clean flat 2D technical diagram. High-contrast dark background, crisp connector lines, strict geometric layout, precise spatial placement, sharp labels. Pure structural accuracy.`;
+      const aspectRatio = token.size === "landscape" ? "16:9" : token.size === "portrait" ? "9:16" : "1:1";
+
+      if (token.mode === "render") {
+        // Primary: Gemini Imagen 3
+        let placed = false;
+        try {
+          const r = await genai.models.generateImages({ model: "imagen-3.0-generate-004", prompt: enginePrompt, config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio } });
+          const bytes = r.generatedImages?.[0]?.image?.imageBytes;
+          if (bytes) {
+            const b64 = typeof bytes === "string" ? bytes : Buffer.from(bytes as Uint8Array).toString("base64");
+            generatedImages.push({ imageUrl: `data:image/jpeg;base64,${b64}`, prompt: enginePrompt, model: "imagen-3", mode: token.mode });
+            placed = true;
+          }
+        } catch (err) { logger.warn({ err }, "Imagen 3 failed for render — trying DALL·E fallback"); }
+        // Fallback: DALL·E 3
+        if (!placed && process.env.OPENAI_API_KEY) {
+          try {
+            const r = await openaiClient.images.generate({ model: "dall-e-3", prompt: enginePrompt, n: 1, size: sizeMap[token.size ?? "square"], response_format: "b64_json" });
+            const b64 = r.data?.[0]?.b64_json;
+            if (b64) generatedImages.push({ imageUrl: `data:image/png;base64,${b64}`, prompt: r.data?.[0]?.revised_prompt ?? enginePrompt, model: "dall-e-3", mode: token.mode });
+          } catch (err) { logger.error({ err }, "DALL·E fallback failed for render"); }
+        }
+      } else {
+        // Primary: DALL·E 3
+        let placed = false;
+        if (process.env.OPENAI_API_KEY) {
+          try {
+            const r = await openaiClient.images.generate({ model: "dall-e-3", prompt: enginePrompt, n: 1, size: sizeMap[token.size ?? "square"], response_format: "b64_json" });
+            const b64 = r.data?.[0]?.b64_json;
+            if (b64) {
+              generatedImages.push({ imageUrl: `data:image/png;base64,${b64}`, prompt: r.data?.[0]?.revised_prompt ?? enginePrompt, model: "dall-e-3", mode: token.mode });
+              placed = true;
+            }
+          } catch (err) { logger.warn({ err }, "DALL·E 3 failed for schematic — trying Gemini fallback"); }
+        }
+        // Fallback: Gemini Imagen 3
+        if (!placed) {
+          try {
+            const r = await genai.models.generateImages({ model: "imagen-3.0-generate-004", prompt: enginePrompt, config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio } });
+            const bytes = r.generatedImages?.[0]?.image?.imageBytes;
+            if (bytes) {
+              const b64 = typeof bytes === "string" ? bytes : Buffer.from(bytes as Uint8Array).toString("base64");
+              generatedImages.push({ imageUrl: `data:image/jpeg;base64,${b64}`, prompt: enginePrompt, model: "imagen-3", mode: token.mode });
+            }
+          } catch (err) { logger.error({ err }, "Gemini fallback failed for schematic"); }
+        }
       }
-    } catch {
-      // Image generation is best-effort; don't fail the chat response
     }
+
+    if (generatedImages.length > 0) imageGenResult = { images: generatedImages };
   }
 
   // Auto-create ledger entries for resolved nodes — skipped in scenario mode
@@ -2596,7 +2677,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
-    ...(imageB64 ? { imageB64, imageMimeType } : {}),
+    ...(imageGenResult ? { imageGen: imageGenResult } : {}),
     ...(autoName ? { autoName } : {}),
   };
 
