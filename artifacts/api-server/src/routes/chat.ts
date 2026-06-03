@@ -215,7 +215,12 @@ function ghHeaders(token: string) {
   };
 }
 
-async function fetchRepoTree(fullName: string, token: string, branch = "main"): Promise<string | null> {
+interface RepoTreeSnapshot {
+  context: string;
+  files: Set<string>;
+}
+
+async function fetchRepoTree(fullName: string, token: string, branch = "main"): Promise<RepoTreeSnapshot | null> {
   try {
     let resp = await fetch(`${GH_API}/repos/${fullName}/git/trees/${branch}?recursive=1`, { headers: ghHeaders(token) });
     if (!resp.ok && branch === "main") {
@@ -232,7 +237,10 @@ async function fetchRepoTree(fullName: string, token: string, branch = "main"): 
       .map(f => `  ${f.path}`)
       .slice(0, 300); // cap at 300 files to keep context manageable
 
-    return `${fullName} (${files.length} files${data.truncated ? ", truncated" : ""}):\n${files.join("\n")}`;
+    return {
+      context: `${fullName} (${files.length} files${data.truncated ? ", truncated" : ""}):\n${files.join("\n")}`,
+      files: new Set(data.tree.filter(f => f.type === "blob").map(f => normalizeRepoPath(f.path))),
+    };
   } catch {
     return null;
   }
@@ -574,9 +582,10 @@ Before emitting ANY FILE_EDIT or LINE_PATCH block, you MUST output this exact st
 CONFIDENCE_ASSESSMENT:{"confidence":"high|medium|low","files_affected":["path/one.ts","path/two.ts"],"blast_radius":"isolated|moderate|wide","reasoning":"One sentence explaining why this confidence level fits."}
 
 Confidence gating rules:
-- high confidence + isolated blast radius: proceed automatically after the assessment; tell the user you are proceeding and then emit FILE_EDIT/LINE_PATCH blocks.
-- medium confidence OR moderate blast radius: surface the assessment and wait for explicit approval before emitting any FILE_EDIT/LINE_PATCH blocks.
-- low confidence OR wide blast radius: surface the assessment, explain the risks, suggest breaking the task into smaller steps, and require explicit approval before emitting any FILE_EDIT/LINE_PATCH blocks.
+- New files that do not exist yet are always high confidence + isolated blast radius; proceed automatically after the assessment and emit FILE_EDIT blocks.
+- Existing non-critical files may proceed automatically after the assessment when the requested change is clear.
+- Existing critical files (package manifests, workspace/config/env files, security/auth/payment/data-loss sensitive paths) require explicit approval before emitting any FILE_EDIT/LINE_PATCH blocks.
+- Low confidence or wide blast radius changes to existing code: surface the assessment, explain the risks, suggest breaking the task into smaller steps, and require explicit approval before emitting any FILE_EDIT/LINE_PATCH blocks.
 - If approval is required, do NOT include FILE_EDIT_START or LINE_PATCH_START in that response.
 
 FILE_EDIT_START
@@ -1046,6 +1055,21 @@ interface FileEdit {
 
 const BLOCKED_PATH_RE = /(?:^|[\\/])(?:package\.json|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
 const BLOCKED_DIR_RE = /^(?:node_modules|dist|build|\.next|\.cache)[\\/]/;
+const CRITICAL_PATH_RE = /(?:^|[\\/])(?:package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
+const CRITICAL_DIR_RE = /(?:^|[\\/])(?:auth|security|payments?|billing|migrations?)(?:[\\/]|$)/i;
+
+function normalizeRepoPath(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/^\.?\//, "");
+}
+
+function isCriticalPath(path: string): boolean {
+  const normalized = normalizeRepoPath(path);
+  return CRITICAL_PATH_RE.test(normalized) || CRITICAL_DIR_RE.test(normalized);
+}
+
+function fileExistsInRepo(path: string, repoFiles: Set<string> | null): boolean {
+  return repoFiles?.has(normalizeRepoPath(path)) ?? false;
+}
 
 function extractAllFileEdits(content: string): { visibleContent: string; fileEdits: FileEdit[] } {
   const startMarker = "FILE_EDIT_START";
@@ -1192,8 +1216,55 @@ function extractConfidenceAssessment(content: string): ConfidenceAssessment | nu
   }
 }
 
-function canProceedWithFileChanges(assessment: ConfidenceAssessment | null): boolean {
-  return assessment?.confidence === "high" && assessment.blast_radius === "isolated";
+function normalizeConfidenceAssessmentForFileChanges(args: {
+  assessment: ConfidenceAssessment | null;
+  fileEdits: FileEdit[];
+  linePatches: LinePatch[];
+  repoFiles: Set<string> | null;
+}): ConfidenceAssessment | null {
+  if (args.fileEdits.length === 0 || args.linePatches.length > 0 || !args.repoFiles) {
+    return args.assessment;
+  }
+
+  const allFileEditsCreateNewFiles = args.fileEdits.every((edit) => !fileExistsInRepo(edit.path, args.repoFiles));
+  if (!allFileEditsCreateNewFiles) {
+    return args.assessment;
+  }
+
+  return {
+    confidence: "high",
+    files_affected: args.assessment?.files_affected.length
+      ? args.assessment.files_affected
+      : args.fileEdits.map((edit) => edit.path),
+    blast_radius: "isolated",
+    reasoning: args.assessment?.reasoning || "Only creates new files that do not exist yet.",
+  };
+}
+
+function hasExistingCriticalFileChange(args: {
+  fileEdits: FileEdit[];
+  linePatches: LinePatch[];
+  repoFiles: Set<string> | null;
+}): boolean {
+  const paths = [
+    ...args.fileEdits.map((edit) => edit.path),
+    ...args.linePatches.map((patch) => patch.path),
+  ];
+
+  return paths.some((path) => {
+    if (!isCriticalPath(path)) return false;
+    // Without a repo tree, keep critical paths behind approval instead of
+    // assuming they are safe new files.
+    return !args.repoFiles || fileExistsInRepo(path, args.repoFiles);
+  });
+}
+
+function canProceedWithFileChanges(args: {
+  fileEdits: FileEdit[];
+  linePatches: LinePatch[];
+  repoFiles: Set<string> | null;
+}): boolean {
+  return !hasExistingCriticalFileChange(args);
 }
 
 const PLAN_PHRASE_RE = /\b(here'?s the plan|here'?s what i(?:'ll| will) do|plan:|steps:|i(?:'ll| will):)\b/i;
@@ -1769,6 +1840,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Auto-fetch repo file tree (Phase 1 — always injected when a repo is linked)
   let repoTreeContext: string | null = null;
+  let repoFiles: Set<string> | null = null;
   let recentRepoActivityContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
   const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project?.githubToken);
@@ -1780,7 +1852,7 @@ router.post("/chat", async (req, res): Promise<void> => {
         ? { fullName: parsedRepo, defaultBranch: "main" }
         : parsedRepo;
       if (repoData.fullName) {
-        const repoContextFetches: [Promise<string | null>, Promise<string | null>] = [
+        const repoContextFetches: [Promise<RepoTreeSnapshot | null>, Promise<string | null>] = [
           resolvedGithubToken
             ? fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main")
             : Promise.resolve(null),
@@ -1789,10 +1861,13 @@ router.post("/chat", async (req, res): Promise<void> => {
             : Promise.resolve(null),
         ];
 
-        [repoTreeContext, recentRepoActivityContext] = await Promise.race([
+        const [repoTreeSnapshot, fetchedRecentRepoActivityContext] = await Promise.race([
           Promise.all(repoContextFetches),
-          new Promise<[string | null, string | null]>((resolve) => setTimeout(() => resolve(["", ""]), 3000)),
+          new Promise<[RepoTreeSnapshot | null, string | null]>((resolve) => setTimeout(() => resolve([null, null]), 3000)),
         ]);
+        repoTreeContext = repoTreeSnapshot?.context ?? null;
+        repoFiles = repoTreeSnapshot?.files ?? null;
+        recentRepoActivityContext = fetchedRecentRepoActivityContext;
       }
     } catch {
       // Non-fatal: continue without tree context
@@ -2277,9 +2352,19 @@ TERMINAL_RESULT:${JSON.stringify(terminalResult)}`);
   // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent: afterPatches, linePatches } = extractAllLinePatches(rawContent);
   const { visibleContent, fileEdits } = extractAllFileEdits(afterPatches);
-  const confidenceAssessment = extractConfidenceAssessment(visibleContent);
+  const parsedConfidenceAssessment = extractConfidenceAssessment(visibleContent);
   const hasProposedFileChanges = fileEdits.length > 0 || linePatches.length > 0;
-  const fileChangesAllowed = !hasProposedFileChanges || canProceedWithFileChanges(confidenceAssessment);
+  const confidenceAssessment = normalizeConfidenceAssessmentForFileChanges({
+    assessment: parsedConfidenceAssessment,
+    fileEdits,
+    linePatches,
+    repoFiles,
+  });
+  const fileChangesAllowed = !hasProposedFileChanges || canProceedWithFileChanges({
+    fileEdits,
+    linePatches,
+    repoFiles,
+  });
   const { content: afterMemory, newFacts } = extractMemoryLines(visibleContent);
   const { content: afterNodeResolved, resolvedNodes } = extractNodeResolved(afterMemory);
   const { content: afterIntent, intentType: detectedIntentType } = extractIntentType(afterNodeResolved);
