@@ -1108,15 +1108,11 @@ function nonBriefingMessages(whereClause: SQL | undefined, hasMessageType = true
   return and(
     whereClause,
     sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
-    sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'reflection'`,
   );
 }
 
-function conversationMessages(whereClause: SQL | undefined, reflectionMode: boolean, hasMessageType = true) {
-  if (!hasMessageType) return whereClause;
-  return reflectionMode
-    ? and(whereClause, eq(nexusMessagesTable.messageType, "reflection"))
-    : nonBriefingMessages(whereClause, hasMessageType);
+function conversationMessages(whereClause: SQL | undefined, hasMessageType = true) {
+  return nonBriefingMessages(whereClause, hasMessageType);
 }
 
 async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: boolean): Promise<NexusMessageRow[]> {
@@ -1345,7 +1341,7 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
       ? await db
           .select({
             id: nexusMessagesTable.conversationId,
-            title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' AND sub.message_type IS DISTINCT FROM 'reflection' ORDER BY sub.created_at ASC LIMIT 1)`,
+            title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' ORDER BY sub.created_at ASC LIMIT 1)`,
             createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
             messageCount: sql<number>`COUNT(*)`,
           })
@@ -1354,7 +1350,6 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
             eq(nexusMessagesTable.userId, userId),
             isNotNull(nexusMessagesTable.conversationId),
             sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
-            sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'reflection'`,
           ))
           .groupBy(nexusMessagesTable.conversationId)
           .orderBy(desc(sql`MAX(${nexusMessagesTable.createdAt})`))
@@ -1430,7 +1425,6 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
         .select({
           id: sessionsTable.id,
           projectId: sessionsTable.projectId,
-          reflectionMode: sessionsTable.reflectionMode,
           ideaMode: sessionsTable.ideaMode,
         })
         .from(sessionsTable)
@@ -1442,7 +1436,6 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Session not found" });
     return;
   }
-  const reflectionMode = sessionContext[0]?.reflectionMode === true;
   let ideaMode = sessionContext[0]?.ideaMode === true;
   const focusProjectId = requestedFocusProjectId ?? sessionContext[0]?.projectId ?? null;
   const hasMessageType = await hasNexusMessageTypeColumn();
@@ -1458,12 +1451,12 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
         ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
         : conversationId
           ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
-          : eq(nexusMessagesTable.userId, userId), reflectionMode, hasMessageType),
+          : eq(nexusMessagesTable.userId, userId), hasMessageType),
       hasMessageType,
     ),
   ]);
 
-  const shouldEnableIdeaMode = !reflectionMode && !ideaMode && (
+  const shouldEnableIdeaMode = !ideaMode && (
     hasExplicitIdeaModeSignal(message) || (dbMessages.length === 0 && hasIdeaModeSignal(message))
   );
   if (shouldEnableIdeaMode) {
@@ -1528,15 +1521,13 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     .limit(20);
 
   // Build system prompt
-  let systemPrompt = reflectionMode
-    ? `${NEXUS_SYSTEM_PROMPT}\n\n--- SESSION CONTEXT ---\nreflection_mode: true\nidea_mode: false\n--- END SESSION CONTEXT ---`
-    : ideaMode
+  let systemPrompt = ideaMode
       ? `${NEXUS_SYSTEM_PROMPT}\n\n${IDEA_MODE_POSTURE}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: true\n--- END SESSION CONTEXT ---`
       : `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: false\n--- END SESSION CONTEXT ---`;
   let vault: Awaited<ReturnType<typeof loadVaultContext>> = { imageBlocks: [], systemNote: "", hasImages: false };
   let urlBlocks: Awaited<ReturnType<typeof screenshotUrlsToBlocks>> = [];
 
-  if (!reflectionMode && !ideaMode) {
+  if (!ideaMode) {
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
   }
@@ -1685,7 +1676,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     projectId: focusProjectId ?? null,
     sessionId,
     conversationId: conversationId ?? null,
-    ...(hasMessageType ? { messageType: reflectionMode ? "reflection" : "message" } : {}),
+    ...(hasMessageType ? { messageType: "message" } : {}),
   });
 
   // Set SSE headers
@@ -1718,7 +1709,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     streamDone = true;
     // Strip MEMORY_Tn tags from persisted output
     const { content: visibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
-    const memoryUpdated = reflectionMode ? false : parsedMemoryUpdated;
+    const memoryUpdated = parsedMemoryUpdated;
     writeStep({ verb: "Write", target: "nexus_messages" });
     const runMetadata = buildRunMetadata(visibleContent, {
       ...modelUsage,
@@ -1738,7 +1729,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     })();
 
     // Detect if Atlas keeps referencing one project and suggest focus
-    const projectMentions = reflectionMode || ideaMode ? [] : projects.map(p => ({
+    const projectMentions = ideaMode ? [] : projects.map(p => ({
       id: p.id,
       name: p.name,
       count: (lowerContent.match(new RegExp(p.name.toLowerCase(), "g")) ?? []).length
@@ -1748,14 +1739,14 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
       : null;
 
-    const handoffSignal = reflectionMode || ideaMode
+    const handoffSignal = ideaMode
       ? null
       : await detectHomeHandoff([
           ...conversationHistory.slice(-8),
           { role: "user", content: message },
           { role: "assistant", content: visibleContent },
         ]);
-    const surface = reflectionMode
+    const surface = ideaMode
       ? null
       : detectSurfaceSignal({
           content: visibleContent,
@@ -1771,7 +1762,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       projectId: focusProjectId ?? null,
       sessionId,
       conversationId: conversationId ?? null,
-      ...(hasMessageType ? { messageType: reflectionMode ? "reflection" : "message" } : {}),
+      ...(hasMessageType ? { messageType: "message" } : {}),
     });
     await updateSessionRunMetadata(sessionId, runMetadata);
 
