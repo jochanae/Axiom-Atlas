@@ -155,6 +155,16 @@ router.post("/connections", async (req, res): Promise<void> => {
       token,
       metadata,
     })
+    .onConflictDoUpdate({
+      target: [connectionsTable.userId, connectionsTable.type],
+      set: {
+        label: body.label.trim(),
+        url,
+        token,
+        metadata,
+        lastCheckedAt: new Date(),
+      },
+    })
     .returning();
 
   res.status(201).json(serializeConnection(connection));
