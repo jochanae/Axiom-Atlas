@@ -81,6 +81,25 @@ app.use(
 );
 app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
+// Fallback: some clients (Lovable preview, certain fetch polyfills) omit the
+// Content-Type header. express.json() silently skips those — body stays
+// undefined. express.text('*/*') reads whatever body-parser left unread, then
+// the inline middleware tries to JSON-parse it. This makes every POST/PUT/PATCH
+// resilient regardless of whether the client sent a Content-Type header.
+app.use(express.text({ limit: "20mb", type: "*/*" }));
+app.use((req, _res, next) => {
+  if (typeof req.body === "string") {
+    const trimmed = req.body.trimStart();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {
+        // leave as string — let the route validator produce the right error
+      }
+    }
+  }
+  next();
+});
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 app.use("/api/shell", shellRouter);
