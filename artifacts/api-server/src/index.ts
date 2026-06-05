@@ -48,7 +48,7 @@ async function main() {
 
   try {
     await migrate(db, { migrationsFolder: "../../lib/db/migrations" });
-    logger.info("Migrations complete");
+    logger.info("Boot migrate: applied cleanly (fresh/empty database).");
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     const causeMessage = (err instanceof Error && (err as any).cause instanceof Error)
@@ -60,7 +60,8 @@ async function main() {
       causeMessage.includes("already exists") ||
       pgCode === "42P07";
     if (isDuplicateTable) {
-      logger.warn("Migration skipped — tables already exist in target database");
+      // Live database schema is managed by drizzle-kit push, so duplicate tables are expected.
+      logger.warn("Boot migrate: skipped — schema is managed by drizzle-kit push, not migration files. Expected on the live database; not an error.");
     } else {
       logger.error({ err }, "Migration failed");
       throw err;
