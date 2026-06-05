@@ -138,6 +138,26 @@ router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
   if (!(await projectBelongsToUser(params.data.projectId, userId))) {
     res.status(404).json({ error: "Project not found" }); return;
   }
+  // ── Dedup guard ──────────────────────────────────────────────────────────
+  // Stops double-clicks and retried network calls from creating duplicate rows:
+  // if an identical-title entry already exists in this project, created within
+  // the last 60s and not archived, return that existing row instead of
+  // inserting another. Uses only existing columns; no schema change.
+  {
+    const dedupeCutoff = new Date(Date.now() - 60_000).toISOString();
+    const [recent] = await db
+      .select()
+      .from(entriesTable)
+      .where(and(
+        eq(entriesTable.projectId, params.data.projectId),
+        eq(entriesTable.title, parsed.data.title.trim()),
+        sql`${entriesTable.status} NOT IN ('archived', 'archived_duplicate')`,
+        sql`${entriesTable.createdAt} >= ${dedupeCutoff}`,
+      ))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(1);
+    if (recent) { res.status(201).json(serializeEntry(recent)); return; }
+  }
   const { costOfLesson, ...rest } = parsed.data;
   const [entry] = await db.insert(entriesTable).values({
     projectId: params.data.projectId,
