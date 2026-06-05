@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable } from "@workspace/db";
@@ -1414,6 +1415,11 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
   const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
+  // Always store messages under a conversation ID so they appear in the
+  // conversations list. If the frontend doesn't send one (new thread), we
+  // generate a UUID here and return it in the `done` event so the client can
+  // attach it to every subsequent message in the same conversation.
+  const effectiveConversationId: string = conversationId ?? randomUUID();
   const userType = parseHomeUserType(body.userType);
   const sessionId = Number.isInteger(body.sessionId) && Number(body.sessionId) > 0 ? Number(body.sessionId) : null;
   // Use a sensible fallback when the user sends an image with no text
@@ -1675,7 +1681,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     content: message,
     projectId: focusProjectId ?? null,
     sessionId,
-    conversationId: conversationId ?? null,
+    conversationId: effectiveConversationId,
     ...(hasMessageType ? { messageType: "message" } : {}),
   });
 
@@ -1761,12 +1767,12 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       content: visibleContent,
       projectId: focusProjectId ?? null,
       sessionId,
-      conversationId: conversationId ?? null,
+      conversationId: effectiveConversationId,
       ...(hasMessageType ? { messageType: "message" } : {}),
     });
     await updateSessionRunMetadata(sessionId, runMetadata);
 
-    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
     res.end();
   };
 
