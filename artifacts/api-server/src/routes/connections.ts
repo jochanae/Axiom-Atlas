@@ -7,7 +7,7 @@ import { decryptToken, encryptToken } from "../lib/tokenCrypto";
 const router: IRouter = Router();
 
 const ConnectionBody = z.object({
-  type: z.enum(["github", "railway", "lovable", "cursor"]),
+  type: z.enum(["github", "railway", "lovable", "cursor", "custom"]),
   label: z.string().min(1),
   url: z.string().url().optional(),
   token: z.string().min(1).optional(),
