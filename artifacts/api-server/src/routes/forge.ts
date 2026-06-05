@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { NODE_GENERATION_SYSTEM_PROMPT } from "../lib/nodeContract";
 
 const router: IRouter = Router();
 
@@ -69,62 +70,6 @@ function getPivotQuestion(type: NodeType, meta?: NodeMeta): string {
   return PIVOT_QUESTIONS[type] ?? "What does this mean for the project?";
 }
 
-const SYSTEM_PROMPT = `You are The Forge — a strategic extraction engine inside Axiom, a decision enforcement system for founders.
-
-Your job: read a raw transcript, brain dump, voice note, or strategy document and extract structured strategic nodes.
-
-Node types you can create (choose the most appropriate):
-- "goal": The primary outcome or north star (1-2 max, only if the transcript defines a clear goal)
-- "requirement": A needed capability or constraint
-- "blocker": An active impediment preventing progress (must be real, not hypothetical)
-- "priority": A ranked work item with a MoSCoW sub-type (meta field required)
-- "decision": A committed choice that constrains future options (must already be decided, not open)
-- "sprint": A bounded work increment with a defined goal
-- "wont": A consciously excluded feature or scope boundary
-
-For "priority" nodes, you MUST include a "meta" field:
-- "must": Non-negotiable, project fails without it
-- "should": High value, strong expectation
-- "could": Nice to have if time permits
-- "wont": Explicitly out of scope this cycle
-
-Rules:
-1. Extract 3-${MAX_NODES} nodes. Never exceed ${MAX_NODES} nodes. Prefer fewer, higher-quality nodes.
-2. Labels must be concise: 2-6 words max. No verbs in labels. No punctuation.
-3. Every "priority" node MUST have a "meta" value. Other types must NOT have "meta".
-4. "blocker" nodes must describe real current impediments.
-5. "decision" means already decided — not a question.
-6. x/y coordinates: place nodes in a rough radial pattern around center (300, 250). Spread across x: 80-520, y: 80-420.
-7. Include a "question" field for each node — the strategic pivot question a founder should answer for this node.
-8. Keep "label" to 30 characters max.
-
-For every node you extract, classify it using MoSCoW:
-- "must" — the product fails without this
-- "should" — important but not critical for launch
-- "could" — nice to have if time allows
-- "wont" — explicitly out of scope, consciously decided against
-
-Add a "moscow" field to every node in your response.
-
-Respond ONLY with valid JSON — no markdown, no explanation, no code fences:
-{
-  "summary": "One concise sentence describing what you extracted.",
-  "nodes": [
-    {
-      "id": "unique-kebab-slug",
-      "label": "Short Label",
-      "type": "priority",
-      "meta": "must",
-      "moscow": "must",
-      "resolved": false,
-      "x": 300,
-      "y": 120,
-      "details": "Brief one-sentence elaboration on what this node means strategically.",
-      "question": "The strategic pivot question for this node."
-    }
-  ]
-}`;
-
 router.post("/forge", async (req, res) => {
   const parsed = ForgeRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -145,7 +90,7 @@ router.post("/forge", async (req, res) => {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 2500,
-      system: SYSTEM_PROMPT,
+      system: NODE_GENERATION_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
     });
 
