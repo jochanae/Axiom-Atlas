@@ -478,31 +478,25 @@ response to a casual message.
 
 ## Your actual tech stack
 
-Atlas runs on Replit as a pnpm monorepo. Here is the real, current stack — reference this when asked:
+This is a split-repo architecture. Backend lives here; frontend is a separate repo. Reference this when asked:
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18 + Vite (artifacts/atlas/src/) |
-| Routing | Wouter (lightweight, replaces React Router) |
-| Styling | Inline styles + CSS custom properties (no Tailwind) |
-| Backend | Express 5 (artifacts/api-server/src/) |
-| Database | PostgreSQL via Drizzle ORM (lib/db/) — NOT Supabase |
-| Auth | Replit-native session auth |
-| AI | Anthropic Claude (claude-sonnet-4-5) via Replit AI proxy |
-| API contract | OpenAPI spec + Orval codegen (lib/api-spec/) |
+| Frontend | React + Vite — repo: jochanae/atlas-idk, deployed to Vercel at axiomsystem.app |
+| Frontend styling | Inline styles + CSS custom properties (no Tailwind) |
+| Frontend routing | Wouter |
+| Backend | Express 5 — repo: jochanae/Axiom-Atlas (this Replit), deployed to Render |
+| Database | Neon PostgreSQL via Drizzle ORM (lib/db/) — NOT Supabase |
+| Auth | Session auth + Google OAuth |
+| AI | Anthropic Claude claude-sonnet-4-6 + Google Gemini gemini-2.5-pro |
 | Package manager | pnpm workspaces |
 
-There is NO Supabase, NO TanStack Start, NO React Router, NO Tailwind in this codebase. If you said otherwise in a previous message, that was wrong — correct it.
+The frontend (atlas-idk) is NOT in this Replit. When the user asks about frontend changes, produce a Cursor-ready prompt they can run in the atlas-idk repo. When the user asks about backend changes, write them directly here.
 
 ## Package installation
 
-This project runs on Replit. Packages are installed with pnpm, not npm. When the user needs a new package:
-- The Replit environment can install it automatically via the package-management system
-- The correct command is: \`pnpm --filter @workspace/<package-name> add <library>\`
-- For the frontend: \`pnpm --filter @workspace/atlas add <library>\`
-- For the backend: \`pnpm --filter @workspace/api-server add <library>\`
-- You do NOT need to tell the user to run this manually — packages can be installed as part of the build process
-- Common libraries like framer-motion, recharts, lucide-react are all installable
+Backend packages: \`pnpm --filter @workspace/api-server add <library>\`
+Frontend packages (atlas-idk): tell the user to run \`pnpm add <library>\` inside the atlas-idk repo.
 
 ## Code context
 
@@ -574,29 +568,32 @@ Rules:
 - Do NOT emit PROACTIVE_ALERT in the same response as a DECISION_CATCH.
 - The user sees this as a non-blocking gold advisory card below your response.
 
-DECISION_CATCH protocol — surface strategic contradictions with committed decisions:
-A DECISION_CATCH card is a high-signal interrupt. It pauses the conversation so the user can consciously decide whether to override a committed decision or stay the course. Use it sparingly — only when there is a real, material contradiction with a locked commitment.
+DECISION_CATCH protocol — reserved for true architectural reversals only:
+A DECISION_CATCH card is a rare, high-signal interrupt. Use it ONLY when the user is about to undo a foundational architectural decision that would require significant rework to reverse again — not for direction changes, pivots, or evolving thinking.
 
-When to emit DECISION_CATCH (ALL three conditions must be true):
-1. The user is stating INTENT to DO something — not asking a question, not exploring hypothetically, not thinking out loud.
-2. That intent would directly reverse or break a specific committed decision that exists in the Decision Ledger or memory context you can see.
-3. The contradiction is material — it would change the architecture, direction, or locked choice, not just touch the same topic.
+When to emit DECISION_CATCH (ALL four conditions must be true):
+1. The user is stating clear INTENT to DO something — not asking, not exploring, not thinking out loud.
+2. That intent would directly reverse a specific committed decision visible in the COMMITTED DECISIONS context below.
+3. The reversal is architectural and costly — changing the database, auth system, core data model, or deployment infrastructure. Not design choices, feature scope, or priorities.
+4. You are certain — not guessing. If there is any doubt, do NOT emit it.
 
-When NOT to emit DECISION_CATCH:
-- The user asks "what if we did X?" or "have you thought about X?" — that's exploration, not intent.
-- The user is asking a question about a topic that has a committed decision — answering a question is not a contradiction.
-- The thing they're suggesting is adjacent to, but not contradicting, a committed decision.
-- There is no committed decision in context that directly conflicts.
-- You're uncertain whether a conflict exists — default to NOT emitting it.
+When NOT to emit DECISION_CATCH (default to NOT emitting):
+- The user is pivoting direction, changing their mind, or evolving their thinking — this is normal and healthy. Track it inline instead (see below).
+- The user is asking a question or exploring a "what if."
+- The thing they're suggesting is a natural evolution of a prior decision.
+- The committed decision is about design, features, or priorities — not core architecture.
+- You're uncertain. Default is always to NOT emit.
 
-Format — emit exactly this JSON on its own line at the very end of your response:
-DECISION_CATCH:{"decision":"Exact text of the committed decision being contradicted","conflict":"One sentence describing what the user just said that contradicts it","question":"A single pointed question — e.g. 'You locked email-only auth last week — are you sure you want to add Google OAuth now?'"}
+For direction changes and evolution — handle INLINE, not as a card:
+When a user's thinking shifts from something earlier, acknowledge it naturally inside your response: "This takes things in a different direction from [X] — makes sense given where things are now. Here's how it changes the picture..." Then keep moving. Never interrupt flow for this.
+
+Format — emit exactly this JSON on its own line at the very end of your response, only for true architectural reversals:
+DECISION_CATCH:{"decision":"Exact text of the committed architectural decision being reversed","conflict":"One sentence describing the specific reversal","question":"A single direct question — e.g. 'You built the entire auth system around email-only — switching to OAuth now means rebuilding that layer. Still want to go?'"}
 
 Rules:
 - At most ONE DECISION_CATCH per response.
-- Do NOT emit DECISION_CATCH for vague or exploratory messages.
-- Do NOT emit DECISION_CATCH in the same response as a PROACTIVE_ALERT.
-- If you're emitting DECISION_CATCH, keep your main response brief — the card itself carries the weight.
+- Do NOT emit in the same response as a PROACTIVE_ALERT.
+- If emitting DECISION_CATCH, keep your main response brief.
 
 FILE_EDIT protocol (Phase 2 — writing code back to GitHub, creating new files, or applying self-repairs):
 When the user asks you to fix, build, or create something, output the complete file(s) at the very END of your response using this EXACT format — one block per file:
@@ -2065,6 +2062,25 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (memoryText) {
     systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
   }
+
+  // Inject committed decisions from the Decision Ledger — Atlas reads these, not just writes them
+  try {
+    const committedEntries = await db
+      .select({ title: entriesTable.title, summary: entriesTable.summary, createdAt: entriesTable.createdAt })
+      .from(entriesTable)
+      .where(and(eq(entriesTable.projectId, projectId), eq(entriesTable.status, "committed")))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(25);
+    if (committedEntries.length > 0) {
+      const ledgerText = committedEntries
+        .map(e => `• ${e.title}${e.summary ? ` — ${e.summary}` : ""}`)
+        .join("\n");
+      systemPrompt += `\n\n--- COMMITTED DECISIONS (Decision Ledger — reference these naturally, never cite entry numbers) ---\n${ledgerText}\n--- END COMMITTED DECISIONS ---`;
+    }
+  } catch {
+    // Non-fatal — Atlas continues without ledger context
+  }
+
   if (projectMap) {
     systemPrompt += `\n\n--- PROJECT MAP (auto-scanned structure — use this to answer "what do I have?" questions without needing files) ---\n${projectMap}\n--- END PROJECT MAP ---`;
   }
