@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, and, isNotNull, inArray } from "drizzle-orm";
-import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable } from "@workspace/db";
+import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable } from "@workspace/db";
 import { encryptToken, decryptToken } from "../lib/tokenCrypto";
 import {
   CreateProjectBody,
@@ -674,6 +674,52 @@ router.post("/projects/:id/readiness-snapshots", async (req, res): Promise<void>
     .values({ projectId: params.data.id, score: parsed.data.score })
     .returning();
   res.status(201).json({ ...snapshot, recordedAt: snapshot.recordedAt.toISOString() });
+});
+
+router.get("/projects/:id/flow", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const [proj] = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
+  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
+  const [canvas] = await db
+    .select()
+    .from(projectFlowCanvasTable)
+    .where(eq(projectFlowCanvasTable.projectId, id));
+  if (!canvas) {
+    res.json({ nodes: [], edges: [] });
+    return;
+  }
+  res.json({ nodes: canvas.nodes, edges: canvas.edges });
+});
+
+router.put("/projects/:id/flow", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const [proj] = await db
+    .select({ id: projectsTable.id })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
+  if (!proj) { res.status(404).json({ error: "Project not found" }); return; }
+  const { nodes, edges } = req.body as { nodes?: unknown[]; edges?: unknown[] };
+  if (!Array.isArray(nodes) || !Array.isArray(edges)) {
+    res.status(400).json({ error: "nodes and edges must be arrays" });
+    return;
+  }
+  await db
+    .insert(projectFlowCanvasTable)
+    .values({ projectId: id, nodes, edges })
+    .onConflictDoUpdate({
+      target: projectFlowCanvasTable.projectId,
+      set: { nodes, edges, updatedAt: new Date() },
+    });
+  res.json({ ok: true });
 });
 
 export default router;
