@@ -41,12 +41,29 @@ ALTER TABLE connections ADD COLUMN IF NOT EXISTS metadata jsonb;
 UPDATE connections SET label = type WHERE label = '';
 
 
+-- ── project_flow_canvas table ─────────────────────────────────────────────────
+-- NEW: Persists AxiomFlow canvas nodes + edges to the database.
+-- Replaces localStorage — canvas now survives across devices and browser clears.
+-- One row per project; nodes and edges are full JSON arrays.
+
+CREATE TABLE IF NOT EXISTS project_flow_canvas (
+  project_id integer NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+  nodes      jsonb NOT NULL DEFAULT '[]',
+  edges      jsonb NOT NULL DEFAULT '[]',
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+
 -- ── VERIFY ────────────────────────────────────────────────────────────────────
--- Run this after the ALTER statements to confirm it landed on the right DB.
--- You should see rows for: shape, label, url, metadata
+-- Run this after the statements above to confirm everything landed correctly.
+-- You should see columns: shape, label, url, metadata
+-- And the table: project_flow_canvas
 
 SELECT table_name, column_name, data_type
 FROM information_schema.columns
 WHERE table_name IN ('projects', 'connections')
   AND column_name IN ('shape', 'label', 'url', 'metadata')
 ORDER BY table_name, column_name;
+
+SELECT table_name FROM information_schema.tables
+WHERE table_name = 'project_flow_canvas';
