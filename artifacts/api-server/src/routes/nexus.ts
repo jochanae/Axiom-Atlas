@@ -1774,14 +1774,23 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     if (streamDone || res.writableEnded || res.destroyed) return;
     streamDone = true;
     writeStep({ verb: status === "cancelled" ? "Cancelled" : "Failed", target: "Atlas response", status: status === "cancelled" ? "warn" : "fail" });
-    const metadata = failedRunMetadata(summary, status);
-    res.write(`event: done\ndata: ${JSON.stringify({
-      content: "",
-      surface: null,
-      memoryUpdated: false,
-      detectedMode: "strategic",
-      ...metadata,
-    })}\n\n`);
+
+    if (status === "cancelled") {
+      const metadata = failedRunMetadata(summary, status);
+      res.write(`event: done\ndata: ${JSON.stringify({
+        content: "",
+        surface: null,
+        memoryUpdated: false,
+        detectedMode: "strategic",
+        ...metadata,
+      })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Real failure — emit error event so the frontend shows the reason
+    // instead of rendering a blank bubble.
+    res.write(`event: error\ndata: ${JSON.stringify(summary || "Atlas ran into an issue. Please try again.")}\n\n`);
     res.end();
   };
   req.on("aborted", () => {
@@ -1941,14 +1950,9 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   } catch (err) {
     req.log.error({ err }, "nexus/chat error");
     if (res.headersSent && !res.writableEnded) {
-      const metadata = failedRunMetadata("Atlas ran into an issue. Please try again.", "failed");
-      res.write(`event: done\ndata: ${JSON.stringify({
-        content: "",
-        surface: null,
-        memoryUpdated: false,
-        detectedMode: "strategic",
-        ...metadata,
-      })}\n\n`);
+      // Stream already started — send error event so the frontend shows it
+      const msg = err instanceof Error ? err.message : "Atlas ran into an issue. Please try again.";
+      res.write(`event: error\ndata: ${JSON.stringify(msg)}\n\n`);
       res.end();
     } else if (!res.headersSent) {
       res.status(500).json({ error: "Atlas ran into an issue. Please try again." });
