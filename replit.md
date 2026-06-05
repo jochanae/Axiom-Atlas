@@ -13,11 +13,13 @@ Repo: `jochanae/Axiom-Atlas` (private)
 
 | Layer | Technology | Notes |
 |---|---|---|
-| **Backend** | `artifacts/api-server/` in this Replit | Deployed to **Render** |
+| **Backend** | `artifacts/api-server/` in this Replit | Runs and deploys **from this Replit** — not Render |
 | **Database** | **Neon** PostgreSQL | `DATABASE_URL` points to Neon |
 | **Frontend** | **Separate repository** | Not in this Replit — Jochanae manages it independently |
 
 **This Replit is the backend codebase.** `artifacts/atlas/` here is a drifted reference copy — do not treat it as the live frontend. All meaningful work happens in `artifacts/api-server/` and `lib/`.
+
+Backend changes go live immediately when the API Server workflow is restarted — no external deployment step needed.
 
 When changes touch the API contract (new routes, new response fields, new DB columns), produce copy-pasteable output files for Jochanae to apply to the frontend repo manually via Cursor.
 

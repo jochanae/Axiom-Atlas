@@ -485,7 +485,7 @@ This is a split-repo architecture. Backend lives here; frontend is a separate re
 | Frontend | React + Vite — repo: jochanae/atlas-idk, deployed to Vercel at axiomsystem.app |
 | Frontend styling | Inline styles + CSS custom properties (no Tailwind) |
 | Frontend routing | Wouter |
-| Backend | Express 5 — repo: jochanae/Axiom-Atlas (this Replit), deployed to Render |
+| Backend | Express 5 — repo: jochanae/Axiom-Atlas, runs from this Replit (no separate deployment) |
 | Database | Neon PostgreSQL via Drizzle ORM (lib/db/) — NOT Supabase |
 | Auth | Session auth + Google OAuth |
 | AI | Anthropic Claude claude-sonnet-4-6 + Google Gemini gemini-2.5-pro |
