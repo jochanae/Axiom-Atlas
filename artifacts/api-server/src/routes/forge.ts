@@ -9,12 +9,18 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+const ExistingNodeSchema = z.object({
+  label: z.string(),
+  type: z.string(),
+});
+
 const ForgeRequestSchema = z.object({
   transcript: z.string().min(10).max(20000),
   projectContext: z.string().max(4000).optional(),
   repoContext: z.string().max(3000).optional(),
   projectId: z.number().optional(),
   moscow: z.boolean().optional(),
+  existingNodes: z.array(ExistingNodeSchema).optional(),
 });
 
 type NodeType = "goal" | "requirement" | "blocker" | "priority" | "decision" | "sprint" | "wont";
@@ -41,6 +47,34 @@ interface ForgeResponse {
 const VALID_TYPES: NodeType[] = ["goal", "requirement", "blocker", "priority", "decision", "sprint", "wont"];
 const VALID_META: NodeMeta[] = ["must", "should", "could", "wont"];
 const MAX_NODES = 12;
+
+// Normalize a label for fuzzy comparison
+function normalizeLabel(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+}
+
+// Returns true if newLabel is a duplicate of any existing node label
+function isDuplicate(
+  newLabel: string,
+  newType: string,
+  existing: Array<{ label: string; type: string }>
+): boolean {
+  const norm = normalizeLabel(newLabel);
+  for (const e of existing) {
+    const eNorm = normalizeLabel(e.label);
+    // Exact match after normalization
+    if (norm === eNorm) return true;
+    // One label contains the other — catches "no recording equipment" vs "recording equipment"
+    if (norm.length >= 5 && eNorm.length >= 5 && (norm.includes(eNorm) || eNorm.includes(norm))) return true;
+    // Same type + at least 2 meaningful words in common — catches "solo vs co-host" vs "solo vs. co-host format"
+    if (e.type === newType) {
+      const sig = (s: string) => s.split(" ").filter(w => w.length > 3);
+      const overlap = sig(norm).filter(w => sig(eNorm).includes(w));
+      if (overlap.length >= 2) return true;
+    }
+  }
+  return false;
+}
 
 // Pre-compute radial positions around a center point
 function radialPositions(count: number, cx = 300, cy = 250, radius = 160): { x: number; y: number }[] {
@@ -78,7 +112,7 @@ router.post("/forge", async (req, res) => {
     return;
   }
 
-  const { transcript, projectContext, repoContext } = parsed.data;
+  const { transcript, projectContext, repoContext, existingNodes = [] } = parsed.data;
 
   const contextParts: string[] = [];
   if (repoContext) contextParts.push(`Existing Repo Docs (already committed — do NOT re-extract as new nodes, use only for context):\n${repoContext}`);
@@ -150,9 +184,14 @@ router.post("/forge", async (req, res) => {
       };
     });
 
+    // Remove nodes whose labels are too similar to ones already on the map
+    const deduped = existingNodes.length > 0
+      ? nodes.filter(n => !isDuplicate(n.label, n.type, existingNodes))
+      : nodes;
+
     const response: ForgeResponse = {
       summary: String(data.summary).slice(0, 300),
-      nodes,
+      nodes: deduped,
     };
 
     res.json(response);
