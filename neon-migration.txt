@@ -54,6 +54,22 @@ CREATE TABLE IF NOT EXISTS project_flow_canvas (
 );
 
 
+-- ── mcp_connections table ────────────────────────────────────────────────────
+-- NEW: Stores MCP (Model Context Protocol) server connections per user.
+-- Powers the MCP tab in the workspace — lets Atlas connect to external tool
+-- servers (Linear, Notion, etc.) so it can call them during conversations.
+
+CREATE TABLE IF NOT EXISTS mcp_connections (
+  id         serial PRIMARY KEY,
+  user_id    integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  label      text NOT NULL,
+  url        text NOT NULL,
+  token      text,
+  tools      jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+
 -- ── VERIFY ────────────────────────────────────────────────────────────────────
 -- Run this after the statements above to confirm everything landed correctly.
 -- You should see columns: shape, label, url, metadata

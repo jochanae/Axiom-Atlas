@@ -20,3 +20,4 @@ export * from "./forgeState";
 export * from "./blueprints";
 export * from "./connections";
 export * from "./flowCanvas";
+export * from "./mcp_connections";
