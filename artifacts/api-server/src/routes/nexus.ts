@@ -32,6 +32,7 @@ type RunStatus = "completed" | "warnings" | "failed" | "cancelled";
 type RunAction = {
   verb: string;
   target?: string;
+  detail?: string;
   status?: "ok" | "warn" | "fail";
 };
 
@@ -1700,10 +1701,21 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     }
   };
 
-  writeStep({ verb: "Read", target: "nexus_messages" });
-  if (focusProjectId) writeStep({ verb: "Read", target: "project context" });
-  if (vault.hasImages) writeStep({ verb: "Read", target: "visual vault" });
-  if (urlBlocks.length > 0) writeStep({ verb: "Captured", target: `${urlBlocks.length} URL${urlBlocks.length === 1 ? "" : "s"}` });
+  // Build contextual step labels from live data
+  const focusedProject = focusProjectId ? projects.find(p => p.id === focusProjectId) : null;
+  const focusLabel = focusedProject?.name ?? "all projects";
+  const threadNote = dbMessages.length > 0
+    ? `${dbMessages.length} message${dbMessages.length === 1 ? "" : "s"} in thread`
+    : "Starting fresh";
+
+  writeStep({ verb: "Reading", target: "conversation history", detail: threadNote });
+  if (focusProjectId) {
+    writeStep({ verb: "Reviewing", target: focusLabel, detail: "Loading project context and memory" });
+  } else {
+    writeStep({ verb: "Reviewing", target: "all projects", detail: `${projects.length} project${projects.length === 1 ? "" : "s"} in portfolio` });
+  }
+  if (vault.hasImages) writeStep({ verb: "Scanning", target: "visual vault", detail: "Images you've shared" });
+  if (urlBlocks.length > 0) writeStep({ verb: "Captured", target: `${urlBlocks.length} URL${urlBlocks.length === 1 ? "" : "s"}`, detail: "Live screenshots taken" });
 
   let modelStartedAt = performance.now();
   let modelUsage: Partial<NexusRunMetadata> = {};
@@ -1716,7 +1728,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     // Strip MEMORY_Tn tags from persisted output
     const { content: visibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
     const memoryUpdated = parsedMemoryUpdated;
-    writeStep({ verb: "Write", target: "nexus_messages" });
+    writeStep({ verb: "Saved", target: "response", detail: "Thread updated" });
     const runMetadata = buildRunMetadata(visibleContent, {
       ...modelUsage,
       runActions: runActions.length > 0 ? runActions : null,
@@ -1810,7 +1822,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ...conversationHistory.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`),
       `User: ${message}`,
     ].join("\n\n");
-    writeStep({ verb: "Call", target: "Gemini" });
+    const geminiModeDetail = mode === "audit" ? "Auditing for gaps and risks"
+      : mode === "deep_dive" ? "Deep-context analysis"
+      : focusProjectId ? `Strategizing ${focusLabel}`
+      : "Cross-portfolio strategy";
+    writeStep({ verb: "Thinking", target: "Gemini", detail: geminiModeDetail });
     modelStartedAt = performance.now();
     if (imageBase64 && imageMimeType) {
       const result = await genai.models.generateContent({
@@ -1913,7 +1929,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   ];
 
   modelStartedAt = performance.now();
-  writeStep({ verb: "Call", target: "Claude" });
+  const claudeModeDetail = mode === "audit" ? "Auditing for gaps and risks"
+    : mode === "deep_dive" ? "Deep strategic analysis"
+    : focusProjectId ? `Strategizing ${focusLabel}`
+    : "Cross-portfolio strategy";
+  writeStep({ verb: "Thinking", target: "Claude Sonnet", detail: claudeModeDetail });
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
