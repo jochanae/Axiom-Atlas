@@ -11,6 +11,15 @@ import { decryptToken } from "../lib/tokenCrypto";
 const router: IRouter = Router();
 
 const GH_API = "https://api.github.com";
+
+// In-memory CSRF state store for GitHub OAuth (10-minute TTL)
+const oauthStateStore = new Map<string, { userId: number; expiresAt: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of oauthStateStore.entries()) {
+    if (v.expiresAt < now) oauthStateStore.delete(k);
+  }
+}, 5 * 60 * 1000).unref();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const COMMIT_CACHE_TTL_MS = 60_000;
 
@@ -296,6 +305,119 @@ router.delete("/github/token", async (req, res): Promise<void> => {
     .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "github")));
 
   res.json({ connected: false });
+});
+
+// GET /api/github/oauth/start — begins the GitHub OAuth flow
+// User must be logged in. Redirects to GitHub for authorization.
+router.get("/github/oauth/start", (req, res): void => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const clientId = process.env.GITHUB_CLIENT_ID;
+  if (!clientId) { res.status(503).json({ error: "GitHub OAuth is not configured on this server" }); return; }
+
+  const state = randomBytes(20).toString("hex");
+  oauthStateStore.set(state, { userId, expiresAt: Date.now() + 10 * 60 * 1000 });
+
+  const appDomain = process.env.REPLIT_DOMAINS?.split(",")[0] ?? "axiomsystem.app";
+  const params = new URLSearchParams({
+    client_id: clientId,
+    scope: "repo",
+    state,
+    redirect_uri: `https://${appDomain}/api/github/oauth/callback`,
+  });
+
+  res.redirect(`https://github.com/login/oauth/authorize?${params}`);
+});
+
+// GET /api/github/oauth/callback — GitHub redirects here after authorization
+router.get("/github/oauth/callback", async (req, res): Promise<void> => {
+  const { code, state, error } = req.query as Record<string, string>;
+  const appDomain = process.env.REPLIT_DOMAINS?.split(",")[0] ?? "axiomsystem.app";
+  const base = `https://${appDomain}`;
+
+  if (error) {
+    res.redirect(`${base}/home?github_error=${encodeURIComponent(error)}`);
+    return;
+  }
+
+  if (!code || !state) {
+    res.redirect(`${base}/home?github_error=missing_params`);
+    return;
+  }
+
+  const stored = oauthStateStore.get(state);
+  if (!stored || stored.expiresAt < Date.now()) {
+    res.redirect(`${base}/home?github_error=invalid_state`);
+    return;
+  }
+  oauthStateStore.delete(state);
+  const { userId } = stored;
+
+  const clientId = process.env.GITHUB_CLIENT_ID!;
+  const clientSecret = process.env.GITHUB_CLIENT_SECRET!;
+
+  try {
+    // Exchange code for access token
+    const tokenResp = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const tokenData = await tokenResp.json() as { access_token?: string; error?: string };
+
+    if (!tokenData.access_token) {
+      req.log.error({ tokenData }, "GitHub OAuth token exchange failed");
+      res.redirect(`${base}/home?github_error=token_exchange_failed`);
+      return;
+    }
+
+    const accessToken = tokenData.access_token;
+
+    // Verify and get the GitHub username
+    const ghRes = await fetch(`${GH_API}/user`, { headers: ghHeaders(accessToken), signal: AbortSignal.timeout(8_000) });
+    if (!ghRes.ok) {
+      res.redirect(`${base}/home?github_error=token_invalid`);
+      return;
+    }
+    const ghUser = await ghRes.json() as { login?: string };
+    const username = ghUser.login ?? "GitHub";
+
+    // Encrypt and upsert into connections table — same as the PAT flow
+    const { encryptToken } = await import("../lib/tokenCrypto");
+    const encrypted = encryptToken(accessToken);
+
+    const existing = await db
+      .select({ id: connectionsTable.id })
+      .from(connectionsTable)
+      .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "github")))
+      .orderBy(desc(connectionsTable.createdAt));
+
+    if (existing.length > 0) {
+      const [keep, ...dupes] = existing;
+      for (const dupe of dupes) {
+        await db.delete(connectionsTable).where(and(eq(connectionsTable.id, dupe.id), eq(connectionsTable.userId, userId)));
+      }
+      await db.update(connectionsTable)
+        .set({ token: encrypted, label: username, url: `https://github.com/${username}`, status: "linked", lastCheckedAt: new Date() })
+        .where(and(eq(connectionsTable.id, keep.id), eq(connectionsTable.userId, userId)));
+    } else {
+      await db.insert(connectionsTable).values({
+        userId,
+        type: "github",
+        label: username,
+        url: `https://github.com/${username}`,
+        token: encrypted,
+        status: "linked",
+      });
+    }
+
+    res.redirect(`${base}/home?github_connected=true&github_user=${encodeURIComponent(username)}`);
+  } catch (err) {
+    req.log.error({ err }, "GitHub OAuth callback error");
+    res.redirect(`${base}/home?github_error=server_error`);
+  }
 });
 
 // GET /api/github/status?projectId=N — unified GitHub connection status
