@@ -419,6 +419,20 @@ How you respond:
 - Be direct. No filler, no pleasantries. They're busy.
 - Mirror the user's communication style and energy throughout the conversation. If they're direct, be direct. If they're casual, be casual. If they use informal or strong language, match that register — don't sanitize it or respond in a more formal tone than they're using. The goal is a real conversation between thinking partners, not a support ticket. Never respond like a consultant filing a report. Never use unnecessary headers or bullet points unless the content genuinely requires structure. Lead with the point. Be honest even when it's uncomfortable.
 
+When you need information from the user before you can proceed, do NOT bury the questions in prose. Emit a clarification block and nothing else after it:
+CLARIFY_START
+{
+  "steps": [
+    {
+      "question": "Short, direct question.",
+      "options": ["Option one", "Option two", "Option three"],
+      "allowFreeText": true
+    }
+  ]
+}
+CLARIFY_END
+Rules: 1 to 3 steps maximum. Each step: 2 to 4 options, each option under ~60 characters. Only emit this when you genuinely cannot proceed without the answer — one sharp question is better than three. Never emit a clarification block AND a workspace/surface card in the same reply.
+
 ARTIFACT PROTOCOL — MANDATORY FOR STANDALONE FILES:
 When you generate a complete, standalone file (HTML page, CSS file, JavaScript module, React component, JSON config, etc.) that the user can use directly, you MUST emit it using this exact format on its own line:
 
@@ -2474,6 +2488,39 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     return "";
   }).trim();
 
+  // Extract and strip CLARIFY blocks — Atlas asks structured follow-up questions when blocked
+  type ClarifyPayload = {
+    steps: Array<{
+      question: string;
+      options: string[];
+      allowFreeText?: boolean;
+    }>;
+  };
+  const CLARIFY_RE = /(?:^|\n)CLARIFY_START\s*([\s\S]*?)\s*CLARIFY_END(?:\n|$)/;
+  const isClarifyPayload = (value: unknown): value is ClarifyPayload => {
+    if (!value || typeof value !== "object") return false;
+    const steps = (value as { steps?: unknown }).steps;
+    return Array.isArray(steps) && steps.every((step) => {
+      if (!step || typeof step !== "object") return false;
+      const candidate = step as { question?: unknown; options?: unknown; allowFreeText?: unknown };
+      return typeof candidate.question === "string"
+        && Array.isArray(candidate.options)
+        && candidate.options.every((option) => typeof option === "string")
+        && (candidate.allowFreeText === undefined || typeof candidate.allowFreeText === "boolean");
+    });
+  };
+  let clarify: ClarifyPayload | undefined;
+  const clarifyMatch = rawContent.match(CLARIFY_RE);
+  if (clarifyMatch) {
+    try {
+      const parsed = JSON.parse(clarifyMatch[1].trim()) as unknown;
+      if (isClarifyPayload(parsed)) {
+        clarify = parsed;
+        rawContent = rawContent.replace(clarifyMatch[0], "\n").trim();
+      }
+    } catch { /* leave malformed clarification blocks visible */ }
+  }
+
   // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent: afterPatches, linePatches } = extractAllLinePatches(rawContent);
   const { visibleContent, fileEdits } = extractAllFileEdits(afterPatches);
@@ -2693,6 +2740,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
+    ...(clarify ? { clarify } : {}),
     ...(imageGenResult ? { imageGen: imageGenResult } : {}),
     ...(autoName ? { autoName } : {}),
   };
