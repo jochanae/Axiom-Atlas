@@ -309,8 +309,11 @@ router.delete("/github/token", async (req, res): Promise<void> => {
 
 // GET /api/github/oauth/start — begins the GitHub OAuth flow
 // User must be logged in. Redirects to GitHub for authorization.
-router.get("/github/oauth/start", (req, res): void => {
-  const userId = (req as any).authUser?.id as number | undefined;
+router.get("/github/oauth/start", async (req, res): Promise<void> => {
+  // Try session cookie first, then fall back to Bearer token
+  const { getUserFromCookie } = await import("./auth");
+  const user = await getUserFromCookie(req);
+  const userId = user?.id ?? (req as any).authUser?.id as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
 
   const clientId = process.env.GITHUB_CLIENT_ID;
@@ -326,8 +329,18 @@ router.get("/github/oauth/start", (req, res): void => {
     state,
     redirect_uri: `https://${appDomain}/api/github/oauth/callback`,
   });
+  const redirectUrl = `https://github.com/login/oauth/authorize?${params}`;
 
-  res.redirect(`https://github.com/login/oauth/authorize?${params}`);
+  // If the frontend asks for JSON (fetch with Accept: application/json),
+  // return the URL so the frontend can redirect via JS. This is more reliable
+  // on mobile because fetch with credentials: "include" sends the cookie.
+  const wantsJson = req.headers.accept?.includes("application/json") || req.query.json === "1";
+  if (wantsJson) {
+    res.json({ url: redirectUrl });
+    return;
+  }
+
+  res.redirect(redirectUrl);
 });
 
 // GET /api/github/oauth/callback — GitHub redirects here after authorization
