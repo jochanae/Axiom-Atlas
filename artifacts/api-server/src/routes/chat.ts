@@ -1312,12 +1312,14 @@ function runSummaryFromContent(content: string): string {
   return line.length > 120 ? `${line.slice(0, 117).trim()}...` : line;
 }
 
-function runMetadataInsertValues(content: string) {
+function runMetadataInsertValues(content: string, fileEdits?: FileEdit[]) {
   return {
     runStatus: "completed",
     runSummary: runSummaryFromContent(content),
     runActions: null,
-    runArtifacts: null,
+    runArtifacts: fileEdits && fileEdits.length > 0
+      ? fileEdits.map(e => ({ type: "file_edit", path: e.path, language: e.language }))
+      : null,
   };
 }
 
@@ -2188,7 +2190,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         intentType: detectedIntentType,
         catchPayload: undefined,
         ...usageInsertValues(assistantUsage),
-        ...runMetadataInsertValues(persistContent),
+        ...runMetadataInsertValues(persistContent, fileEdits),
       })
       .returning();
     savedMsgId = savedMsg.id;
