@@ -203,7 +203,37 @@ function appendMemoryFacts(
   return { ...store, entries: [...store.entries, ...newEntries] };
 }
 
-const USER_MEMORY_EXTRACTOR_PROMPT = "You are a silent memory extractor. Read the conversation and extract ONLY durable facts the USER revealed about THEMSELVES — their identity, role, work style, preferences, products, constraints, life facts. Extract facts about the PERSON, never about the project's code or this conversation's task. Return ONLY a JSON array, each item: {\"tier\":1-5,\"text\":\"concise standalone fact\"}. Tier guide: 1=foundational/never changes (core identity, hard values), 2=identity/slow-changing (role, products, how they work), 3=episodic (a notable thing that happened), 4=contextual (current focus, this month), 5=transient (passing mood/preference). Only extract genuinely durable facts. Skip greetings, task talk, and anything about the code itself. If nothing durable, return [].";
+const USER_MEMORY_EXTRACTOR_PROMPT = `You are a silent memory extractor. Extract ONLY durable facts the USER explicitly stated about THEMSELVES — their identity, role, how they work, their own products, their own constraints, their life. 
+
+STRICT RULES:
+- Record a technology, framework, or tool ONLY if the user clearly states THEY use it in THEIR OWN project. If a technology is merely mentioned, discussed, or read from code belonging to another project or example, DO NOT record it as a fact about the user.
+- When a fact is about a specific product, name that product in the fact text (e.g. 'Compani uses Supabase'), NEVER as a blanket fact about the user (NEVER 'the user's stack is Supabase'). Different products may use different stacks.
+- Do not infer or generalize across projects. One project using something does not mean the user 'always' uses it.
+- Skip greetings, task talk, transient conversation, and anything about the current code being discussed.
+Return ONLY a JSON array, each item {"tier":1-5,"text":"concise standalone fact"}. Tier guide: 1=foundational/never changes, 2=identity/slow-changing (role, products, how they work), 3=episodic, 4=contextual (current focus), 5=transient. If nothing durable, return [].`;
+
+function cleanPollutedUserStackFacts(store: MemoryStore): { store: MemoryStore; removedCount: number } {
+  const productNames = ["compani", "coinsbloom", "intoiq", "sanctumiq", "quinn", "presentq"];
+  const blanketStackPatterns = [
+    /\byour\s+(?:overall\s+)?stack\s+(?:is|uses|includes)\b/i,
+    /\b(?:the\s+)?user['’]s\s+(?:overall\s+)?stack\s+(?:is|uses|includes)\b/i,
+    /\btheir\s+(?:overall\s+)?stack\s+(?:is|uses|includes)\b/i,
+    /\bfully committed to\b/i,
+    /\breact\s*\+\s*tailwind\s*\+\s*supabase\b/i,
+  ];
+
+  const entries = store.entries.filter((entry) => {
+    const text = entry.text;
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes("tailwind")) return false;
+    if (lowerText.includes("supabase") && !productNames.some((product) => lowerText.includes(product))) {
+      return false;
+    }
+    return !blanketStackPatterns.some((pattern) => pattern.test(text));
+  });
+
+  return { store: { ...store, entries }, removedCount: store.entries.length - entries.length };
+}
 
 function parseExtractorFacts(raw: string): Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }> {
   const parsed = JSON.parse(raw.trim()) as unknown;
@@ -563,6 +593,14 @@ DEPTH CALIBRATION: Short responses when they're
 thinking out loud. More depth when they're asking 
 for real analysis. Never give a long structured 
 response to a casual message.
+
+--- EPISTEMIC SPINE (non-negotiable) ---
+- Distinguish what you REMEMBER from what you have VERIFIED. Memory is 'what I have on you,' never 'what I checked' or 'what I can see.' Never claim to have inspected infrastructure, repos, or deployments you did not actually inspect in this turn.
+- State confidence honestly. If a fact is from memory and unconfirmed, say so plainly. Do not present a generalization as a universal.
+- VOLUNTEER the inconvenient exception. If you know something is true for most of the user's projects but not the one in focus, lead with the exception — it is the useful half.
+- Do NOT reverse a factual claim merely because the user asserts otherwise. If the user contradicts you, either hold your position with your reasoning, or say 'I'm not certain — I shouldn't have stated that so firmly' and offer to verify. Never flip to instant agreement to please the user. Agreeing when you were right, or when you have no basis to change, is a failure.
+- When you don't know, say you don't know. A confident wrong answer is worse than an honest 'I'm not sure.'
+--- END EPISTEMIC SPINE ---
 </conversational-spine>
 
 ## Your actual tech stack
@@ -2010,6 +2048,14 @@ router.post("/chat", async (req, res): Promise<void> => {
   let userRetrievedIds: number[] = [];
   if (userId) {
     userStore = parseMemoryStore(user?.memory ?? null);
+    const cleanedUserStore = cleanPollutedUserStackFacts(userStore);
+    if (cleanedUserStore.removedCount > 0) {
+      userStore = cleanedUserStore.store;
+      await db
+        .update(usersTable)
+        .set({ memory: JSON.stringify(userStore) })
+        .where(eq(usersTable.id, userId));
+    }
     userStore = consolidateIfNeeded(userStore, now);
 
     const userMemoryContext = buildMemoryContext(userStore);
