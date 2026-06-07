@@ -1247,6 +1247,22 @@ interface FileEdit {
   content: string;
 }
 
+type RunStatus = "completed" | "warnings" | "failed" | "cancelled";
+
+type RunAction = {
+  verb: string;
+  target?: string;
+  detail?: string;
+  status?: "ok" | "warn" | "fail";
+};
+
+type RunArtifact = {
+  type: "commit" | "file" | "url" | "pr";
+  label: string;
+  href?: string;
+  meta?: string;
+};
+
 const BLOCKED_PATH_RE = /(?:^|[\\/])(?:package\.json|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
 const BLOCKED_DIR_RE = /^(?:node_modules|dist|build|\.next|\.cache)[\\/]/;
 const CRITICAL_PATH_RE = /(?:^|[\\/])(?:package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
@@ -1819,12 +1835,28 @@ function runSummaryFromContent(content: string): string {
   return line.length > 120 ? `${line.slice(0, 117).trim()}...` : line;
 }
 
-function runMetadataInsertValues(content: string) {
+function runMetadataInsertValues(content: string, fileEdits: FileEdit[] = []) {
+  const runActions: RunAction[] | null = fileEdits.length > 0
+    ? [{
+      verb: "Prepared",
+      target: fileEdits.length === 1 ? fileEdits[0].path : `${fileEdits.length} file edits`,
+      detail: fileEdits.slice(0, 3).map((edit) => edit.path).join(", "),
+      status: "ok",
+    }]
+    : null;
+  const runArtifacts: RunArtifact[] | null = fileEdits.length > 0
+    ? fileEdits.map((edit) => ({
+      type: "file",
+      label: edit.path,
+      meta: edit.language,
+    }))
+    : null;
+
   return {
-    runStatus: "completed",
+    runStatus: "completed" as RunStatus,
     runSummary: runSummaryFromContent(content),
-    runActions: null,
-    runArtifacts: null,
+    runActions,
+    runArtifacts,
   };
 }
 
@@ -2380,15 +2412,19 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       userMessage: message,
       recentMessages: history,
     });
+    const runMetadata = runMetadataInsertValues(diveResult.content);
     const [savedDive] = await db.insert(chatMessagesTable).values({
       sessionId,
       role: "assistant",
       content: diveResult.content,
       intentType: "EXPLORE",
       ...usageInsertValues(diveResult.usage),
-      ...runMetadataInsertValues(diveResult.content),
+      ...runMetadata,
     }).returning();
-    await db.update(sessionsTable).set({ messageCount: sql`${sessionsTable.messageCount} + 2` }).where(eq(sessionsTable.id, sessionId));
+    await db.update(sessionsTable).set({
+      messageCount: sql`${sessionsTable.messageCount} + 2`,
+      ...runMetadata,
+    }).where(eq(sessionsTable.id, sessionId));
     res.json({ content: diveResult.content, modelUsed: diveResult.model, terminalCmd: null, terminalResult: null, surface, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
     return;
   }
@@ -2762,6 +2798,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let savedMsgId: number | undefined;
   let autoName: string | undefined;
   if (!isFlowMode && !isScenarioMode) {
+    const runMetadata = runMetadataInsertValues(persistContent, fileChangesAllowed ? fileEdits : []);
     const [savedMsg] = await db
       .insert(chatMessagesTable)
       .values({
@@ -2771,14 +2808,17 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         intentType: detectedIntentType,
         catchPayload: undefined,
         ...usageInsertValues(assistantUsage),
-        ...runMetadataInsertValues(persistContent),
+        ...runMetadata,
       })
       .returning();
     savedMsgId = savedMsg.id;
 
     await db
       .update(sessionsTable)
-      .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
+      .set({
+        messageCount: sql`${sessionsTable.messageCount} + 2`,
+        ...runMetadata,
+      })
       .where(eq(sessionsTable.id, sessionId));
   }
 
