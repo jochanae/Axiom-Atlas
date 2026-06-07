@@ -2195,9 +2195,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       .returning();
     savedMsgId = savedMsg.id;
 
+    const runMeta = runMetadataInsertValues(persistContent, fileEdits);
     await db
       .update(sessionsTable)
-      .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
+      .set({
+        messageCount: sql`${sessionsTable.messageCount} + 2`,
+        runStatus: runMeta.runStatus,
+        runSummary: runMeta.runSummary,
+        runActions: runMeta.runActions,
+        runArtifacts: runMeta.runArtifacts,
+      })
       .where(eq(sessionsTable.id, sessionId));
   }
 

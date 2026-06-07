@@ -70,6 +70,11 @@ CREATE TABLE IF NOT EXISTS mcp_connections (
 );
 
 
+-- ── sessions table (run tracking for /code page) ─────────────────────────────
+-- NEW: run_status column for the /code page generation runs feature.
+
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS run_status text;
+
 -- ── VERIFY ────────────────────────────────────────────────────────────────────
 -- Run this after the statements above to confirm everything landed correctly.
 -- You should see columns: shape, label, url, metadata
@@ -77,9 +82,9 @@ CREATE TABLE IF NOT EXISTS mcp_connections (
 
 SELECT table_name, column_name, data_type
 FROM information_schema.columns
-WHERE table_name IN ('projects', 'connections')
-  AND column_name IN ('shape', 'label', 'url', 'metadata')
+WHERE table_name IN ('projects', 'connections', 'sessions')
+  AND column_name IN ('shape', 'label', 'url', 'metadata', 'run_status')
 ORDER BY table_name, column_name;
 
 SELECT table_name FROM information_schema.tables
-WHERE table_name = 'project_flow_canvas';
+WHERE table_name IN ('project_flow_canvas', 'mcp_connections');
