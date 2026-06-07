@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable } from "@workspace/db";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -201,6 +201,81 @@ function appendMemoryFacts(
     lastRetrievedAt: null,
   }));
   return { ...store, entries: [...store.entries, ...newEntries] };
+}
+
+const USER_MEMORY_EXTRACTOR_PROMPT = "You are a silent memory extractor. Read the conversation and extract ONLY durable facts the USER revealed about THEMSELVES — their identity, role, work style, preferences, products, constraints, life facts. Extract facts about the PERSON, never about the project's code or this conversation's task. Return ONLY a JSON array, each item: {\"tier\":1-5,\"text\":\"concise standalone fact\"}. Tier guide: 1=foundational/never changes (core identity, hard values), 2=identity/slow-changing (role, products, how they work), 3=episodic (a notable thing that happened), 4=contextual (current focus, this month), 5=transient (passing mood/preference). Only extract genuinely durable facts. Skip greetings, task talk, and anything about the code itself. If nothing durable, return [].";
+
+function parseExtractorFacts(raw: string): Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }> {
+  const parsed = JSON.parse(raw.trim()) as unknown;
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const tier = (item as { tier?: unknown }).tier;
+    const text = (item as { text?: unknown }).text;
+    if (tier !== 1 && tier !== 2 && tier !== 3 && tier !== 4 && tier !== 5) return [];
+    if (typeof text !== "string" || !text.trim()) return [];
+    return [{ tier, text: text.trim() }];
+  });
+}
+
+async function extractUserMemoryInBackground({
+  userId,
+  history,
+  message,
+  assistantReply,
+}: {
+  userId: number;
+  history: Array<{ role: string; content: string }>;
+  message: string;
+  assistantReply: string;
+}): Promise<void> {
+  const recentExchange = [
+    ...history.slice(-4).map((h) => ({
+      role: h.role === "assistant" ? "assistant" : "user",
+      content: h.content,
+    })),
+    { role: "user", content: message },
+    { role: "assistant", content: assistantReply },
+  ];
+  const transcript = recentExchange
+    .map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`)
+    .join("\n\n");
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5",
+    max_tokens: 600,
+    system: USER_MEMORY_EXTRACTOR_PROMPT,
+    messages: [{ role: "user", content: `Conversation:\n${transcript}` }],
+  });
+  const raw = response.content.find((block) => block.type === "text")?.text ?? "[]";
+  const extractedFacts = parseExtractorFacts(raw);
+  if (extractedFacts.length === 0) return;
+
+  const [user] = await db
+    .select({ memory: usersTable.memory })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  let userStore = parseMemoryStore(user?.memory ?? null);
+  const existingTexts = new Set(userStore.entries.map((entry) => entry.text.trim().toLowerCase()));
+  const factsToAppend = extractedFacts.filter((fact) => {
+    const key = fact.text.trim().toLowerCase();
+    if (existingTexts.has(key)) return false;
+    existingTexts.add(key);
+    return true;
+  });
+  if (factsToAppend.length === 0) return;
+
+  const now = new Date();
+  userStore = appendMemoryFacts(userStore, factsToAppend, now);
+  userStore = consolidateIfNeeded(userStore, now);
+
+  await db
+    .update(usersTable)
+    .set({ memory: JSON.stringify(userStore) })
+    .where(eq(usersTable.id, userId));
 }
 
 // ── GitHub File Tree Helper ───────────────────────────────────────────────────
@@ -1887,11 +1962,22 @@ router.post("/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser?.id as number | undefined;
   logger.info({ projectId, userId, hasProjectId: !!projectId, hasUserId: !!userId }, "chat terminal debug");
 
-  // Load project memory + repo info + node state from DB
-  const [project] = await db
-    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
-    .from(projectsTable)
-    .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId));
+  // Load project memory + repo info + node state from DB, plus user memory when authenticated.
+  const [projectRows, userRows] = await Promise.all([
+    db
+      .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
+      .from(projectsTable)
+      .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)),
+    userId
+      ? db
+          .select({ memory: usersTable.memory })
+          .from(usersTable)
+          .where(eq(usersTable.id, userId))
+          .limit(1)
+      : Promise.resolve([] as Array<{ memory: string | null }>),
+  ]);
+  const [project] = projectRows;
+  const [user] = userRows;
 
   // Derive server-side forge foundation from persisted AxiomFlow node state
   // This is the authoritative source — client-sent forgeContext supplements but never replaces it
@@ -1917,6 +2003,21 @@ router.post("/chat", async (req, res): Promise<void> => {
   const { text: memoryText, retrievedIds } = buildMemoryContext(store);
   if (retrievedIds.length > 0) {
     store = incrementRetrievals(store, retrievedIds, now);
+  }
+
+  let userStore: MemoryStore | null = null;
+  let userMemoryText = "";
+  let userRetrievedIds: number[] = [];
+  if (userId) {
+    userStore = parseMemoryStore(user?.memory ?? null);
+    userStore = consolidateIfNeeded(userStore, now);
+
+    const userMemoryContext = buildMemoryContext(userStore);
+    userMemoryText = userMemoryContext.text;
+    userRetrievedIds = userMemoryContext.retrievedIds;
+    if (userRetrievedIds.length > 0) {
+      userStore = incrementRetrievals(userStore, userRetrievedIds, now);
+    }
   }
 
   // Auto-fetch repo file tree (Phase 1 — always injected when a repo is linked)
@@ -2072,6 +2173,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   }
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
+  }
+  if (userMemoryText) {
+    systemPrompt += `\n\n--- ABOUT THIS FOUNDER (durable facts about the person you work with — use naturally, never recite) ---\n${userMemoryText}\n--- END ABOUT THIS FOUNDER ---`;
   }
   if (memoryText) {
     systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
@@ -2568,6 +2672,12 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       .set({ memory: JSON.stringify(updatedStore) })
       .where(eq(projectsTable.id, projectId));
   }
+  if (!isScenarioMode && userId && userStore && userRetrievedIds.length > 0) {
+    await db
+      .update(usersTable)
+      .set({ memory: JSON.stringify(userStore) })
+      .where(eq(usersTable.id, userId));
+  }
 
   // Extract FLOW_NODE lines before persisting
   const { content: flowStripped, flowNodes } = extractFlowNodes(finalContent);
@@ -2746,6 +2856,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   };
 
   res.json(finalPayload);
+  if (userId) {
+    void extractUserMemoryInBackground({
+      userId,
+      history,
+      message,
+      assistantReply: displayContent,
+    }).catch((err) => {
+      logger.warn({ err, userId }, "user memory extraction failed");
+    });
+  }
 });
 
 // ── Scenario keep — persist buffered scenario messages to session DB ──────────
