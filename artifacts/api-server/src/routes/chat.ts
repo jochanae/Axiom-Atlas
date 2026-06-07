@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
+import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles } from "@workspace/db";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -1327,6 +1328,153 @@ function extractAllFileEdits(content: string): { visibleContent: string; fileEdi
   return { visibleContent, fileEdits };
 }
 
+function countContentLines(content: string): number {
+  return content.split("\n").length;
+}
+
+function inferGeneratedFileLanguage(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase();
+  if (ext === "ts" || ext === "tsx") return "typescript";
+  if (ext === "js" || ext === "jsx") return "javascript";
+  if (ext === "css") return "css";
+  if (ext === "json") return "json";
+  if (ext === "md") return "markdown";
+  return "text";
+}
+
+function stripContextSeparator(content: string): string {
+  let normalized = content.startsWith("\n") ? content.slice(1) : content;
+  if (normalized.endsWith("\n\n")) normalized = normalized.slice(0, -2);
+  else if (normalized.endsWith("\n")) normalized = normalized.slice(0, -1);
+  return normalized;
+}
+
+function extractPreviousContentByPath(context: string): Map<string, string> {
+  const previous = new Map<string, string>();
+  if (!context.trim()) return previous;
+
+  const sectionHeaderRe = /^===\s+(.+?)(?:\s+(?:\[[^\]]+\]|\([^)]*\)))?\s+===$/gm;
+  const sections: Array<{ path: string; start: number; end: number; truncated: boolean }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = sectionHeaderRe.exec(context)) !== null) {
+    sections.push({
+      path: normalizeRepoPath(match[1]),
+      start: match.index,
+      end: sectionHeaderRe.lastIndex,
+      truncated: /truncated|\bfirst\s+\d+\s+of\b/i.test(match[0]),
+    });
+  }
+
+  for (let i = 0; i < sections.length; i += 1) {
+    const section = sections[i];
+    if (!section.path || section.truncated) continue;
+    const nextStart = sections[i + 1]?.start ?? context.length;
+    const content = stripContextSeparator(context.slice(section.end, nextStart));
+    if (/\n(?:…|\.\.\.) \(truncated\)\s*$/i.test(content)) continue;
+    previous.set(section.path, content);
+  }
+
+  const fileBlockRe = /^File:\s+(.+?)(?:\s+\([^)]*\))?\n```[^\n]*\n([\s\S]*?)\n```/gm;
+  while ((match = fileBlockRe.exec(context)) !== null) {
+    const path = normalizeRepoPath(match[1]);
+    if (path) previous.set(path, match[2]);
+  }
+
+  return previous;
+}
+
+function addKnownPreviousContent(
+  previousContentByPath: Map<string, string>,
+  file: { path: string; content: string; truncated?: boolean }
+): void {
+  if (file.truncated) return;
+  const path = normalizeRepoPath(file.path);
+  if (path) previousContentByPath.set(path, file.content);
+}
+
+function lookupPreviousContent(previousContentByPath: Map<string, string>, path: string): string | null {
+  return previousContentByPath.get(normalizeRepoPath(path)) ?? null;
+}
+
+async function recordGenerationRunInBackground({
+  projectId,
+  userId,
+  prompt,
+  model,
+  startedAt,
+  fileEdits,
+  previousContentByPath,
+}: {
+  projectId: unknown;
+  userId: unknown;
+  prompt: string;
+  model: string | null | undefined;
+  startedAt: Date | null;
+  fileEdits: FileEdit[];
+  previousContentByPath: Map<string, string>;
+}): Promise<void> {
+  try {
+    if (fileEdits.length === 0) return;
+    const numericProjectId = Number(projectId);
+    if (!Number.isInteger(numericProjectId) || numericProjectId <= 0) return;
+    const numericUserId = Number(userId);
+    if (!Number.isInteger(numericUserId) || numericUserId <= 0) return;
+
+    const runId = crypto.randomUUID();
+    const finishedAt = new Date();
+    const knownStartedAt = startedAt ?? null;
+    const generationFiles = fileEdits.map((fileEdit) => {
+      const previousContent = lookupPreviousContent(previousContentByPath, fileEdit.path);
+      return {
+        fileEdit,
+        previousContent,
+        lines: countContentLines(fileEdit.content),
+        previousLines: previousContent === null ? 0 : countContentLines(previousContent),
+      };
+    });
+
+    await db.insert(generationRuns).values({
+      id: runId,
+      projectId: numericProjectId,
+      userId: numericUserId,
+      prompt: prompt.slice(0, 2000),
+      intent: "build",
+      model: model || "claude-sonnet-4-6",
+      status: "completed",
+      startedAt: knownStartedAt ?? finishedAt,
+      finishedAt,
+      durationMs: knownStartedAt ? Math.max(0, finishedAt.getTime() - knownStartedAt.getTime()) : null,
+      filesChanged: generationFiles.length,
+      linesAdded: generationFiles.reduce((sum, file) => sum + file.lines, 0),
+      linesRemoved: generationFiles.reduce((sum, file) => sum + file.previousLines, 0),
+      summary: `Edited ${generationFiles.length} file${generationFiles.length === 1 ? "" : "s"}`,
+      commitSha: null,
+      pushedToBranch: null,
+    });
+
+    await db.insert(generatedFiles).values(
+      generationFiles.map(({ fileEdit, previousContent, lines }) => {
+        const timestamp = new Date();
+        return {
+          id: crypto.randomUUID(),
+          runId,
+          path: fileEdit.path,
+          language: inferGeneratedFileLanguage(fileEdit.path),
+          bytes: Buffer.byteLength(fileEdit.content, "utf8"),
+          lines,
+          content: fileEdit.content,
+          previousContent,
+          status: previousContent === null ? "created" : "edited",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+      })
+    );
+  } catch (err) {
+    logger.warn({ err, projectId, userId }, "failed to record generation run");
+  }
+}
+
 // ── LINE_PATCH extraction ─────────────────────────────────────────────────────
 interface LinePatch {
   path: string;
@@ -2138,6 +2286,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const BUILD_INTENT_RE = /\b(fix|build|add|change|update|create|implement|write|modify|edit|refactor|debug|bug|error|broken|doesn't work|won't work|failing|crash|not working)\b/i;
   let autoFetchedFiles: string[] = [];
   let autoFetchedContext = "";
+  const previousContentByPath = new Map<string, string>();
 
   if (BUILD_INTENT_RE.test(message) && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
     try {
@@ -2177,6 +2326,7 @@ router.post("/chat", async (req, res): Promise<void> => {
         const valid = fetched.filter((f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null);
         if (valid.length > 0) {
           autoFetchedFiles = valid.map(f => f.path);
+          valid.forEach((file) => addKnownPreviousContent(previousContentByPath, file));
           autoFetchedContext = valid
             .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
             .join("\n\n");
@@ -2189,6 +2339,9 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Merge auto-fetched content with any manually-opened files from the client
   const combinedFileContext = [autoFetchedContext, fileContext].filter(Boolean).join("\n\n");
+  extractPreviousContentByPath(fileContext).forEach((content, path) => {
+    previousContentByPath.set(path, content);
+  });
 
   let recentErrorContext = "";
   try {
@@ -2588,6 +2741,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
         );
         if (validFiles.length > 0) {
+          validFiles.forEach((file) => addKnownPreviousContent(previousContentByPath, file));
           const filesSummary = validFiles
             .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
             .join("\n\n");
@@ -2827,6 +2981,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     await db.update(projectsTable).set({ name: generatedAutoName }).where(eq(projectsTable.id, projectId));
     autoName = generatedAutoName;
   }
+  const responseFileEdits = fileChangesAllowed ? fileEdits : [];
+  const responseLinePatches = fileChangesAllowed ? linePatches : [];
 
   // Dual-engine image generation — process IMAGE_GEN tokens Atlas emitted
   // RENDER mode → Gemini Imagen 3  (cinematic, premium, client-facing)
@@ -2929,9 +3085,9 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     messageId: savedMsgId,
     memoryUpdated: newFacts.length > 0,
     confidenceAssessment: confidenceAssessment ?? undefined,
-    fileEdits: fileChangesAllowed && fileEdits.length > 0 ? fileEdits : undefined,
-    fileEdit: fileChangesAllowed && fileEdits.length > 0 ? fileEdits[0] : undefined,
-    linePatches: fileChangesAllowed && linePatches.length > 0 ? linePatches : undefined,
+    fileEdits: responseFileEdits.length > 0 ? responseFileEdits : undefined,
+    fileEdit: responseFileEdits.length > 0 ? responseFileEdits[0] : undefined,
+    linePatches: responseLinePatches.length > 0 ? responseLinePatches : undefined,
     plan: responsePlan ?? undefined,
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
@@ -2942,6 +3098,15 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   };
 
   res.json(finalPayload);
+  void recordGenerationRunInBackground({
+    projectId,
+    userId,
+    prompt: message,
+    model: modelUsed,
+    startedAt: now,
+    fileEdits: responseFileEdits,
+    previousContentByPath,
+  });
   if (userId) {
     void extractUserMemoryInBackground({
       userId,
