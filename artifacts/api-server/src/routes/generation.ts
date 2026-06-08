@@ -4,6 +4,25 @@ import { db, generatedFiles, generationRuns, projectsTable } from "@workspace/db
 
 const router: IRouter = Router();
 
+const generationRunColumns = {
+  id: generationRuns.id,
+  projectId: generationRuns.projectId,
+  userId: generationRuns.userId,
+  prompt: generationRuns.prompt,
+  intent: generationRuns.intent,
+  model: generationRuns.model,
+  status: generationRuns.status,
+  startedAt: generationRuns.startedAt,
+  finishedAt: generationRuns.finishedAt,
+  durationMs: generationRuns.durationMs,
+  filesChanged: generationRuns.filesChanged,
+  linesAdded: generationRuns.linesAdded,
+  linesRemoved: generationRuns.linesRemoved,
+  summary: generationRuns.summary,
+  commitSha: generationRuns.commitSha,
+  pushedToBranch: generationRuns.pushedToBranch,
+};
+
 // Verify that a project exists and is owned by the given userId.
 async function projectBelongsToUser(projectId: number, userId: number): Promise<boolean> {
   const rows = await db
@@ -55,13 +74,14 @@ router.get("/projects/:projectId/generation-runs", async (req, res): Promise<voi
   const projectId = Number(req.params.projectId);
   if (!Number.isInteger(projectId) || projectId <= 0) { res.status(400).json({ error: "Invalid project id" }); return; }
 
-  const userId = (req as any).authUser.id as number;
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   if (!(await projectBelongsToUser(projectId, userId))) {
     res.status(404).json({ error: "Project not found" }); return;
   }
 
   const rows = await db
-    .select()
+    .select(generationRunColumns)
     .from(generationRuns)
     .where(eq(generationRuns.projectId, projectId))
     .orderBy(desc(generationRuns.startedAt))
@@ -74,7 +94,8 @@ router.get("/projects/:projectId/generation-runs/:runId/files", async (req, res)
   const projectId = Number(req.params.projectId);
   if (!Number.isInteger(projectId) || projectId <= 0) { res.status(400).json({ error: "Invalid project id" }); return; }
 
-  const userId = (req as any).authUser.id as number;
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
   if (!(await projectBelongsToUser(projectId, userId))) {
     res.status(404).json({ error: "Project not found" }); return;
   }
