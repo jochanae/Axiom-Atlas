@@ -35,6 +35,7 @@ import connectionsRouter from "./connections";
 import mcpRouter from "./mcp";
 import stateRouter from "./state";
 import imagineRouter from "./imagine";
+import previewRouter from "./preview";
 
 const router: IRouter = Router();
 
@@ -92,6 +93,7 @@ router.use(requireAuth, terminalRouter);
 
 // Image generation — Imagen 3 (primary) / DALL·E 3 (fallback)
 router.use(requireAuth, imagineRouter);
+router.use(requireAuth, previewRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);
