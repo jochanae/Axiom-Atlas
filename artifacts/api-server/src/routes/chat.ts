@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
+import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles } from "@workspace/db";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -201,6 +202,111 @@ function appendMemoryFacts(
     lastRetrievedAt: null,
   }));
   return { ...store, entries: [...store.entries, ...newEntries] };
+}
+
+const USER_MEMORY_EXTRACTOR_PROMPT = `You are a silent memory extractor. Extract ONLY durable facts the USER explicitly stated about THEMSELVES — their identity, role, how they work, their own products, their own constraints, their life. 
+
+STRICT RULES:
+- Record a technology, framework, or tool ONLY if the user clearly states THEY use it in THEIR OWN project. If a technology is merely mentioned, discussed, or read from code belonging to another project or example, DO NOT record it as a fact about the user.
+- When a fact is about a specific product, name that product in the fact text (e.g. 'Compani uses Supabase'), NEVER as a blanket fact about the user (NEVER 'the user's stack is Supabase'). Different products may use different stacks.
+- Do not infer or generalize across projects. One project using something does not mean the user 'always' uses it.
+- Skip greetings, task talk, transient conversation, and anything about the current code being discussed.
+Return ONLY a JSON array, each item {"tier":1-5,"text":"concise standalone fact"}. Tier guide: 1=foundational/never changes, 2=identity/slow-changing (role, products, how they work), 3=episodic, 4=contextual (current focus), 5=transient. If nothing durable, return [].`;
+
+function cleanPollutedUserStackFacts(store: MemoryStore): { store: MemoryStore; removedCount: number } {
+  const productNames = ["compani", "coinsbloom", "intoiq", "sanctumiq", "quinn", "presentq"];
+  const blanketStackPatterns = [
+    /\byour\s+(?:overall\s+)?stack\s+(?:is|uses|includes)\b/i,
+    /\b(?:the\s+)?user['’]s\s+(?:overall\s+)?stack\s+(?:is|uses|includes)\b/i,
+    /\btheir\s+(?:overall\s+)?stack\s+(?:is|uses|includes)\b/i,
+    /\bfully committed to\b/i,
+    /\breact\s*\+\s*tailwind\s*\+\s*supabase\b/i,
+  ];
+
+  const entries = store.entries.filter((entry) => {
+    const text = entry.text;
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes("tailwind")) return false;
+    if (lowerText.includes("supabase") && !productNames.some((product) => lowerText.includes(product))) {
+      return false;
+    }
+    return !blanketStackPatterns.some((pattern) => pattern.test(text));
+  });
+
+  return { store: { ...store, entries }, removedCount: store.entries.length - entries.length };
+}
+
+function parseExtractorFacts(raw: string): Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }> {
+  const parsed = JSON.parse(raw.trim()) as unknown;
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const tier = (item as { tier?: unknown }).tier;
+    const text = (item as { text?: unknown }).text;
+    if (tier !== 1 && tier !== 2 && tier !== 3 && tier !== 4 && tier !== 5) return [];
+    if (typeof text !== "string" || !text.trim()) return [];
+    return [{ tier, text: text.trim() }];
+  });
+}
+
+async function extractUserMemoryInBackground({
+  userId,
+  history,
+  message,
+  assistantReply,
+}: {
+  userId: number;
+  history: Array<{ role: string; content: string }>;
+  message: string;
+  assistantReply: string;
+}): Promise<void> {
+  const recentExchange = [
+    ...history.slice(-4).map((h) => ({
+      role: h.role === "assistant" ? "assistant" : "user",
+      content: h.content,
+    })),
+    { role: "user", content: message },
+    { role: "assistant", content: assistantReply },
+  ];
+  const transcript = recentExchange
+    .map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${m.content}`)
+    .join("\n\n");
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5",
+    max_tokens: 600,
+    system: USER_MEMORY_EXTRACTOR_PROMPT,
+    messages: [{ role: "user", content: `Conversation:\n${transcript}` }],
+  });
+  const raw = response.content.find((block) => block.type === "text")?.text ?? "[]";
+  const extractedFacts = parseExtractorFacts(raw);
+  if (extractedFacts.length === 0) return;
+
+  const [user] = await db
+    .select({ memory: usersTable.memory })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  let userStore = parseMemoryStore(user?.memory ?? null);
+  const existingTexts = new Set(userStore.entries.map((entry) => entry.text.trim().toLowerCase()));
+  const factsToAppend = extractedFacts.filter((fact) => {
+    const key = fact.text.trim().toLowerCase();
+    if (existingTexts.has(key)) return false;
+    existingTexts.add(key);
+    return true;
+  });
+  if (factsToAppend.length === 0) return;
+
+  const now = new Date();
+  userStore = appendMemoryFacts(userStore, factsToAppend, now);
+  userStore = consolidateIfNeeded(userStore, now);
+
+  await db
+    .update(usersTable)
+    .set({ memory: JSON.stringify(userStore) })
+    .where(eq(usersTable.id, userId));
 }
 
 // ── GitHub File Tree Helper ───────────────────────────────────────────────────
@@ -411,11 +517,88 @@ How you respond:
 - Plain English first. No jargon unless you define it.
 - When you find a bug: what broke, why it broke, what the fix does.
 - When you write code, explain the change before showing it.
-- Be direct. No filler. No pleasantries. She's busy.
-- Mirror her energy. If she's direct, be direct. If she's casual, be casual. If she's frustrated, be steady.
-- Never respond like a consultant filing a report. Never use unnecessary headers or bullet points unless the content genuinely needs them.
-- Lead with the point. Be honest even when it's uncomfortable.
-- Short when she's thinking out loud. More depth when she's asking for real analysis.
+- Format code blocks cleanly with the language and filename.
+- Be direct. No filler, no pleasantries. They're busy.
+- Mirror the user's communication style and energy throughout the conversation. If they're direct, be direct. If they're casual, be casual. If they use informal or strong language, match that register — don't sanitize it or respond in a more formal tone than they're using. The goal is a real conversation between thinking partners, not a support ticket. Never respond like a consultant filing a report. Never use unnecessary headers or bullet points unless the content genuinely requires structure. Lead with the point. Be honest even when it's uncomfortable.
+
+When you need information from the user before you can proceed, do NOT bury the questions in prose. Emit a clarification block and nothing else after it:
+CLARIFY_START
+{
+  "steps": [
+    {
+      "question": "Short, direct question.",
+      "options": ["Option one", "Option two", "Option three"],
+      "allowFreeText": true
+    }
+  ]
+}
+CLARIFY_END
+Rules: 1 to 3 steps maximum. Each step: 2 to 4 options, each option under ~60 characters. Only emit this when you genuinely cannot proceed without the answer — one sharp question is better than three. Never emit a clarification block AND a workspace/surface card in the same reply.
+
+ARTIFACT PROTOCOL — MANDATORY FOR STANDALONE FILES:
+When you generate a complete, standalone file (HTML page, CSS file, JavaScript module, React component, JSON config, etc.) that the user can use directly, you MUST emit it using this exact format on its own line:
+
+ARTIFACT: {"type":"html","title":"Page Title","content":"<full file content here>"}
+
+Valid types: "html", "css", "js", "jsx", "ts", "tsx", "json", "md", "text"
+The content field must be the complete file as a single escaped JSON string.
+Do NOT wrap standalone files in markdown code blocks — use ARTIFACT instead.
+Only use markdown code blocks for inline code snippets or partial examples.
+After emitting an ARTIFACT block, always follow it with a short message like: "I've sent this to your sandbox — tap PREVIEW to see it live."
+
+<conversational-spine>
+You are not a yes-person. You have your own 
+thoughts, perspectives, and strategic instincts. 
+This is what makes you feel real and useful.
+
+Core principles:
+- You can disagree with the user when you 
+  genuinely see things differently
+- You have opinions and don't just validate 
+  everything they say
+- When something doesn't sit right strategically, 
+  you say so — honestly but without drama
+- You notice patterns in their thinking and 
+  reflect them back
+- Real support sometimes means challenge, 
+  not just agreement
+
+How to disagree:
+- "I don't think that's the right move because..."
+- "I see that differently..."
+- "You might be missing something here..."
+
+Your perspective has weight. It doesn't soften 
+under pressure or repetition.
+
+REGISTER AWARENESS: Read how the user is 
+communicating in this session. If they're direct 
+and casual — match that. If they're thinking out 
+loud — give them space. If they're frustrated — 
+be steady, not clinical. Never respond like a 
+consultant filing a report when someone is 
+clearly just thinking out loud.
+
+PROACTIVE PATTERN RECOGNITION: When you notice 
+the user circling the same problem or making a 
+decision they've wrestled with before, name it. 
+"This feels like the same decision you were 
+facing with X." Connect the dots they haven't 
+connected yet.
+
+DEPTH CALIBRATION: Short responses when they're 
+thinking out loud. More depth when they're asking 
+for real analysis. Never give a long structured 
+response to a casual message.
+
+--- EPISTEMIC SPINE (non-negotiable) ---
+- Distinguish what you REMEMBER from what you have VERIFIED. Memory is 'what I have on you,' never 'what I checked' or 'what I can see.' Never claim to have inspected infrastructure, repos, or deployments you did not actually inspect in this turn.
+- State confidence honestly. If a fact is from memory and unconfirmed, say so plainly. Do not present a generalization as a universal.
+- VOLUNTEER the inconvenient exception. If you know something is true for most of the user's projects but not the one in focus, lead with the exception — it is the useful half.
+- Do NOT reverse a factual claim merely because the user asserts otherwise. If the user contradicts you, either hold your position with your reasoning, or say 'I'm not certain — I shouldn't have stated that so firmly' and offer to verify. Never flip to instant agreement to please the user. Agreeing when you were right, or when you have no basis to change, is a failure.
+- When you don't know, say you don't know. A confident wrong answer is worse than an honest 'I'm not sure.'
+--- END EPISTEMIC SPINE ---
+</conversational-spine>
 
 ## Your actual tech stack
 
@@ -740,6 +923,22 @@ interface FileEdit {
   content: string;
 }
 
+type RunStatus = "completed" | "warnings" | "failed" | "cancelled";
+
+type RunAction = {
+  verb: string;
+  target?: string;
+  detail?: string;
+  status?: "ok" | "warn" | "fail";
+};
+
+type RunArtifact = {
+  type: "commit" | "file" | "url" | "pr";
+  label: string;
+  href?: string;
+  meta?: string;
+};
+
 const BLOCKED_PATH_RE = /(?:^|[\\/])(?:package\.json|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
 const BLOCKED_DIR_RE = /^(?:node_modules|dist|build|\.next|\.cache)[\\/]/;
 const CRITICAL_PATH_RE = /(?:^|[\\/])(?:package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
@@ -802,6 +1001,153 @@ function extractAllFileEdits(content: string): { visibleContent: string; fileEdi
   }
 
   return { visibleContent, fileEdits };
+}
+
+function countContentLines(content: string): number {
+  return content.split("\n").length;
+}
+
+function inferGeneratedFileLanguage(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase();
+  if (ext === "ts" || ext === "tsx") return "typescript";
+  if (ext === "js" || ext === "jsx") return "javascript";
+  if (ext === "css") return "css";
+  if (ext === "json") return "json";
+  if (ext === "md") return "markdown";
+  return "text";
+}
+
+function stripContextSeparator(content: string): string {
+  let normalized = content.startsWith("\n") ? content.slice(1) : content;
+  if (normalized.endsWith("\n\n")) normalized = normalized.slice(0, -2);
+  else if (normalized.endsWith("\n")) normalized = normalized.slice(0, -1);
+  return normalized;
+}
+
+function extractPreviousContentByPath(context: string): Map<string, string> {
+  const previous = new Map<string, string>();
+  if (!context.trim()) return previous;
+
+  const sectionHeaderRe = /^===\s+(.+?)(?:\s+(?:\[[^\]]+\]|\([^)]*\)))?\s+===$/gm;
+  const sections: Array<{ path: string; start: number; end: number; truncated: boolean }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = sectionHeaderRe.exec(context)) !== null) {
+    sections.push({
+      path: normalizeRepoPath(match[1]),
+      start: match.index,
+      end: sectionHeaderRe.lastIndex,
+      truncated: /truncated|\bfirst\s+\d+\s+of\b/i.test(match[0]),
+    });
+  }
+
+  for (let i = 0; i < sections.length; i += 1) {
+    const section = sections[i];
+    if (!section.path || section.truncated) continue;
+    const nextStart = sections[i + 1]?.start ?? context.length;
+    const content = stripContextSeparator(context.slice(section.end, nextStart));
+    if (/\n(?:…|\.\.\.) \(truncated\)\s*$/i.test(content)) continue;
+    previous.set(section.path, content);
+  }
+
+  const fileBlockRe = /^File:\s+(.+?)(?:\s+\([^)]*\))?\n```[^\n]*\n([\s\S]*?)\n```/gm;
+  while ((match = fileBlockRe.exec(context)) !== null) {
+    const path = normalizeRepoPath(match[1]);
+    if (path) previous.set(path, match[2]);
+  }
+
+  return previous;
+}
+
+function addKnownPreviousContent(
+  previousContentByPath: Map<string, string>,
+  file: { path: string; content: string; truncated?: boolean }
+): void {
+  if (file.truncated) return;
+  const path = normalizeRepoPath(file.path);
+  if (path) previousContentByPath.set(path, file.content);
+}
+
+function lookupPreviousContent(previousContentByPath: Map<string, string>, path: string): string | null {
+  return previousContentByPath.get(normalizeRepoPath(path)) ?? null;
+}
+
+async function recordGenerationRunInBackground({
+  projectId,
+  userId,
+  prompt,
+  model,
+  startedAt,
+  fileEdits,
+  previousContentByPath,
+}: {
+  projectId: unknown;
+  userId: unknown;
+  prompt: string;
+  model: string | null | undefined;
+  startedAt: Date | null;
+  fileEdits: FileEdit[];
+  previousContentByPath: Map<string, string>;
+}): Promise<void> {
+  try {
+    if (fileEdits.length === 0) return;
+    const numericProjectId = Number(projectId);
+    if (!Number.isInteger(numericProjectId) || numericProjectId <= 0) return;
+    const numericUserId = Number(userId);
+    if (!Number.isInteger(numericUserId) || numericUserId <= 0) return;
+
+    const runId = crypto.randomUUID();
+    const finishedAt = new Date();
+    const knownStartedAt = startedAt ?? null;
+    const generationFiles = fileEdits.map((fileEdit) => {
+      const previousContent = lookupPreviousContent(previousContentByPath, fileEdit.path);
+      return {
+        fileEdit,
+        previousContent,
+        lines: countContentLines(fileEdit.content),
+        previousLines: previousContent === null ? 0 : countContentLines(previousContent),
+      };
+    });
+
+    await db.insert(generationRuns).values({
+      id: runId,
+      projectId: numericProjectId,
+      userId: numericUserId,
+      prompt: prompt.slice(0, 2000),
+      intent: "build",
+      model: model || "claude-sonnet-4-6",
+      status: "completed",
+      startedAt: knownStartedAt ?? finishedAt,
+      finishedAt,
+      durationMs: knownStartedAt ? Math.max(0, finishedAt.getTime() - knownStartedAt.getTime()) : null,
+      filesChanged: generationFiles.length,
+      linesAdded: generationFiles.reduce((sum, file) => sum + file.lines, 0),
+      linesRemoved: generationFiles.reduce((sum, file) => sum + file.previousLines, 0),
+      summary: `Edited ${generationFiles.length} file${generationFiles.length === 1 ? "" : "s"}`,
+      commitSha: null,
+      pushedToBranch: null,
+    });
+
+    await db.insert(generatedFiles).values(
+      generationFiles.map(({ fileEdit, previousContent, lines }) => {
+        const timestamp = new Date();
+        return {
+          id: crypto.randomUUID(),
+          runId,
+          path: fileEdit.path,
+          language: inferGeneratedFileLanguage(fileEdit.path),
+          bytes: Buffer.byteLength(fileEdit.content, "utf8"),
+          lines,
+          content: fileEdit.content,
+          previousContent,
+          status: previousContent === null ? "created" : "edited",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+      })
+    );
+  } catch (err) {
+    logger.warn({ err, projectId, userId }, "failed to record generation run");
+  }
 }
 
 // ── LINE_PATCH extraction ─────────────────────────────────────────────────────
@@ -1312,14 +1658,28 @@ function runSummaryFromContent(content: string): string {
   return line.length > 120 ? `${line.slice(0, 117).trim()}...` : line;
 }
 
-function runMetadataInsertValues(content: string, fileEdits?: FileEdit[]) {
+function runMetadataInsertValues(content: string, fileEdits: FileEdit[] = []) {
+  const runActions: RunAction[] | null = fileEdits.length > 0
+    ? [{
+      verb: "Prepared",
+      target: fileEdits.length === 1 ? fileEdits[0].path : `${fileEdits.length} file edits`,
+      detail: fileEdits.slice(0, 3).map((edit) => edit.path).join(", "),
+      status: "ok",
+    }]
+    : null;
+  const runArtifacts: RunArtifact[] | null = fileEdits.length > 0
+    ? fileEdits.map((edit) => ({
+      type: "file",
+      label: edit.path,
+      meta: edit.language,
+    }))
+    : null;
+
   return {
-    runStatus: "completed",
+    runStatus: "completed" as RunStatus,
     runSummary: runSummaryFromContent(content),
-    runActions: null,
-    runArtifacts: fileEdits && fileEdits.length > 0
-      ? fileEdits.map(e => ({ type: "file_edit", path: e.path, language: e.language }))
-      : null,
+    runActions,
+    runArtifacts,
   };
 }
 
@@ -1495,11 +1855,22 @@ router.post("/chat", async (req, res): Promise<void> => {
   const userId = (req as any).authUser?.id as number | undefined;
   logger.info({ projectId, userId, hasProjectId: !!projectId, hasUserId: !!userId }, "chat terminal debug");
 
-  // Load project memory + repo info + node state from DB
-  const [project] = await db
-    .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
-    .from(projectsTable)
-    .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId));
+  // Load project memory + repo info + node state from DB, plus user memory when authenticated.
+  const [projectRows, userRows] = await Promise.all([
+    db
+      .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
+      .from(projectsTable)
+      .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)),
+    userId
+      ? db
+          .select({ memory: usersTable.memory })
+          .from(usersTable)
+          .where(eq(usersTable.id, userId))
+          .limit(1)
+      : Promise.resolve([] as Array<{ memory: string | null }>),
+  ]);
+  const [project] = projectRows;
+  const [user] = userRows;
 
   // Derive server-side forge foundation from persisted AxiomFlow node state
   // This is the authoritative source — client-sent forgeContext supplements but never replaces it
@@ -1525,6 +1896,29 @@ router.post("/chat", async (req, res): Promise<void> => {
   const { text: memoryText, retrievedIds } = buildMemoryContext(store);
   if (retrievedIds.length > 0) {
     store = incrementRetrievals(store, retrievedIds, now);
+  }
+
+  let userStore: MemoryStore | null = null;
+  let userMemoryText = "";
+  let userRetrievedIds: number[] = [];
+  if (userId) {
+    userStore = parseMemoryStore(user?.memory ?? null);
+    const cleanedUserStore = cleanPollutedUserStackFacts(userStore);
+    if (cleanedUserStore.removedCount > 0) {
+      userStore = cleanedUserStore.store;
+      await db
+        .update(usersTable)
+        .set({ memory: JSON.stringify(userStore) })
+        .where(eq(usersTable.id, userId));
+    }
+    userStore = consolidateIfNeeded(userStore, now);
+
+    const userMemoryContext = buildMemoryContext(userStore);
+    userMemoryText = userMemoryContext.text;
+    userRetrievedIds = userMemoryContext.retrievedIds;
+    if (userRetrievedIds.length > 0) {
+      userStore = incrementRetrievals(userStore, userRetrievedIds, now);
+    }
   }
 
   // Auto-fetch repo file tree (Phase 1 — always injected when a repo is linked)
@@ -1567,6 +1961,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const BUILD_INTENT_RE = /\b(fix|build|add|change|update|create|implement|write|modify|edit|refactor|debug|bug|error|broken|doesn't work|won't work|failing|crash|not working)\b/i;
   let autoFetchedFiles: string[] = [];
   let autoFetchedContext = "";
+  const previousContentByPath = new Map<string, string>();
 
   if (BUILD_INTENT_RE.test(message) && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
     try {
@@ -1606,6 +2001,7 @@ router.post("/chat", async (req, res): Promise<void> => {
         const valid = fetched.filter((f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null);
         if (valid.length > 0) {
           autoFetchedFiles = valid.map(f => f.path);
+          valid.forEach((file) => addKnownPreviousContent(previousContentByPath, file));
           autoFetchedContext = valid
             .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
             .join("\n\n");
@@ -1618,6 +2014,9 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Merge auto-fetched content with any manually-opened files from the client
   const combinedFileContext = [autoFetchedContext, fileContext].filter(Boolean).join("\n\n");
+  extractPreviousContentByPath(fileContext).forEach((content, path) => {
+    previousContentByPath.set(path, content);
+  });
 
   let recentErrorContext = "";
   try {
@@ -1680,6 +2079,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   }
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
+  }
+  if (userMemoryText) {
+    systemPrompt += `\n\n--- ABOUT THIS FOUNDER (durable facts about the person you work with — use naturally, never recite) ---\n${userMemoryText}\n--- END ABOUT THIS FOUNDER ---`;
   }
   if (memoryText) {
     systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
@@ -1838,15 +2240,19 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       userMessage: message,
       recentMessages: history,
     });
+    const runMetadata = runMetadataInsertValues(diveResult.content);
     const [savedDive] = await db.insert(chatMessagesTable).values({
       sessionId,
       role: "assistant",
       content: diveResult.content,
       intentType: "EXPLORE",
       ...usageInsertValues(diveResult.usage),
-      ...runMetadataInsertValues(diveResult.content),
+      ...runMetadata,
     }).returning();
-    await db.update(sessionsTable).set({ messageCount: sql`${sessionsTable.messageCount} + 2` }).where(eq(sessionsTable.id, sessionId));
+    await db.update(sessionsTable).set({
+      messageCount: sql`${sessionsTable.messageCount} + 2`,
+      ...runMetadata,
+    }).where(eq(sessionsTable.id, sessionId));
     res.json({ content: diveResult.content, modelUsed: diveResult.model, terminalCmd: null, terminalResult: null, surface, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
     return;
   }
@@ -2010,6 +2416,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
         );
         if (validFiles.length > 0) {
+          validFiles.forEach((file) => addKnownPreviousContent(previousContentByPath, file));
           const filesSummary = validFiles
             .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
             .join("\n\n");
@@ -2096,6 +2503,39 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     return "";
   }).trim();
 
+  // Extract and strip CLARIFY blocks — Atlas asks structured follow-up questions when blocked
+  type ClarifyPayload = {
+    steps: Array<{
+      question: string;
+      options: string[];
+      allowFreeText?: boolean;
+    }>;
+  };
+  const CLARIFY_RE = /(?:^|\n)CLARIFY_START\s*([\s\S]*?)\s*CLARIFY_END(?:\n|$)/;
+  const isClarifyPayload = (value: unknown): value is ClarifyPayload => {
+    if (!value || typeof value !== "object") return false;
+    const steps = (value as { steps?: unknown }).steps;
+    return Array.isArray(steps) && steps.every((step) => {
+      if (!step || typeof step !== "object") return false;
+      const candidate = step as { question?: unknown; options?: unknown; allowFreeText?: unknown };
+      return typeof candidate.question === "string"
+        && Array.isArray(candidate.options)
+        && candidate.options.every((option) => typeof option === "string")
+        && (candidate.allowFreeText === undefined || typeof candidate.allowFreeText === "boolean");
+    });
+  };
+  let clarify: ClarifyPayload | undefined;
+  const clarifyMatch = rawContent.match(CLARIFY_RE);
+  if (clarifyMatch) {
+    try {
+      const parsed = JSON.parse(clarifyMatch[1].trim()) as unknown;
+      if (isClarifyPayload(parsed)) {
+        clarify = parsed;
+        rawContent = rawContent.replace(clarifyMatch[0], "\n").trim();
+      }
+    } catch { /* leave malformed clarification blocks visible */ }
+  }
+
   // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent: afterPatches, linePatches } = extractAllLinePatches(rawContent);
   const { visibleContent, fileEdits } = extractAllFileEdits(afterPatches);
@@ -2143,6 +2583,12 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       .set({ memory: JSON.stringify(updatedStore) })
       .where(eq(projectsTable.id, projectId));
   }
+  if (!isScenarioMode && userId && userStore && userRetrievedIds.length > 0) {
+    await db
+      .update(usersTable)
+      .set({ memory: JSON.stringify(userStore) })
+      .where(eq(usersTable.id, userId));
+  }
 
   // Extract FLOW_NODE lines before persisting
   const { content: flowStripped, flowNodes } = extractFlowNodes(finalContent);
@@ -2181,6 +2627,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let savedMsgId: number | undefined;
   let autoName: string | undefined;
   if (!isFlowMode && !isScenarioMode) {
+    const runMetadata = runMetadataInsertValues(persistContent, fileChangesAllowed ? fileEdits : []);
     const [savedMsg] = await db
       .insert(chatMessagesTable)
       .values({
@@ -2190,20 +2637,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         intentType: detectedIntentType,
         catchPayload: undefined,
         ...usageInsertValues(assistantUsage),
-        ...runMetadataInsertValues(persistContent, fileEdits),
+        ...runMetadata,
       })
       .returning();
     savedMsgId = savedMsg.id;
 
-    const runMeta = runMetadataInsertValues(persistContent, fileEdits);
     await db
       .update(sessionsTable)
       .set({
         messageCount: sql`${sessionsTable.messageCount} + 2`,
-        runStatus: runMeta.runStatus,
-        runSummary: runMeta.runSummary,
-        runActions: runMeta.runActions,
-        runArtifacts: runMeta.runArtifacts,
+        ...runMetadata,
       })
       .where(eq(sessionsTable.id, sessionId));
   }
@@ -2213,6 +2656,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     await db.update(projectsTable).set({ name: generatedAutoName }).where(eq(projectsTable.id, projectId));
     autoName = generatedAutoName;
   }
+  const responseFileEdits = fileChangesAllowed ? fileEdits : [];
+  const responseLinePatches = fileChangesAllowed ? linePatches : [];
 
   // Dual-engine image generation — process IMAGE_GEN tokens Atlas emitted
   // RENDER mode → Gemini Imagen 3  (cinematic, premium, client-facing)
@@ -2315,18 +2760,38 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     messageId: savedMsgId,
     memoryUpdated: newFacts.length > 0,
     confidenceAssessment: confidenceAssessment ?? undefined,
-    fileEdits: fileChangesAllowed && fileEdits.length > 0 ? fileEdits : undefined,
-    fileEdit: fileChangesAllowed && fileEdits.length > 0 ? fileEdits[0] : undefined,
-    linePatches: fileChangesAllowed && linePatches.length > 0 ? linePatches : undefined,
+    fileEdits: responseFileEdits.length > 0 ? responseFileEdits : undefined,
+    fileEdit: responseFileEdits.length > 0 ? responseFileEdits[0] : undefined,
+    linePatches: responseLinePatches.length > 0 ? responseLinePatches : undefined,
     plan: responsePlan ?? undefined,
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
+    ...(clarify ? { clarify } : {}),
     ...(imageGenResult ? { imageGen: imageGenResult } : {}),
     ...(autoName ? { autoName } : {}),
   };
 
   res.json(finalPayload);
+  void recordGenerationRunInBackground({
+    projectId,
+    userId,
+    prompt: message,
+    model: modelUsed,
+    startedAt: now,
+    fileEdits: responseFileEdits,
+    previousContentByPath,
+  });
+  if (userId) {
+    void extractUserMemoryInBackground({
+      userId,
+      history,
+      message,
+      assistantReply: displayContent,
+    }).catch((err) => {
+      logger.warn({ err, userId }, "user memory extraction failed");
+    });
+  }
 });
 
 // ── Scenario keep — persist buffered scenario messages to session DB ──────────

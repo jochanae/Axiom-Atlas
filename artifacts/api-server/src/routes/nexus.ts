@@ -789,6 +789,7 @@ async function updateSessionRunMetadata(sessionId: number | null, runMetadata: N
       totalOutputTokens: sql`coalesce(${sessionsTable.totalOutputTokens}, 0) + ${runMetadata.outputTokens ?? 0}`,
       totalCostUsd: sql`coalesce(${sessionsTable.totalCostUsd}, 0) + ${runMetadata.costUsd ?? 0}`,
       totalExecutionMs: sql`coalesce(${sessionsTable.totalExecutionMs}, 0) + ${runMetadata.executionTimeMs ?? 0}`,
+      runStatus: runMetadata.runStatus,
       runSummary: runMetadata.runSummary ?? null,
       runActions: runMetadata.runActions ?? null,
       runArtifacts: runMetadata.runArtifacts ?? null,

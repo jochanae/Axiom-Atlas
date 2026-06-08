@@ -2,6 +2,7 @@ export * from "./projects";
 export * from "./sessions";
 export * from "./chat_messages";
 export * from "./entries";
+export * from "./generation";
 export * from "./conversations";
 export * from "./messages";
 export * from "./thoughts";

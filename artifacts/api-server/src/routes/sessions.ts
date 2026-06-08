@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, and, desc } from "drizzle-orm";
+import { eq, sql, and, desc, isNotNull } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { db, sessionsTable, chatMessagesTable, projectsTable } from "@workspace/db";
@@ -92,6 +92,49 @@ router.get("/projects/:projectId/sessions", async (req, res): Promise<void> => {
     ...s,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
+  })));
+});
+
+router.get("/projects/:projectId/runs", async (req, res): Promise<void> => {
+  const params = ListSessionsParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await projectBelongsToUser(params.data.projectId, userId))) {
+    res.status(404).json({ error: "Project not found" }); return;
+  }
+
+  const runs = await db
+    .select({
+      id: sessionsTable.id,
+      projectId: sessionsTable.projectId,
+      title: sessionsTable.title,
+      mode: sessionsTable.mode,
+      status: sessionsTable.status,
+      messageCount: sessionsTable.messageCount,
+      totalInputTokens: sessionsTable.totalInputTokens,
+      totalOutputTokens: sessionsTable.totalOutputTokens,
+      totalCostUsd: sessionsTable.totalCostUsd,
+      totalExecutionMs: sessionsTable.totalExecutionMs,
+      runStatus: sessionsTable.runStatus,
+      runSummary: sessionsTable.runSummary,
+      runActions: sessionsTable.runActions,
+      runArtifacts: sessionsTable.runArtifacts,
+      createdAt: sessionsTable.createdAt,
+      updatedAt: sessionsTable.updatedAt,
+    })
+    .from(sessionsTable)
+    .where(and(
+      eq(sessionsTable.projectId, params.data.projectId),
+      isNotNull(sessionsTable.runStatus),
+    ))
+    .orderBy(desc(sessionsTable.updatedAt))
+    .limit(50);
+
+  res.json(runs.map(run => ({
+    ...run,
+    totalCostUsd: run.totalCostUsd == null ? null : Number(run.totalCostUsd),
+    createdAt: run.createdAt.toISOString(),
+    updatedAt: run.updatedAt.toISOString(),
   })));
 });
 
