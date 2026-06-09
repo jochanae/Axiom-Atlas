@@ -85,17 +85,17 @@ async function getProject(projectId: number, userId: number) {
 async function resolveIdeaModeSession(projectId: number, requestedSessionId: number | null) {
   if (requestedSessionId) {
     const [session] = await db
-      .select({ id: sessionsTable.id, ideaMode: sessionsTable.ideaMode })
+      .select({ id: sessionsTable.id, ideaMode: (sessionsTable as any).ideaMode })
       .from(sessionsTable)
       .where(and(eq(sessionsTable.id, requestedSessionId), eq(sessionsTable.projectId, projectId)))
       .limit(1);
-    return session?.ideaMode ? session.id : null;
+    return (session as any)?.ideaMode ? session.id : null;
   }
 
   const [session] = await db
     .select({ id: sessionsTable.id })
     .from(sessionsTable)
-    .where(and(eq(sessionsTable.projectId, projectId), eq(sessionsTable.ideaMode, true)))
+    .where(and(eq(sessionsTable.projectId, projectId), eq((sessionsTable as any).ideaMode, true)))
     .orderBy(desc(sessionsTable.updatedAt))
     .limit(1);
   return session?.id ?? null;

@@ -111,21 +111,21 @@ router.get("/projects/:projectId/runs", async (req, res): Promise<void> => {
       mode: sessionsTable.mode,
       status: sessionsTable.status,
       messageCount: sessionsTable.messageCount,
-      totalInputTokens: sessionsTable.totalInputTokens,
-      totalOutputTokens: sessionsTable.totalOutputTokens,
-      totalCostUsd: sessionsTable.totalCostUsd,
-      totalExecutionMs: sessionsTable.totalExecutionMs,
-      runStatus: sessionsTable.runStatus,
-      runSummary: sessionsTable.runSummary,
-      runActions: sessionsTable.runActions,
-      runArtifacts: sessionsTable.runArtifacts,
+      totalInputTokens: (sessionsTable as any).totalInputTokens,
+      totalOutputTokens: (sessionsTable as any).totalOutputTokens,
+      totalCostUsd: (sessionsTable as any).totalCostUsd,
+      totalExecutionMs: (sessionsTable as any).totalExecutionMs,
+      runStatus: (sessionsTable as any).runStatus,
+      runSummary: (sessionsTable as any).runSummary,
+      runActions: (sessionsTable as any).runActions,
+      runArtifacts: (sessionsTable as any).runArtifacts,
       createdAt: sessionsTable.createdAt,
       updatedAt: sessionsTable.updatedAt,
     })
     .from(sessionsTable)
     .where(and(
       eq(sessionsTable.projectId, params.data.projectId),
-      isNotNull(sessionsTable.runStatus),
+      isNotNull((sessionsTable as any).runStatus),
     ))
     .orderBy(desc(sessionsTable.updatedAt))
     .limit(50);
@@ -148,17 +148,47 @@ router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => 
     res.status(404).json({ error: "Project not found" }); return;
   }
   const { seedMessage, seedIntentType, ...sessionFields } = parsed.data;
-  const [session] = await db.insert(sessionsTable).values({
-    projectId: params.data.projectId,
-    ...sessionFields,
-  }).returning();
+  let session: typeof sessionsTable.$inferInsert | undefined;
+  try {
+    [session] = await db.insert(sessionsTable).values({
+      projectId: params.data.projectId,
+      ...sessionFields,
+    }).returning();
+  } catch (dbErr: any) {
+    const errMsg = dbErr?.message ?? "";
+    const isMissingColumn = errMsg.includes("column") && errMsg.includes("does not exist");
+    if (isMissingColumn) {
+      logger.warn({ dbErr: errMsg }, "DB schema behind on session insert — falling back to core insert");
+      [session] = await db.insert(sessionsTable).values({
+        projectId: params.data.projectId,
+        title: (sessionFields as any).title ?? "Untitled",
+      }).returning();
+    } else {
+      throw dbErr;
+    }
+  }
   if (seedMessage && seedMessage.trim().length > 0) {
-    await db.insert(chatMessagesTable).values({
-      sessionId: session.id,
-      role: "assistant",
-      content: seedMessage,
-      intentType: seedIntentType ?? "handover_snapshot",
-    });
+    try {
+      await db.insert(chatMessagesTable).values({
+        sessionId: session.id,
+        role: "assistant",
+        content: seedMessage,
+        intentType: seedIntentType ?? "handover_snapshot",
+      });
+    } catch (dbErr: any) {
+      const errMsg = dbErr?.message ?? "";
+      const isMissingColumn = errMsg.includes("column") && errMsg.includes("does not exist");
+      if (isMissingColumn) {
+        logger.warn({ dbErr: errMsg }, "DB schema behind on seed message insert — falling back to core insert");
+        await db.insert(chatMessagesTable).values({
+          sessionId: session.id,
+          role: "assistant",
+          content: seedMessage,
+        });
+      } else {
+        throw dbErr;
+      }
+    }
     await db
       .update(sessionsTable)
       .set({ messageCount: sql`${sessionsTable.messageCount} + 1` })
@@ -298,15 +328,15 @@ router.get("/projects/:projectId/runs", async (req, res): Promise<void> => {
     .select({
       id: sessionsTable.id,
       title: sessionsTable.title,
-      runStatus: sessionsTable.runStatus,
-      runSummary: sessionsTable.runSummary,
-      runActions: sessionsTable.runActions,
-      runArtifacts: sessionsTable.runArtifacts,
+      runStatus: (sessionsTable as any).runStatus,
+      runSummary: (sessionsTable as any).runSummary,
+      runActions: (sessionsTable as any).runActions,
+      runArtifacts: (sessionsTable as any).runArtifacts,
       messageCount: sessionsTable.messageCount,
-      totalInputTokens: sessionsTable.totalInputTokens,
-      totalOutputTokens: sessionsTable.totalOutputTokens,
-      totalCostUsd: sessionsTable.totalCostUsd,
-      totalExecutionMs: sessionsTable.totalExecutionMs,
+      totalInputTokens: (sessionsTable as any).totalInputTokens,
+      totalOutputTokens: (sessionsTable as any).totalOutputTokens,
+      totalCostUsd: (sessionsTable as any).totalCostUsd,
+      totalExecutionMs: (sessionsTable as any).totalExecutionMs,
       createdAt: sessionsTable.createdAt,
       updatedAt: sessionsTable.updatedAt,
     })

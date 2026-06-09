@@ -284,7 +284,7 @@ async function extractUserMemoryInBackground({
   if (extractedFacts.length === 0) return;
 
   const [user] = await db
-    .select({ memory: usersTable.memory })
+    .select({ memory: (usersTable as any).memory })
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
@@ -1863,7 +1863,7 @@ router.post("/chat", async (req, res): Promise<void> => {
       .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)),
     userId
       ? db
-          .select({ memory: usersTable.memory })
+          .select({ memory: (usersTable as any).memory })
           .from(usersTable)
           .where(eq(usersTable.id, userId))
           .limit(1)
@@ -2345,12 +2345,28 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   ];
 
   if (!isFlowMode && !isScenarioMode) {
-    await db.insert(chatMessagesTable).values({
-      sessionId,
-      role: "user",
-      content: message,
-      intentType: body.mode ?? null,
-    });
+    try {
+      await db.insert(chatMessagesTable).values({
+        sessionId,
+        role: "user",
+        content: message,
+        intentType: body.mode ?? null,
+      });
+    } catch (dbErr: any) {
+      const errMsg = dbErr?.message ?? "";
+      const isMissingColumn = errMsg.includes("column") && errMsg.includes("does not exist");
+      if (isMissingColumn) {
+        logger.warn({ dbErr: errMsg }, "DB schema behind on user message insert — falling back to core insert");
+        await db.insert(chatMessagesTable).values({
+          sessionId,
+          role: "user",
+          content: message,
+          intentType: null,
+        });
+      } else {
+        throw dbErr;
+      }
+    }
   }
 
   // Auto-name: on first message, generate a real project name from the user's intent.
@@ -2586,7 +2602,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   if (!isScenarioMode && userId && userStore && userRetrievedIds.length > 0) {
     await db
       .update(usersTable)
-      .set({ memory: JSON.stringify(userStore) })
+      .set({ memory: JSON.stringify(userStore) } as any)
       .where(eq(usersTable.id, userId));
   }
 
@@ -2628,27 +2644,52 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let autoName: string | undefined;
   if (!isFlowMode && !isScenarioMode) {
     const runMetadata = runMetadataInsertValues(persistContent, fileChangesAllowed ? fileEdits : []);
-    const [savedMsg] = await db
-      .insert(chatMessagesTable)
-      .values({
-        sessionId,
-        role: "assistant",
-        content: persistContent,
-        intentType: detectedIntentType,
-        catchPayload: undefined,
-        ...usageInsertValues(assistantUsage),
-        ...runMetadata,
-      })
-      .returning();
-    savedMsgId = savedMsg.id;
+    try {
+      const [savedMsg] = await db
+        .insert(chatMessagesTable)
+        .values({
+          sessionId,
+          role: "assistant",
+          content: persistContent,
+          intentType: detectedIntentType,
+          catchPayload: undefined,
+          ...usageInsertValues(assistantUsage),
+          ...runMetadata,
+        })
+        .returning();
+      savedMsgId = savedMsg.id;
 
-    await db
-      .update(sessionsTable)
-      .set({
-        messageCount: sql`${sessionsTable.messageCount} + 2`,
-        ...runMetadata,
-      })
-      .where(eq(sessionsTable.id, sessionId));
+      await db
+        .update(sessionsTable)
+        .set({
+          messageCount: sql`${sessionsTable.messageCount} + 2`,
+          ...runMetadata,
+        })
+        .where(eq(sessionsTable.id, sessionId));
+    } catch (dbErr: any) {
+      const errMsg = dbErr?.message ?? "";
+      const isMissingColumn = errMsg.includes("column") && errMsg.includes("does not exist");
+      if (isMissingColumn) {
+        logger.warn({ dbErr: errMsg }, "DB schema behind — falling back to core insert without run metadata");
+        const [savedMsg] = await db
+          .insert(chatMessagesTable)
+          .values({
+            sessionId,
+            role: "assistant",
+            content: persistContent,
+            intentType: detectedIntentType,
+            catchPayload: undefined,
+          })
+          .returning();
+        savedMsgId = savedMsg.id;
+        await db
+          .update(sessionsTable)
+          .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
+          .where(eq(sessionsTable.id, sessionId));
+      } else {
+        throw dbErr;
+      }
+    }
   }
 
   const generatedAutoName = await autoNamePromise;

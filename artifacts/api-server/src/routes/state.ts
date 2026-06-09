@@ -39,8 +39,8 @@ router.get("/projects/:id/state", async (req, res): Promise<void> => {
         mode: sessionsTable.mode,
         status: sessionsTable.status,
         messageCount: sessionsTable.messageCount,
-        reflectionMode: sessionsTable.reflectionMode,
-        ideaMode: sessionsTable.ideaMode,
+        reflectionMode: (sessionsTable as any).reflectionMode,
+        ideaMode: (sessionsTable as any).ideaMode,
         updatedAt: sessionsTable.updatedAt,
       })
       .from(sessionsTable)

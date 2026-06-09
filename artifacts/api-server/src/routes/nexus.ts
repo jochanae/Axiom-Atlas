@@ -1398,15 +1398,33 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   }
 
   // Persist the user message to the Living Thread
-  await db.insert(nexusMessagesTable).values({
-    userId,
-    role: "user",
-    content: message,
-    projectId: focusProjectId ?? null,
-    sessionId,
-    conversationId: effectiveConversationId,
-    ...(hasMessageType ? { messageType: "message" } : {}),
-  });
+  try {
+    await db.insert(nexusMessagesTable).values({
+      userId,
+      role: "user",
+      content: message,
+      projectId: focusProjectId ?? null,
+      sessionId,
+      conversationId: effectiveConversationId,
+      ...(hasMessageType ? { messageType: "message" } : {}),
+    });
+  } catch (dbErr: any) {
+    const errMsg = dbErr?.message ?? "";
+    const isMissingColumn = errMsg.includes("column") && errMsg.includes("does not exist");
+    if (isMissingColumn) {
+      logger.warn({ dbErr: errMsg }, "DB schema behind on nexus user insert — falling back to core insert");
+      await db.insert(nexusMessagesTable).values({
+        userId,
+        role: "user",
+        content: message,
+        projectId: focusProjectId ?? null,
+        sessionId,
+        conversationId: effectiveConversationId,
+      });
+    } else {
+      throw dbErr;
+    }
+  }
 
   // Set SSE headers
   res.setHeader("Content-Type", "text/event-stream");
@@ -1495,16 +1513,36 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         });
 
     // Persist the assistant response to the Living Thread
-    await db.insert(nexusMessagesTable).values({
-      userId,
-      role: "assistant",
-      content: visibleContent,
-      projectId: focusProjectId ?? null,
-      sessionId,
-      conversationId: effectiveConversationId,
-      ...(hasMessageType ? { messageType: "message" } : {}),
+    try {
+      await db.insert(nexusMessagesTable).values({
+        userId,
+        role: "assistant",
+        content: visibleContent,
+        projectId: focusProjectId ?? null,
+        sessionId,
+        conversationId: effectiveConversationId,
+        ...(hasMessageType ? { messageType: "message" } : {}),
+      });
+    } catch (dbErr: any) {
+      const errMsg = dbErr?.message ?? "";
+      const isMissingColumn = errMsg.includes("column") && errMsg.includes("does not exist");
+      if (isMissingColumn) {
+        logger.warn({ dbErr: errMsg }, "DB schema behind on nexus assistant insert — falling back to core insert");
+        await db.insert(nexusMessagesTable).values({
+          userId,
+          role: "assistant",
+          content: visibleContent,
+          projectId: focusProjectId ?? null,
+          sessionId,
+          conversationId: effectiveConversationId,
+        });
+      } else {
+        throw dbErr;
+      }
+    }
+    await updateSessionRunMetadata(sessionId, runMetadata).catch((err) => {
+      logger.warn({ err }, "updateSessionRunMetadata failed — continuing");
     });
-    await updateSessionRunMetadata(sessionId, runMetadata);
 
     res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
     res.end();

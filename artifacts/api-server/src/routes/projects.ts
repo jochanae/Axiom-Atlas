@@ -210,14 +210,14 @@ router.get("/projects/recent", async (req, res): Promise<void> => {
       id: projectsTable.id,
       name: projectsTable.name,
       status: projectsTable.status,
-      lastOpenedAt: projectsTable.lastOpenedAt,
+      lastOpenedAt: (projectsTable as any).lastOpenedAt,
     })
     .from(projectsTable)
     .where(and(
       eq(projectsTable.userId, userId),
-      sql`${projectsTable.lastOpenedAt} >= now() - (${withinHours}::int * interval '1 hour')`,
+      sql`${(projectsTable as any).lastOpenedAt} >= now() - (${withinHours}::int * interval '1 hour')`,
     ))
-    .orderBy(desc(projectsTable.lastOpenedAt))
+    .orderBy(desc((projectsTable as any).lastOpenedAt))
     .limit(20);
 
   res.json({
@@ -262,7 +262,7 @@ router.get("/projects/:id/map-nodes", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const projectId = params.data.id;
   const [project] = await db
-    .select({ id: projectsTable.id, entityType: projectsTable.entityType })
+    .select({ id: projectsTable.id, entityType: (projectsTable as any).entityType })
     .from(projectsTable)
     .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
     .limit(1);
@@ -272,7 +272,7 @@ router.get("/projects/:id/map-nodes", async (req, res): Promise<void> => {
     return;
   }
 
-  const entityType = project.entityType === "idea" ? "idea" : "project";
+  const entityType = (project as any).entityType === "idea" ? "idea" : "project";
   const nodes: MapNode[] = [];
 
   if (entityType === "project") {
@@ -390,7 +390,7 @@ router.get("/projects/:id/shape", async (req, res): Promise<void> => {
 
   const userId = (req as any).authUser.id as number;
   const [project] = await db
-    .select({ shape: projectsTable.shape })
+    .select({ shape: (projectsTable as any).shape })
     .from(projectsTable)
     .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)))
     .limit(1);
@@ -400,7 +400,7 @@ router.get("/projects/:id/shape", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json({ shape: project.shape });
+  res.json({ shape: (project as any).shape });
 });
 
 router.put("/projects/:id/shape", async (req, res): Promise<void> => {
@@ -418,9 +418,9 @@ router.put("/projects/:id/shape", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const [project] = await db
     .update(projectsTable)
-    .set({ shape: req.body.shape })
+    .set({ shape: req.body.shape } as any)
     .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.userId, userId)))
-    .returning({ shape: projectsTable.shape });
+    .returning({ shape: (projectsTable as any).shape } as any);
 
   if (!project) {
     res.status(404).json({ error: "Project not found" });
