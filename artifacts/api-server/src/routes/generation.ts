@@ -143,7 +143,7 @@ function parseForgeSyncResponse(raw: string, flowNodes: FlowNodeSummary[], fallb
       ? parsed.summary.trim()
       : fallback.summary;
     const changes = Array.isArray(parsed.changes)
-      ? parsed.changes.filter((change): change is string => typeof change === "string" && change.trim()).map((change) => change.trim())
+      ? parsed.changes.filter((change): change is string => typeof change === "string" && change.trim().length > 0).map((change) => change.trim())
       : fallback.changes;
 
     let proposedNodeMatch: ForgeSyncResponse["proposedNodeMatch"] = null;
