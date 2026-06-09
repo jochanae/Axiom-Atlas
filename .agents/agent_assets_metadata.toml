@@ -72,3 +72,9 @@ id = "v7M4c1UZ3PIylRBFL71mF"
 uri = "file://find-the-right-database.txt"
 type = "text"
 title = "Find & fix the real database"
+
+[[outputs]]
+id = "1aNg3v6r5EGW9pQhVoitc"
+uri = "file://neon-migration-complete.txt"
+type = "text"
+title = "Neon Database Migration — Run in SQL Editor"

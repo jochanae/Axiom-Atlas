@@ -1,0 +1,494 @@
+-- ============================================================
+-- Axiom-Atlas — COMPLETE Neon Database Migration
+-- Run ALL of this in the Neon SQL Editor at console.neon.tech
+-- Safe to run more than once — IF NOT EXISTS / IF NOT EXISTS guards everything.
+--
+-- WHEN TO RUN THIS:
+--   - After pushing backend code that adds new tables/columns
+--   - When workspace chat shows "Something went wrong" on first message
+--   - When project creation fails or is delayed
+--   - After ANY Cloud Run redeploy that includes new backend features
+--
+-- IMPORTANT — RUN IT ON THE RIGHT DATABASE:
+--   1. Google Cloud Console → Cloud Run → your service → "Edit & deploy
+--      new revision" → Variables & Secrets → find DATABASE_URL.
+--   2. Note its host (looks like ep-xxxxx-xxxx.<region>.aws.neon.tech)
+--      and the database name at the end of the URL.
+--   3. In Neon, open the project/branch whose host MATCHES that exactly,
+--      then SQL Editor → paste this whole block → Run.
+--
+-- AFTER RUNNING:
+--   1. Verify the SELECT at the bottom returns all expected tables/columns.
+--   2. Restart the Cloud Run service (or wait for it to auto-restart).
+--   3. Test workspace chat again.
+-- ============================================================
+
+
+-- ── 1. projects table (new columns added over time) ───────────────────────────
+
+ALTER TABLE projects
+  ADD COLUMN IF NOT EXISTS shape jsonb NOT NULL
+  DEFAULT '{"identity": [], "constraints": [], "formats": []}'::jsonb;
+
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS node_state jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS push_history jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_handover_at timestamptz;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_handover_hash text;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS last_opened_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS entity_type text NOT NULL DEFAULT 'project';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS preview_url text;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS github_token text;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS linked_repo text;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS memory text;
+
+-- Fix: ensure the default status is 'shaping' (not 'active') to match the CHECK constraint
+ALTER TABLE projects ALTER COLUMN status SET DEFAULT 'shaping';
+
+-- Add entity_type check constraint
+DO $$ BEGIN
+  ALTER TABLE projects ADD CONSTRAINT projects_entity_type_check CHECK (entity_type IN ('project', 'idea'));
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── 2. sessions table (new columns for run tracking + token usage) ──────────
+
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS reflection_mode boolean NOT NULL DEFAULT false;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS idea_mode boolean NOT NULL DEFAULT false;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS total_input_tokens integer DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS total_output_tokens integer DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS total_cost_usd numeric DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS total_execution_ms integer DEFAULT 0;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS run_summary text;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS run_actions jsonb;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS run_artifacts jsonb;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS run_status text;
+
+-- Fix: ensure the default status is 'active'
+ALTER TABLE sessions ALTER COLUMN status SET DEFAULT 'active';
+
+
+-- ── 3. chat_messages table (usage tracking + run metadata) ───────────────────
+
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS execution_time_ms integer;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS input_tokens integer;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS output_tokens integer;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS cost_usd numeric(10,5);
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS run_status text;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS run_summary text;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS run_actions jsonb;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS run_artifacts jsonb;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS model_used text;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS intent_type text;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS is_deep_dive boolean DEFAULT false;
+
+
+-- ── 4. nexus_messages table (conversation tracking + session links) ──────────
+
+ALTER TABLE nexus_messages ADD COLUMN IF NOT EXISTS message_type text DEFAULT 'message';
+ALTER TABLE nexus_messages ADD COLUMN IF NOT EXISTS conversation_id text;
+ALTER TABLE nexus_messages ADD COLUMN IF NOT EXISTS project_id integer;
+ALTER TABLE nexus_messages ADD COLUMN IF NOT EXISTS session_id integer;
+
+-- Add foreign keys
+DO $$ BEGIN
+  ALTER TABLE nexus_messages ADD CONSTRAINT nexus_messages_project_id_projects_id_fk
+    FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE nexus_messages ADD CONSTRAINT nexus_messages_session_id_sessions_id_fk
+    FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── 5. entries table (enhanced decision ledger) ───────────────────────────────
+
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS deviation_reason text;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS catch_against_id integer;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS card_schema_version integer DEFAULT 1;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS context_what text;
+ALTER TABLE entries ADD COLUMN IF NOT EXISTS context_why text;
+
+
+-- ── 6. users table (user memory + OAuth) ──────────────────────────────────────
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS memory text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier text DEFAULT 'free' NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role text DEFAULT 'user' NOT NULL;
+
+-- Add unique constraints
+DO $$ BEGIN
+  ALTER TABLE users ADD CONSTRAINT users_google_id_unique UNIQUE (google_id);
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE users ADD CONSTRAINT users_email_unique UNIQUE (email);
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── 7. connections table (GitHub OAuth + integrations) ───────────────────────
+
+CREATE TABLE IF NOT EXISTS connections (
+  id serial PRIMARY KEY NOT NULL,
+  user_id integer NOT NULL,
+  type text NOT NULL,
+  label text NOT NULL,
+  url text,
+  token text,
+  metadata jsonb,
+  status text DEFAULT 'linked' NOT NULL,
+  last_checked_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+DO $$ BEGIN
+  ALTER TABLE connections ADD CONSTRAINT connections_user_id_users_id_fk
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- Back-fill label for existing rows
+UPDATE connections SET label = type WHERE label = '' OR label IS NULL;
+
+
+-- ── 8. generation_runs table (code generation tracking) ──────────────────────
+
+CREATE TABLE IF NOT EXISTS generation_runs (
+  id text PRIMARY KEY NOT NULL,
+  project_id integer NOT NULL,
+  user_id integer NOT NULL,
+  prompt text NOT NULL,
+  intent text NOT NULL,
+  model text NOT NULL,
+  status text NOT NULL,
+  started_at timestamp with time zone NOT NULL,
+  finished_at timestamp with time zone,
+  duration_ms integer,
+  files_changed integer NOT NULL DEFAULT 0,
+  lines_added integer NOT NULL DEFAULT 0,
+  lines_removed integer NOT NULL DEFAULT 0,
+  summary text NOT NULL DEFAULT '',
+  commit_sha text,
+  pushed_to_branch text
+);
+
+
+-- ── 9. generated_files table (individual files in a generation run) ───────
+
+CREATE TABLE IF NOT EXISTS generated_files (
+  id text PRIMARY KEY NOT NULL,
+  run_id text NOT NULL,
+  path text NOT NULL,
+  language text NOT NULL,
+  bytes integer NOT NULL,
+  lines integer NOT NULL,
+  content text NOT NULL,
+  previous_content text,
+  status text NOT NULL,
+  created_at timestamp with time zone NOT NULL,
+  updated_at timestamp with time zone NOT NULL
+);
+
+
+-- ── 10. blueprints table (strategic planning) ─────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS blueprints (
+  id serial PRIMARY KEY NOT NULL,
+  project_id integer NOT NULL,
+  user_id integer NOT NULL,
+  session_id integer,
+  title text NOT NULL,
+  content jsonb NOT NULL,
+  conversation_summary text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+DO $$ BEGIN
+  ALTER TABLE blueprints ADD CONSTRAINT blueprints_project_id_projects_id_fk
+    FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE blueprints ADD CONSTRAINT blueprints_user_id_users_id_fk
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE blueprints ADD CONSTRAINT blueprints_session_id_sessions_id_fk
+    FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── 11. project_flow_canvas table (AxiomFlow persistence) ───────────────────
+
+CREATE TABLE IF NOT EXISTS project_flow_canvas (
+  project_id integer NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+  nodes jsonb NOT NULL DEFAULT '[]',
+  edges jsonb NOT NULL DEFAULT '[]',
+  updated_at timestamp with time zone NOT NULL DEFAULT now()
+);
+
+
+-- ── 12. mcp_connections table (MCP protocol integrations) ─────────────────────
+
+CREATE TABLE IF NOT EXISTS mcp_connections (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  label text NOT NULL,
+  url text NOT NULL,
+  token text,
+  tools jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+
+-- ── 13. vault table (secrets storage) ───────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS vault (
+  id serial PRIMARY KEY NOT NULL,
+  project_id integer,
+  project_name text NOT NULL,
+  title text NOT NULL,
+  content text NOT NULL,
+  entry_count integer DEFAULT 0 NOT NULL,
+  tags text[],
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+DO $$ BEGIN
+  ALTER TABLE vault ADD CONSTRAINT vault_project_id_projects_id_fk
+    FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── 14. thoughts table (parking lot) ────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS thoughts (
+  id serial PRIMARY KEY NOT NULL,
+  content text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+-- ── 15. user_sessions table (auth tokens) ───────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id serial PRIMARY KEY NOT NULL,
+  user_id integer NOT NULL,
+  token text NOT NULL,
+  expires_at timestamp with time zone NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  CONSTRAINT user_sessions_token_unique UNIQUE (token)
+);
+
+DO $$ BEGIN
+  ALTER TABLE user_sessions ADD CONSTRAINT user_sessions_user_id_users_id_fk
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── 16. admin_notes table ───────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS admin_notes (
+  id serial PRIMARY KEY NOT NULL,
+  content text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+-- ── 17. invites table ─────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS invites (
+  id serial PRIMARY KEY NOT NULL,
+  email text NOT NULL,
+  token text NOT NULL,
+  invited_by_id integer,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  accepted_at timestamp with time zone,
+  CONSTRAINT invites_token_unique UNIQUE (token)
+);
+
+DO $$ BEGIN
+  ALTER TABLE invites ADD CONSTRAINT invites_invited_by_id_users_id_fk
+    FOREIGN KEY (invited_by_id) REFERENCES public.users(id) ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── 18. atlas_incidents table ───────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS atlas_incidents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  project_id text NOT NULL,
+  files_changed text[] NOT NULL,
+  commit_message text NOT NULL,
+  branch_name text NOT NULL,
+  pr_url text NOT NULL,
+  validation_passed boolean DEFAULT false NOT NULL,
+  outcome text,
+  notes text,
+  confidence text,
+  blast_radius text,
+  reasoning text
+);
+
+
+-- ── 19. atlas_error_logs table ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS atlas_error_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  error_message text NOT NULL,
+  stack_trace text,
+  route text NOT NULL,
+  timestamp timestamp with time zone NOT NULL,
+  project_id text NOT NULL
+);
+
+
+-- ── 20. atlas_self_map table ────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS atlas_self_map (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  map_json text NOT NULL,
+  file_count integer NOT NULL
+);
+
+
+-- ── 21. readiness_snapshots table ───────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS readiness_snapshots (
+  id serial PRIMARY KEY,
+  project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  score integer NOT NULL,
+  summary text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+-- ── 22. secrets table ───────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS secrets (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL,
+  project_id integer,
+  key text NOT NULL,
+  value text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+-- ── 23. gallery table ───────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS gallery (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL,
+  project_id integer,
+  image_url text NOT NULL,
+  prompt text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+-- ── 24. forge_state table ───────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS forge_state (
+  id serial PRIMARY KEY,
+  user_id integer NOT NULL,
+  project_id integer,
+  state jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+-- ── 25. error_logs table (legacy) ───────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS error_logs (
+  id serial PRIMARY KEY NOT NULL,
+  message text NOT NULL,
+  stack text,
+  url text,
+  user_id integer,
+  context text,
+  resolved boolean DEFAULT false NOT NULL,
+  admin_response text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+DO $$ BEGIN
+  ALTER TABLE error_logs ADD CONSTRAINT error_logs_user_id_users_id_fk
+    FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── 26. conversations + messages tables (legacy nexus) ─────────────────────
+
+CREATE TABLE IF NOT EXISTS conversations (
+  id serial PRIMARY KEY NOT NULL,
+  title text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id serial PRIMARY KEY NOT NULL,
+  conversation_id integer NOT NULL,
+  role text NOT NULL,
+  content text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+DO $$ BEGIN
+  ALTER TABLE messages ADD CONSTRAINT messages_conversation_id_conversations_id_fk
+    FOREIGN KEY (conversation_id) REFERENCES public.conversations(id) ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+
+-- ── VERIFY ──────────────────────────────────────────────────────────────────
+-- Run this after all statements to confirm everything landed.
+
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_name IN ('projects', 'sessions', 'chat_messages', 'nexus_messages', 'users', 'connections', 'entries')
+  AND column_name IN (
+    'shape', 'entity_type', 'last_opened_at', 'run_status', 'run_summary',
+    'execution_time_ms', 'input_tokens', 'output_tokens', 'cost_usd',
+    'reflection_mode', 'idea_mode', 'total_input_tokens', 'memory',
+    'label', 'url', 'metadata', 'deviation_reason', 'message_type'
+  )
+ORDER BY table_name, column_name;
+
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN (
+    'connections', 'generation_runs', 'generated_files', 'blueprints',
+    'project_flow_canvas', 'mcp_connections', 'vault', 'thoughts',
+    'user_sessions', 'admin_notes', 'invites', 'atlas_incidents',
+    'atlas_error_logs', 'atlas_self_map', 'readiness_snapshots',
+    'secrets', 'gallery', 'forge_state', 'error_logs',
+    'conversations', 'messages'
+  )
+ORDER BY table_name;
