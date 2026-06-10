@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
@@ -1833,6 +1833,10 @@ function extractFlowNodes(content: string): {
 }
 
 router.post("/chat", async (req, res): Promise<void> => {
+  const writeStep = (res: Response, s: { verb: string; target?: string; phase: string }) => {
+    try { res.write(`data: ${JSON.stringify({ type: "step", ...s })}\n\n`); } catch {}
+  };
+
   const body = req.body as {
     sessionId?: number;
     projectId: number;
@@ -1858,6 +1862,12 @@ router.post("/chat", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
     return;
   }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+  writeStep(res, { verb: "Reviewing", target: "workspace context", phase: "scan" });
 
   const { sessionId = 0, projectId, message, history = [], entries = [] } = body;
   const fileContext = body.fileContext ?? "";
@@ -1950,6 +1960,7 @@ router.post("/chat", async (req, res): Promise<void> => {
         ? { fullName: parsedRepo, defaultBranch: "main" }
         : parsedRepo;
       if (repoData.fullName) {
+        writeStep(res, { verb: "Scanning", target: "project files", phase: "scan" });
         const repoContextFetches: [Promise<RepoTreeSnapshot | null>, Promise<string | null>] = [
           resolvedGithubToken
             ? fetchRepoTree(repoData.fullName, resolvedGithubToken, repoData.defaultBranch ?? "main")
@@ -2269,7 +2280,9 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       messageCount: sql`${sessionsTable.messageCount} + 2`,
       ...runMetadata,
     }).where(eq(sessionsTable.id, sessionId));
-    res.json({ content: diveResult.content, modelUsed: diveResult.model, terminalCmd: null, terminalResult: null, surface, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true });
+    const inputTokenCount = diveResult.usage.inputTokens;
+    res.write(`data: ${JSON.stringify({ type: "done", content: diveResult.content, modelUsed: diveResult.model, terminalCmd: null, terminalResult: null, surface, intentType: "EXPLORE", catchPayload: null, messageId: savedDive.id, model: "gemini", isDeepDive: true, developerLens: { routing: { activeModel: "claude-sonnet-4-6", provider: "anthropic", fallbackTriggered: false }, telemetry: { tokensPerSecond: 0, inputTokens: inputTokenCount ?? 0, executionStrategy: "standard" } } })}\n\n`);
+    res.end();
     return;
   }
 
@@ -2410,6 +2423,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         })()
       : Promise.resolve(undefined);
 
+  writeStep(res, { verb: "Analyzing", target: "your request", phase: "analyze" });
   let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
@@ -2530,6 +2544,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       const parsed = JSON.parse(json) as ImageGenToken;
       if (parsed.prompt && (parsed.mode === "render" || parsed.mode === "schematic")) {
         imageGenTokens.push(parsed);
+        writeStep(res, { verb: "Generating", target: "render", phase: "render" });
       }
     } catch { /* ignore malformed tokens */ }
     return "";
@@ -2829,7 +2844,10 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     ...(autoName ? { autoName } : {}),
   };
 
-  res.json(finalPayload);
+  const fullText = displayContent;
+  const inputTokenCount = assistantUsage.inputTokens;
+  res.write(`data: ${JSON.stringify({ type: "done", ...finalPayload, content: fullText, imageGen: imageGenResult, developerLens: { routing: { activeModel: "claude-sonnet-4-6", provider: "anthropic", fallbackTriggered: false }, telemetry: { tokensPerSecond: 0, inputTokens: inputTokenCount ?? 0, executionStrategy: "standard" } } })}\n\n`);
+  res.end();
   void recordGenerationRunInBackground({
     projectId,
     userId,

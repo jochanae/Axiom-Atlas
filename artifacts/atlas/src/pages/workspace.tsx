@@ -143,6 +143,13 @@ interface ChatMessage {
   alertResolved?: boolean;
 }
 
+type ChatStepEvent = {
+  type: "step";
+  verb: string;
+  target?: string;
+  phase: string;
+};
+
 type MemoryChip = { label: string; insight?: string };
 
 interface LinkedRepo {
@@ -165,6 +172,70 @@ const SYSTEM_NODE_IDS = new Set(["auth", "db", "api", "state", "ui", "logic"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function chatStepActivityText(step: ChatStepEvent): string {
+  return `${step.verb}${step.target ? ` ${step.target}` : ""}...`;
+}
+
+async function readChatResponse<T extends Record<string, any>>(
+  response: Response,
+  onStep?: (step: ChatStepEvent) => void
+): Promise<T> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("text/event-stream")) {
+    return await response.json() as T;
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Missing chat response stream");
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let donePayload: T | null = null;
+
+  const handleBlock = (block: string) => {
+    const dataLines: string[] = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+    }
+    if (dataLines.length === 0) return;
+
+    const payload = JSON.parse(dataLines.join("\n")) as Record<string, any>;
+    if (payload.type === "step") {
+      if (typeof payload.verb === "string" && typeof payload.phase === "string") {
+        onStep?.({
+          type: "step",
+          verb: payload.verb,
+          target: typeof payload.target === "string" ? payload.target : undefined,
+          phase: payload.phase,
+        });
+      }
+      return;
+    }
+
+    if (payload.type === "done") {
+      const { type: _type, ...rest } = payload;
+      donePayload = rest as T;
+      return;
+    }
+
+    if (payload.type === "error") {
+      throw new Error(typeof payload.error === "string" ? payload.error : "Chat stream failed");
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() ?? "";
+    for (const block of blocks) handleBlock(block);
+  }
+  if (buffer.trim()) handleBlock(buffer);
+  if (!donePayload) throw new Error("Chat stream ended without a done event");
+  return donePayload;
 }
 
 function asFlowNodeType(value: unknown): ArchNode["type"] | null {
@@ -6186,7 +6257,7 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
       const nodeContext = nodes.length > 0
         ? `Current canvas nodes:\n${nodes.map(n => `- [${n.type}] ${n.label}${n.strategicAnswer ? " (answered)" : " (unanswered)"}`).join("\n")}`
         : "Canvas is empty — no nodes yet.";
-      const res = await fetch("/api/chat", {
+      const chatRes = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -6200,7 +6271,9 @@ function SystemMapWithCockpit({ projectId, onHomeNav, onSendIntent, onFillIntent
           mode: "plan",
           ...(imageFile ? await fileToBase64Safe(imageFile).then(r => ({ imageBase64: r.base64, imageMediaType: r.mediaType })).catch(() => ({ imageBase64: "", imageMediaType: "" })) : {}),
         }),
-      }).then(r => r.ok ? r.json() : Promise.reject(r.status));
+      });
+      if (!chatRes.ok) throw new Error(`HTTP ${chatRes.status}`);
+      const res = await readChatResponse<Record<string, any>>(chatRes);
       const incoming = (res.flowNodes ?? []) as ArchNode[];
       setFlowMessages(prev => [...prev, { role: "assistant", content: res.content ?? "" }]);
       if (incoming.length > 0) setPendingNodes(incoming);
@@ -8783,7 +8856,9 @@ export default function Workspace() {
       })
         .then((r) => {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.json();
+          return readChatResponse<Record<string, any>>(r, (step) => {
+            setActivityStream({ active: true, content: chatStepActivityText(step) });
+          });
         })
         .then((res) => {
           // Detect LENS_DRIFT signal in response content and strip it
