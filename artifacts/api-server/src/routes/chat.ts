@@ -17,6 +17,7 @@ import {
   type TerminalTier,
 } from "../lib/terminalExecution";
 import { prepareProjectRepo } from "../lib/terminalSandbox";
+import { ATLAS_PLATFORM_KNOWLEDGE } from "../lib/atlasKnowledge";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
@@ -2072,6 +2073,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Build layered system prompt
   let systemPrompt = DEV_SYSTEM_PROMPT;
+  systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
   // Inject project identity
   const [projectRow] = await db
     .select({ name: projectsTable.name, description: projectsTable.description })
