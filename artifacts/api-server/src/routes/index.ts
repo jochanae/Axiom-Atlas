@@ -36,6 +36,7 @@ import mcpRouter from "./mcp";
 import stateRouter from "./state";
 import imagineRouter from "./imagine";
 import previewRouter from "./preview";
+import artifactsRouter from "./artifacts";
 
 const router: IRouter = Router();
 
@@ -75,6 +76,7 @@ router.use(requireAuth, blueprintRouter);
 router.use(requireAuth, connectionsRouter);
 router.use(requireAuth, mcpRouter);
 router.use(requireAuth, stateRouter);
+router.use(requireAuth, artifactsRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
