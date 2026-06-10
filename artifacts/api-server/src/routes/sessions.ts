@@ -3,6 +3,7 @@ import { eq, sql, and, desc, isNotNull } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { db, sessionsTable, chatMessagesTable, projectsTable } from "@workspace/db";
+import { logger } from "../lib/logger";
 import {
   CreateSessionBody,
   CreateSessionParams,
@@ -148,7 +149,7 @@ router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => 
     res.status(404).json({ error: "Project not found" }); return;
   }
   const { seedMessage, seedIntentType, ...sessionFields } = parsed.data;
-  let session: typeof sessionsTable.$inferInsert | undefined;
+  let session: typeof sessionsTable.$inferSelect | undefined;
   try {
     [session] = await db.insert(sessionsTable).values({
       projectId: params.data.projectId,

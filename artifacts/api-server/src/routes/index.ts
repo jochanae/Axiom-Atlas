@@ -16,6 +16,7 @@ import secretsRouter from "./secrets";
 import forgeRouter from "./forge";
 import authRouter, { requireAuth, requireAdmin } from "./auth";
 import googleAuthRouter from "./google-auth";
+import githubOAuthPublicRouter from "./github-oauth-public";
 import adminRouter from "./admin";
 import invitesRouter from "./invites";
 import stripeRouter from "./stripe";
@@ -44,6 +45,7 @@ const router: IRouter = Router();
 router.use(stripeRouter);
 router.use(authRouter);
 router.use(googleAuthRouter);
+router.use(githubOAuthPublicRouter);  // GitHub OAuth callback must be public (cross-site redirect drops cookies)
 router.use(healthRouter);
 router.use(errorlogRouter);
 router.use("/server", serverApiRouter);

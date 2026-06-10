@@ -8,6 +8,7 @@ import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { findSemanticTensionsForProject } from "./tensions";
 import { calculateModelCostUsd } from "../pricing";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
