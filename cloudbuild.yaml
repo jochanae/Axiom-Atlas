@@ -26,39 +26,7 @@ steps:
       - "1"
       - "--max-instances"
       - "10"
-      - "--no-traffic"
-    id: "deploy-new-revision"
-
-  - name: "gcr.io/cloud-builders/gcloud"
-    args:
-      - "run"
-      - "services"
-      - "update-traffic"
-      - "axiom-atlas"
-      - "--region"
-      - "us-east1"
-      - "--to-latest"
-      - "--platform"
-      - "managed"
-    id: "route-traffic"
-
-  # Auto-migrate database schema on every deploy
-  - name: "gcr.io/cloud-builders/docker"
-    args:
-      - "run"
-      - "--rm"
-      - "-e"
-      - "DATABASE_URL"
-      - "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA"
-      - "pnpm"
-      - "--filter"
-      - "@workspace/db"
-      - "run"
-      - "push"
-    secretEnv: ["DATABASE_URL"]
-    id: "migrate-db"
-    waitFor:
-      - "deploy-new-revision"
+    id: "deploy"
 
 availableSecrets:
   secretManager:

@@ -2,6 +2,7 @@ import app from "./app";
 import { db } from "@workspace/db";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { logger } from "./lib/logger";
+import { spawn } from "node:child_process";
 
 const rawPort = process.env["PORT"];
 
@@ -40,10 +41,56 @@ async function initStripe() {
   }
 }
 
+// Run drizzle-kit push as a child process to sync schema with the live database.
+// This is the production equivalent of `pnpm --filter @workspace/db run push`.
+// It runs on every startup so the database schema never falls behind the code.
+async function pushSchema(): Promise<void> {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    logger.warn("DATABASE_URL not set — skipping schema push");
+    return;
+  }
+
+  return new Promise((resolve) => {
+    const child = spawn("npx", [
+      "drizzle-kit",
+      "push",
+      "--config", "lib/db/drizzle.config.ts",
+    ], {
+      stdio: "pipe",
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => { stdout += d; });
+    child.stderr.on("data", (d) => { stderr += d; });
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        logger.info("Schema push: applied cleanly");
+      } else {
+        logger.warn({ code, stdout: stdout.trim(), stderr: stderr.trim() }, "Schema push: non-zero exit — server will start anyway");
+      }
+      resolve();
+    });
+
+    child.on("error", (err) => {
+      logger.warn({ err }, "Schema push: spawn failed — server will start anyway");
+      resolve();
+    });
+  });
+}
+
 async function main() {
   // Fire and forget — never block startup
   initStripe().catch((err) => {
     console.warn("Stripe init skipped:", err?.message ?? err);
+  });
+
+  // Sync schema before starting. Never block on failure.
+  pushSchema().catch((err) => {
+    logger.warn({ err }, "Schema push threw — server will start anyway");
   });
 
   try {
