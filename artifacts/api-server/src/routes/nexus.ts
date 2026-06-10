@@ -1595,7 +1595,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       : mode === "deep_dive" ? "Deep-context analysis"
       : focusProjectId ? `Strategizing ${focusLabel}`
       : "Cross-portfolio strategy";
-    writeStep({ verb: "Thinking", target: "Gemini", detail: geminiModeDetail });
+    writeStep({ verb: "Thinking", target: geminiModeDetail });
     modelStartedAt = performance.now();
     if (imageBase64 && imageMimeType) {
       const result = await genai.models.generateContent({
@@ -1702,7 +1702,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     : mode === "deep_dive" ? "Deep strategic analysis"
     : focusProjectId ? `Strategizing ${focusLabel}`
     : "Cross-portfolio strategy";
-  writeStep({ verb: "Thinking", target: "Claude Sonnet", detail: claudeModeDetail });
+  writeStep({ verb: "Thinking", target: claudeModeDetail });
   const stream = anthropic.messages.stream({
     model: "claude-sonnet-4-6",
     max_tokens: 8192,
