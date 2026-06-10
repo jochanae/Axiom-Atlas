@@ -2319,6 +2319,25 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     } catch { /* secrets unavailable */ }
   }
 
+  try {
+    const recentErrors = await db.execute(sql`
+      SELECT app_name, message, stack, url, severity, created_at
+      FROM error_reports
+      WHERE project_id = ${projectId}
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+    const errorRows = Array.isArray(recentErrors) ? recentErrors : (recentErrors as any).rows ?? [];
+    if (errorRows.length > 0) {
+      const errorSummary = errorRows.map((e: any) =>
+        `[${e.severity?.toUpperCase() ?? "ERROR"}] ${e.app_name ? e.app_name + ": " : ""}${e.message}${e.url ? " (at " + e.url + ")" : ""}${e.stack ? "\n  " + String(e.stack).split("\n").slice(0, 3).join("\n  ") : ""}`
+      ).join("\n\n");
+      systemPrompt += `\n\n--- RECENT RUNTIME ERRORS (last ${errorRows.length}) ---\n${errorSummary}\nIf the user mentions something broken, cross-reference these errors first before asking them to describe the problem.\n--- END RECENT ERRORS ---`;
+    }
+  } catch {
+    // error fetch failed silently — continue without it
+  }
+
   // ── Build message history for multi-model dispatcher ─────────────────────
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = {
