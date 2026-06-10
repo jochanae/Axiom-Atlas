@@ -39,6 +39,7 @@ import imagineRouter from "./imagine";
 import previewRouter from "./preview";
 import artifactsRouter from "./artifacts";
 import codegenRouter from "./codegen";
+import errorsRouter from "./errors";
 
 const router: IRouter = Router();
 
@@ -50,6 +51,7 @@ router.use(githubOAuthPublicRouter);  // GitHub OAuth callback must be public (c
 router.use(healthRouter);
 router.use(errorlogRouter);
 router.use("/server", serverApiRouter);
+router.use(errorsRouter);
 
 // Invite redemption is public so users can sign up via invite link
 router.use(invitesRouter);
