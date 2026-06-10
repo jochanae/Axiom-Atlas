@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { db, projectsTable, sessionsTable } from "@workspace/db";
+import { db, projectsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
@@ -11,17 +11,16 @@ router.post("/codegen", async (req, res): Promise<void> => {
   const userId = (req as any).authUser?.id as number | undefined;
   if (!userId) { res.status(401).json({ error: "Authentication required" }); return; }
 
-  const { prompt, projectId, sessionId, model = "claude-sonnet-4-6", maxTokens = 8192 } = req.body as {
+  const { prompt, projectId, sessionId, context, model = "claude-sonnet-4-6" } = req.body as {
     prompt?: string;
     projectId?: number;
     sessionId?: number;
+    context?: string | null;
     model?: string;
-    maxTokens?: number;
   };
 
   if (!prompt?.trim()) { res.status(400).json({ error: "prompt is required" }); return; }
 
-  // Verify project ownership when projectId is provided
   if (projectId) {
     const [project] = await db
       .select({ id: projectsTable.id })
@@ -31,48 +30,50 @@ router.post("/codegen", async (req, res): Promise<void> => {
     if (!project) { res.status(403).json({ error: "Project not found" }); return; }
   }
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
   try {
-    const stream = anthropic.messages.stream({
+    const systemPrompt = `You are a code generation engine. When given a prompt, respond with a single code file.
+
+Your response must follow this exact format:
+FILENAME: <filename with extension>
+LANGUAGE: <language name>
+---
+<complete file content here>
+
+Rules:
+- Always include FILENAME and LANGUAGE headers
+- Always include the --- separator
+- Write complete, working code — no placeholders or ellipsis
+- Never include explanation outside the file content`;
+
+    const fullPrompt = context
+      ? `Context:\n${context}\n\nTask:\n${prompt}`
+      : prompt;
+
+    const response = await anthropic.messages.create({
       model,
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: [{ role: "user", content: fullPrompt }],
     });
 
-    stream.on("text", (text) => {
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ type: "token", text })}\n\n`);
-      }
-    });
+    const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
 
-    stream.on("error", (err) => {
-      logger.error({ err }, "codegen stream error");
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ type: "error", message: err.message })}\n\n`);
-        res.end();
-      }
-    });
+    // Parse FILENAME / LANGUAGE / content
+    const filenameMatch = raw.match(/^FILENAME:\s*(.+)$/m);
+    const languageMatch = raw.match(/^LANGUAGE:\s*(.+)$/m);
+    const separatorIndex = raw.indexOf("\n---\n");
+    const content = separatorIndex >= 0 ? raw.slice(separatorIndex + 5).trim() : raw.trim();
+    const filename = filenameMatch?.[1]?.trim() ?? "generated.ts";
+    const language = languageMatch?.[1]?.trim() ?? "typescript";
 
-    stream.on("finalMessage", async (message) => {
-      const content = message.content[0]?.type === "text" ? message.content[0].text : "";
-      const inputTokens = message.usage?.input_tokens ?? null;
-      const outputTokens = message.usage?.output_tokens ?? null;
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify({ type: "done", content, inputTokens, outputTokens })}\n\n`);
-        res.end();
-      }
+    res.json({
+      file: { filename, language, content },
+      inputTokens: response.usage?.input_tokens ?? null,
+      outputTokens: response.usage?.output_tokens ?? null,
     });
-
   } catch (err: any) {
     logger.error({ err }, "codegen route error");
-    if (!res.writableEnded) {
-      res.write(`data: ${JSON.stringify({ type: "error", message: err?.message ?? "Codegen failed" })}\n\n`);
-      res.end();
-    }
+    res.status(500).json({ error: err?.message ?? "Codegen failed" });
   }
 });
 
