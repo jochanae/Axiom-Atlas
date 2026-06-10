@@ -1,3 +1,4 @@
+// health check route
 import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { sql } from "drizzle-orm";
