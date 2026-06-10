@@ -47,6 +47,8 @@ steps:
     args:
       - "run"
       - "--rm"
+      - "-e"
+      - "DATABASE_URL"
       - "gcr.io/$PROJECT_ID/axiom-atlas:$COMMIT_SHA"
       - "pnpm"
       - "--filter"
