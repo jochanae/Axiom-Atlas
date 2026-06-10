@@ -55,7 +55,7 @@ async function pushSchema(): Promise<void> {
     const child = spawn("npx", [
       "drizzle-kit",
       "push",
-      "--config", "lib/db/drizzle.config.ts",
+      "--config", "../../lib/db/drizzle.config.ts",
     ], {
       stdio: "pipe",
       env: { ...process.env, DATABASE_URL: databaseUrl },
