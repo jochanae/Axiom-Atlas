@@ -38,6 +38,7 @@ import stateRouter from "./state";
 import imagineRouter from "./imagine";
 import previewRouter from "./preview";
 import artifactsRouter from "./artifacts";
+import codegenRouter from "./codegen";
 
 const router: IRouter = Router();
 
@@ -79,6 +80,7 @@ router.use(requireAuth, connectionsRouter);
 router.use(requireAuth, mcpRouter);
 router.use(requireAuth, stateRouter);
 router.use(requireAuth, artifactsRouter);
+router.use(requireAuth, codegenRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
