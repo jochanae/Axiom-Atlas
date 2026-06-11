@@ -4349,6 +4349,28 @@ function FilesTab({
   const autoLoadedRef = useRef(false);
   const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "done" | "error">("idle");
   const [fileSearch, setFileSearch] = useState("");
+  const [liveUrlInput, setLiveUrlInput] = useState("");
+  const [liveUrlSaved, setLiveUrlSaved] = useState(false);
+  const [liveUrlSaving, setLiveUrlSaving] = useState(false);
+
+  useEffect(() => {
+    setLiveUrlInput(filesProject?.previewUrl ?? "");
+  }, [filesProject?.previewUrl]);
+
+  const saveLiveUrl = () => {
+    setLiveUrlSaving(true);
+    updateProject.mutate(
+      { id: projectId, data: { previewUrl: liveUrlInput || null } },
+      {
+        onSuccess: () => {
+          setLiveUrlSaved(true);
+          setLiveUrlSaving(false);
+          setTimeout(() => setLiveUrlSaved(false), 2500);
+        },
+        onError: () => setLiveUrlSaving(false),
+      }
+    );
+  };
 
   const runAutoScan = (repo: GhRepo, token: string) => {
     const scanKey = `atlas-scan-${projectId}`;
@@ -5098,6 +5120,52 @@ function FilesTab({
               </div>
             );
           })}
+
+          {/* Live URL setting */}
+          <div style={{ margin: "14px 2px 4px", borderTop: "1px solid var(--atlas-border)", padding: "12px 8px 6px" }}>
+            <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", color: "var(--atlas-muted)", opacity: 0.55, marginBottom: 8, textTransform: "uppercase" }}>
+              Live URL
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="url"
+                value={liveUrlInput}
+                onChange={e => { setLiveUrlInput(e.target.value); setLiveUrlSaved(false); }}
+                onKeyDown={e => { if (e.key === "Enter") saveLiveUrl(); }}
+                placeholder="https://your-app.com"
+                style={{
+                  flex: 1, background: "var(--atlas-bg)", border: "1px solid var(--atlas-border)",
+                  borderRadius: 6, padding: "6px 9px", fontSize: 11, color: "var(--atlas-fg)",
+                  fontFamily: "var(--app-font-mono)", outline: "none", minWidth: 0,
+                  transition: "border-color 140ms ease",
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = "var(--atlas-border)"; }}
+              />
+              <button
+                onClick={saveLiveUrl}
+                disabled={liveUrlSaving}
+                style={{
+                  flexShrink: 0, padding: "5px 11px", borderRadius: 6,
+                  background: liveUrlSaved ? "rgba(52,211,153,0.1)" : "rgba(201,162,76,0.08)",
+                  border: `1px solid ${liveUrlSaved ? "rgba(52,211,153,0.28)" : "rgba(201,162,76,0.22)"}`,
+                  color: liveUrlSaved ? "#34d399" : "var(--atlas-gold)",
+                  fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.05em",
+                  cursor: liveUrlSaving ? "default" : "pointer",
+                  opacity: liveUrlSaving ? 0.5 : 1,
+                  transition: "all 140ms ease",
+                  minHeight: 30,
+                }}
+                onMouseEnter={e => { if (!liveUrlSaving && !liveUrlSaved) { e.currentTarget.style.background = "rgba(201,162,76,0.15)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.4)"; } }}
+                onMouseLeave={e => { if (!liveUrlSaving && !liveUrlSaved) { e.currentTarget.style.background = "rgba(201,162,76,0.08)"; e.currentTarget.style.borderColor = "rgba(201,162,76,0.22)"; } }}
+              >
+                {liveUrlSaved ? "✓ Saved" : liveUrlSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+            <div style={{ marginTop: 5, fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.4, lineHeight: 1.4, fontFamily: "var(--app-font-mono)" }}>
+              Your deployed app URL — enables auto health checks.
+            </div>
+          </div>
         </div>
       )}
 
