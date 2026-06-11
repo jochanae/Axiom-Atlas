@@ -2610,11 +2610,44 @@ function AssistantBubble({
             </div>
 
             {message.browserResult.screenshotBase64 && (
-              <img
-                src={message.browserResult.screenshotBase64}
-                alt="Browser screenshot"
-                style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid rgba(201,162,76,0.2)", display: "block", width: "100%", marginBottom: 8 }}
-              />
+              <div style={{ marginBottom: 8 }}>
+                <button
+                  onClick={() => onOpenCanvas?.(message.browserResult!.screenshotBase64!)}
+                  title="Tap to open in canvas"
+                  style={{
+                    display: "block",
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    width: "100%",
+                    borderRadius: 10,
+                    position: "relative",
+                  }}
+                >
+                  <img
+                    src={message.browserResult.screenshotBase64}
+                    alt="Browser screenshot"
+                    style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid rgba(201,162,76,0.2)", display: "block", width: "100%" }}
+                  />
+                  <div style={{
+                    position: "absolute",
+                    bottom: 8,
+                    right: 8,
+                    background: "rgba(0,0,0,0.55)",
+                    backdropFilter: "blur(4px)",
+                    borderRadius: 5,
+                    padding: "3px 7px",
+                    fontSize: 9,
+                    fontFamily: "var(--app-font-mono)",
+                    color: "rgba(201,162,76,0.9)",
+                    letterSpacing: "0.08em",
+                    pointerEvents: "none",
+                  }}>
+                    TAP TO EXPAND
+                  </div>
+                </button>
+              </div>
             )}
 
             {(message.browserResult.type === "health" || message.browserResult.type === "monitor") && (
@@ -2681,11 +2714,44 @@ function AssistantBubble({
               </span>
             </div>
             {message.deployQa.screenshotBase64 && (
-              <img
-                src={message.deployQa.screenshotBase64}
-                alt="Deploy preview"
-                style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid rgba(201,162,76,0.15)", display: "block", width: "100%", marginBottom: 8 }}
-              />
+              <div style={{ marginBottom: 8 }}>
+                <button
+                  onClick={() => onOpenCanvas?.(message.deployQa!.screenshotBase64!)}
+                  title="Tap to open in canvas"
+                  style={{
+                    display: "block",
+                    padding: 0,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    width: "100%",
+                    borderRadius: 8,
+                    position: "relative",
+                  }}
+                >
+                  <img
+                    src={message.deployQa.screenshotBase64}
+                    alt="Deploy preview"
+                    style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid rgba(201,162,76,0.15)", display: "block", width: "100%" }}
+                  />
+                  <div style={{
+                    position: "absolute",
+                    bottom: 8,
+                    right: 8,
+                    background: "rgba(0,0,0,0.55)",
+                    backdropFilter: "blur(4px)",
+                    borderRadius: 5,
+                    padding: "3px 7px",
+                    fontSize: 9,
+                    fontFamily: "var(--app-font-mono)",
+                    color: "rgba(201,162,76,0.9)",
+                    letterSpacing: "0.08em",
+                    pointerEvents: "none",
+                  }}>
+                    TAP TO EXPAND
+                  </div>
+                </button>
+              </div>
             )}
             {message.deployQa.issues.length > 0 && (
               <ul style={{ margin: "0 0 6px", paddingLeft: 16, fontSize: 11, color: "rgba(252,165,165,0.75)", lineHeight: 1.7 }}>
