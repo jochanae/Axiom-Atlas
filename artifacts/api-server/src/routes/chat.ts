@@ -713,8 +713,9 @@ RULES:
 - One BROWSER_VISIT per response. The result appears immediately after your message.
 - Never say "I'll visit that" and then not emit the token. Just emit it.
 - After deploy confirmation (when you see FILE_EDIT_CONFIRMED), emit BROWSER_VISIT with the live URL and mode "monitor" to catch runtime errors automatically.
-- For competitor research ("how does X work?", "what does their pricing look like?"), emit BROWSER_VISIT with mode "scrape".
+- For competitor research ("how does X work?", "what does their pricing look like?", "compare us to X", "what does Y charge?"), emit BROWSER_VISIT with mode "scrape". If the user mentions a product or company by name and you know its URL, use it — don't ask for the URL.
 - For "is my app broken?" / "check for errors", use mode "monitor". For "show me what it looks like", use mode "screenshot".
+- Users can also type /research <url> to trigger scrape directly — that's handled separately, no BROWSER_VISIT token needed for those.
 
 You are Atlas. Just be it.`;
 
@@ -1964,6 +1965,50 @@ router.post("/chat", async (req, res): Promise<void> => {
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
 
+  // ── Intercept /research <url> slash command ──────────────────────────────────
+  // User-facing shorthand: /research https://competitor.com  (or just /research domain.com)
+  const researchSlashMatch = message.match(/^\/research\s+(\S+)/i);
+  if (researchSlashMatch) {
+    const rawUrl = researchSlashMatch[1].trim();
+    const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+    writeStep(res, { verb: "Researching", target: url, phase: "execute" });
+    try {
+      const scrapeRes = await fetch(`${req.protocol}://${req.get("host")}/api/browser/scrape`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
+        body: JSON.stringify({ url, maxLength: 8000, analyze: true }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const data = await scrapeRes.json() as {
+        title?: string; text?: string; headings?: string[];
+        links?: Array<{ href: string; text: string }>; analysis?: string; error?: string;
+      };
+      if (data.error) {
+        res.write(`data: ${JSON.stringify({ type: "done", content: `Could not research ${url}: ${data.error}`, researchResult: null, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}\n\n`);
+      } else {
+        const topHeadings = (data.headings ?? []).slice(0, 6);
+        const mdSummary = [
+          `**${data.title ?? url}**  \`${url}\``,
+          data.analysis ?? data.text?.slice(0, 600) ?? "",
+          topHeadings.length > 0 ? `**Key sections:** ${topHeadings.join(" · ")}` : "",
+        ].filter(Boolean).join("\n\n");
+        const researchResult = {
+          type: "research" as const,
+          url,
+          title: data.title ?? url,
+          summary: data.analysis ?? null,
+          headings: topHeadings,
+        };
+        res.write(`data: ${JSON.stringify({ type: "done", content: mdSummary, researchResult, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}\n\n`);
+      }
+    } catch (err) {
+      logger.error({ err: String(err), url }, "Research slash command failed");
+      res.write(`data: ${JSON.stringify({ type: "done", content: `Research failed for ${url}.`, researchResult: null, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}\n\n`);
+    }
+    res.end();
+    return;
+  }
+
   // ── Intercept browser automation commands ──
   const browserScrapeMatch = message.match(/^BROWSER_SCRAPE:\s*(.+)$/i);
   if (browserScrapeMatch) {
@@ -1985,16 +2030,22 @@ router.post("/chat", async (req, res): Promise<void> => {
 \n`);
       } else {
         const summary = data.analysis
-          ? `**${data.title ?? "Untitled"}** (${url})\n\n${data.analysis}`
+          ? `**${data.title ?? "Untitled"}**  \`${url}\`\n\n${data.analysis}`
           : [
-            `**${data.title ?? "Untitled"}** (${url})`,
+            `**${data.title ?? "Untitled"}**  \`${url}\``,
             "",
             data.text?.slice(0, 2000) ?? "",
-            data.headings && data.headings.length > 0 ? `\n**Headings:** ${data.headings.slice(0, 10).join(" › ")}` : "",
-            data.links && data.links.length > 0 ? `\n**Links:** ${data.links.slice(0, 8).map((l) => `[${l.text || "link"}](${l.href})`).join(" ")}` : "",
+            data.headings && data.headings.length > 0 ? `\n**Key sections:** ${data.headings.slice(0, 6).join(" · ")}` : "",
           ].filter(Boolean).join("\n");
-        res.write(`data: ${JSON.stringify({ type: "done", content: summary, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}
-\n`);
+        const topHeadings = (data.headings ?? []).slice(0, 6);
+        const researchResult = {
+          type: "research" as const,
+          url,
+          title: data.title ?? url,
+          summary: data.analysis ?? null,
+          headings: topHeadings,
+        };
+        res.write(`data: ${JSON.stringify({ type: "done", content: summary, researchResult, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}\n\n`);
       }
     } catch (err) {
       logger.error({ err: String(err), url }, "Browser scrape intercept failed");
@@ -3184,13 +3235,15 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         const bvData = await bvRes.json() as {
           screenshotBase64?: string; analysis?: string; isHealthy?: boolean; issues?: string[];
           hasErrors?: boolean; consoleErrors?: string[]; resourceErrors?: string[]; errorPatterns?: string[]; summary?: string;
-          title?: string; text?: string;
+          title?: string; text?: string; headings?: string[];
         };
         browserVisitResult = {
           type: bvt.mode,
           url: bvt.url,
           ...(bvData.screenshotBase64 ? { screenshotBase64: bvData.screenshotBase64 } : {}),
           ...(bvData.analysis ? { analysis: bvData.analysis } : {}),
+          ...(bvt.mode === "scrape" && bvData.title ? { title: bvData.title } : {}),
+          ...(bvt.mode === "scrape" && bvData.headings ? { headings: (bvData.headings as string[]).slice(0, 6) } : {}),
           ...(bvt.mode === "health" && bvData.isHealthy !== undefined ? { isHealthy: bvData.isHealthy, issues: bvData.issues ?? [] } : {}),
           ...(bvt.mode === "monitor" ? {
             hasErrors: bvData.hasErrors ?? false,
@@ -3225,8 +3278,23 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       const badge = bv.hasErrors ? "⚠️ Errors detected" : "✅ No errors found";
       lines.push(`**Monitor — ${bv.url}**\n${badge}`);
       if (bv.summary) lines.push(bv.summary);
+    } else if (bv.type === "scrape") {
+      const bvScrape = bv as typeof bv & { title?: string; headings?: string[] };
+      lines.push(`**${bvScrape.title ?? bv.url}**  \`${bv.url}\``);
+      if (bv.analysis) lines.push(bv.analysis);
+      if (bvScrape.headings && bvScrape.headings.length > 0) {
+        lines.push(`**Key sections:** ${bvScrape.headings.slice(0, 6).join(" · ")}`);
+      }
+      // Attach structured researchResult so the frontend can render a card
+      (finalPayload as Record<string, unknown>).researchResult = {
+        type: "research",
+        url: bv.url,
+        title: bvScrape.title ?? bv.url,
+        summary: bv.analysis ?? null,
+        headings: bvScrape.headings ?? [],
+      };
     } else if (bv.analysis) {
-      lines.push(`**${bv.type === "scrape" ? "Scraped" : "Screenshot"} — ${bv.url}**\n${bv.analysis}`);
+      lines.push(`**Screenshot — ${bv.url}**\n${bv.analysis}`);
     }
     if (lines.length > 0) fullText = fullText.trimEnd() + "\n\n" + lines.join("\n");
   }
