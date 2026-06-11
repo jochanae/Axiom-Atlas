@@ -2120,7 +2120,8 @@ router.post("/chat", async (req, res): Promise<void> => {
   logger.info({ projectId, userId, hasProjectId: !!projectId, hasUserId: !!userId }, "chat terminal debug");
 
   // Load project memory + repo info + node state from DB, plus user memory when authenticated.
-  const [projectRows, userRows] = await Promise.all([
+  // Also check for Vercel connection so we know whether to defer BROWSER_VISIT until after deploy.
+  const [projectRows, userRows, vercelRows] = await Promise.all([
     db
       .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name, previewUrl: projectsTable.previewUrl })
       .from(projectsTable)
@@ -2132,9 +2133,17 @@ router.post("/chat", async (req, res): Promise<void> => {
           .where(eq(usersTable.id, userId))
           .limit(1)
       : Promise.resolve([] as Array<{ memory: string | null }>),
+    userId
+      ? db
+          .select({ id: connectionsTable.id })
+          .from(connectionsTable)
+          .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "vercel")))
+          .limit(1)
+      : Promise.resolve([] as Array<{ id: number }>),
   ]);
   const [project] = projectRows;
   const [user] = userRows;
+  const hasVercelConnection = vercelRows.length > 0;
 
   // Derive server-side forge foundation from persisted AxiomFlow node state
   // This is the authoritative source — client-sent forgeContext supplements but never replaces it
@@ -2407,7 +2416,8 @@ You are now in BUILD mode. This changes how you respond:
 • Multiple files changed? Emit multiple FILE_EDIT blocks back-to-back.
 • GitHub push is enabled — the user will push your FILE_EDIT output directly to their repo.
 • Do NOT stop short with explanations. If you can write the code, write it.
-• When you receive FILE_EDIT_CONFIRMED: — the push succeeded. Acknowledge it briefly ("Pushed.") and move to the next step. Deploy status is checked automatically in the background and will appear in the chat — do not ask about it or try to check it yourself.`,
+• When you receive FILE_EDIT_CONFIRMED: — the push succeeded. Acknowledge it briefly ("Pushed.") and move to the next step. Deploy status is checked automatically in the background and will appear in the chat — do not ask about it or try to check it yourself.
+• When you receive DEPLOY_READY_VISIT: — the Vercel deploy is confirmed live. Say nothing (the health check result appears automatically in the chat). Do not comment on it or summarize it.`,
     plan: `\n\n--- ACTIVE MODE: PLAN ---
 You are now in PLAN mode. This changes how you respond:
 • Focus on structure, architecture, and sequence — not implementation.
@@ -2839,9 +2849,18 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     return "";
   }).trim();
 
-  // Auto-inject BROWSER_VISIT monitor after FILE_EDIT_CONFIRMED when project has a known live URL
-  // This gives the user a silent health check + screenshot in chat with no prompt required
-  if (!browserVisitToken && message.includes("FILE_EDIT_CONFIRMED:") && project?.previewUrl) {
+  // Auto-inject BROWSER_VISIT monitor after FILE_EDIT_CONFIRMED when project has a known live URL.
+  // Skip when the user has a Vercel connection — in that case the /api/deploy/after-push endpoint
+  // waits for the deploy to reach "ready" before running visual QA, so visiting immediately would
+  // capture the mid-deploy state. Fall back to immediate visit only when no Vercel integration
+  // is configured (e.g. projects hosted on Railway, Render, or a custom domain).
+  if (!browserVisitToken && message.includes("FILE_EDIT_CONFIRMED:") && project?.previewUrl && !hasVercelConnection) {
+    browserVisitToken = { url: project.previewUrl, mode: "monitor" };
+    writeStep(res, { verb: "Visiting", target: project.previewUrl, phase: "execute" });
+  }
+  // When Vercel IS configured and the message signals that the deploy is now confirmed ready,
+  // run the post-deploy health check against the live URL.
+  if (!browserVisitToken && message.includes("DEPLOY_READY_VISIT:") && project?.previewUrl) {
     browserVisitToken = { url: project.previewUrl, mode: "monitor" };
     writeStep(res, { verb: "Visiting", target: project.previewUrl, phase: "execute" });
   }

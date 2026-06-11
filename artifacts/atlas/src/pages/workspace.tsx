@@ -11238,7 +11238,9 @@ export default function Workspace() {
                         messagesRef.current,
                       );
                     }
-                    // Background deploy status check — polls Vercel for up to 90 s after push
+                    // Background deploy status check — polls Vercel for up to 90 s after push.
+                    // When Vercel is configured, BROWSER_VISIT is deferred until after-push confirms
+                    // the deploy is "ready" — this prevents visiting a mid-deploy / stale snapshot.
                     fetch(`/api/deploy/after-push?atlasProjectId=${id}`, { credentials: "include" })
                       .then((r) => (r.ok ? r.json() : null))
                       .then((data: { hasVercel?: boolean; status?: string; alias?: string; url?: string; visualQa?: DeployQa; autoMonitoringSetUp?: boolean; autoMonitoringMessage?: string } | null) => {
@@ -11269,6 +11271,17 @@ export default function Workspace() {
                             ...(data.visualQa ? { deployQa: data.visualQa } : {}),
                           },
                         ]);
+                        // Trigger the post-deploy health check now that the site is confirmed live.
+                        // The backend gates BROWSER_VISIT on this signal when Vercel is connected,
+                        // so the health badge reflects the actual deployed state, not mid-deploy.
+                        if (data.status === "ready" && sessionId) {
+                          const liveNote = host ? ` Live at ${host}.` : "";
+                          doSend(
+                            `DEPLOY_READY_VISIT:${liveNote} Run post-deploy health check now.`,
+                            sessionId,
+                            messagesRef.current,
+                          );
+                        }
                       })
                       .catch(() => {});
                   }}
