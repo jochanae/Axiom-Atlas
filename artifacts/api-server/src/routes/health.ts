@@ -54,21 +54,18 @@ router.get("/healthz", (_req, res) => {
 });
 
 router.get("/health/image-gen-test", async (req, res): Promise<void> => {
-  const Anthropic = (await import("@anthropic-ai/sdk")).default;
   const { GoogleGenAI } = await import("@google/genai");
-  const OpenAI = (await import("openai")).default;
-
   const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
-  const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
   const results: Record<string, unknown> = {
     hasGeminiKey: !!process.env.GOOGLE_GEMINI_API_KEY,
     hasOpenAIKey: !!process.env.OPENAI_API_KEY,
   };
 
+  // Test 1: Imagen 3 (direct image generation)
   try {
     const r = await genai.models.generateImages({
-      model: "imagen-3.0-generate-004",
+      model: "imagen-3.0-generate-002",
       prompt: "A simple red circle on a white background",
       config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio: "1:1" }
     });
@@ -78,17 +75,47 @@ router.get("/health/image-gen-test", async (req, res): Promise<void> => {
     results.imagen3 = { error: err?.message, code: err?.code, status: err?.status };
   }
 
+  // Test 2: DALL-E 3
   try {
+    const { default: OpenAI } = await import("openai");
+    const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const r = await openaiClient.images.generate({
       model: "dall-e-3",
       prompt: "A simple red circle on a white background",
       n: 1,
       size: "1024x1024",
-      response_format: "b64_json"
     });
-    results.dalle3 = r.data?.[0]?.b64_json ? "SUCCESS" : "NO_IMAGE_RETURNED";
+    const item = r.data?.[0];
+    if (item?.url) {
+      const imgRes = await fetch(item.url, { signal: AbortSignal.timeout(15_000) });
+      if (imgRes.ok) {
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        results.dalle3 = { status: "SUCCESS", base64Length: buffer.toString("base64").length };
+      } else {
+        results.dalle3 = { status: "URL_ONLY", url: item.url };
+      }
+    } else {
+      results.dalle3 = "NO_IMAGE_RETURNED";
+    }
   } catch (err: any) {
     results.dalle3 = { error: err?.message, code: err?.code, status: err?.status };
+  }
+
+  // Test 3: Gemini inline image (generateContent with IMAGE modality)
+  try {
+    const r = await genai.models.generateContent({
+      model: "gemini-2.5-flash-preview-05-20",
+      contents: "A simple red circle on a white background",
+      config: { responseModalities: ["IMAGE", "TEXT"] },
+    });
+    const parts = r.candidates?.[0]?.content?.parts ?? [];
+    const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+    const textPart = parts.find((p: any) => p.text);
+    results.geminiInline = imagePart?.inlineData?.data
+      ? { status: "SUCCESS", mimeType: imagePart.inlineData.mimeType, dataLength: imagePart.inlineData.data?.length ?? 0, text: textPart?.text?.slice(0, 100) }
+      : { status: "NO_IMAGE", text: textPart?.text?.slice(0, 200) };
+  } catch (err: any) {
+    results.geminiInline = { error: err?.message, code: err?.code, status: err?.status };
   }
 
   res.json(results);

@@ -44,7 +44,7 @@ async function generateWithGemini(
 
   const ai = new GoogleGenAI({ apiKey });
   const response = await ai.models.generateImages({
-    model: "imagen-3.0-generate-004",
+    model: "imagen-3.0-generate-002",
     prompt,
     config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio },
   });
@@ -83,16 +83,23 @@ async function generateWithDalle(
     prompt,
     n: 1,
     size: sizeMap[size],
-    response_format: "b64_json",
   });
 
   const item = response.data?.[0];
-  if (!item?.b64_json) return null;
+  if (!item?.url) return null;
 
-  return {
-    url: `data:image/png;base64,${item.b64_json}`,
-    revisedPrompt: item.revised_prompt ?? prompt,
-  };
+  // Fetch the image from the URL and convert to base64
+  try {
+    const imgRes = await fetch(item.url, { signal: AbortSignal.timeout(15_000) });
+    if (!imgRes.ok) return { url: item.url, revisedPrompt: item.revised_prompt ?? prompt };
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+    return {
+      url: `data:image/png;base64,${buffer.toString("base64")}`,
+      revisedPrompt: item.revised_prompt ?? prompt,
+    };
+  } catch {
+    return { url: item.url, revisedPrompt: item.revised_prompt ?? prompt };
+  }
 }
 
 // ── Route ─────────────────────────────────────────────────────────────────────
