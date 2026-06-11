@@ -2815,71 +2815,15 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     linePatches: fileChangesAllowed ? linePatches : [],
   });
 
-  let savedMsgId: number | undefined;
-  let autoName: string | undefined;
-  if (!isFlowMode && !isScenarioMode) {
-    const runMetadata = runMetadataInsertValues(persistContent, fileChangesAllowed ? fileEdits : []);
-    try {
-      const [savedMsg] = await db
-        .insert(chatMessagesTable)
-        .values({
-          sessionId,
-          role: "assistant",
-          content: persistContent,
-          intentType: detectedIntentType,
-          catchPayload: undefined,
-          ...usageInsertValues(assistantUsage),
-          ...runMetadata,
-          imageB64: imageGenResult?.images?.[0]?.imageUrl.split(",")[1] ?? null,
-          imageMimeType: imageGenResult?.images?.[0]?.imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png",
-        })
-        .returning();
-      savedMsgId = savedMsg.id;
-
-      await db
-        .update(sessionsTable)
-        .set({
-          messageCount: sql`${sessionsTable.messageCount} + 2`,
-          ...runMetadata,
-        })
-        .where(eq(sessionsTable.id, sessionId));
-    } catch (dbErr: any) {
-      const errMsg = dbErr?.message ?? "";
-      const isMissingColumn = errMsg.includes("column") && errMsg.includes("does not exist");
-      if (isMissingColumn) {
-        logger.warn({ dbErr: errMsg }, "DB schema behind — falling back to core insert without run metadata");
-        const [savedMsg] = await db
-          .insert(chatMessagesTable)
-          .values({
-            sessionId,
-            role: "assistant",
-            content: persistContent,
-            intentType: detectedIntentType,
-            catchPayload: undefined,
-            imageB64: imageGenResult?.images?.[0]?.imageUrl.split(",")[1] ?? null,
-            imageMimeType: imageGenResult?.images?.[0]?.imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png",
-          })
-          .returning();
-        savedMsgId = savedMsg.id;
-        await db
-          .update(sessionsTable)
-          .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
-          .where(eq(sessionsTable.id, sessionId));
-      } else {
-        throw dbErr;
-      }
-    }
-  }
-
   const generatedAutoName = await autoNamePromise;
   if (generatedAutoName) {
     await db.update(projectsTable).set({ name: generatedAutoName }).where(eq(projectsTable.id, projectId));
-    autoName = generatedAutoName;
   }
   const responseFileEdits = fileChangesAllowed ? fileEdits : [];
   const responseLinePatches = fileChangesAllowed ? linePatches : [];
 
-  // Dual-engine image generation — process IMAGE_GEN tokens Atlas emitted
+  // Dual-engine image generation — process IMAGE_GEN tokens Atlas emitted.
+  // Must run BEFORE the DB insert so image data is available when we persist.
   // RENDER mode → Gemini Imagen 3  (cinematic, premium, client-facing)
   // SCHEMATIC mode → DALL·E 3       (technical diagrams, architecture maps)
   // Each engine has an automatic fallback to the other if its key is missing or fails.
@@ -2988,6 +2932,68 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     }
 
     if (generatedImages.length > 0) imageGenResult = { images: generatedImages };
+  }
+
+  // Persist assistant message — image generation runs first so imageB64 is available
+  let savedMsgId: number | undefined;
+  let autoName: string | undefined;
+  if (generatedAutoName) autoName = generatedAutoName;
+  if (!isFlowMode && !isScenarioMode) {
+    const firstImage = imageGenResult?.images?.[0];
+    const imageB64Val = firstImage ? firstImage.imageUrl.split(",")[1] ?? null : null;
+    const imageMimeTypeVal = firstImage
+      ? (firstImage.imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png")
+      : null;
+    const runMetadata = runMetadataInsertValues(persistContent, fileChangesAllowed ? fileEdits : []);
+    try {
+      const [savedMsg] = await db
+        .insert(chatMessagesTable)
+        .values({
+          sessionId,
+          role: "assistant",
+          content: persistContent,
+          intentType: detectedIntentType,
+          catchPayload: undefined,
+          ...usageInsertValues(assistantUsage),
+          ...runMetadata,
+          imageB64: imageB64Val,
+          imageMimeType: imageMimeTypeVal,
+        })
+        .returning();
+      savedMsgId = savedMsg.id;
+      await db
+        .update(sessionsTable)
+        .set({
+          messageCount: sql`${sessionsTable.messageCount} + 2`,
+          ...runMetadata,
+        })
+        .where(eq(sessionsTable.id, sessionId));
+    } catch (dbErr: any) {
+      const errMsg = dbErr?.message ?? "";
+      const isMissingColumn = errMsg.includes("column") && errMsg.includes("does not exist");
+      if (isMissingColumn) {
+        logger.warn({ dbErr: errMsg }, "DB schema behind — falling back to core insert without run metadata");
+        const [savedMsg] = await db
+          .insert(chatMessagesTable)
+          .values({
+            sessionId,
+            role: "assistant",
+            content: persistContent,
+            intentType: detectedIntentType,
+            catchPayload: undefined,
+            imageB64: imageB64Val,
+            imageMimeType: imageMimeTypeVal,
+          })
+          .returning();
+        savedMsgId = savedMsg.id;
+        await db
+          .update(sessionsTable)
+          .set({ messageCount: sql`${sessionsTable.messageCount} + 2` })
+          .where(eq(sessionsTable.id, sessionId));
+      } else {
+        throw dbErr;
+      }
+    }
   }
 
   // Auto-create ledger entries for resolved nodes — skipped in scenario mode
