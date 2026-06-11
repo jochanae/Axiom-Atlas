@@ -31,41 +31,46 @@ function buildSchematicPrompt(prompt: string): string {
   return `${prompt} Clean flat 2D technical diagram. High-contrast dark background with crisp white or bright accent lines. Strict geometric layout, precise spatial placement of every element. Clear directional connectors, sharp boundaries between sections, minimal decorative noise. Exact label placement, no atmospheric effects — pure structural accuracy and readability.`;
 }
 
-// ── Engine: Gemini Imagen 3 (RENDER mode) ────────────────────────────────────
+// ── Engine: Gemini Inline Image (RENDER + SCHEMATIC modes) ──────────────────
+// Uses gemini-2.5-flash-image which supports both image and text output.
+// This is the ONLY working image generation engine with the current API key.
 
 async function generateWithGemini(
   prompt: string,
-  size: ImagineBody["size"] = "square"
-): Promise<string | null> {
+  _size: ImagineBody["size"] = "square"
+): Promise<{ imageUrl: string; revisedPrompt: string } | null> {
   const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const aspectRatio = size === "landscape" ? "16:9" : size === "portrait" ? "9:16" : "1:1";
-
   const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateImages({
-    model: "imagen-3.0-generate-002",
-    prompt,
-    config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio },
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash-image",
+    contents: prompt,
+    config: { responseModalities: ["IMAGE", "TEXT"] },
   });
 
-  const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-  if (!imageBytes) return null;
+  const parts = response.candidates?.[0]?.content?.parts ?? [];
+  const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+  const textPart = parts.find((p: any) => p.text);
 
-  const base64 =
-    typeof imageBytes === "string"
-      ? imageBytes
-      : Buffer.from(imageBytes as Uint8Array).toString("base64");
+  if (!imagePart?.inlineData?.data) return null;
 
-  return `data:image/jpeg;base64,${base64}`;
+  const mime = imagePart.inlineData.mimeType;
+  const base64 = imagePart.inlineData.data;
+  return {
+    imageUrl: `data:${mime};base64,${base64}`,
+    revisedPrompt: textPart?.text ?? prompt,
+  };
 }
 
-// ── Engine: DALL·E 3 (SCHEMATIC mode) ────────────────────────────────────────
+// ── Engine: DALL·E 3 (SCHEMATIC mode fallback) ───────────────────────────────
+// NOTE: DALL-E 3 is currently non-functional with the current key (model does not exist).
+// Kept as a stub so we can re-enable when a proper OpenAI key is configured.
 
 async function generateWithDalle(
   prompt: string,
-  size: ImagineBody["size"] = "square"
-): Promise<{ url: string; revisedPrompt: string } | null> {
+  _size: ImagineBody["size"] = "square"
+): Promise<{ imageUrl: string; revisedPrompt: string } | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
@@ -82,7 +87,7 @@ async function generateWithDalle(
     model: "dall-e-3",
     prompt,
     n: 1,
-    size: sizeMap[size],
+    size: sizeMap[_size],
   });
 
   const item = response.data?.[0];
@@ -91,14 +96,14 @@ async function generateWithDalle(
   // Fetch the image from the URL and convert to base64
   try {
     const imgRes = await fetch(item.url, { signal: AbortSignal.timeout(15_000) });
-    if (!imgRes.ok) return { url: item.url, revisedPrompt: item.revised_prompt ?? prompt };
+    if (!imgRes.ok) return { imageUrl: item.url, revisedPrompt: item.revised_prompt ?? prompt };
     const buffer = Buffer.from(await imgRes.arrayBuffer());
     return {
-      url: `data:image/png;base64,${buffer.toString("base64")}`,
+      imageUrl: `data:image/png;base64,${buffer.toString("base64")}`,
       revisedPrompt: item.revised_prompt ?? prompt,
     };
   } catch {
-    return { url: item.url, revisedPrompt: item.revised_prompt ?? prompt };
+    return { imageUrl: item.url, revisedPrompt: item.revised_prompt ?? prompt };
   }
 }
 
@@ -136,12 +141,12 @@ router.post("/imagine", async (req, res): Promise<void> => {
     // Primary: Gemini Imagen 3
     const enginePrompt = buildRenderPrompt(trimmedPrompt);
     try {
-      const url = await generateWithGemini(enginePrompt, size);
-      if (url) {
-        images.push({ imageUrl: url, prompt: enginePrompt, model: "imagen-3", mode });
+      const result = await generateWithGemini(enginePrompt, size);
+      if (result) {
+        images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "gemini-flash-image", mode });
       }
     } catch (err) {
-      logger.warn({ err }, "Imagen 3 failed for render mode — trying DALL·E fallback");
+      logger.warn({ err }, "Gemini inline image failed for render mode — trying DALL·E fallback");
     }
 
     // Fallback: DALL·E 3
@@ -149,7 +154,7 @@ router.post("/imagine", async (req, res): Promise<void> => {
       try {
         const result = await generateWithDalle(enginePrompt, size);
         if (result) {
-          images.push({ imageUrl: result.url, prompt: result.revisedPrompt, model: "dall-e-3", mode });
+          images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "dall-e-3", mode });
         }
       } catch (err) {
         logger.error({ err }, "DALL·E fallback also failed for render mode");
@@ -162,18 +167,18 @@ router.post("/imagine", async (req, res): Promise<void> => {
     try {
       const result = await generateWithDalle(enginePrompt, size);
       if (result) {
-        images.push({ imageUrl: result.url, prompt: result.revisedPrompt, model: "dall-e-3", mode });
+        images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "dall-e-3", mode });
       }
     } catch (err) {
       logger.warn({ err }, "DALL·E 3 failed for schematic mode — trying Gemini fallback");
     }
 
-    // Fallback: Gemini Imagen 3
+    // Fallback: Gemini inline image
     if (images.length === 0) {
       try {
-        const url = await generateWithGemini(enginePrompt, size);
-        if (url) {
-          images.push({ imageUrl: url, prompt: enginePrompt, model: "imagen-3", mode });
+        const result = await generateWithGemini(enginePrompt, size);
+        if (result) {
+          images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "gemini-flash-image", mode });
         }
       } catch (err) {
         logger.error({ err }, "Gemini fallback also failed for schematic mode");

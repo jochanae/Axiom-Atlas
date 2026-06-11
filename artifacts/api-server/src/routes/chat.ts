@@ -2892,50 +2892,31 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         : `${token.prompt} Clean flat 2D technical diagram. High-contrast dark background, crisp connector lines, strict geometric layout, precise spatial placement, sharp labels. Pure structural accuracy.`;
       const aspectRatio = token.size === "landscape" ? "16:9" : token.size === "portrait" ? "9:16" : "1:1";
 
-      if (token.mode === "render") {
-        // Primary: Gemini Imagen 3
-        let placed = false;
-        try {
-          const r = await genai.models.generateImages({ model: "imagen-3.0-generate-004", prompt: enginePrompt, config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio } });
-          const bytes = r.generatedImages?.[0]?.image?.imageBytes;
-          if (bytes) {
-            const b64 = typeof bytes === "string" ? bytes : Buffer.from(bytes as Uint8Array).toString("base64");
-            generatedImages.push({ imageUrl: `data:image/jpeg;base64,${b64}`, prompt: enginePrompt, model: "imagen-3", mode: token.mode });
-            placed = true;
-          }
-        } catch (err) { logger.warn({ err }, "Imagen 3 failed for render — trying DALL·E fallback"); }
-        // Fallback: DALL·E 3
-        if (!placed && process.env.OPENAI_API_KEY) {
-          try {
-            const r = await openaiClient.images.generate({ model: "dall-e-3", prompt: enginePrompt, n: 1, size: sizeMap[token.size ?? "square"], response_format: "b64_json" });
-            const b64 = r.data?.[0]?.b64_json;
-            if (b64) generatedImages.push({ imageUrl: `data:image/png;base64,${b64}`, prompt: r.data?.[0]?.revised_prompt ?? enginePrompt, model: "dall-e-3", mode: token.mode });
-          } catch (err) { logger.error({ err }, "DALL·E fallback failed for render"); }
+      // Primary: Gemini inline image (gemini-2.5-flash-image) — works for both render and schematic
+      // NOTE: Imagen 4.0 and DALL-E 3 are currently non-functional (wrong model names / model not available for these keys)
+      try {
+        const r = await genai.models.generateContent({
+          model: "gemini-2.5-flash-image",
+          contents: enginePrompt,
+          config: { responseModalities: ["IMAGE", "TEXT"] },
+        });
+        const parts = r.candidates?.[0]?.content?.parts ?? [];
+        const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+        const textPart = parts.find((p: any) => p.text);
+        if (imagePart?.inlineData?.data) {
+          const mime = imagePart.inlineData.mimeType;
+          const b64 = imagePart.inlineData.data;
+          generatedImages.push({
+            imageUrl: `data:${mime};base64,${b64}`,
+            prompt: textPart?.text ?? enginePrompt,
+            model: "gemini-flash-image",
+            mode: token.mode,
+          });
+        } else {
+          logger.warn({ prompt: enginePrompt }, "Gemini inline image returned no image data");
         }
-      } else {
-        // Primary: DALL·E 3
-        let placed = false;
-        if (process.env.OPENAI_API_KEY) {
-          try {
-            const r = await openaiClient.images.generate({ model: "dall-e-3", prompt: enginePrompt, n: 1, size: sizeMap[token.size ?? "square"], response_format: "b64_json" });
-            const b64 = r.data?.[0]?.b64_json;
-            if (b64) {
-              generatedImages.push({ imageUrl: `data:image/png;base64,${b64}`, prompt: r.data?.[0]?.revised_prompt ?? enginePrompt, model: "dall-e-3", mode: token.mode });
-              placed = true;
-            }
-          } catch (err) { logger.warn({ err }, "DALL·E 3 failed for schematic — trying Gemini fallback"); }
-        }
-        // Fallback: Gemini Imagen 3
-        if (!placed) {
-          try {
-            const r = await genai.models.generateImages({ model: "imagen-3.0-generate-004", prompt: enginePrompt, config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio } });
-            const bytes = r.generatedImages?.[0]?.image?.imageBytes;
-            if (bytes) {
-              const b64 = typeof bytes === "string" ? bytes : Buffer.from(bytes as Uint8Array).toString("base64");
-              generatedImages.push({ imageUrl: `data:image/jpeg;base64,${b64}`, prompt: enginePrompt, model: "imagen-3", mode: token.mode });
-            }
-          } catch (err) { logger.error({ err }, "Gemini fallback failed for schematic"); }
-        }
+      } catch (err) {
+        logger.warn({ err }, "Gemini inline image failed for render mode");
       }
     }
 

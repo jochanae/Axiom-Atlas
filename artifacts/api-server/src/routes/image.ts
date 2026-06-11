@@ -16,7 +16,7 @@ router.post("/image/generate", async (req, res): Promise<void> => {
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-05-20",
+      model: "gemini-2.5-flash-image",
       contents: prompt,
       config: {
         responseModalities: ["IMAGE", "TEXT"],

@@ -65,7 +65,7 @@ router.get("/health/image-gen-test", async (req, res): Promise<void> => {
   // Test 1: Imagen 3 (direct image generation)
   try {
     const r = await genai.models.generateImages({
-      model: "imagen-3.0-generate-002",
+      model: "imagen-4.0-generate-001",
       prompt: "A simple red circle on a white background",
       config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio: "1:1" }
     });
@@ -104,7 +104,7 @@ router.get("/health/image-gen-test", async (req, res): Promise<void> => {
   // Test 3: Gemini inline image (generateContent with IMAGE modality)
   try {
     const r = await genai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model: "gemini-2.5-flash-image",
       contents: "A simple red circle on a white background",
       config: { responseModalities: ["IMAGE", "TEXT"] },
     });
