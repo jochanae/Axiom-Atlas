@@ -7,3 +7,4 @@
 - [Prod schema drift — status check](prod-schema-drift-status.md) — "Failed to create project" = status CHECK rejects default 'active' (prod allows shaping/committed/archived), NOT a missing column; Drizzle error hides the real cause
 - [Dual-engine image generation](dual-engine-image.md) — IMAGE_GEN tokens: render→Gemini Imagen 3, schematic→DALL·E 3; auto-fallback each way; OPENAI_API_KEY required in Cloud Run for schematic mode
 - [Atlas future builds](atlas-future-builds.md) — two approved: live dev server preview + new project bootstrapping from Atlas
+- [Post-merge setup pattern](post-merge-setup.md) — script only runs pnpm install; DB migrations run at server startup, not in post-merge
