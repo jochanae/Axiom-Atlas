@@ -53,4 +53,45 @@ router.get("/healthz", (_req, res) => {
   res.json(data);
 });
 
+router.get("/health/image-gen-test", async (req, res): Promise<void> => {
+  const Anthropic = (await import("@anthropic-ai/sdk")).default;
+  const { GoogleGenAI } = await import("@google/genai");
+  const OpenAI = (await import("openai")).default;
+
+  const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
+  const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  const results: Record<string, unknown> = {
+    hasGeminiKey: !!process.env.GOOGLE_GEMINI_API_KEY,
+    hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+  };
+
+  try {
+    const r = await genai.models.generateImages({
+      model: "imagen-3.0-generate-004",
+      prompt: "A simple red circle on a white background",
+      config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio: "1:1" }
+    });
+    const bytes = r.generatedImages?.[0]?.image?.imageBytes;
+    results.imagen3 = bytes ? "SUCCESS" : "NO_BYTES_RETURNED";
+  } catch (err: any) {
+    results.imagen3 = { error: err?.message, code: err?.code, status: err?.status };
+  }
+
+  try {
+    const r = await openaiClient.images.generate({
+      model: "dall-e-3",
+      prompt: "A simple red circle on a white background",
+      n: 1,
+      size: "1024x1024",
+      response_format: "b64_json"
+    });
+    results.dalle3 = r.data?.[0]?.b64_json ? "SUCCESS" : "NO_IMAGE_RETURNED";
+  } catch (err: any) {
+    results.dalle3 = { error: err?.message, code: err?.code, status: err?.status };
+  }
+
+  res.json(results);
+});
+
 export default router;
