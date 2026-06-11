@@ -84,3 +84,9 @@ id = "S0ELRIRnU_UzEzphQOfYx"
 uri = "file://cursor-prompt-phase2-visual-layer.md"
 type = "text"
 title = "Phase 2 — Visual Canvas: Cursor Prompt for atlas-idk"
+
+[[outputs]]
+id = "fPt_qtZ4XWKP8070jb3sY"
+uri = "file://artifacts/api-server/frontend-prompts/PHASE2-VISUAL-LAYER.md"
+type = "text"
+title = "Phase 2 — Visual Layer Cursor Prompts"
