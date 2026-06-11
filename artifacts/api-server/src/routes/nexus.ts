@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
-import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable } from "@workspace/db";
+import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable, scheduledChecksTable, checkResultsTable } from "@workspace/db";
 import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, gte, type SQL } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
@@ -1255,6 +1255,52 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     };
   })();
 
+  // Scheduled health check awareness — summarise per-project monitor status for Atlas
+  const monitorContext = await (async () => {
+    if (projectIds.length === 0) return null;
+    try {
+      // Get the most recent check result per project (one query, then group in JS)
+      const recentResults = await db
+        .select({
+          projectId: checkResultsTable.projectId,
+          url: checkResultsTable.url,
+          isHealthy: checkResultsTable.isHealthy,
+          issues: checkResultsTable.issues,
+          checkedAt: checkResultsTable.checkedAt,
+        })
+        .from(checkResultsTable)
+        .where(inArray(checkResultsTable.projectId, projectIds))
+        .orderBy(desc(checkResultsTable.checkedAt))
+        .limit(projectIds.length * 5);
+
+      // Keep only the most recent result per project
+      const latestByProject = new Map<number, typeof recentResults[number]>();
+      for (const r of recentResults) {
+        if (!latestByProject.has(r.projectId)) latestByProject.set(r.projectId, r);
+      }
+
+      if (latestByProject.size === 0) return null;
+
+      const lines: string[] = [];
+      for (const [pid, result] of latestByProject) {
+        const name = projectNameById.get(pid) ?? `Project ${pid}`;
+        const daysSince = Math.round(
+          (Date.now() - new Date(result.checkedAt).getTime()) / 86_400_000
+        );
+        const recency = daysSince === 0 ? "today" : `${daysSince}d ago`;
+        if (result.isHealthy) {
+          lines.push(`• ${name} — HEALTHY (${result.url}, checked ${recency})`);
+        } else {
+          const issueStr = result.issues.slice(0, 2).join("; ") || "unknown issue";
+          lines.push(`• ${name} — ISSUE (${result.url}, checked ${recency}): ${issueStr}`);
+        }
+      }
+      return lines.join("\n");
+    } catch {
+      return null;
+    }
+  })();
+
   // Always source conversation context from the persisted Living Thread (last 40 turns)
   const conversationHistory = dbMessages.slice(-40).map((m) => ({
     role: m.role as "user" | "assistant",
@@ -1296,6 +1342,9 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       `Total projects: ${portfolioHealth.totalProjects}`,
     ].join("\n");
     systemPrompt += `\n\n--- PORTFOLIO HEALTH ---\n${healthLines}\nUse this when the user asks about momentum, health, activity, or progress across the portfolio.\n--- END PORTFOLIO HEALTH ---`;
+  }
+  if (monitorContext) {
+    systemPrompt += `\n\n--- LIVE APP HEALTH (scheduled monitor results) ---\n${monitorContext}\nUse this when the user asks about app health, uptime, or "how is my app doing". Report HEALTHY/ISSUE status directly from these results. If an issue is listed, surface it proactively.\n--- END LIVE APP HEALTH ---`;
   }
   if (committedLedger) {
     systemPrompt += `\n\n--- COMMITTED DECISIONS ACROSS PORTFOLIO (use for cross-project tension detection) ---\n${committedLedger}\n--- END COMMITTED DECISIONS ---`;

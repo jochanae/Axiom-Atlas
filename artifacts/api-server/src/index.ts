@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { logger } from "./lib/logger";
 import { spawn } from "node:child_process";
+import { startScheduledChecksWorker } from "./lib/scheduledChecksWorker";
 
 const rawPort = process.env["PORT"];
 
@@ -119,6 +120,8 @@ async function main() {
     console.log({ port }, "Server listening");
     // Signal readiness immediately
     if (process.send) process.send("ready");
+    // Start background worker for scheduled health checks
+    startScheduledChecksWorker();
   });
 }
 

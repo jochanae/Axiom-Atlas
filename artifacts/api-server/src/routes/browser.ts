@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import Anthropic from "@anthropic-ai/sdk";
+import { db, scheduledChecksTable, checkResultsTable, projectsTable } from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -493,6 +495,207 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
     errorPatterns,
     summary,
   });
+});
+
+const ScheduleBody = z.object({
+  url: z.string().url(),
+  projectId: z.number().int().positive(),
+  intervalMinutes: z.number().int().min(5).max(10080).optional().default(1440),
+});
+
+/**
+ * POST /api/browser/schedule
+ * Register a URL for scheduled health checks.
+ * Body: { url, projectId, intervalMinutes? }  (intervalMinutes default: 1440 = daily)
+ * Returns the created scheduled_check row.
+ */
+router.post("/browser/schedule", async (req, res): Promise<void> => {
+  const userId = (req as any).user?.id as number | undefined;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const parsed = ScheduleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { url, projectId, intervalMinutes } = parsed.data;
+
+  try {
+    // Verify the project belongs to the authenticated user before scheduling
+    const [ownedProject] = await db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+      .limit(1);
+
+    if (!ownedProject) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    // Schedule the first check immediately (nextCheckAt = now)
+    const [row] = await db
+      .insert(scheduledChecksTable)
+      .values({
+        userId,
+        projectId,
+        url,
+        intervalMinutes,
+        isActive: true,
+        nextCheckAt: new Date(),
+      })
+      .returning();
+
+    res.status(201).json(row);
+  } catch (err) {
+    logger.error({ err, url, projectId }, "Failed to create scheduled check");
+    res.status(500).json({ error: "Failed to create scheduled check" });
+  }
+});
+
+/**
+ * DELETE /api/browser/schedule/:id
+ * Deactivate (soft-delete) a scheduled check.
+ */
+router.delete("/browser/schedule/:id", async (req, res): Promise<void> => {
+  const userId = (req as any).user?.id as number | undefined;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  try {
+    const [row] = await db
+      .update(scheduledChecksTable)
+      .set({ isActive: false })
+      .where(
+        and(
+          eq(scheduledChecksTable.id, id),
+          eq(scheduledChecksTable.userId, userId)
+        )
+      )
+      .returning();
+
+    if (!row) {
+      res.status(404).json({ error: "Scheduled check not found" });
+      return;
+    }
+    res.json({ ok: true, id: row.id });
+  } catch (err) {
+    logger.error({ err, id }, "Failed to deactivate scheduled check");
+    res.status(500).json({ error: "Failed to deactivate scheduled check" });
+  }
+});
+
+/**
+ * GET /api/browser/checks/:projectId
+ * Return recent check results + active scheduled checks for a project.
+ * Query params: limit (default 20, max 100)
+ */
+router.get("/browser/checks/:projectId", async (req, res): Promise<void> => {
+  const userId = (req as any).user?.id as number | undefined;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const projectId = parseInt(req.params.projectId ?? "", 10);
+  if (isNaN(projectId)) {
+    res.status(400).json({ error: "Invalid projectId" });
+    return;
+  }
+
+  const rawLimit = parseInt((req.query.limit as string) ?? "20", 10);
+  const limit = Math.min(isNaN(rawLimit) ? 20 : rawLimit, 100);
+
+  try {
+    // Verify project ownership before any reads
+    const [ownedProject] = await db
+      .select({ id: projectsTable.id })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+      .limit(1);
+
+    if (!ownedProject) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const [schedules, results] = await Promise.all([
+      db
+        .select()
+        .from(scheduledChecksTable)
+        .where(
+          and(
+            eq(scheduledChecksTable.projectId, projectId),
+            eq(scheduledChecksTable.userId, userId),
+            eq(scheduledChecksTable.isActive, true)
+          )
+        )
+        .orderBy(desc(scheduledChecksTable.createdAt)),
+      // Scope results through user-owned schedules — prevents IDOR data leak
+      db
+        .select({
+          id: checkResultsTable.id,
+          scheduleId: checkResultsTable.scheduleId,
+          projectId: checkResultsTable.projectId,
+          url: checkResultsTable.url,
+          httpStatus: checkResultsTable.httpStatus,
+          isHealthy: checkResultsTable.isHealthy,
+          issues: checkResultsTable.issues,
+          analysis: checkResultsTable.analysis,
+          checkedAt: checkResultsTable.checkedAt,
+        })
+        .from(checkResultsTable)
+        .innerJoin(
+          scheduledChecksTable,
+          and(
+            eq(checkResultsTable.scheduleId, scheduledChecksTable.id),
+            eq(scheduledChecksTable.userId, userId)
+          )
+        )
+        .where(eq(checkResultsTable.projectId, projectId))
+        .orderBy(desc(checkResultsTable.checkedAt))
+        .limit(limit),
+    ]);
+
+    // Compute a simple health summary for Atlas
+    const totalChecks = results.length;
+    const healthyChecks = results.filter(r => r.isHealthy).length;
+    const lastResult = results[0] ?? null;
+
+    let healthSummary: string;
+    if (totalChecks === 0) {
+      healthSummary = "No checks run yet.";
+    } else {
+      const lastCheckedAt = lastResult?.checkedAt;
+      const daysSinceLast = lastCheckedAt
+        ? Math.round((Date.now() - new Date(lastCheckedAt).getTime()) / 86_400_000)
+        : null;
+      const streakLabel =
+        healthyChecks === totalChecks
+          ? `healthy for all ${totalChecks} check${totalChecks !== 1 ? "s" : ""}`
+          : `${healthyChecks}/${totalChecks} checks healthy`;
+      const recencyLabel = daysSinceLast != null
+        ? daysSinceLast === 0 ? ", last checked today" : `, last checked ${daysSinceLast}d ago`
+        : "";
+      healthSummary = `App is ${streakLabel}${recencyLabel}.`;
+    }
+
+    res.json({
+      schedules,
+      results,
+      summary: healthSummary,
+    });
+  } catch (err) {
+    logger.error({ err, projectId }, "Failed to fetch check results");
+    res.status(500).json({ error: "Failed to fetch check results" });
+  }
 });
 
 export default router;

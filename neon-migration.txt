@@ -103,10 +103,47 @@ CREATE TABLE IF NOT EXISTS "image_versions" (
 );
 
 
+-- ── scheduled_checks + check_results tables ───────────────────────────────────
+-- NEW: Powers Atlas's automatic post-deploy monitoring.
+-- scheduled_checks stores URLs to watch on a cron schedule (per project).
+-- check_results stores the history of each health check run.
+
+CREATE TABLE IF NOT EXISTS "scheduled_checks" (
+  "id"               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "user_id"          integer NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+  "project_id"       integer NOT NULL REFERENCES "projects"("id") ON DELETE CASCADE,
+  "url"              text NOT NULL,
+  "interval_minutes" integer NOT NULL DEFAULT 1440,
+  "is_active"        boolean NOT NULL DEFAULT true,
+  "last_checked_at"  timestamptz,
+  "next_check_at"    timestamptz NOT NULL DEFAULT now(),
+  "created_at"       timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "check_results" (
+  "id"          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "schedule_id" uuid NOT NULL REFERENCES "scheduled_checks"("id") ON DELETE CASCADE,
+  "project_id"  integer NOT NULL REFERENCES "projects"("id") ON DELETE CASCADE,
+  "url"         text NOT NULL,
+  "http_status" integer,
+  "is_healthy"  boolean NOT NULL,
+  "issues"      text[] NOT NULL DEFAULT '{}',
+  "analysis"    text,
+  "checked_at"  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Index: background worker queries for due checks efficiently
+CREATE INDEX IF NOT EXISTS "idx_scheduled_checks_next_check_at"
+  ON "scheduled_checks" ("next_check_at")
+  WHERE "is_active" = true;
+
+-- Index: GET /api/browser/checks/:projectId needs fast reverse-chronological lookup
+CREATE INDEX IF NOT EXISTS "idx_check_results_project_id_checked_at"
+  ON "check_results" ("project_id", "checked_at" DESC);
+
+
 -- ── VERIFY ────────────────────────────────────────────────────────────────────
 -- Run this after the statements above to confirm everything landed correctly.
--- You should see columns: shape, label, url, metadata, image_b64, image_mime_type
--- And the tables: project_flow_canvas, mcp_connections, image_versions
 
 SELECT table_name, column_name, data_type
 FROM information_schema.columns
@@ -115,4 +152,5 @@ WHERE table_name IN ('projects', 'connections', 'sessions', 'chat_messages')
 ORDER BY table_name, column_name;
 
 SELECT table_name FROM information_schema.tables
-WHERE table_name IN ('project_flow_canvas', 'mcp_connections', 'image_versions');
+WHERE table_name IN ('project_flow_canvas', 'mcp_connections', 'image_versions',
+                     'scheduled_checks', 'check_results');
