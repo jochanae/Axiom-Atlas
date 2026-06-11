@@ -134,6 +134,20 @@
       "when": 1779132400000,
       "tag": "0018_sessions_run_status",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779136000000,
+      "tag": "0019_image_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779139600000,
+      "tag": "0020_scheduled_checks",
+      "breakpoints": true
     }
   ]
 }

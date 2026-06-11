@@ -15,6 +15,7 @@ import { db, scheduledChecksTable, checkResultsTable } from "@workspace/db";
 import { lte, eq, and } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { logger } from "./logger";
+import { safeFetch } from "./ssrf";
 
 const POLL_INTERVAL_MS = 60_000;
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -32,7 +33,7 @@ async function runHealthCheck(url: string): Promise<{
 
   // 1. HTTP status
   try {
-    const headResp = await fetch(url, {
+    const headResp = await safeFetch(url, {
       method: "HEAD",
       headers: { "User-Agent": "Atlas-ScheduledCheck/1.0" },
       signal: AbortSignal.timeout(10_000),

@@ -3208,7 +3208,28 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     }
   }
 
-  const fullText = displayContent;
+  // Append browser visit analysis to the displayed message so users can read it in chat
+  let fullText = displayContent;
+  if (browserVisitResult) {
+    const bv = browserVisitResult as {
+      type: string; url: string; analysis?: string; isHealthy?: boolean;
+      issues?: string[]; summary?: string; hasErrors?: boolean;
+    };
+    const lines: string[] = [];
+    if (bv.type === "health") {
+      const badge = bv.isHealthy ? "✅ Healthy" : `⚠️ ${bv.issues?.length ?? 0} issue(s) found`;
+      lines.push(`**Site check — ${bv.url}**\n${badge}`);
+      if (bv.issues?.length) lines.push(bv.issues.map(i => `- ${i}`).join("\n"));
+      if (bv.analysis) lines.push(bv.analysis);
+    } else if (bv.type === "monitor") {
+      const badge = bv.hasErrors ? "⚠️ Errors detected" : "✅ No errors found";
+      lines.push(`**Monitor — ${bv.url}**\n${badge}`);
+      if (bv.summary) lines.push(bv.summary);
+    } else if (bv.analysis) {
+      lines.push(`**${bv.type === "scrape" ? "Scraped" : "Screenshot"} — ${bv.url}**\n${bv.analysis}`);
+    }
+    if (lines.length > 0) fullText = fullText.trimEnd() + "\n\n" + lines.join("\n");
+  }
   const inputTokenCount = assistantUsage.inputTokens;
   res.write(`data: ${JSON.stringify({ type: "done", ...finalPayload, content: fullText, imageGen: imageGenResult, developerLens: { routing: { activeModel: "claude-sonnet-4-6", provider: "anthropic", fallbackTriggered: false }, telemetry: { tokensPerSecond: 0, inputTokens: inputTokenCount ?? 0, executionStrategy: "standard" } } })}\n\n`);
   res.end();
