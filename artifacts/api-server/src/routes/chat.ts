@@ -1836,6 +1836,39 @@ function extractFlowNodes(content: string): {
   return { content: clean, flowNodes };
 }
 
+router.get("/image-gen-test", async (req, res): Promise<void> => {
+  const results: Record<string, unknown> = {};
+
+  // Test Imagen 3
+  try {
+    const r = await genai.models.generateImages({
+      model: "imagen-3.0-generate-004",
+      prompt: "A simple red circle on a white background",
+      config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio: "1:1" }
+    });
+    const bytes = r.generatedImages?.[0]?.image?.imageBytes;
+    results.imagen3 = bytes ? "SUCCESS" : "NO_BYTES_RETURNED";
+  } catch (err: any) {
+    results.imagen3 = { error: err?.message, code: err?.code, status: err?.status };
+  }
+
+  // Test DALL-E 3
+  try {
+    const r = await openaiClient.images.generate({
+      model: "dall-e-3",
+      prompt: "A simple red circle on a white background",
+      n: 1,
+      size: "1024x1024",
+      response_format: "b64_json"
+    });
+    results.dalle3 = r.data?.[0]?.b64_json ? "SUCCESS" : "NO_IMAGE_RETURNED";
+  } catch (err: any) {
+    results.dalle3 = { error: err?.message, code: err?.code, status: err?.status };
+  }
+
+  res.json(results);
+});
+
 router.post("/chat", async (req, res): Promise<void> => {
   const writeStep = (res: Response, s: { verb: string; target?: string; phase: string }) => {
     try { res.write(`data: ${JSON.stringify({ type: "step", ...s })}\n\n`); } catch {}
