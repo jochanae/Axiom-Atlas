@@ -1921,6 +1921,76 @@ router.post("/chat", async (req, res): Promise<void> => {
   const activeModel = selectChatModelForMessage(message);
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
+
+  // ── Intercept browser automation commands ──
+  const browserScrapeMatch = message.match(/^BROWSER_SCRAPE:\s*(.+)$/i);
+  if (browserScrapeMatch) {
+    const url = browserScrapeMatch[1].trim();
+    writeStep(res, { verb: "Scraping", target: url, phase: "execute" });
+    try {
+      const scrapeRes = await fetch(`${req.protocol}://${req.get("host")}/api/browser/scrape`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
+        body: JSON.stringify({ url, maxLength: 8000 }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const data = await scrapeRes.json() as {
+        title?: string; text?: string; headings?: string[]; links?: Array<{ href: string; text: string }>;
+        error?: string;
+      };
+      if (data.error) {
+        res.write(`data: ${JSON.stringify({ type: "done", content: `Failed to scrape ${url}: ${data.error}`, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}
+\n`);
+      } else {
+        const summary = [
+          `**${data.title ?? "Untitled"}** (${url})`,
+          "",
+          data.text?.slice(0, 2000) ?? "",
+          data.headings && data.headings.length > 0 ? `\n**Headings:** ${data.headings.slice(0, 10).join(" › ")}` : "",
+          data.links && data.links.length > 0 ? `\n**Links:** ${data.links.slice(0, 8).map((l) => `[${l.text || "link"}](${l.href})`).join(" ")}` : "",
+        ].filter(Boolean).join("\n");
+        res.write(`data: ${JSON.stringify({ type: "done", content: summary, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}
+\n`);
+      }
+    } catch (err) {
+      logger.error({ err: String(err), url }, "Browser scrape intercept failed");
+      res.write(`data: ${JSON.stringify({ type: "done", content: `Failed to scrape ${url}.`, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}
+\n`);
+    }
+    res.end();
+    return;
+  }
+
+  // ── Intercept deploy commands ──
+  const deployMatch = message.match(/^DEPLOY_NOW:/i);
+  if (deployMatch) {
+    writeStep(res, { verb: "Triggering", target: "Vercel deploy", phase: "execute" });
+    try {
+      const deployRes = await fetch(`${req.protocol}://${req.get("host")}/api/deploy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
+        body: JSON.stringify({}),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const data = await deployRes.json() as {
+        success?: boolean; deploymentId?: string; url?: string; state?: string; error?: string; alias?: string[];
+      };
+      if (data.error) {
+        res.write(`data: ${JSON.stringify({ type: "done", content: `Deploy failed: ${data.error}`, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "BUILD", catchPayload: null, messageId: null, model: "system" })}
+\n`);
+      } else {
+        const alias = data.alias?.[0] ?? data.url ?? "";
+        res.write(`data: ${JSON.stringify({ type: "done", content: `Deploy triggered ✅\n- Deployment: ${data.deploymentId ?? "N/A"}\n- Status: ${data.state ?? "queued"}\n- URL: ${alias ? `https://${alias}` : "pending"}`, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "BUILD", catchPayload: null, messageId: null, model: "system" })}
+\n`);
+      }
+    } catch (err) {
+      logger.error({ err: String(err) }, "Deploy intercept failed");
+      res.write(`data: ${JSON.stringify({ type: "done", content: "Deploy trigger failed. Check your Vercel connection in Settings.", modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "BUILD", catchPayload: null, messageId: null, model: "system" })}
+\n`);
+    }
+    res.end();
+    return;
+  }
   logger.info({ projectId, userId, hasProjectId: !!projectId, hasUserId: !!userId }, "chat terminal debug");
 
   // Load project memory + repo info + node state from DB, plus user memory when authenticated.

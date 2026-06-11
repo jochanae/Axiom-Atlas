@@ -141,6 +141,8 @@ interface ChatMessage {
   autoPushed?: boolean;
   alertPayload?: AlertPayload | null;
   alertResolved?: boolean;
+  terminalCmd?: { command: string; tier?: string } | null;
+  terminalResult?: { command: string; output: string; exitCode: number | null } | null;
 }
 
 type ChatStepEvent = {
@@ -2690,6 +2692,74 @@ function AssistantBubble({
             sessionId={sessionId}
             onDismiss={() => onAlertDismiss?.()}
           />
+        )}
+
+        {/* TERMINAL_CMD — server-side suggested terminal command */}
+        {message.terminalCmd && (
+          <div
+            style={{
+              marginTop: 12, padding: "10px 14px",
+              borderRadius: 8,
+              background: "var(--atlas-surface)",
+              border: "1px solid rgba(146,64,14,0.40)",
+              display: "flex", alignItems: "center", gap: 10,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.65 }}>
+              <path d="M2 4l5 4-5 4" stroke="rgba(230,150,90,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M9 12h5" stroke="rgba(230,150,90,0.9)" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "var(--app-font-mono)", fontSize: 12.5, color: "rgba(230,150,90,0.92)", letterSpacing: "0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {message.terminalCmd.command}
+              </div>
+            </div>
+            <button
+              onClick={() => onRunCommand?.(message.terminalCmd!.command)}
+              style={{
+                flexShrink: 0, padding: "5px 12px", borderRadius: 5,
+                background: "rgba(146,64,14,0.25)",
+                border: "1px solid rgba(146,64,14,0.55)",
+                color: "rgba(230,150,90,0.95)",
+                fontSize: 11, fontWeight: 600, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.08em", cursor: "pointer",
+                transition: "all 140ms ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(146,64,14,0.4)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(146,64,14,0.25)")}
+            >
+              Run →
+            </button>
+          </div>
+        )}
+
+        {/* TERMINAL_RESULT — shows execution result inline */}
+        {message.terminalResult && (
+          <div
+            style={{
+              marginTop: 12,
+              borderRadius: 8,
+              background: "rgba(146,64,14,0.08)",
+              border: "1px solid rgba(146,64,14,0.25)",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 8, borderBottom: "1px solid rgba(146,64,14,0.15)" }}>
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                <path d="M2 4l5 4-5 4" stroke="rgba(230,150,90,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M9 12h5" stroke="rgba(230,150,90,0.7)" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 11, color: "rgba(230,150,90,0.85)", letterSpacing: "0.02em" }}>
+                {message.terminalResult.command}
+              </span>
+              <span style={{ fontSize: 9, color: "var(--atlas-muted)", marginLeft: "auto", fontFamily: "var(--app-font-mono)" }}>
+                exit {message.terminalResult.exitCode ?? "?"}
+              </span>
+            </div>
+            <pre style={{ margin: 0, padding: "10px 12px", fontSize: 12, lineHeight: 1.5, fontFamily: "var(--app-font-mono)", color: "var(--atlas-fg)", opacity: 0.85, whiteSpace: "pre-wrap", overflowWrap: "break-word", maxHeight: 200, overflow: "auto" }}>
+              {message.terminalResult.output}
+            </pre>
+          </div>
         )}
 
         {/* CMD_EXEC — runnable command card suggested by Atlas */}
@@ -8147,6 +8217,10 @@ export default function Workspace() {
   const [switchProjectDeleteId, setSwitchProjectDeleteId] = useState<number | null>(null);
   const projectBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
+  // Error log indicator — fetches recent runtime errors for this project
+  const [recentErrorCount, setRecentErrorCount] = useState(0);
+  const [showErrorLog, setShowErrorLog] = useState(false);
+  const [errorLogEntries, setErrorLogEntries] = useState<Array<{ id: string; errorMessage: string; stackTrace: string | null; route: string; timestamp: Date }>>([]);
   // Close portaled header dropdowns on scroll/resize so they don't float off their anchors.
   useEffect(() => {
     if (!showProjectMenu) return;
@@ -8196,6 +8270,23 @@ export default function Workspace() {
       setLeftTab("chat");
     }
   }, [wsLens, leftTab]);
+
+  // Fetch recent runtime errors for this project (every 30s)
+  useEffect(() => {
+    if (!id) return;
+    const fetchErrors = async () => {
+      try {
+        const res = await fetch(`/api/errorlog/recent?project_id=${id}&limit=20`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json() as { count?: number; errors?: Array<{ id: string; errorMessage: string; stackTrace: string | null; route: string; timestamp: string }> };
+        setRecentErrorCount(data.count ?? 0);
+        setErrorLogEntries((data.errors ?? []).map((e) => ({ ...e, timestamp: new Date(e.timestamp) })));
+      } catch { /* non-fatal */ }
+    };
+    fetchErrors();
+    const interval = setInterval(fetchErrors, 30000);
+    return () => clearInterval(interval);
+  }, [id]);
 
   const [mobileTab, setMobileTab] = useState<"chat" | "ledger" | "files" | "map" | "preview">(() =>
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : "chat"
@@ -8880,6 +8971,8 @@ export default function Workspace() {
           const fes = (res.fileEdits ?? (res.fileEdit ? [res.fileEdit] : [])) as FileEdit[];
           const lps = (res.linePatches ?? []) as LinePatch[];
           const aff = (res.autoFetchedFiles ?? []) as string[];
+          const tCmd = res.terminalCmd as { command: string; tier?: string } | null;
+          const tRes = res.terminalResult as { command: string; output: string; exitCode: number | null } | null;
           setActivityStream({
             active: true,
             content: [
@@ -8888,6 +8981,8 @@ export default function Workspace() {
               aff.length > 0 ? "FILE_READ" : "",
               fes.length > 0 ? "FILE_EDIT" : "",
               lps.length > 0 ? "LINE_PATCH" : "",
+              tCmd ? "TERMINAL" : "",
+              tRes ? "TERMINAL_RESULT" : "",
             ].filter(Boolean).join("\n"),
           });
           const rawChips = (res.memoryChips ?? []) as Array<string | MemoryChip>;
@@ -8908,6 +9003,8 @@ export default function Workspace() {
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
             ...(res.imageGen?.images?.[0]?.imageUrl ? { imageB64: res.imageGen.images[0].imageUrl.split(",")[1], imageMimeType: res.imageGen.images[0].imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png" } : {}),
             ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),
+            ...(tCmd ? { terminalCmd: tCmd } : {}),
+            ...(tRes ? { terminalResult: tRes } : {}),
           }]);
           // Capture scenario messages in isolated buffer (not persisted to DB)
           if (isScenario) {
@@ -9388,18 +9485,19 @@ export default function Workspace() {
     if (!agenticMode || chatPending) return;
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg || lastMsg.role !== "assistant") return;
-    const match = lastMsg.content.match(/CMD_EXEC:(\{[^\n}]*\})/);
-    if (!match) return;
+    // Prefer server-side terminalCmd over inline CMD_EXEC
+    const cmd = lastMsg.terminalCmd?.command ?? lastMsg.content.match(/CMD_EXEC:(\{[^\n}]*\})/)?.[1];
+    if (!cmd) return;
     let cleanup: (() => void) | undefined;
     try {
-      const parsed = JSON.parse(match[1]) as { command?: string };
-      const cmd = parsed.command;
-      if (!cmd?.trim()) return;
-      const key = (lastMsg.sentAt ?? String(messages.length)) + cmd;
+      const parsed = typeof cmd === "string" && cmd.startsWith("{") ? (JSON.parse(cmd) as { command?: string }) : { command: cmd };
+      const command = parsed.command ?? cmd;
+      if (!command?.trim()) return;
+      const key = (lastMsg.sentAt ?? String(messages.length)) + command;
       if (agenticAutoRunRef.current.has(key)) return;
       agenticAutoRunRef.current.add(key);
       setAgenticIterCount((n) => n + 1);
-      const t = setTimeout(() => handleRunCommand(cmd), 900);
+      const t = setTimeout(() => handleRunCommand(command), 900);
       cleanup = () => clearTimeout(t);
     } catch {}
     return cleanup;
@@ -10050,6 +10148,33 @@ export default function Workspace() {
 
           {/* Right: vault + % score + mode + avatar */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {/* Error badge — shows recent runtime error count */}
+            {recentErrorCount > 0 && (
+              <button
+                title={`${recentErrorCount} runtime error${recentErrorCount > 1 ? "s" : ""} in last 24h`}
+                onClick={() => setShowErrorLog(true)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  padding: "2px 7px", borderRadius: 4,
+                  background: "rgba(239,68,68,0.12)",
+                  border: "1px solid rgba(239,68,68,0.35)",
+                  color: "rgba(239,100,100,0.9)",
+                  fontFamily: "var(--app-font-mono)",
+                  fontSize: 9, fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  cursor: "pointer", flexShrink: 0,
+                  transition: "all 180ms ease",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.22)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.55)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.12)"; e.currentTarget.style.borderColor = "rgba(239,68,68,0.35)"; }}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 8v4" /><path d="M12 16h.01" /><circle cx="12" cy="12" r="10" />
+                </svg>
+                {recentErrorCount}
+              </button>
+            )}
+
             {/* Lens chip — dot-only on tiny screens */}
             <button
               title={`Lens: ${LENS_CONFIG[wsLens].sub}`}
@@ -11217,6 +11342,66 @@ export default function Workspace() {
                     )}
                   </button>
 
+                  {/* Browser button — screenshot/scrape a URL */}
+                  <button
+                    onClick={() => {
+                      const url = window.prompt("Enter URL to screenshot or scrape:");
+                      if (url?.trim() && sessionId) {
+                        doSend(
+                          `BROWSER_SCRAPE: ${url.trim()}`,
+                          sessionId,
+                          messagesRef.current
+                        );
+                      }
+                    }}
+                    title="Screenshot or scrape a URL"
+                    aria-label="Browser automation"
+                    style={{
+                      minWidth: 44, minHeight: 44, padding: 7, borderRadius: 7,
+                      background: "transparent", border: "1px solid transparent",
+                      color: "var(--atlas-muted)", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      opacity: 0.4, transition: "all 160ms ease", flexShrink: 0,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.color = "rgba(56,189,248,0.85)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = "0.4"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+                      <line x1="1.5" y1="5.5" x2="14.5" y2="5.5" />
+                      <circle cx="3.5" cy="4" r="0.5" fill="currentColor" />
+                      <circle cx="5" cy="4" r="0.5" fill="currentColor" />
+                    </svg>
+                  </button>
+
+                  {/* Deploy button — trigger Vercel deploy */}
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Deploy to production now?") && sessionId) {
+                        doSend(
+                          "DEPLOY_NOW: Trigger production deployment via Vercel",
+                          sessionId,
+                          messagesRef.current
+                        );
+                      }
+                    }}
+                    title="Deploy to production (Vercel)"
+                    aria-label="Deploy to production"
+                    style={{
+                      minWidth: 44, minHeight: 44, padding: 7, borderRadius: 7,
+                      background: "transparent", border: "1px solid transparent",
+                      color: "var(--atlas-muted)", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      opacity: 0.4, transition: "all 160ms ease", flexShrink: 0,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.color = "rgba(74,222,128,0.85)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = "0.4"; e.currentTarget.style.color = "var(--atlas-muted)"; }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M8 2L2 8h3v6h6V8h3L8 2z" />
+                    </svg>
+                  </button>
+
                   {/* Deep Dive button */}
                   <div style={{ position: "relative" }}>
                     <button
@@ -11975,6 +12160,63 @@ export default function Workspace() {
           projectId={id}
           onClose={() => setShowVault(false)}
         />
+      )}
+
+      {/* Error Log Modal */}
+      {showErrorLog && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+          <div style={{
+            width: "min(90vw, 560px)", maxHeight: "min(80vh, 600px)",
+            background: "var(--atlas-surface)", borderRadius: 12,
+            border: "1px solid var(--atlas-border)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden",
+          }}>
+            <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--atlas-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--atlas-fg)" }}>
+                Runtime Errors (24h)
+              </span>
+              <button onClick={() => setShowErrorLog(false)} style={{ background: "transparent", border: "none", color: "var(--atlas-muted)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+            <div style={{ padding: "12px 16px", overflow: "auto", flex: 1 }}>
+              {errorLogEntries.length === 0 ? (
+                <p style={{ color: "var(--atlas-muted)", fontSize: 13, textAlign: "center", margin: 0 }}>
+                  No errors in the last 24 hours.
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {errorLogEntries.map((err) => (
+                    <div key={err.id} style={{
+                      padding: "10px 12px", borderRadius: 8,
+                      background: "rgba(239,68,68,0.06)",
+                      border: "1px solid rgba(239,68,68,0.15)",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", color: "rgba(239,100,100,0.85)", fontWeight: 600, letterSpacing: "0.06em" }}>
+                          {err.route}
+                        </span>
+                        <span style={{ fontSize: 9, color: "var(--atlas-muted)", marginLeft: "auto" }}>
+                          {err.timestamp.toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12, color: "var(--atlas-fg)", lineHeight: 1.5, wordBreak: "break-word" }}>
+                        {err.errorMessage}
+                      </p>
+                      {err.stackTrace && (
+                        <pre style={{ margin: "6px 0 0", fontSize: 10, color: "var(--atlas-muted)", lineHeight: 1.4, whiteSpace: "pre-wrap", overflowWrap: "break-word", maxHeight: 120, overflow: "auto" }}>
+                          {err.stackTrace}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>

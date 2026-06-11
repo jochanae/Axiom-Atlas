@@ -13,13 +13,13 @@ Repo: `jochanae/Axiom-Atlas` (private)
 
 | Layer | Technology | Notes |
 |---|---|---|
-| **Backend** | `artifacts/api-server/` in this Replit | Runs and deploys **from this Replit** — not Render |
+| **Backend** | `artifacts/api-server/` | Deployed to **Google Cloud Run** via `cloudbuild.yaml` + Docker |
 | **Database** | **Neon** PostgreSQL | `DATABASE_URL` points to Neon |
-| **Frontend** | **Separate repository** | Not in this Replit — Jochanae manages it independently |
+| **Frontend** | **Separate repository** | Not in this Replit — deployed independently |
 
-**This Replit is the backend codebase.** `artifacts/atlas/` here is a drifted reference copy — do not treat it as the live frontend. All meaningful work happens in `artifacts/api-server/` and `lib/`.
+**This Replit is the backend development environment.** `artifacts/atlas/` here is a drifted reference copy — do not treat it as the live frontend. All meaningful work happens in `artifacts/api-server/` and `lib/`.
 
-Backend changes go live immediately when the API Server workflow is restarted — no external deployment step needed.
+**Cloud Run deployment:** Changes are pushed to GitHub → Cloud Build triggers → builds Docker image → deploys to `axiom-atlas` service in `us-east1`. Backend changes require a Cloud Build trigger to go live.
 
 When changes touch the API contract (new routes, new response fields, new DB columns), produce copy-pasteable output files for Jochanae to apply to the frontend repo manually via Cursor.
 
@@ -44,7 +44,7 @@ Jochanae — founder of Into Innovations. Builds production SaaS entirely from h
 ## Architecture
 
 ### Stack
-- **Backend:** Express 5 (`artifacts/api-server/`) — deployed to Render, served at `/api`
+- **Backend:** Express 5 (`artifacts/api-server/`) — deployed to Google Cloud Run, served at `/api`
 - **Database:** Neon PostgreSQL via Drizzle ORM (`lib/db/`)
 - **Frontend:** Separate repository (not in this Replit) — React + Vite, deployed independently
 - **AI:** Anthropic Claude `claude-sonnet-4-6` + Google Gemini `gemini-2.5-pro`
@@ -125,18 +125,24 @@ artifacts/atlas/src/components/
 
 ```
 artifacts/api-server/src/routes/
-  nexus.ts        — Home chat (/api/nexus/chat, model-aware) + briefing + activity
-  chat.ts         — Workspace AI chat with Decision Catch Engine + FILE_EDIT
-  github.ts       — GitHub read/write/analyze/auto-link pipeline
-  google-auth.ts  — Google OAuth (registered, wired end-to-end)
-  projects.ts     — CRUD + summary stats + archive/restore
-  sessions.ts     — Session management + message history
-  entries.ts      — Decision Ledger entries
-  auth.ts         — Auth + Resend password reset + in-app password change
-  forge.ts        — Strategic extraction engine (solid prompt, produces structured nodes)
-  vault.ts        — Secrets Vault
-  thoughts.ts     — Thoughts/parking lot
-  stripe.ts       — Stripe webhook + subscription sync
+  nexus.ts          — Home chat (/api/nexus/chat, model-aware) + briefing + activity
+  chat.ts           — Workspace AI chat with Decision Catch Engine + FILE_EDIT + IMAGE_GEN
+  github.ts         — GitHub read/write/analyze/auto-link pipeline
+  google-auth.ts    — Google OAuth (registered, wired end-to-end)
+  projects.ts       — CRUD + summary stats + archive/restore
+  sessions.ts       — Session management + message history
+  entries.ts        — Decision Ledger entries
+  auth.ts           — Auth + Resend password reset + in-app password change
+  forge.ts          — Strategic extraction engine (solid prompt, produces structured nodes)
+  vault.ts          — Secrets Vault
+  thoughts.ts       — Thoughts/parking lot
+  stripe.ts         — Stripe webhook + subscription sync
+  errorlog.ts       — Error ingestion from frontend
+  terminal.ts       — Terminal command execution with sandbox
+  image.ts          — Image generation (Gemini Imagen 3 + DALL-E 3 fallback)
+  devserver.ts      — Dev server streaming logs
+  codegen.ts        — Code generation utilities
+  shell.ts          — Shell execution pipeline
 ```
 
 ---
@@ -218,6 +224,10 @@ AI returns `FILE_EDIT_START / FILE_EDIT_CONTENT / FILE_EDIT_END` blocks. Fronten
 - Forge — strategic extraction engine with structured node output
 - Stripe webhook auto-configures on server start; free plan capped at 1 project
 - `/deep` research in workspace
+- Terminal command execution with sandbox — backend wired, frontend has CONSOLE tab
+- IMAGE_GEN dual-engine (Gemini Imagen 3 + DALL-E 3) — backend wired, frontend renders in chat
+- Error ingestion from frontend to backend DB
+- Auto-indexing — server + localStorage cache
 
 ---
 
@@ -265,13 +275,22 @@ After every push: Replit Git tab → Pull (manual pull required).
 
 ## Environment Variables
 
-- `DATABASE_URL` — PostgreSQL (auto-provisioned)
+- `DATABASE_URL` — Neon PostgreSQL (production), auto-provisioned in dev
 - `ANTHROPIC_API_KEY` — Claude sonnet-4-6 (via Replit AI integration proxy)
-- `GOOGLE_GEMINI_API_KEY` — Gemini 2.5 Pro
+- `GOOGLE_GEMINI_API_KEY` — Gemini 2.5 Pro (image + text generation)
+- `OPENAI_API_KEY` — DALL-E 3 fallback for image generation
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth
 - `SESSION_SECRET` — Express sessions
-- `STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — Billing
 - `GITHUB_TOKEN` — Server-side GitHub fallback
+- `RESEND_API_KEY` — Password reset emails
+- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — GitHub OAuth
+- `APP_URL` — Backend URL (e.g., `https://axiom-atlas-xxx.run.app`)
+- `REPLIT_DOMAINS` — Comma-separated, auto-set by Replit
+- `CLOUD_BUILD_TRIGGER` — Push to main → Cloud Run deploy
+- `ATLAS_REPORTING_KEY` — Admin reporting auth
+- `RAILWAY_API_TOKEN` — Server token middleware
+- `LOG_LEVEL` — `info` (default), `debug` for verbose
 
 ---
 

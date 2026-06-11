@@ -40,6 +40,8 @@ import previewRouter from "./preview";
 import artifactsRouter from "./artifacts";
 import codegenRouter from "./codegen";
 import errorsRouter from "./errors";
+import browserRouter from "./browser";
+import deployRouter from "./deploy";
 
 const router: IRouter = Router();
 
@@ -83,6 +85,8 @@ router.use(requireAuth, mcpRouter);
 router.use(requireAuth, stateRouter);
 router.use(requireAuth, artifactsRouter);
 router.use(requireAuth, codegenRouter);
+router.use(requireAuth, browserRouter);
+router.use(requireAuth, deployRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);

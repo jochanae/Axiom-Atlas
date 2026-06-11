@@ -7,7 +7,7 @@ import { decryptToken, encryptToken } from "../lib/tokenCrypto";
 const router: IRouter = Router();
 
 const ConnectionBody = z.object({
-  type: z.enum(["github", "railway", "lovable", "cursor"]),
+  type: z.enum(["github", "railway", "lovable", "cursor", "vercel"]),
   label: z.string().min(1),
   url: z.string().url().optional(),
   token: z.string().min(1).optional(),
@@ -160,9 +160,9 @@ router.post("/connections", async (req, res): Promise<void> => {
       res.status(200).json(serializeConnection(updated));
       return;
     }
-  } else if (body.type === "railway") {
+  } else if (body.type === "railway" || body.type === "vercel") {
     if (!body.token) {
-      res.status(400).json({ error: "Railway token is required" });
+      res.status(400).json({ error: `${body.type} token is required` });
       return;
     }
     token = encryptToken(body.token);
@@ -320,6 +320,38 @@ async function railwayStatus(connection: typeof connectionsTable.$inferSelect) {
   };
 }
 
+async function vercelStatus(connection: typeof connectionsTable.$inferSelect) {
+  if (!connection.token) return { type: "vercel", status: "missing" };
+  const token = decryptToken(connection.token);
+  const response = await fetch("https://api.vercel.com/v9/projects", {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!response.ok) return { type: "vercel", status: "failed" };
+
+  const data = await response.json() as {
+    projects?: Array<{ name?: string; latestDeployments?: Array<{ state?: string; createdAt?: number }> }>;
+  };
+  const project = data.projects?.[0];
+  const latestDeploy = project?.latestDeployments?.[0];
+  const rawState = latestDeploy?.state?.toLowerCase() ?? "ready";
+  const status = rawState.includes("error") || rawState.includes("failed")
+    ? "failed"
+    : rawState.includes("building") || rawState.includes("queued") || rawState.includes("initializing")
+      ? "building"
+      : "active";
+
+  return {
+    type: "vercel",
+    status,
+    project: project?.name ?? null,
+    lastDeploy: latestDeploy ? {
+      state: latestDeploy.state ?? null,
+      timestamp: latestDeploy.createdAt ? new Date(latestDeploy.createdAt).toISOString() : null,
+    } : null,
+  };
+}
+
 router.get("/connections/status", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const connections = await db
@@ -334,6 +366,7 @@ router.get("/connections/status", async (req, res): Promise<void> => {
       if (connection.type === "railway") return railwayStatus(connection);
       if (connection.type === "lovable") return { type: "lovable", status: "linked", url: connection.url };
       if (connection.type === "cursor") return { type: "cursor", status: "linked", url: connection.url };
+      if (connection.type === "vercel") return vercelStatus(connection);
       return { type: connection.type, status: "linked" };
     } catch {
       return { type: connection.type, status: "failed" };
