@@ -501,7 +501,79 @@ Add these four lines before `priorLoaded.current`:
 
 ---
 
-### Change 7: Add useEffect to collect images from messages into version history
+### Change 7: Rehydrate imageB64 when loading prior messages from DB
+
+Find the priorMessages useEffect that sets messages:
+```tsx
+    setMessages(
+      priorMessages.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        intentType: m.intentType,
+        sentAt: m.createdAt,
+      }))
+    );
+  }, [priorMessages]);
+```
+
+Change the `priorMessages.map(...)` to include imageB64 and imageMimeType:
+```tsx
+    setMessages(
+      priorMessages.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        intentType: m.intentType,
+        sentAt: m.createdAt,
+        imageB64: (m as any).imageB64 ?? undefined,
+        imageMimeType: (m as any).imageMimeType ?? undefined,
+      }))
+    );
+  }, [priorMessages]);
+```
+
+> This causes the existing image-collection useEffect (below) to pick up images from prior messages on page load.
+
+---
+
+### Change 8: Load persisted image versions from backend when session opens
+
+Find:
+```tsx
+  // Collect images from chat messages into version history
+  useEffect(() => {
+```
+
+Add immediately before it:
+```tsx
+  // Load persisted image versions from the backend when a session is known
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    fetch(`/api/sessions/${sessionId}/image-versions`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: any[] | null) => {
+        if (cancelled || !data || data.length === 0) return;
+        const loaded: ImageVersion[] = data.map((v) => ({
+          id: `db-${v.id}`,
+          dataUrl: `data:${v.imageMimeType ?? "image/png"};base64,${v.imageB64}`,
+          prompt: v.prompt,
+          createdAt: v.createdAt,
+        }));
+        setImageVersions(loaded);
+        setActiveCanvasVersionId(loaded[loaded.length - 1].id);
+        loaded.forEach((v) => processedImageIds.current.add(v.id));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
+```
+
+---
+
+### Change 9: Add useEffect to collect images from messages into version history
 
 Find:
 ```tsx
@@ -540,7 +612,7 @@ Add before it:
 
 ---
 
-### Change 8: Add canvas handlers (handleOpenCanvas + handleCanvasRefine)
+### Change 10: Add canvas handlers (handleOpenCanvas + handleCanvasRefine)
 
 Find:
 ```tsx
@@ -579,7 +651,7 @@ Add before it:
 
 ---
 
-### Change 9: Pass onOpenCanvas to AssistantBubble
+### Change 11: Pass onOpenCanvas to AssistantBubble
 
 Find the `onAlertDismiss` prop in the AssistantBubble JSX call (the one inside the messages.map loop):
 ```tsx
@@ -604,7 +676,7 @@ Change to:
 
 ---
 
-### Change 10: Desktop split pane — show CanvasPanel when canvas is open
+### Change 12: Desktop split pane — show CanvasPanel when canvas is open
 
 Find the desktop right panel `<div>` wrapper. It looks like:
 ```tsx
@@ -644,7 +716,7 @@ Replace the entire `<div>` (through its closing `</div>`) with:
 
 ---
 
-### Change 11: Mobile canvas modal overlay
+### Change 13: Mobile canvas modal overlay
 
 Find:
 ```tsx

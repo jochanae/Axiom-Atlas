@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql, and, desc, isNotNull } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { db, sessionsTable, chatMessagesTable, projectsTable } from "@workspace/db";
+import { db, sessionsTable, chatMessagesTable, projectsTable, imageVersionsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import {
   CreateSessionBody,
@@ -366,6 +366,32 @@ router.get("/sessions/:sessionId/messages", async (req, res): Promise<void> => {
     .where(eq(chatMessagesTable.sessionId, params.data.sessionId))
     .orderBy(chatMessagesTable.createdAt);
   res.json(messages.map(serializeMessage));
+});
+
+// GET /sessions/:sessionId/image-versions — list all persisted image versions for a session
+router.get("/sessions/:sessionId/image-versions", async (req, res): Promise<void> => {
+  const params = ListMessagesParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await sessionBelongsToUser(params.data.sessionId, userId))) {
+    res.status(404).json({ error: "Session not found" }); return;
+  }
+  const versions = await db
+    .select()
+    .from(imageVersionsTable)
+    .where(eq(imageVersionsTable.sessionId, params.data.sessionId))
+    .orderBy(imageVersionsTable.createdAt);
+  res.json(versions.map((v) => ({
+    id: v.id,
+    messageId: v.messageId,
+    parentVersionId: v.parentVersionId,
+    prompt: v.prompt,
+    imageB64: v.imageB64,
+    imageMimeType: v.imageMimeType,
+    model: v.model,
+    mode: v.mode,
+    createdAt: v.createdAt.toISOString(),
+  })));
 });
 
 // POST /sessions/:id/summarize — write a session memory snapshot to project memory.

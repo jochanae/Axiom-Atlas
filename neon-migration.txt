@@ -83,10 +83,30 @@ ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS "image_b64" text;
 ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS "image_mime_type" text;
 
 
+-- ── image_versions table ──────────────────────────────────────────────────────
+-- NEW (Phase 2 Visual Layer): Persists every AI-generated image as a named
+-- version record. Powers the Visual Canvas version history strip and lets
+-- images survive page refresh and session reload.
+
+CREATE TABLE IF NOT EXISTS "image_versions" (
+  "id" serial PRIMARY KEY,
+  "session_id" integer NOT NULL REFERENCES "sessions"("id") ON DELETE CASCADE,
+  "project_id" integer NOT NULL REFERENCES "projects"("id") ON DELETE CASCADE,
+  "message_id" integer,
+  "parent_version_id" integer,
+  "prompt" text NOT NULL,
+  "image_b64" text NOT NULL,
+  "image_mime_type" text NOT NULL DEFAULT 'image/png',
+  "model" text,
+  "mode" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+
 -- ── VERIFY ────────────────────────────────────────────────────────────────────
 -- Run this after the statements above to confirm everything landed correctly.
 -- You should see columns: shape, label, url, metadata, image_b64, image_mime_type
--- And the tables: project_flow_canvas, mcp_connections
+-- And the tables: project_flow_canvas, mcp_connections, image_versions
 
 SELECT table_name, column_name, data_type
 FROM information_schema.columns
@@ -95,4 +115,4 @@ WHERE table_name IN ('projects', 'connections', 'sessions', 'chat_messages')
 ORDER BY table_name, column_name;
 
 SELECT table_name FROM information_schema.tables
-WHERE table_name IN ('project_flow_canvas', 'mcp_connections');
+WHERE table_name IN ('project_flow_canvas', 'mcp_connections', 'image_versions');

@@ -8724,6 +8724,8 @@ export default function Workspace() {
         content: m.content,
         intentType: m.intentType,
         sentAt: m.createdAt,
+        imageB64: (m as any).imageB64 ?? undefined,
+        imageMimeType: (m as any).imageMimeType ?? undefined,
       }))
     );
   }, [priorMessages]);
@@ -9261,6 +9263,28 @@ export default function Workspace() {
       },
     ]);
   }, []);
+
+  // Load persisted image versions from the backend when a session is known
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    fetch(`/api/sessions/${sessionId}/image-versions`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: any[] | null) => {
+        if (cancelled || !data || data.length === 0) return;
+        const loaded: ImageVersion[] = data.map((v) => ({
+          id: `db-${v.id}`,
+          dataUrl: `data:${v.imageMimeType ?? "image/png"};base64,${v.imageB64}`,
+          prompt: v.prompt,
+          createdAt: v.createdAt,
+        }));
+        setImageVersions(loaded);
+        setActiveCanvasVersionId(loaded[loaded.length - 1].id);
+        loaded.forEach((v) => processedImageIds.current.add(v.id));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [sessionId]);
 
   // Collect images from chat messages into version history
   useEffect(() => {

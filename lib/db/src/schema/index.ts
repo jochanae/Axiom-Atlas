@@ -22,3 +22,4 @@ export * from "./blueprints";
 export * from "./connections";
 export * from "./flowCanvas";
 export * from "./mcp_connections";
+export * from "./image_versions";

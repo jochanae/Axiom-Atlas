@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable } from "@workspace/db";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -2979,6 +2979,23 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         })
         .returning();
       savedMsgId = savedMsg.id;
+      // Persist image version record if an image was generated
+      if (firstImage && savedMsg.id) {
+        try {
+          await db.insert(imageVersionsTable).values({
+            sessionId,
+            projectId,
+            messageId: savedMsg.id,
+            prompt: firstImage.prompt ?? message,
+            imageB64: imageB64Val!,
+            imageMimeType: imageMimeTypeVal ?? "image/png",
+            model: firstImage.model ?? null,
+            mode: firstImage.mode ?? null,
+          });
+        } catch (ivErr: any) {
+          logger.warn({ err: ivErr?.message }, "image_versions insert failed — non-fatal");
+        }
+      }
       await db
         .update(sessionsTable)
         .set({
