@@ -25,6 +25,8 @@ import { CommitCard } from "../components/CommitCard";
 import { PlanCard } from "../components/PlanCard";
 import { LiveGenerationCard } from "../components/LiveGenerationCard";
 import { Eye, TerminalSquare } from "lucide-react";
+import { CanvasPanel } from "../components/CanvasPanel";
+import type { ImageVersion } from "../components/CanvasPanel";
 import { useThemeMode } from "@/lib/theme";
 import { fileToBase64Safe } from "@/lib/image-resize";
 import { detectDecisionMoment } from "@/lib/DecisionCatchEngine";
@@ -2198,6 +2200,7 @@ function AssistantBubble({
   agenticMode,
   onEditDeclined,
   onAlertDismiss,
+  onOpenCanvas,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -2227,6 +2230,7 @@ function AssistantBubble({
   agenticMode?: boolean;
   onEditDeclined?: () => void;
   onAlertDismiss?: () => void;
+  onOpenCanvas?: (dataUrl: string) => void;
 }) {
   const [hov, setHov] = useState(false);
   const hovTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2508,11 +2512,45 @@ function AssistantBubble({
 
         {message.imageB64 && (
           <div style={{ marginBottom: 12 }}>
-            <img
-              src={`data:${message.imageMimeType ?? "image/png"};base64,${message.imageB64}`}
-              alt="Generated visual"
-              style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid rgba(201,162,76,0.2)", display: "block" }}
-            />
+            <button
+              onClick={() => {
+                const dataUrl = `data:${message.imageMimeType ?? "image/png"};base64,${message.imageB64}`;
+                onOpenCanvas?.(dataUrl);
+              }}
+              title="Tap to open in canvas"
+              style={{
+                display: "block",
+                padding: 0,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                width: "100%",
+                borderRadius: 10,
+                position: "relative",
+              }}
+            >
+              <img
+                src={`data:${message.imageMimeType ?? "image/png"};base64,${message.imageB64}`}
+                alt="Generated visual"
+                style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid rgba(201,162,76,0.2)", display: "block", width: "100%" }}
+              />
+              <div style={{
+                position: "absolute",
+                bottom: 8,
+                right: 8,
+                background: "rgba(0,0,0,0.55)",
+                backdropFilter: "blur(4px)",
+                borderRadius: 5,
+                padding: "3px 7px",
+                fontSize: 9,
+                fontFamily: "var(--app-font-mono)",
+                color: "rgba(201,162,76,0.9)",
+                letterSpacing: "0.08em",
+                pointerEvents: "none",
+              }}>
+                TAP TO EXPAND
+              </div>
+            </button>
           </div>
         )}
 
@@ -8132,6 +8170,10 @@ export default function Workspace() {
   const [planExecutions, setPlanExecutions] = useState<Map<number, PlanExecution>>(() => new Map());
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
+  const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [activeCanvasVersionId, setActiveCanvasVersionId] = useState<string | null>(null);
+  const processedImageIds = useRef(new Set<string>());
 
   // Reset all chat state when the project changes so old messages never bleed into a new workspace
   useEffect(() => {
@@ -8140,6 +8182,10 @@ export default function Workspace() {
     setPlanExecutions(new Map());
     setSessionId(null);
     setActiveCatch(null);
+    setImageVersions([]);
+    setCanvasOpen(false);
+    setActiveCanvasVersionId(null);
+    processedImageIds.current.clear();
     priorLoaded.current = false;
     homePlanLoadedRef.current = false;
   }, [id]);
@@ -9216,6 +9262,30 @@ export default function Workspace() {
     ]);
   }, []);
 
+  // Collect images from chat messages into version history
+  useEffect(() => {
+    let latestNew: ImageVersion | null = null;
+    for (const msg of messages) {
+      if (msg.role === "assistant" && msg.imageB64) {
+        const versionId = msg.id ? `msg-${msg.id}` : `sent-${msg.sentAt ?? ""}`;
+        if (!processedImageIds.current.has(versionId)) {
+          processedImageIds.current.add(versionId);
+          const version: ImageVersion = {
+            id: versionId,
+            dataUrl: `data:${msg.imageMimeType ?? "image/png"};base64,${msg.imageB64}`,
+            createdAt: msg.sentAt ?? new Date().toISOString(),
+          };
+          setImageVersions((prev) => [...prev, version]);
+          latestNew = version;
+        }
+      }
+    }
+    if (latestNew) {
+      setActiveCanvasVersionId(latestNew.id);
+      setCanvasOpen(true);
+    }
+  }, [messages]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, chatPending]);
@@ -9378,6 +9448,32 @@ export default function Workspace() {
 
   const { listening: voiceListening, toggle: toggleVoice, isSupported: voiceSupported } =
     useVoiceInput(handleVoiceTranscript);
+
+  const handleOpenCanvas = useCallback((dataUrl: string) => {
+    const existing = imageVersions.find((v) => v.dataUrl === dataUrl);
+    if (existing) {
+      setActiveCanvasVersionId(existing.id);
+    } else {
+      const newId = `manual-${Date.now()}`;
+      setImageVersions((prev) => [...prev, { id: newId, dataUrl, createdAt: new Date().toISOString() }]);
+      setActiveCanvasVersionId(newId);
+    }
+    setCanvasOpen(true);
+  }, [imageVersions]);
+
+  const handleCanvasRefine = useCallback((prompt: string) => {
+    if (!sessionId) return;
+    const active = imageVersions.find((v) => v.id === activeCanvasVersionId);
+    if (!active) {
+      doSend(prompt, sessionId, messages);
+      return;
+    }
+    const commaIdx = active.dataUrl.indexOf(",");
+    const base64 = commaIdx >= 0 ? active.dataUrl.slice(commaIdx + 1) : "";
+    const mimeMatch = active.dataUrl.match(/data:([^;]+)/);
+    const mediaType = mimeMatch?.[1] ?? "image/png";
+    doSend(prompt, sessionId, messages, undefined, { base64, mediaType });
+  }, [sessionId, messages, imageVersions, activeCanvasVersionId, doSend]);
 
   const handleCatchProceed = (msgId?: number) => {
     setMessages((prev) => prev.map((m) => m.id === msgId ? { ...m, catchResolved: true } : m));
@@ -10921,6 +11017,7 @@ export default function Workspace() {
                       m.id === msg.id ? { ...m, alertResolved: true } : m
                     ));
                   }}
+                  onOpenCanvas={handleOpenCanvas}
                 />
               )
             )}
@@ -11728,43 +11825,54 @@ export default function Workspace() {
               }} />
             </div>
             <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
-              <RightPanel
-                projectId={id}
-                entries={entries || []}
-                activeCatch={activeCatch}
-                onFileContext={setFileContext}
-                onLinkedRepoChange={setLinkedRepo}
-                pushHistory={pushHistory}
-                onRollbackPush={handleRollbackPush}
-                onHomeNav={() => setLocation("/home")}
-                forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : desktopForceTab}
-                onSendIntent={sendFromIntentCapture}
-                onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
-                onMapReadinessChange={setMapReadiness}
-                displayedReadinessScore={displayedReadinessScore}
-                onSystemNodeMessage={pushSystemNodeMessage}
-                onHandover={handleHandover}
-                handoverPending={handoverPending}
-                lastHandoverHash={project?.lastHandoverHash ?? null}
-                isMobile={false}
-                resolvedNodeIds={pendingResolvedNodeIds}
-                onResolvedConsumed={() => setPendingResolvedNodeIds([])}
-                currentSnapshot={currentSnapshot}
-                onSnapshotChange={setCurrentSnapshot}
-                handoverOpen={handoverOpen}
-                onHandoverOpenChange={setHandoverOpen}
-                sandboxCode={sandboxCode}
-                onSandboxConsumed={() => setSandboxCode(null)}
-                previewRefreshTrigger={previewRefreshTrigger}
-                pendingTerminalCommand={pendingTerminalCommand}
-                onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
-                onCommandComplete={handleTerminalComplete}
-                wsLens={wsLens}
-                onOpenForge={() => setShowForgeExternal(true)}
-                externalForgeNodes={externalForgeNodes}
-                onForgeNodesConsumed={() => setExternalForgeNodes([])}
-                onForgeCompleted={() => void updateForgeState("forged")}
-              />
+              {canvasOpen && imageVersions.length > 0 ? (
+                <CanvasPanel
+                  versions={imageVersions}
+                  activeVersionId={activeCanvasVersionId}
+                  onVersionSelect={setActiveCanvasVersionId}
+                  onRefine={handleCanvasRefine}
+                  onClose={() => setCanvasOpen(false)}
+                  mode="inline"
+                />
+              ) : (
+                <RightPanel
+                  projectId={id}
+                  entries={entries || []}
+                  activeCatch={activeCatch}
+                  onFileContext={setFileContext}
+                  onLinkedRepoChange={setLinkedRepo}
+                  pushHistory={pushHistory}
+                  onRollbackPush={handleRollbackPush}
+                  onHomeNav={() => setLocation("/home")}
+                  forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : desktopForceTab}
+                  onSendIntent={sendFromIntentCapture}
+                  onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
+                  onMapReadinessChange={setMapReadiness}
+                  displayedReadinessScore={displayedReadinessScore}
+                  onSystemNodeMessage={pushSystemNodeMessage}
+                  onHandover={handleHandover}
+                  handoverPending={handoverPending}
+                  lastHandoverHash={project?.lastHandoverHash ?? null}
+                  isMobile={false}
+                  resolvedNodeIds={pendingResolvedNodeIds}
+                  onResolvedConsumed={() => setPendingResolvedNodeIds([])}
+                  currentSnapshot={currentSnapshot}
+                  onSnapshotChange={setCurrentSnapshot}
+                  handoverOpen={handoverOpen}
+                  onHandoverOpenChange={setHandoverOpen}
+                  sandboxCode={sandboxCode}
+                  onSandboxConsumed={() => setSandboxCode(null)}
+                  previewRefreshTrigger={previewRefreshTrigger}
+                  pendingTerminalCommand={pendingTerminalCommand}
+                  onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
+                  onCommandComplete={handleTerminalComplete}
+                  wsLens={wsLens}
+                  onOpenForge={() => setShowForgeExternal(true)}
+                  externalForgeNodes={externalForgeNodes}
+                  onForgeNodesConsumed={() => setExternalForgeNodes([])}
+                  onForgeCompleted={() => void updateForgeState("forged")}
+                />
+              )}
             </div>
           </>
         )}
@@ -11847,6 +11955,18 @@ export default function Workspace() {
           </div>
         )}
       </div>
+
+      {/* Mobile: full-screen Canvas Panel modal */}
+      {isMobile && canvasOpen && imageVersions.length > 0 && (
+        <CanvasPanel
+          versions={imageVersions}
+          activeVersionId={activeCanvasVersionId}
+          onVersionSelect={setActiveCanvasVersionId}
+          onRefine={handleCanvasRefine}
+          onClose={() => setCanvasOpen(false)}
+          mode="modal"
+        />
+      )}
 
       {isMobile && mobileTab !== "map" && (
         <MobileTabBar
