@@ -8906,6 +8906,7 @@ export default function Workspace() {
             ...(lps.length > 0 ? { linePatches: lps } : {}),
             ...(normalizedChips.length > 0 ? { memoryChips: normalizedChips } : {}),
             ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
+            ...(res.imageGen?.images?.[0]?.imageUrl ? { imageB64: res.imageGen.images[0].imageUrl.split(",")[1], imageMimeType: res.imageGen.images[0].imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png" } : {}),
             ...(aff.length > 0 ? { autoFetchedFiles: aff } : {}),
           }]);
           // Capture scenario messages in isolated buffer (not persisted to DB)

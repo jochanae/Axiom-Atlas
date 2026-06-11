@@ -2569,6 +2569,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     return "";
   }).trim();
 
+  // Auto-inject IMAGE_GEN if user asked for an image but Atlas didn't emit the token
+  // This prevents the AI from ignoring the image generation instruction
+  if (imageGenTokens.length === 0 && IMAGE_REQUEST_RE.test(message)) {
+    const autoPrompt = message.replace(/\b(generate|create|make|draw|sketch|visualize|design|mock.?up|wireframe|show me|build me)\b/gi, "").trim();
+    const mode = /\b(diagram|flow|chart|wireframe|architecture|schematic|structure|map|system)\b/i.test(message) ? "schematic" : "render";
+    const size = /\b(wide|landscape|desktop|banner|hero)\b/i.test(message) ? "landscape" : /\b(mobile|phone|portrait|tall|vertical)\b/i.test(message) ? "portrait" : "square";
+    imageGenTokens.push({ prompt: autoPrompt || message, mode, size });
+    writeStep(res, { verb: "Auto-generating", target: "image", phase: "render" });
+  }
+
   // Extract and strip CLARIFY blocks — Atlas asks structured follow-up questions when blocked
   type ClarifyPayload = {
     steps: Array<{
