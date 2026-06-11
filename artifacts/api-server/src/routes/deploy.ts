@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { and, desc, eq } from "drizzle-orm";
-import { connectionsTable, db } from "@workspace/db";
+import { connectionsTable, db, projectsTable, scheduledChecksTable } from "@workspace/db";
 import { decryptToken } from "../lib/tokenCrypto";
 import { logger } from "../lib/logger";
+import { assertSafeUrl } from "../lib/ssrf";
 
 const router: IRouter = Router();
 
@@ -179,12 +180,17 @@ router.get("/deploy/status", async (req, res): Promise<void> => {
  * If the user has no Vercel connection, returns { hasVercel: false } immediately.
  * If they do, polls Vercel every 5 s for up to 90 s until the latest deployment
  * reaches "ready" or "failed", then returns the result.
- * Query: ?projectId=...&teamId=... (both optional — falls back to connection metadata)
+ * Query: ?projectId=...&teamId=...&atlasProjectId=... (projectId/teamId optional — fall back to connection metadata;
+ *         atlasProjectId is our internal DB project ID — when provided, auto-registers a daily scheduled
+ *         health check for the deployed URL after a successful deploy; idempotent)
  */
 router.get("/deploy/after-push", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const projectId = req.query.projectId as string | undefined;
   const teamId = req.query.teamId as string | undefined;
+  // atlasProjectId is our internal DB project ID — used to auto-register a health check
+  const atlasProjectIdRaw = req.query.atlasProjectId as string | undefined;
+  const atlasProjectId = atlasProjectIdRaw ? parseInt(atlasProjectIdRaw, 10) : null;
 
   const [connection] = await db
     .select()
@@ -275,8 +281,12 @@ router.get("/deploy/after-push", async (req, res): Promise<void> => {
 
     // When deploy is ready and we have a URL, auto-run visual QA health check
     let visualQa: { isHealthy: boolean; issues: string[]; analysis?: string; screenshotBase64?: string } | null = null;
+    let autoMonitoringSetUp = false;
+
     if (result.status === "ready" && (result.alias ?? result.url)) {
       const liveUrl = result.alias ? `https://${result.alias}` : `https://${result.url}`;
+
+      // Visual QA one-shot health check
       try {
         const healthRes = await fetch(
           `${req.protocol}://${req.get("host")}/api/browser/health`,
@@ -293,9 +303,79 @@ router.get("/deploy/after-push", async (req, res): Promise<void> => {
       } catch (err) {
         logger.warn({ err: String(err), liveUrl }, "Post-deploy visual QA failed — continuing without it");
       }
+
+      // Auto-register a scheduled health check against the project's canonical previewUrl
+      if (atlasProjectId && !isNaN(atlasProjectId)) {
+        try {
+          // Load the project scoped to this user (ownership check)
+          const [project] = await db
+            .select({ id: projectsTable.id, previewUrl: projectsTable.previewUrl })
+            .from(projectsTable)
+            .where(
+              and(
+                eq(projectsTable.id, atlasProjectId),
+                eq(projectsTable.userId, userId)
+              )
+            )
+            .limit(1);
+
+          if (!project) {
+            logger.warn({ atlasProjectId, userId }, "Auto health check skipped — project not found or not owned by user");
+          } else if (!project.previewUrl) {
+            logger.info({ atlasProjectId }, "Auto health check skipped — project has no previewUrl");
+          } else {
+            // Validate the URL is safe (SSRF guard, same as POST /api/browser/schedule)
+            await assertSafeUrl(project.previewUrl);
+
+            const existing = await db
+              .select({ id: scheduledChecksTable.id, isActive: scheduledChecksTable.isActive })
+              .from(scheduledChecksTable)
+              .where(
+                and(
+                  eq(scheduledChecksTable.projectId, atlasProjectId),
+                  eq(scheduledChecksTable.url, project.previewUrl),
+                  eq(scheduledChecksTable.userId, userId)
+                )
+              )
+              .limit(1);
+
+            if (existing.length === 0) {
+              // No check exists yet — create one
+              await db.insert(scheduledChecksTable).values({
+                userId,
+                projectId: atlasProjectId,
+                url: project.previewUrl,
+                intervalMinutes: 1440,
+                isActive: true,
+                nextCheckAt: new Date(),
+              });
+              autoMonitoringSetUp = true;
+              logger.info({ userId, atlasProjectId, previewUrl: project.previewUrl }, "Auto-registered health check after deploy");
+            } else if (!existing[0]!.isActive) {
+              // Check exists but was deactivated — reactivate it
+              await db
+                .update(scheduledChecksTable)
+                .set({ isActive: true, nextCheckAt: new Date() })
+                .where(eq(scheduledChecksTable.id, existing[0]!.id));
+              autoMonitoringSetUp = true;
+              logger.info({ userId, atlasProjectId, previewUrl: project.previewUrl }, "Reactivated health check after deploy");
+            } else {
+              // Check already exists and is active — monitoring already running
+              autoMonitoringSetUp = true;
+            }
+          }
+        } catch (err) {
+          logger.warn({ err: String(err), atlasProjectId }, "Auto-register health check failed — continuing without it");
+        }
+      }
     }
 
-    res.json({ hasVercel: true, ...result, ...(visualQa ? { visualQa } : {}) });
+    res.json({
+      hasVercel: true,
+      ...result,
+      ...(visualQa ? { visualQa } : {}),
+      ...(autoMonitoringSetUp ? { autoMonitoringSetUp: true, autoMonitoringMessage: "I've set up automatic monitoring for your app." } : {}),
+    });
   } catch (err) {
     logger.error({ err: String(err), userId, resolvedProjectId }, "after-push poll failed");
     res.status(500).json({ error: "Deploy status poll failed" });

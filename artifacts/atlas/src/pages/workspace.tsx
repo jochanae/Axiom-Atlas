@@ -11153,18 +11153,21 @@ export default function Workspace() {
                       );
                     }
                     // Background deploy status check — polls Vercel for up to 90 s after push
-                    fetch("/api/deploy/after-push", { credentials: "include" })
+                    fetch(`/api/deploy/after-push?atlasProjectId=${id}`, { credentials: "include" })
                       .then((r) => (r.ok ? r.json() : null))
-                      .then((data: { hasVercel?: boolean; status?: string; alias?: string; url?: string; visualQa?: DeployQa } | null) => {
+                      .then((data: { hasVercel?: boolean; status?: string; alias?: string; url?: string; visualQa?: DeployQa; autoMonitoringSetUp?: boolean; autoMonitoringMessage?: string } | null) => {
                         if (!data?.hasVercel) return;
                         const host = data.alias
                           ? `https://${data.alias}`
                           : data.url
                             ? `https://${data.url}`
                             : null;
+                        const monitoringNote = data.autoMonitoringSetUp && data.autoMonitoringMessage
+                          ? `\n\n${data.autoMonitoringMessage}`
+                          : "";
                         const content =
                           data.status === "ready"
-                            ? `Deployed ✓${host ? `\n\nLive at ${host}` : ""}`
+                            ? `Deployed ✓${host ? `\n\nLive at ${host}` : ""}${monitoringNote}`
                             : data.status === "failed"
                               ? "Deploy failed. Check your Vercel dashboard — the build may need a fix."
                               : null;
