@@ -607,6 +607,36 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
     summary = `No errors detected on ${url}. Page loaded with HTTP ${httpStatus ?? "unknown"}, no console errors, no resource failures, no crash patterns found.`;
   }
 
+  // Screenshot via Microlink — always capture so the inline card shows what the page looks like.
+  // Non-fatal: if Microlink times out or fails, the monitor result is still returned without it.
+  let monitorScreenshotBase64: string | null = null;
+  {
+    try {
+      const mlUrl =
+        `https://api.microlink.io/?url=${encodeURIComponent(url)}` +
+        `&screenshot=true&fullPage=false&meta=false&embed=screenshot.url`;
+      const mlRes = await fetch(mlUrl, {
+        headers: { "User-Agent": "Atlas-Browser/1.0" },
+        signal: AbortSignal.timeout(25_000),
+      });
+      if (mlRes.ok) {
+        const mlData = await mlRes.json() as { data?: { screenshot?: { url?: string } } };
+        const screenshotUrl = mlData?.data?.screenshot?.url;
+        if (screenshotUrl) {
+          const imgRes = await fetch(screenshotUrl, { signal: AbortSignal.timeout(15_000) });
+          if (imgRes.ok) {
+            const buffer = Buffer.from(await imgRes.arrayBuffer());
+            const contentType = imgRes.headers.get("content-type") ?? "image/jpeg";
+            const mediaType = contentType.includes("png") ? "image/png" : "image/jpeg";
+            monitorScreenshotBase64 = `data:${mediaType};base64,${buffer.toString("base64")}`;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, url }, "Monitor screenshot failed — continuing without it");
+    }
+  }
+
   res.json({
     url,
     httpStatus,
@@ -616,6 +646,7 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
     errorPatterns,
     summary,
     engine,
+    ...(monitorScreenshotBase64 ? { screenshotBase64: monitorScreenshotBase64 } : {}),
   });
 });
 

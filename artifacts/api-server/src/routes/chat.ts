@@ -2122,7 +2122,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Load project memory + repo info + node state from DB, plus user memory when authenticated.
   const [projectRows, userRows] = await Promise.all([
     db
-      .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name })
+      .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name, previewUrl: projectsTable.previewUrl })
       .from(projectsTable)
       .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)),
     userId
@@ -2838,6 +2838,13 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     }
     return "";
   }).trim();
+
+  // Auto-inject BROWSER_VISIT monitor after FILE_EDIT_CONFIRMED when project has a known live URL
+  // This gives the user a silent health check + screenshot in chat with no prompt required
+  if (!browserVisitToken && message.includes("FILE_EDIT_CONFIRMED:") && project?.previewUrl) {
+    browserVisitToken = { url: project.previewUrl, mode: "monitor" };
+    writeStep(res, { verb: "Visiting", target: project.previewUrl, phase: "execute" });
+  }
 
   // Extract and strip CLARIFY blocks — Atlas asks structured follow-up questions when blocked
   type ClarifyPayload = {
