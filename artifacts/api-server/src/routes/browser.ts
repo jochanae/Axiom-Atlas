@@ -50,6 +50,31 @@ async function assertSafeUrl(rawUrl: string): Promise<void> {
     // Benign DNS failure — let the actual fetch fail naturally
   }
 }
+
+/**
+ * SSRF-safe fetch that follows redirects manually.
+ * Each Location hop is validated with assertSafeUrl() before following,
+ * preventing open-redirect attacks that bounce through a public URL to reach
+ * internal/private network endpoints.
+ */
+const MAX_REDIRECT_HOPS = 5;
+async function safeFetch(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  let currentUrl = url;
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop++) {
+    const resp = await fetch(currentUrl, { ...options, redirect: "manual" });
+    // Non-redirect — done
+    if (resp.status < 300 || resp.status >= 400) return resp;
+    const location = resp.headers.get("location");
+    if (!location) return resp; // redirect with no Location — treat as final
+    const nextUrl = new URL(location, currentUrl).href;
+    await assertSafeUrl(nextUrl); // throws if next hop is private
+    currentUrl = nextUrl;
+  }
+  throw new Error(`Too many redirects (>${MAX_REDIRECT_HOPS})`);
+}
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ScreenshotBody = z.object({
@@ -194,7 +219,7 @@ router.post("/browser/scrape", async (req, res): Promise<void> => {
   }
 
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Atlas/1.0)",
         Accept: "text/html",
@@ -297,7 +322,7 @@ router.post("/browser/health", async (req, res): Promise<void> => {
 
   // 1. HTTP status check
   try {
-    const headResp = await fetch(url, {
+    const headResp = await safeFetch(url, {
       method: "HEAD",
       headers: { "User-Agent": "Atlas-HealthCheck/1.0" },
       signal: AbortSignal.timeout(10_000),
@@ -440,6 +465,24 @@ async function runPuppeteerMonitor(url: string, checkResources: boolean): Promis
     const page = await browser.newPage();
     await page.setUserAgent("Mozilla/5.0 (Atlas-Monitor/2.0) AppleWebKit/537.36");
 
+    // ── SSRF guard: block navigation redirects to private network targets ───
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      if (req.isNavigationRequest()) {
+        try {
+          const parsed = new URL(req.url());
+          if (isPrivateIp(parsed.hostname.toLowerCase())) {
+            req.abort("blockedbyclient");
+            return;
+          }
+        } catch {
+          req.abort("blockedbyclient");
+          return;
+        }
+      }
+      req.continue();
+    });
+
     // ── Live console capture ────────────────────────────────────────────────
     page.on("console", (msg) => {
       const t = msg.type();
@@ -500,7 +543,7 @@ async function runHtmlAnalysis(url: string, checkResources: boolean): Promise<Mo
   let pageContent = "";
 
   try {
-    const pageResp = await fetch(url, {
+    const pageResp = await safeFetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Atlas-Monitor/1.0)", Accept: "text/html" },
       signal: AbortSignal.timeout(15_000),
     });
@@ -552,7 +595,7 @@ async function runHtmlAnalysis(url: string, checkResources: boolean): Promise<Mo
       const toCheck = [...resourceUrls].slice(0, 12);
       const results = await Promise.allSettled(
         toCheck.map(async (resUrl) => {
-          const r = await fetch(resUrl, {
+          const r = await safeFetch(resUrl, {
             method: "HEAD",
             headers: { "User-Agent": "Atlas-Monitor/1.0" },
             signal: AbortSignal.timeout(8_000),

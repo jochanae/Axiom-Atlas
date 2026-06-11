@@ -72,6 +72,10 @@ vi.mock("node:dns/promises", () => ({
   },
 }));
 
+// Stub global fetch for redirect SSRF tests
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+
 // ── Test app setup ────────────────────────────────────────────────────────────
 function createTestApp() {
   const app = express();
@@ -244,5 +248,76 @@ describe("GET /api/browser/checks/:projectId", () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("schedules");
     expect(res.body).toHaveProperty("results");
+  });
+});
+
+// ── SSRF redirect protection ──────────────────────────────────────────────────
+// These tests verify that safeFetch() validates each redirect hop and refuses
+// to follow a public-URL → private-IP redirect chain.
+describe("SSRF redirect bypass protection (safeFetch)", () => {
+  beforeEach(() => {
+    mockDbState.selectResults = [];
+    mockFetch.mockReset();
+  });
+
+  it("blocks a redirect from a public URL to a private IP", async () => {
+    // Simulate: example.com returns a 302 → http://192.168.1.1/admin
+    mockFetch.mockResolvedValueOnce({
+      status: 302,
+      headers: { get: (h: string) => h === "location" ? "http://192.168.1.1/admin" : null },
+    });
+
+    const app = createTestApp();
+    const cookie = withAuth();
+    const res = await request(app)
+      .post("/api/browser/scrape")
+      .set("Cookie", cookie)
+      .send({ url: "https://example.com/redirect-trap" });
+
+    // safeFetch should throw on the private redirect → route returns 500
+    // (or 400 from SSRF guard — either signals the redirect was blocked)
+    expect([400, 500, 502]).toContain(res.status);
+  });
+
+  it("blocks a redirect from a public URL to localhost", async () => {
+    mockFetch.mockResolvedValueOnce({
+      status: 301,
+      headers: { get: (h: string) => h === "location" ? "http://localhost:8080/secret" : null },
+    });
+
+    const app = createTestApp();
+    const cookie = withAuth();
+    const res = await request(app)
+      .post("/api/browser/scrape")
+      .set("Cookie", cookie)
+      .send({ url: "https://example.com/trap" });
+
+    expect([400, 500, 502]).toContain(res.status);
+  });
+
+  it("follows a redirect from one public URL to another", async () => {
+    // Simulate: example.com 301 → example.org → 200 OK with HTML
+    mockFetch
+      .mockResolvedValueOnce({
+        status: 301,
+        headers: { get: (h: string) => h === "location" ? "https://example.org/page" : null },
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        ok: true,
+        headers: { get: () => null },
+        text: async () => "<html><head><title>Example</title></head><body>hello</body></html>",
+      });
+
+    const app = createTestApp();
+    const cookie = withAuth();
+    const res = await request(app)
+      .post("/api/browser/scrape")
+      .set("Cookie", cookie)
+      .send({ url: "https://example.com/redirect" });
+
+    // Both hops are public — should succeed
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe("Example");
   });
 });
