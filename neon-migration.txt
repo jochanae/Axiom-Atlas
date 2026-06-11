@@ -75,15 +75,23 @@ CREATE TABLE IF NOT EXISTS mcp_connections (
 
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS run_status text;
 
+-- ── chat_messages: image storage ──────────────────────────────────────────────
+-- NEW: Stores generated image base64 alongside the assistant message.
+-- Required for images to persist across page reloads.
+
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS "image_b64" text;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS "image_mime_type" text;
+
+
 -- ── VERIFY ────────────────────────────────────────────────────────────────────
 -- Run this after the statements above to confirm everything landed correctly.
--- You should see columns: shape, label, url, metadata
--- And the table: project_flow_canvas
+-- You should see columns: shape, label, url, metadata, image_b64, image_mime_type
+-- And the tables: project_flow_canvas, mcp_connections
 
 SELECT table_name, column_name, data_type
 FROM information_schema.columns
-WHERE table_name IN ('projects', 'connections', 'sessions')
-  AND column_name IN ('shape', 'label', 'url', 'metadata', 'run_status')
+WHERE table_name IN ('projects', 'connections', 'sessions', 'chat_messages')
+  AND column_name IN ('shape', 'label', 'url', 'metadata', 'run_status', 'image_b64', 'image_mime_type')
 ORDER BY table_name, column_name;
 
 SELECT table_name FROM information_schema.tables
