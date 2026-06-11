@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { LoadingSpinner } from "../components/ui/loading-spinner";
@@ -1059,10 +1059,27 @@ export default function Home() {
   const { isFree } = useSubscription();
 
   // ── Home context: repo / branch / model ────────────────────────────────────
-  const [homeFocus] = useState<number | null>(null);
+  const [homeFocus, setHomeFocus] = useState<number | null>(() => {
+    try {
+      const raw = localStorage.getItem("atlas-home-focus");
+      const fid = raw ? Number(raw) : null;
+      return Number.isFinite(fid ?? NaN) && (fid ?? 0) > 0 ? fid : null;
+    } catch { return null; }
+  });
+  const [showFocusPicker, setShowFocusPicker] = useState(false);
   const [homeModel] = useState<string>("claude");
   const [homeMode] = useState<string>("strategic");
+
+  const handleSetFocus = useCallback((fid: number | null) => {
+    setHomeFocus(fid);
+    setShowFocusPicker(false);
+    try {
+      if (fid) localStorage.setItem("atlas-home-focus", String(fid));
+      else localStorage.removeItem("atlas-home-focus");
+    } catch { /* silent */ }
+  }, []);
   const [homeUserType] = useState<HomeUserType | null>(() => loadHomeUserType());
+
   const [showHandoff, setShowHandoff] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [handoffStage, setHandoffStage] = useState("");
@@ -1669,6 +1686,35 @@ export default function Home() {
             </svg>
           </button>
           <AtlasLogo />
+
+          {/* Focus chip — shows active project, opens picker on tap */}
+          {projects && projects.length > 0 && (
+            <button
+              onClick={() => setShowFocusPicker(true)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "4px 10px", borderRadius: 16,
+                background: homeFocus ? "rgba(201,162,76,0.10)" : "rgba(120,113,108,0.06)",
+                border: homeFocus ? "1px solid rgba(201,162,76,0.28)" : "1px solid rgba(120,113,108,0.15)",
+                cursor: "pointer", transition: "all 160ms ease",
+                flexShrink: 0,
+              }}
+            >
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: homeFocus ? "var(--atlas-gold)" : "var(--atlas-muted)",
+                opacity: homeFocus ? 0.8 : 0.4,
+              }} />
+              <span style={{
+                fontSize: 10, fontFamily: "var(--app-font-mono)",
+                letterSpacing: "0.08em", textTransform: "uppercase",
+                color: homeFocus ? "rgba(201,162,76,0.85)" : "var(--atlas-muted)",
+              }}>
+                {homeFocus && projects ? (projects as Project[]).find((p: Project) => p.id === homeFocus)?.name ?? "All Projects" : "All Projects"}
+              </span>
+              <span style={{ fontSize: 8, color: "var(--atlas-muted)", opacity: 0.5 }}>▼</span>
+            </button>
+          )}
         </div>
 
         {/* Center: timestamp — hidden on tiny screens to avoid overlap */}
@@ -2598,6 +2644,67 @@ export default function Home() {
           activeProjectName={homeFocus ? (projects?.find(p => p.id === homeFocus)?.name ?? undefined) : undefined}
           onClose={() => setShowQuickPrompt(false)}
         />
+      )}
+
+      {/* Focus picker — choose which project to focus on home */}
+      {showFocusPicker && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 500,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)",
+        }} onClick={() => setShowFocusPicker(false)}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)",
+              borderRadius: 14, padding: "20px 16px", width: "min(320px, 90vw)",
+              maxHeight: "60vh", overflowY: "auto",
+              display: "flex", flexDirection: "column", gap: 8,
+            }}
+          >
+            <div style={{
+              fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.12em",
+              textTransform: "uppercase", color: "var(--atlas-muted)", marginBottom: 4,
+            }}>
+              Focus Project
+            </div>
+            <button
+              onClick={() => handleSetFocus(null)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "10px 12px", borderRadius: 10,
+                background: homeFocus === null ? "rgba(201,162,76,0.10)" : "transparent",
+                border: homeFocus === null ? "1px solid rgba(201,162,76,0.25)" : "1px solid transparent",
+                cursor: "pointer", textAlign: "left", transition: "all 160ms",
+              }}
+            >
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: homeFocus === null ? "var(--atlas-gold)" : "var(--atlas-muted)", opacity: 0.5,
+              }} />
+              <span style={{ fontSize: 12, color: "var(--atlas-fg)" }}>All Projects</span>
+            </button>
+            {(projects ?? []).filter((p: Project) => p.status !== "archived").map((p: Project) => (
+              <button
+                key={p.id}
+                onClick={() => handleSetFocus(p.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 12px", borderRadius: 10,
+                  background: homeFocus === p.id ? "rgba(201,162,76,0.10)" : "transparent",
+                  border: homeFocus === p.id ? "1px solid rgba(201,162,76,0.25)" : "1px solid transparent",
+                  cursor: "pointer", textAlign: "left", transition: "all 160ms",
+                }}
+              >
+                <span style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: homeFocus === p.id ? "var(--atlas-gold)" : "var(--atlas-muted)", opacity: 0.5,
+                }} />
+                <span style={{ fontSize: 12, color: "var(--atlas-fg)" }}>{p.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Fixed 5-item bottom nav — true flex row, even spacing */}
