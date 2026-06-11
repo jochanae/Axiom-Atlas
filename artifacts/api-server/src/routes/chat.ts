@@ -3012,11 +3012,11 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
             if (b64) generatedImages.push({ imageUrl: `data:image/png;base64,${b64}`, prompt: r.data?.[0]?.revised_prompt ?? enginePrompt, model: "dall-e-3", mode: token.mode });
           } catch (err) { logger.warn({ err }, "DALL·E fallback failed for render — trying Gemini Flash"); }
         }
-        // Fallback 2: Gemini Flash
+        // Fallback 2: Gemini Flash image generation
         if (!placed) {
           try {
             const r = await genai.models.generateContent({
-              model: "gemini-2.5-flash-image",
+              model: "gemini-2.0-flash-preview-image-generation",
               contents: enginePrompt,
               config: { responseModalities: ["IMAGE", "TEXT"] },
             });
@@ -3027,7 +3027,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
               generatedImages.push({
                 imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
                 prompt: textPart?.text ?? enginePrompt,
-                model: "gemini-flash-image",
+                model: "gemini-2.0-flash-image",
                 mode: token.mode,
               });
               placed = true;
@@ -3059,11 +3059,11 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
             }
           } catch (err) { logger.warn({ err }, "Imagen 3 fallback failed for schematic — trying Gemini Flash"); }
         }
-        // Fallback 2: Gemini Flash
+        // Fallback 2: Gemini Flash image generation
         if (!placed) {
           try {
             const r = await genai.models.generateContent({
-              model: "gemini-2.5-flash-image",
+              model: "gemini-2.0-flash-preview-image-generation",
               contents: enginePrompt,
               config: { responseModalities: ["IMAGE", "TEXT"] },
             });
@@ -3074,7 +3074,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
               generatedImages.push({
                 imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
                 prompt: textPart?.text ?? enginePrompt,
-                model: "gemini-flash-image",
+                model: "gemini-2.0-flash-image",
                 mode: token.mode,
               });
             }
