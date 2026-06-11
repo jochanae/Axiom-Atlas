@@ -2830,6 +2830,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           catchPayload: undefined,
           ...usageInsertValues(assistantUsage),
           ...runMetadata,
+          imageB64: imageGenResult?.images?.[0]?.imageUrl.split(",")[1] ?? null,
+          imageMimeType: imageGenResult?.images?.[0]?.imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png",
         })
         .returning();
       savedMsgId = savedMsg.id;
@@ -2854,6 +2856,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
             content: persistContent,
             intentType: detectedIntentType,
             catchPayload: undefined,
+            imageB64: imageGenResult?.images?.[0]?.imageUrl.split(",")[1] ?? null,
+            imageMimeType: imageGenResult?.images?.[0]?.imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png",
           })
           .returning();
         savedMsgId = savedMsg.id;

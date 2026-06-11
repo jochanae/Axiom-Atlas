@@ -18,6 +18,8 @@ export const chatMessagesTable = pgTable("chat_messages", {
   runSummary: text("run_summary"),
   runActions: jsonb("run_actions"),
   runArtifacts: jsonb("run_artifacts"),
+  imageB64: text("image_b64"),
+  imageMimeType: text("image_mime_type"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

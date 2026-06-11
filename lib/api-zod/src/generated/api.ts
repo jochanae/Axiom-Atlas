@@ -422,6 +422,8 @@ export const GetSessionResponse = zod.object({
       runArtifacts: zod
         .array(zod.record(zod.string(), zod.unknown()))
         .nullish(),
+      imageB64: zod.string().nullish(),
+      imageMimeType: zod.string().nullish(),
       createdAt: zod.string(),
     }),
   ),
@@ -464,6 +466,8 @@ export const ListMessagesResponseItem = zod.object({
   runSummary: zod.string().nullish(),
   runActions: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
   runArtifacts: zod.array(zod.record(zod.string(), zod.unknown())).nullish(),
+  imageB64: zod.string().nullish(),
+  imageMimeType: zod.string().nullish(),
   createdAt: zod.string(),
 });
 export const ListMessagesResponse = zod.array(ListMessagesResponseItem);

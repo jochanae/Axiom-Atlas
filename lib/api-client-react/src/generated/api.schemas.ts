@@ -215,6 +215,10 @@ export interface Message {
   runActions?: MessageRunActionsItem[] | null;
   /** @nullable */
   runArtifacts?: MessageRunArtifactsItem[] | null;
+  /** @nullable */
+  imageB64?: string | null;
+  /** @nullable */
+  imageMimeType?: string | null;
   createdAt: string;
 }
 

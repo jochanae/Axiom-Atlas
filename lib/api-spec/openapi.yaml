@@ -915,6 +915,10 @@ components:
           items:
             type: object
             additionalProperties: true
+        imageB64:
+          type: ["string", "null"]
+        imageMimeType:
+          type: ["string", "null"]
         createdAt:
           type: string
       required:
