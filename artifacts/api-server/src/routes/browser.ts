@@ -4,8 +4,52 @@ import Anthropic from "@anthropic-ai/sdk";
 import { db, scheduledChecksTable, checkResultsTable, projectsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import dns from "node:dns/promises";
 
 const router: IRouter = Router();
+
+// ── SSRF protection ──────────────────────────────────────────────────────────
+function isPrivateIp(ip: string): boolean {
+  const s = ip.toLowerCase();
+  if (s === "localhost" || s === "::1") return true;
+  return [
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^192\.168\./,
+    /^169\.254\./,
+    /^0\./,
+    /^::1$/,
+    /^fc00:/i,
+    /^fe80:/i,
+  ].some(re => re.test(s));
+}
+
+async function assertSafeUrl(rawUrl: string): Promise<void> {
+  let parsed: URL;
+  try { parsed = new URL(rawUrl); } catch { throw new Error("Invalid URL"); }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Only http/https URLs are allowed");
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (isPrivateIp(host)) {
+    throw new Error("Requests to private/localhost addresses are not allowed");
+  }
+  // DNS resolution guard against rebinding attacks
+  try {
+    const v4 = await dns.resolve4(host).catch(() => [] as string[]);
+    const v6 = await dns.resolve6(host).catch(() => [] as string[]);
+    for (const addr of [...v4, ...v6]) {
+      if (isPrivateIp(addr)) {
+        throw new Error("URL resolves to a private IP address");
+      }
+    }
+  } catch (err) {
+    const msg = (err as Error).message ?? "";
+    if (msg.includes("private") || msg.includes("not allowed") || msg.includes("localhost")) throw err;
+    // Benign DNS failure — let the actual fetch fail naturally
+  }
+}
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const ScreenshotBody = z.object({
@@ -43,6 +87,10 @@ router.post("/browser/screenshot", async (req, res): Promise<void> => {
     return;
   }
   const { url, fullPage, analyze } = parsed.data;
+
+  try { await assertSafeUrl(url); } catch (e) {
+    res.status(400).json({ error: (e as Error).message }); return;
+  }
 
   try {
     const mlUrl =
@@ -141,6 +189,10 @@ router.post("/browser/scrape", async (req, res): Promise<void> => {
   }
   const { url, selector, maxLength = 8000, analyze } = parsed.data;
 
+  try { await assertSafeUrl(url); } catch (e) {
+    res.status(400).json({ error: (e as Error).message }); return;
+  }
+
   try {
     const response = await fetch(url, {
       headers: {
@@ -233,6 +285,10 @@ router.post("/browser/health", async (req, res): Promise<void> => {
     return;
   }
   const { url } = parsed.data;
+
+  try { await assertSafeUrl(url); } catch (e) {
+    res.status(400).json({ error: (e as Error).message }); return;
+  }
 
   const issues: string[] = [];
   let httpStatus: number | null = null;
@@ -329,39 +385,129 @@ router.post("/browser/health", async (req, res): Promise<void> => {
   });
 });
 
-/**
- * POST /api/browser/monitor
- * Live error capture — multi-signal page analysis without a headless browser.
- * Covers: HTTP errors, failed resource loads (JS/CSS 404s), HTML error patterns,
- * inline script console.error detection, and framework-specific crash overlays.
- * Returns { url, hasErrors, consoleErrors[], resourceErrors[], errorPatterns[], summary }.
- */
-router.post("/browser/monitor", async (req, res): Promise<void> => {
-  const parsed = MonitorBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
-  const { url, checkResources } = parsed.data;
+// ── Shared framework crash patterns ──────────────────────────────────────────
+const CRASH_PATTERNS: Array<{ re: RegExp; label: string }> = [
+  { re: /Minified React error #(\d+)/i, label: "React minified error" },
+  { re: /Application error: a client-side exception has occurred/i, label: "Next.js application error" },
+  { re: /ChunkLoadError/i, label: "Webpack chunk load failure" },
+  { re: /__webpack_error__|__vite_error__/i, label: "Bundler error overlay" },
+  { re: /window\.__SENTRY_REPLAY_ERROR__/i, label: "Sentry error capture" },
+  { re: /<title[^>]*>[^<]*(404|not found|error|crashed|unavailable)[^<]*<\/title>/i, label: "Error in page title" },
+  { re: /Something went wrong\./i, label: "Generic 'Something went wrong' UI" },
+  { re: /Internal Server Error/i, label: "Internal Server Error in page body" },
+  { re: /#error-boundary|class="error-boundary|id="error-boundary/i, label: "React error boundary rendered" },
+  { re: /data-nextjs-dialog-overlay|__nextjs__toast/i, label: "Next.js error overlay active" },
+  { re: /vite-error-overlay|plugin-vue-error/i, label: "Vite error overlay active" },
+];
 
+interface MonitorResult {
+  consoleErrors: string[];
+  resourceErrors: string[];
+  errorPatterns: string[];
+  httpStatus: number | null;
+  engine: "puppeteer" | "html";
+}
+
+/**
+ * Primary path: real headless browser via Puppeteer.
+ * Captures live console events, uncaught exceptions, and failed network
+ * requests — runtime behaviour that static HTML analysis cannot see.
+ */
+async function runPuppeteerMonitor(url: string, checkResources: boolean): Promise<MonitorResult> {
+  const puppeteer = await import("puppeteer-core");
+  const executablePath =
+    process.env.PUPPETEER_EXECUTABLE_PATH ??
+    "/usr/bin/chromium";
+
+  const browser = await puppeteer.launch({
+    executablePath,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--single-process",
+    ],
+    headless: true,
+  });
+
+  const consoleErrors: string[] = [];
+  const resourceErrors: string[] = [];
+  const errorPatterns: string[] = [];
+  let httpStatus: number | null = null;
+
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent("Mozilla/5.0 (Atlas-Monitor/2.0) AppleWebKit/537.36");
+
+    // ── Live console capture ────────────────────────────────────────────────
+    page.on("console", (msg) => {
+      const t = msg.type();
+      if (t === "error" || t === "warn") {
+        consoleErrors.push(`[${t}] ${msg.text()}`);
+      }
+    });
+
+    // ── Uncaught page exceptions ────────────────────────────────────────────
+    page.on("pageerror", (err) => {
+      consoleErrors.push(`[uncaught] ${(err as Error).message}`);
+    });
+
+    // ── Failed network requests ─────────────────────────────────────────────
+    if (checkResources) {
+      page.on("requestfailed", (req) => {
+        const reqUrl = req.url();
+        const failure = req.failure();
+        if (/\.(js|css)(\?|$)/i.test(reqUrl)) {
+          resourceErrors.push(`Failed — ${reqUrl}: ${failure?.errorText ?? "network error"}`);
+        }
+      });
+    }
+
+    // ── Navigate and capture HTTP status ───────────────────────────────────
+    const response = await page.goto(url, {
+      waitUntil: "networkidle2",
+      timeout: 30_000,
+    });
+    httpStatus = response?.status() ?? null;
+
+    if (httpStatus != null && httpStatus >= 400) {
+      errorPatterns.push(`HTTP ${httpStatus}: page returned an error status`);
+    }
+
+    // ── Check rendered HTML for framework crash overlays ───────────────────
+    const content = await page.content();
+    for (const { re, label } of CRASH_PATTERNS) {
+      if (re.test(content)) errorPatterns.push(label);
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return { consoleErrors, resourceErrors, errorPatterns, httpStatus, engine: "puppeteer" };
+}
+
+/**
+ * Fallback path: static HTML fetch + pattern analysis.
+ * Used when Puppeteer/Chromium is unavailable (e.g. local dev without Chromium).
+ * Cannot capture runtime console errors — reports structural signals only.
+ */
+async function runHtmlAnalysis(url: string, checkResources: boolean): Promise<MonitorResult> {
   const consoleErrors: string[] = [];
   const resourceErrors: string[] = [];
   const errorPatterns: string[] = [];
   let httpStatus: number | null = null;
   let pageContent = "";
 
-  // ── 1. Fetch page HTML ──────────────────────────────────────────────────────
   try {
     const pageResp = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (Atlas-Monitor/1.0)", Accept: "text/html" },
       signal: AbortSignal.timeout(15_000),
     });
     httpStatus = pageResp.status;
-
     if (pageResp.status >= 400) {
       errorPatterns.push(`HTTP ${pageResp.status}: page returned an error status`);
     }
-
     if (pageResp.status < 400) {
       pageContent = await pageResp.text();
     }
@@ -370,56 +516,26 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
   }
 
   if (pageContent) {
-    // ── 2. Framework crash pattern detection ─────────────────────────────────
-    const crashPatterns: Array<{ re: RegExp; label: string }> = [
-      { re: /Minified React error #(\d+)/i, label: "React minified error" },
-      { re: /Application error: a client-side exception has occurred/i, label: "Next.js application error" },
-      { re: /ChunkLoadError/i, label: "Webpack chunk load failure" },
-      { re: /__webpack_error__|__vite_error__/i, label: "Bundler error overlay" },
-      { re: /window\.__SENTRY_REPLAY_ERROR__/i, label: "Sentry error capture" },
-      { re: /<title[^>]*>[^<]*(404|not found|error|crashed|unavailable)[^<]*<\/title>/i, label: "Error in page title" },
-      { re: /Something went wrong\./i, label: "Generic 'Something went wrong' UI" },
-      { re: /Internal Server Error/i, label: "Internal Server Error in page body" },
-      { re: /#error-boundary|class="error-boundary|id="error-boundary/i, label: "React error boundary rendered" },
-      { re: /data-nextjs-dialog-overlay|__nextjs__toast/i, label: "Next.js error overlay active" },
-      { re: /vite-error-overlay|plugin-vue-error/i, label: "Vite error overlay active" },
-    ];
-    for (const { re, label } of crashPatterns) {
-      if (re.test(pageContent)) {
-        errorPatterns.push(label);
-      }
+    for (const { re, label } of CRASH_PATTERNS) {
+      if (re.test(pageContent)) errorPatterns.push(label);
     }
 
-    // ── 3. Inline script console.error / uncaught exception scanning ─────────
+    // Inline script static analysis (best-effort without runtime execution)
     const scriptTagRe = /<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi;
     let scriptMatch: RegExpExecArray | null;
     const consoleErrRe = /console\.(error|warn)\s*\(/gi;
-    const throwRe = /\bthrow\s+new\s+Error\s*\(/gi;
-    const uncaughtRe = /window\.(onerror|addEventListener)\s*[=(]/i;
     let inlineScriptCount = 0;
-
     while ((scriptMatch = scriptTagRe.exec(pageContent)) !== null && inlineScriptCount < 10) {
       inlineScriptCount++;
       const scriptBody = scriptMatch[1] ?? "";
-      // Skip small utility scripts (< 200 chars) and minified bundles > 50KB
       if (scriptBody.length < 50 || scriptBody.length > 50_000) continue;
-
       const errCalls = scriptBody.match(consoleErrRe);
       if (errCalls && errCalls.length > 0) {
-        // Distinguish deliberate production error logging from dev artifacts
         const snippet = scriptBody.slice(0, 300).replace(/\s+/g, " ").trim();
-        consoleErrors.push(`Inline script calls console.error/warn (${errCalls.length}×): …${snippet.slice(0, 120)}…`);
-      }
-      if (throwRe.test(scriptBody)) {
-        consoleErrors.push(`Inline script throws uncaught Error (may be in error handler)`);
-        throwRe.lastIndex = 0;
-      }
-      if (uncaughtRe.test(scriptBody)) {
-        consoleErrors.push(`Inline script registers window.onerror / uncaught exception handler`);
+        consoleErrors.push(`[static-scan] Inline script calls console.error/warn (${errCalls.length}×): …${snippet.slice(0, 120)}…`);
       }
     }
 
-    // ── 4. Resource 404 check — JS/CSS bundles only ───────────────────────────
     if (checkResources) {
       const origin = new URL(url).origin;
       const resourceRe = /<(?:script|link)[^>]+(?:src|href)="([^"]+\.(js|css))"/gi;
@@ -431,10 +547,8 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
         try {
           const resolved = new URL(href, origin).href;
           if (resolved.startsWith(origin)) resourceUrls.add(resolved);
-        } catch { /* ignore invalid URLs */ }
+        } catch { /* invalid URL — skip */ }
       }
-
-      // Check up to 12 resources in parallel
       const toCheck = [...resourceUrls].slice(0, 12);
       const results = await Promise.allSettled(
         toCheck.map(async (resUrl) => {
@@ -446,7 +560,6 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
           return { resUrl, status: r.status };
         })
       );
-
       for (const result of results) {
         if (result.status === "fulfilled" && result.value.status >= 400) {
           resourceErrors.push(`${result.value.status} — ${result.value.resUrl}`);
@@ -457,8 +570,41 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
     }
   }
 
-  // ── 5. AI synthesis ─────────────────────────────────────────────────────────
-  const hasErrors = errorPatterns.length > 0 || resourceErrors.length > 0;
+  return { consoleErrors, resourceErrors, errorPatterns, httpStatus, engine: "html" };
+}
+
+/**
+ * POST /api/browser/monitor
+ * Live error capture using a real headless browser (Puppeteer + Chromium).
+ * Captures: live console.error/warn, uncaught exceptions, failed resource loads,
+ * framework crash overlays, and HTTP error statuses.
+ * Falls back to static HTML analysis when Chromium is unavailable.
+ * Returns { url, hasErrors, consoleErrors[], resourceErrors[], errorPatterns[], summary, engine }.
+ */
+router.post("/browser/monitor", async (req, res): Promise<void> => {
+  const parsed = MonitorBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { url, checkResources } = parsed.data;
+
+  try { await assertSafeUrl(url); } catch (e) {
+    res.status(400).json({ error: (e as Error).message }); return;
+  }
+
+  let result: MonitorResult;
+  try {
+    result = await runPuppeteerMonitor(url, checkResources);
+  } catch (puppeteerErr) {
+    logger.warn({ puppeteerErr: String(puppeteerErr), url }, "Puppeteer unavailable — falling back to HTML analysis");
+    result = await runHtmlAnalysis(url, checkResources);
+  }
+
+  const { consoleErrors, resourceErrors, errorPatterns, httpStatus, engine } = result;
+
+  // ── AI synthesis ─────────────────────────────────────────────────────────
+  const hasErrors = errorPatterns.length > 0 || resourceErrors.length > 0 || consoleErrors.length > 0;
   const allSignals = [
     ...errorPatterns.map(p => `ERROR_PATTERN: ${p}`),
     ...consoleErrors.map(c => `CONSOLE_ERROR: ${c}`),
@@ -473,7 +619,7 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
         max_tokens: 250,
         messages: [{
           role: "user",
-          content: `Live error capture for ${url}. Signals detected:\n${allSignals.join("\n")}\n\nSummarize in 2-3 sentences for a developer: what's broken, what caused it, and what to check first. Be specific and direct.`,
+          content: `Live error capture for ${url} (engine: ${engine}). Signals detected:\n${allSignals.join("\n")}\n\nSummarize in 2-3 sentences for a developer: what's broken, what caused it, and what to check first. Be specific and direct.`,
         }],
       });
       const textBlock = synthResp.content.find(b => b.type === "text");
@@ -483,7 +629,7 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
       summary = allSignals.join("; ");
     }
   } else {
-    summary = `No errors detected on ${url}. Page loaded with HTTP ${httpStatus ?? "unknown"}, all checked resources returned 200, no crash patterns found.`;
+    summary = `No errors detected on ${url}. Page loaded with HTTP ${httpStatus ?? "unknown"}, no console errors, no resource failures, no crash patterns found.`;
   }
 
   res.json({
@@ -494,6 +640,7 @@ router.post("/browser/monitor", async (req, res): Promise<void> => {
     resourceErrors,
     errorPatterns,
     summary,
+    engine,
   });
 });
 
@@ -522,6 +669,10 @@ router.post("/browser/schedule", async (req, res): Promise<void> => {
     return;
   }
   const { url, projectId, intervalMinutes } = parsed.data;
+
+  try { await assertSafeUrl(url); } catch (e) {
+    res.status(400).json({ error: (e as Error).message }); return;
+  }
 
   try {
     // Verify the project belongs to the authenticated user before scheduling
