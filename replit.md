@@ -19,6 +19,13 @@ Repo: `jochanae/Axiom-Atlas` (private)
 
 **This Replit is the backend development environment.** `artifacts/atlas/` here is a drifted reference copy — do not treat it as the live frontend. All meaningful work happens in `artifacts/api-server/` and `lib/`.
 
+**HARD RULE — DO NOT TOUCH THE FRONTEND:**
+- `artifacts/atlas/` is a **drifted reference copy**. It does NOT reflect the live frontend at `axiomsystem.app`.
+- The live frontend is maintained separately in `jochanae/atlas-idk` (Cursor/Lovable).
+- **Never** modify frontend code in this repo unless explicitly asked.
+- **Never** place mockups on the Canvas that pretend to show the live app UI — they will not match.
+- When backend changes affect the frontend contract, produce **copy-pasteable output files** for Jochanae to apply manually via Cursor.
+
 **Cloud Run deployment:** Changes are pushed to GitHub → Cloud Build triggers → builds Docker image → deploys to `axiom-atlas` service in `us-east1`. Backend changes require a Cloud Build trigger to go live.
 
 When changes touch the API contract (new routes, new response fields, new DB columns), produce copy-pasteable output files for Jochanae to apply to the frontend repo manually via Cursor.

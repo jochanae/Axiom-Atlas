@@ -1275,7 +1275,6 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   if (focusProjectId) {
     const focusProject = projects.find(p => p.id === focusProjectId);
     if (focusProject) {
-      systemPrompt += `\n\n--- ACTIVE FOCUS PROJECT ---\nThe user has focused on "${focusProject.name}". Open with a brief acknowledgment that references this project by name. Keep it natural — one sentence max. Then move to the substance.\n--- END ACTIVE FOCUS PROJECT ---`;
       if (focusProject?.linkedRepo) {
         try {
           const repoFull = parseRepo(focusProject.linkedRepo ?? null);

@@ -24,7 +24,6 @@ import { ProjectSettingsPanel } from "../components/ProjectSettingsPanel";
 import { CommitCard } from "../components/CommitCard";
 import { PlanCard } from "../components/PlanCard";
 import { LiveGenerationCard } from "../components/LiveGenerationCard";
-import { CanvasPanel, type ImageVersion } from "../components/CanvasPanel";
 import { Eye, TerminalSquare } from "lucide-react";
 import { useThemeMode } from "@/lib/theme";
 import { fileToBase64Safe } from "@/lib/image-resize";
@@ -2199,7 +2198,6 @@ function AssistantBubble({
   agenticMode,
   onEditDeclined,
   onAlertDismiss,
-  onOpenCanvas,
 }: {
   message: ChatMessage;
   isNew?: boolean;
@@ -2229,7 +2227,6 @@ function AssistantBubble({
   agenticMode?: boolean;
   onEditDeclined?: () => void;
   onAlertDismiss?: () => void;
-  onOpenCanvas?: (version: ImageVersion) => void;
 }) {
   const [hov, setHov] = useState(false);
   const hovTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2510,20 +2507,7 @@ function AssistantBubble({
         )}
 
         {message.imageB64 && (
-          <div
-            style={{ marginBottom: 12, cursor: "pointer" }}
-            onClick={() => {
-              const version: ImageVersion = {
-                id: message.id?.toString() ?? Math.random().toString(36).slice(2),
-                imageUrl: `data:${message.imageMimeType ?? "image/png"};base64,${message.imageB64}`,
-                prompt: message.content.slice(0, 120),
-                model: message.model ?? "unknown",
-                mode: "render",
-                timestamp: message.sentAt ?? new Date().toISOString(),
-              };
-              onOpenCanvas?.(version);
-            }}
-          >
+          <div style={{ marginBottom: 12 }}>
             <img
               src={`data:${message.imageMimeType ?? "image/png"};base64,${message.imageB64}`}
               alt="Generated visual"
@@ -8140,7 +8124,6 @@ export default function Workspace() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const isTinyScreen = useIsTinyScreen();
-  const themeMode = useThemeMode();
   useRequireAuth();
 
   const [input, setInput] = useState("");
@@ -8234,34 +8217,6 @@ export default function Workspace() {
   const [switchProjectDeleteId, setSwitchProjectDeleteId] = useState<number | null>(null);
   const projectBtnRef = useRef<HTMLButtonElement>(null);
   const [showViewMenu, setShowViewMenu] = useState(false);
-  // Canvas panel state — inline-to-canvas image viewing
-  const [canvasOpen, setCanvasOpen] = useState(false);
-  const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
-  const [activeVersionId, setActiveVersionId] = useState<string>("");
-  const [canvasGenerating, setCanvasGenerating] = useState(false);
-  // Auto-add new images from chat into the version history
-  useEffect(() => {
-    const newImages = messages.filter((m): m is ChatMessage & { imageB64: string } => m.role === "assistant" && !!m.imageB64);
-    if (newImages.length === 0) return;
-    setImageVersions((prev) => {
-      const existingIds = new Set(prev.map((v) => v.id));
-      const toAdd = newImages
-        .filter((m) => !existingIds.has(m.id?.toString() ?? ""))
-        .map((m) => ({
-          id: m.id?.toString() ?? Math.random().toString(36).slice(2),
-          imageUrl: `data:${m.imageMimeType ?? "image/png"};base64,${m.imageB64}`,
-          prompt: m.content.slice(0, 120),
-          model: m.model ?? "unknown",
-          mode: "render" as const,
-          timestamp: m.sentAt ?? new Date().toISOString(),
-        }));
-      if (toAdd.length === 0) return prev;
-      const next = [...prev, ...toAdd];
-      // Auto-switch to the latest image when a new one arrives
-      setActiveVersionId(toAdd[toAdd.length - 1].id);
-      return next;
-    });
-  }, [messages]);
   // Error log indicator — fetches recent runtime errors for this project
   const [recentErrorCount, setRecentErrorCount] = useState(0);
   const [showErrorLog, setShowErrorLog] = useState(false);
@@ -10911,11 +10866,6 @@ export default function Workspace() {
                   onPlanExecutionChange={updatePlanExecution}
                   onExecuteHomePlan={executeHomePlan}
                   trustMode={trustMode}
-                  onOpenCanvas={(version) => {
-                    setImageVersions([version]);
-                    setActiveVersionId(version.id);
-                    setCanvasOpen(true);
-                  }}
                   onPushSuccess={(records) => {
                     setPushHistory((prev) => {
                       const next = [...prev, ...records].slice(-20);
@@ -11777,73 +11727,44 @@ export default function Workspace() {
                 pointerEvents: "none",
               }} />
             </div>
-            <div style={{ flex: 1, minWidth: 240, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-              {/* Inline canvas panel on desktop when images exist */}
-              {imageVersions.length > 0 && (
-                <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
-                  <CanvasPanel
-                    open={true}
-                    onClose={() => { /* desktop inline stays open */ }}
-                    versions={imageVersions}
-                    activeVersionId={activeVersionId}
-                    onSelectVersion={(id) => setActiveVersionId(id)}
-                    onRefine={(prompt) => {
-                      if (!sessionId || chatPending) return;
-                      const activeVersion = imageVersions.find((v) => v.id === activeVersionId);
-                      const imageData = (() => {
-                        if (!activeVersion?.imageUrl) return undefined;
-                        const match = activeVersion.imageUrl.match(/^data:([^;]+);base64,(.+)$/);
-                        if (!match) return undefined;
-                        return { base64: match[2], mediaType: match[1] };
-                      })();
-                      const refinePrompt = `Refine this image: ${prompt}. Previous context: ${activeVersion?.prompt ?? ""}`;
-                      doSend(refinePrompt, sessionId, messages, null, imageData);
-                    }}
-                    isGenerating={canvasGenerating}
-                    theme={themeMode === "parchment" ? "light" : "dark"}
-                    mode="inline"
-                  />
-                </div>
-              )}
-              {imageVersions.length === 0 && (
-                <RightPanel
-                  projectId={id}
-                  entries={entries || []}
-                  activeCatch={activeCatch}
-                  onFileContext={setFileContext}
-                  onLinkedRepoChange={setLinkedRepo}
-                  pushHistory={pushHistory}
-                  onRollbackPush={handleRollbackPush}
-                  onHomeNav={() => setLocation("/home")}
-                  forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : desktopForceTab}
-                  onSendIntent={sendFromIntentCapture}
-                  onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
-                  onMapReadinessChange={setMapReadiness}
-                  displayedReadinessScore={displayedReadinessScore}
-                  onSystemNodeMessage={pushSystemNodeMessage}
-                  onHandover={handleHandover}
-                  handoverPending={handoverPending}
-                  lastHandoverHash={project?.lastHandoverHash ?? null}
-                  isMobile={false}
-                  resolvedNodeIds={pendingResolvedNodeIds}
-                  onResolvedConsumed={() => setPendingResolvedNodeIds([])}
-                  currentSnapshot={currentSnapshot}
-                  onSnapshotChange={setCurrentSnapshot}
-                  handoverOpen={handoverOpen}
-                  onHandoverOpenChange={setHandoverOpen}
-                  sandboxCode={sandboxCode}
-                  onSandboxConsumed={() => setSandboxCode(null)}
-                  previewRefreshTrigger={previewRefreshTrigger}
-                  pendingTerminalCommand={pendingTerminalCommand}
-                  onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
-                  onCommandComplete={handleTerminalComplete}
-                  wsLens={wsLens}
-                  onOpenForge={() => setShowForgeExternal(true)}
-                  externalForgeNodes={externalForgeNodes}
-                  onForgeNodesConsumed={() => setExternalForgeNodes([])}
-                  onForgeCompleted={() => void updateForgeState("forged")}
-                />
-              )}
+            <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
+              <RightPanel
+                projectId={id}
+                entries={entries || []}
+                activeCatch={activeCatch}
+                onFileContext={setFileContext}
+                onLinkedRepoChange={setLinkedRepo}
+                pushHistory={pushHistory}
+                onRollbackPush={handleRollbackPush}
+                onHomeNav={() => setLocation("/home")}
+                forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : desktopForceTab}
+                onSendIntent={sendFromIntentCapture}
+                onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
+                onMapReadinessChange={setMapReadiness}
+                displayedReadinessScore={displayedReadinessScore}
+                onSystemNodeMessage={pushSystemNodeMessage}
+                onHandover={handleHandover}
+                handoverPending={handoverPending}
+                lastHandoverHash={project?.lastHandoverHash ?? null}
+                isMobile={false}
+                resolvedNodeIds={pendingResolvedNodeIds}
+                onResolvedConsumed={() => setPendingResolvedNodeIds([])}
+                currentSnapshot={currentSnapshot}
+                onSnapshotChange={setCurrentSnapshot}
+                handoverOpen={handoverOpen}
+                onHandoverOpenChange={setHandoverOpen}
+                sandboxCode={sandboxCode}
+                onSandboxConsumed={() => setSandboxCode(null)}
+                previewRefreshTrigger={previewRefreshTrigger}
+                pendingTerminalCommand={pendingTerminalCommand}
+                onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
+                onCommandComplete={handleTerminalComplete}
+                wsLens={wsLens}
+                onOpenForge={() => setShowForgeExternal(true)}
+                externalForgeNodes={externalForgeNodes}
+                onForgeNodesConsumed={() => setExternalForgeNodes([])}
+                onForgeCompleted={() => void updateForgeState("forged")}
+              />
             </div>
           </>
         )}
@@ -12298,31 +12219,6 @@ export default function Workspace() {
         document.body
       )}
 
-      {/* Canvas Panel — inline-to-canvas image viewing */}
-      <CanvasPanel
-        open={canvasOpen}
-        onClose={() => setCanvasOpen(false)}
-        versions={imageVersions}
-        activeVersionId={activeVersionId}
-        onSelectVersion={(id) => setActiveVersionId(id)}
-        onRefine={(prompt) => {
-          if (!sessionId || chatPending) return;
-          setCanvasGenerating(true);
-          const activeVersion = imageVersions.find((v) => v.id === activeVersionId);
-          // Extract base64 from the data:URL so the backend can send it as image context
-          const imageData = (() => {
-            if (!activeVersion?.imageUrl) return undefined;
-            const match = activeVersion.imageUrl.match(/^data:([^;]+);base64,(.+)$/);
-            if (!match) return undefined;
-            return { base64: match[2], mediaType: match[1] };
-          })();
-          const refinePrompt = `Refine this image: ${prompt}. Previous context: ${activeVersion?.prompt ?? ""}`;
-          doSend(refinePrompt, sessionId, messages, null, imageData);
-          setCanvasGenerating(false);
-        }}
-        isGenerating={canvasGenerating}
-        theme={themeMode === "parchment" ? "light" : "dark"}
-      />
     </div>
   );
 }
