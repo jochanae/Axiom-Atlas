@@ -11023,6 +11023,35 @@ export default function Workspace() {
                         messagesRef.current,
                       );
                     }
+                    // Background deploy status check — polls Vercel for up to 90 s after push
+                    fetch("/api/deploy/after-push", { credentials: "include" })
+                      .then((r) => (r.ok ? r.json() : null))
+                      .then((data: { hasVercel?: boolean; status?: string; alias?: string; url?: string } | null) => {
+                        if (!data?.hasVercel) return;
+                        const host = data.alias
+                          ? `https://${data.alias}`
+                          : data.url
+                            ? `https://${data.url}`
+                            : null;
+                        const content =
+                          data.status === "ready"
+                            ? `Deployed ✓${host ? `\n\nLive at ${host}` : ""}`
+                            : data.status === "failed"
+                              ? "Deploy failed. Check your Vercel dashboard — the build may need a fix."
+                              : null;
+                        if (!content) return;
+                        setMessages((prev) => [
+                          ...prev,
+                          {
+                            role: "assistant" as const,
+                            content,
+                            model: "system",
+                            intentType: "BUILD",
+                            sentAt: new Date().toISOString(),
+                          },
+                        ]);
+                      })
+                      .catch(() => {});
                   }}
                   onEditDeclined={() => {
                     if (sessionId) {

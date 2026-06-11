@@ -173,4 +173,110 @@ router.get("/deploy/status", async (req, res): Promise<void> => {
   }
 });
 
+/**
+ * GET /api/deploy/after-push
+ * Called immediately after a FILE_EDIT GitHub push succeeds.
+ * If the user has no Vercel connection, returns { hasVercel: false } immediately.
+ * If they do, polls Vercel every 5 s for up to 90 s until the latest deployment
+ * reaches "ready" or "failed", then returns the result.
+ * Query: ?projectId=...&teamId=... (both optional — falls back to connection metadata)
+ */
+router.get("/deploy/after-push", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const projectId = req.query.projectId as string | undefined;
+  const teamId = req.query.teamId as string | undefined;
+
+  const [connection] = await db
+    .select()
+    .from(connectionsTable)
+    .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "vercel")))
+    .orderBy(desc(connectionsTable.createdAt))
+    .limit(1);
+
+  if (!connection?.token) {
+    res.json({ hasVercel: false });
+    return;
+  }
+
+  const token = decryptToken(connection.token);
+  const resolvedProjectId =
+    projectId ??
+    ((connection.metadata as Record<string, unknown>)?.projectId as string | undefined) ??
+    null;
+  const resolvedTeamId =
+    teamId ??
+    ((connection.metadata as Record<string, unknown>)?.teamId as string | undefined) ??
+    null;
+
+  if (!resolvedProjectId) {
+    res.json({ hasVercel: false, reason: "No Vercel projectId configured" });
+    return;
+  }
+
+  const statusUrl = resolvedTeamId
+    ? `https://api.vercel.com/v6/deployments?projectId=${resolvedProjectId}&teamId=${resolvedTeamId}&limit=1`
+    : `https://api.vercel.com/v6/deployments?projectId=${resolvedProjectId}&limit=1`;
+
+  const POLL_INTERVAL_MS = 5000;
+  const MAX_POLLS = 18; // 18 × 5 s = 90 s max wait
+
+  const poll = async (): Promise<{
+    status: "ready" | "failed" | "building" | "pending" | "timeout";
+    url?: string;
+    alias?: string;
+    deploymentId?: string;
+  }> => {
+    for (let i = 0; i < MAX_POLLS; i++) {
+      if (i > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      }
+      try {
+        const r = await fetch(statusUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!r.ok) continue;
+
+        const data = await r.json() as {
+          deployments?: Array<{
+            id?: string;
+            url?: string;
+            state?: string;
+            readyState?: string;
+            alias?: string[];
+          }>;
+        };
+
+        const deploy = data.deployments?.[0];
+        if (!deploy) continue;
+
+        const raw = (deploy.state ?? deploy.readyState ?? "").toLowerCase();
+        if (raw.includes("ready") || raw.includes("completed")) {
+          return {
+            status: "ready",
+            deploymentId: deploy.id,
+            url: deploy.url,
+            alias: deploy.alias?.[0],
+          };
+        }
+        if (raw.includes("error") || raw.includes("failed") || raw.includes("canceled")) {
+          return { status: "failed", deploymentId: deploy.id };
+        }
+        // still building — keep polling
+      } catch {
+        // transient error — keep polling
+      }
+    }
+    return { status: "timeout" };
+  };
+
+  try {
+    const result = await poll();
+    res.json({ hasVercel: true, ...result });
+  } catch (err) {
+    logger.error({ err: String(err), userId, resolvedProjectId }, "after-push poll failed");
+    res.status(500).json({ error: "Deploy status poll failed" });
+  }
+});
+
 export default router;

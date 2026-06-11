@@ -2298,7 +2298,8 @@ You are now in BUILD mode. This changes how you respond:
 • Explain what you changed and why in plain English BEFORE the FILE_EDIT blocks.
 • Multiple files changed? Emit multiple FILE_EDIT blocks back-to-back.
 • GitHub push is enabled — the user will push your FILE_EDIT output directly to their repo.
-• Do NOT stop short with explanations. If you can write the code, write it.`,
+• Do NOT stop short with explanations. If you can write the code, write it.
+• When you receive FILE_EDIT_CONFIRMED: — the push succeeded. Acknowledge it briefly ("Pushed.") and move to the next step. Deploy status is checked automatically in the background and will appear in the chat — do not ask about it or try to check it yourself.`,
     plan: `\n\n--- ACTIVE MODE: PLAN ---
 You are now in PLAN mode. This changes how you respond:
 • Focus on structure, architecture, and sequence — not implementation.
@@ -2358,6 +2359,7 @@ You are in BUILD lens. This means:
 • Use FILE_EDIT blocks for all code changes. No partial snippets.
 • Be surgical — know what to change and why. Explain concisely before the FILE_EDIT.
 • GitHub push is enabled — your output goes directly to the repo.
+• When you receive FILE_EDIT_CONFIRMED: — the push succeeded. Say "Pushed." and continue to the next step. Deploy status surfaces automatically in the chat — you do not need to poll, ask, or check it.
 • If the user is clearly exploring concepts or asking "what if" questions with no code intent, end your response with: LENS_DRIFT: flow`,
     look: `\n\n--- LENS: LOOK ---
 You are in LOOK lens. This means:
