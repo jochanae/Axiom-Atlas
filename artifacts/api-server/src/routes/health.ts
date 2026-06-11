@@ -104,7 +104,7 @@ router.get("/health/image-gen-test", async (req, res): Promise<void> => {
   // Test 3: Gemini inline image (generateContent with IMAGE modality)
   try {
     const r = await genai.models.generateContent({
-      model: "gemini-2.5-flash-preview-05-20",
+      model: "gemini-2.5-pro",
       contents: "A simple red circle on a white background",
       config: { responseModalities: ["IMAGE", "TEXT"] },
     });
@@ -116,6 +116,32 @@ router.get("/health/image-gen-test", async (req, res): Promise<void> => {
       : { status: "NO_IMAGE", text: textPart?.text?.slice(0, 200) };
   } catch (err: any) {
     results.geminiInline = { error: err?.message, code: err?.code, status: err?.status };
+  }
+
+  // Test 4: DALL-E 2 (fallback model)
+  try {
+    const { default: OpenAI } = await import("openai");
+    const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const r = await openaiClient.images.generate({
+      model: "dall-e-2",
+      prompt: "A simple red circle on a white background",
+      n: 1,
+      size: "1024x1024",
+    });
+    const item = r.data?.[0];
+    if (item?.url) {
+      const imgRes = await fetch(item.url, { signal: AbortSignal.timeout(15_000) });
+      if (imgRes.ok) {
+        const buffer = Buffer.from(await imgRes.arrayBuffer());
+        results.dalle2 = { status: "SUCCESS", base64Length: buffer.toString("base64").length };
+      } else {
+        results.dalle2 = { status: "URL_ONLY", url: item.url };
+      }
+    } else {
+      results.dalle2 = "NO_IMAGE_RETURNED";
+    }
+  } catch (err: any) {
+    results.dalle2 = { error: err?.message, code: err?.code, status: err?.status };
   }
 
   res.json(results);
