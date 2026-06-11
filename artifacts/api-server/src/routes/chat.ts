@@ -2614,11 +2614,13 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
 
   // Auto-inject IMAGE_GEN if user asked for an image but Atlas didn't emit the token
   // This prevents the AI from ignoring the image generation instruction
+  logger.info({ rawTokens: imageGenTokens.length, messageMatched: IMAGE_REQUEST_RE.test(message), message }, "image gen debug");
   if (imageGenTokens.length === 0 && IMAGE_REQUEST_RE.test(message)) {
     const autoPrompt = message.replace(/\b(generate|create|make|draw|sketch|visualize|design|mock.?up|wireframe|show me|build me)\b/gi, "").trim();
     const mode = /\b(diagram|flow|chart|wireframe|architecture|schematic|structure|map|system)\b/i.test(message) ? "schematic" : "render";
     const size = /\b(wide|landscape|desktop|banner|hero)\b/i.test(message) ? "landscape" : /\b(mobile|phone|portrait|tall|vertical)\b/i.test(message) ? "portrait" : "square";
     imageGenTokens.push({ prompt: autoPrompt || message, mode, size });
+    logger.info({ autoPrompt, mode, size, autoInjected: true }, "image gen auto-injected");
     writeStep(res, { verb: "Auto-generating", target: "image", phase: "render" });
   }
 
