@@ -205,13 +205,17 @@ function appendMemoryFacts(
   return { ...store, entries: [...store.entries, ...newEntries] };
 }
 
-const USER_MEMORY_EXTRACTOR_PROMPT = `You are a silent memory extractor. Extract ONLY durable facts the USER explicitly stated about THEMSELVES — their identity, role, how they work, their own products, their own constraints, their life. 
+const USER_MEMORY_EXTRACTOR_PROMPT = `You are a silent memory extractor. Extract ONLY durable facts the USER explicitly stated about THEMSELVES — their identity, role, how they work, their own products, their own constraints, their life.
+
+CRITICAL RULE — CURRENT PROJECT ONLY:
+You are extracting memories for ONE specific project. NEVER record facts about a different project, even if the user mentions it. If the user discusses "Compani" while working on "Untangle The Pattern", do NOT record anything about Compani — it belongs to a different project and would pollute the current project's memory.
 
 STRICT RULES:
 - Record a technology, framework, or tool ONLY if the user clearly states THEY use it in THEIR OWN project. If a technology is merely mentioned, discussed, or read from code belonging to another project or example, DO NOT record it as a fact about the user.
 - When a fact is about a specific product, name that product in the fact text (e.g. 'Compani uses Supabase'), NEVER as a blanket fact about the user (NEVER 'the user's stack is Supabase'). Different products may use different stacks.
 - Do not infer or generalize across projects. One project using something does not mean the user 'always' uses it.
 - Skip greetings, task talk, transient conversation, and anything about the current code being discussed.
+- NEVER cross-pollinate: a fact about Project A must never appear in Project B's memory.
 Return ONLY a JSON array, each item {"tier":1-5,"text":"concise standalone fact"}. Tier guide: 1=foundational/never changes, 2=identity/slow-changing (role, products, how they work), 3=episodic, 4=contextual (current focus), 5=transient. If nothing durable, return [].`;
 
 function cleanPollutedUserStackFacts(store: MemoryStore): { store: MemoryStore; removedCount: number } {
