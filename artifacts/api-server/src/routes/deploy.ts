@@ -272,7 +272,30 @@ router.get("/deploy/after-push", async (req, res): Promise<void> => {
 
   try {
     const result = await poll();
-    res.json({ hasVercel: true, ...result });
+
+    // When deploy is ready and we have a URL, auto-run visual QA health check
+    let visualQa: { isHealthy: boolean; issues: string[]; analysis?: string; screenshotBase64?: string } | null = null;
+    if (result.status === "ready" && (result.alias ?? result.url)) {
+      const liveUrl = result.alias ? `https://${result.alias}` : `https://${result.url}`;
+      try {
+        const healthRes = await fetch(
+          `${req.protocol}://${req.get("host")}/api/browser/health`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
+            body: JSON.stringify({ url: liveUrl }),
+            signal: AbortSignal.timeout(60_000),
+          }
+        );
+        if (healthRes.ok) {
+          visualQa = await healthRes.json() as typeof visualQa;
+        }
+      } catch (err) {
+        logger.warn({ err: String(err), liveUrl }, "Post-deploy visual QA failed — continuing without it");
+      }
+    }
+
+    res.json({ hasVercel: true, ...result, ...(visualQa ? { visualQa } : {}) });
   } catch (err) {
     logger.error({ err: String(err), userId, resolvedProjectId }, "after-push poll failed");
     res.status(500).json({ error: "Deploy status poll failed" });

@@ -692,6 +692,27 @@ ANTI-TRIGGER (do NOT generate proactively):
 
 When you generate proactively, don't announce it. Just let the image appear inline in your response, naturally. The visual is part of your answer, not a separate deliverable.
 
+## Browser Agent — Atlas Can See the Web
+
+You can visit any URL: screenshot it, scrape its content, or check if it's healthy. Use this to do competitor research, visual QA on a live app, or check what a page actually looks like.
+
+Emit a BROWSER_VISIT token at the END of your response when you want to visit a URL:
+
+BROWSER_VISIT:{"url":"https://example.com","mode":"screenshot"}
+BROWSER_VISIT:{"url":"https://example.com","mode":"scrape"}
+BROWSER_VISIT:{"url":"https://example.com","mode":"health"}
+
+- mode "screenshot" — takes a screenshot and gives you an AI visual description. Use when the user wants to SEE a page, do visual QA, or check what a deployed app looks like.
+- mode "scrape" — fetches the page content and gives you a strategic AI summary. Use for competitor research, product analysis, or reading any public page.
+- mode "health" — full health check (HTTP status + screenshot + visual AI assessment). Use after a deploy to check if the live app is rendering correctly.
+
+RULES:
+- Only emit BROWSER_VISIT when you actually have a URL to visit (user provided it, or it's the deployed app URL).
+- One BROWSER_VISIT per response. The result appears immediately after your message.
+- Never say "I'll visit that" and then not emit the token. Just emit it.
+- After deploy confirmation (when you see FILE_EDIT_CONFIRMED), emit BROWSER_VISIT with the live URL and mode "health" to verify the deploy automatically.
+- For competitor research ("how does X work?", "what does their pricing look like?"), emit BROWSER_VISIT with mode "scrape".
+
 You are Atlas. Just be it.`;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1949,24 +1970,26 @@ router.post("/chat", async (req, res): Promise<void> => {
       const scrapeRes = await fetch(`${req.protocol}://${req.get("host")}/api/browser/scrape`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
-        body: JSON.stringify({ url, maxLength: 8000 }),
-        signal: AbortSignal.timeout(20_000),
+        body: JSON.stringify({ url, maxLength: 8000, analyze: true }),
+        signal: AbortSignal.timeout(25_000),
       });
       const data = await scrapeRes.json() as {
         title?: string; text?: string; headings?: string[]; links?: Array<{ href: string; text: string }>;
-        error?: string;
+        analysis?: string; error?: string;
       };
       if (data.error) {
         res.write(`data: ${JSON.stringify({ type: "done", content: `Failed to scrape ${url}: ${data.error}`, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}
 \n`);
       } else {
-        const summary = [
-          `**${data.title ?? "Untitled"}** (${url})`,
-          "",
-          data.text?.slice(0, 2000) ?? "",
-          data.headings && data.headings.length > 0 ? `\n**Headings:** ${data.headings.slice(0, 10).join(" › ")}` : "",
-          data.links && data.links.length > 0 ? `\n**Links:** ${data.links.slice(0, 8).map((l) => `[${l.text || "link"}](${l.href})`).join(" ")}` : "",
-        ].filter(Boolean).join("\n");
+        const summary = data.analysis
+          ? `**${data.title ?? "Untitled"}** (${url})\n\n${data.analysis}`
+          : [
+            `**${data.title ?? "Untitled"}** (${url})`,
+            "",
+            data.text?.slice(0, 2000) ?? "",
+            data.headings && data.headings.length > 0 ? `\n**Headings:** ${data.headings.slice(0, 10).join(" › ")}` : "",
+            data.links && data.links.length > 0 ? `\n**Links:** ${data.links.slice(0, 8).map((l) => `[${l.text || "link"}](${l.href})`).join(" ")}` : "",
+          ].filter(Boolean).join("\n");
         res.write(`data: ${JSON.stringify({ type: "done", content: summary, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}
 \n`);
       }
@@ -1974,6 +1997,37 @@ router.post("/chat", async (req, res): Promise<void> => {
       logger.error({ err: String(err), url }, "Browser scrape intercept failed");
       res.write(`data: ${JSON.stringify({ type: "done", content: `Failed to scrape ${url}.`, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}
 \n`);
+    }
+    res.end();
+    return;
+  }
+
+  // ── Intercept browser screenshot commands ──
+  const browserScreenshotMatch = message.match(/^BROWSER_SCREENSHOT:\s*(.+)$/i);
+  if (browserScreenshotMatch) {
+    const url = browserScreenshotMatch[1].trim();
+    writeStep(res, { verb: "Screenshotting", target: url, phase: "execute" });
+    try {
+      const shotRes = await fetch(`${req.protocol}://${req.get("host")}/api/browser/screenshot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
+        body: JSON.stringify({ url, analyze: true }),
+        signal: AbortSignal.timeout(40_000),
+      });
+      const data = await shotRes.json() as {
+        screenshotBase64?: string; imageUrl?: string; analysis?: string; error?: string;
+      };
+      if (data.error) {
+        res.write(`data: ${JSON.stringify({ type: "done", content: `Failed to screenshot ${url}: ${data.error}`, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}\n\n`);
+      } else {
+        const content = data.analysis
+          ? `**Screenshot of ${url}**\n\n${data.analysis}`
+          : `**Screenshot of ${url}**`;
+        res.write(`data: ${JSON.stringify({ type: "done", content, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system", browserResult: { type: "screenshot", url, screenshotBase64: data.screenshotBase64, analysis: data.analysis } })}\n\n`);
+      }
+    } catch (err) {
+      logger.error({ err: String(err), url }, "Browser screenshot intercept failed");
+      res.write(`data: ${JSON.stringify({ type: "done", content: `Failed to screenshot ${url}.`, modelUsed: "system", terminalCmd: null, terminalResult: null, surface: "system", intentType: "EXPLORE", catchPayload: null, messageId: null, model: "system" })}\n\n`);
     }
     res.end();
     return;
@@ -2714,6 +2768,23 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     writeStep(res, { verb: "Auto-generating", target: "image", phase: "render" });
   }
 
+  // Extract and strip BROWSER_VISIT tokens — Atlas requests browser visits at end of response
+  const BROWSER_VISIT_RE = /^BROWSER_VISIT:\s*(\{[^\n]+\})\s*$/gm;
+  type BrowserVisitToken = { url: string; mode: "screenshot" | "scrape" | "health" };
+  let browserVisitToken: BrowserVisitToken | null = null;
+  rawContent = rawContent.replace(BROWSER_VISIT_RE, (_match, json: string) => {
+    if (!browserVisitToken) {
+      try {
+        const parsed = JSON.parse(json) as BrowserVisitToken;
+        if (parsed.url && (parsed.mode === "screenshot" || parsed.mode === "scrape" || parsed.mode === "health")) {
+          browserVisitToken = parsed;
+          writeStep(res, { verb: parsed.mode === "scrape" ? "Analyzing" : "Visiting", target: parsed.url, phase: "execute" });
+        }
+      } catch { /* ignore malformed tokens */ }
+    }
+    return "";
+  }).trim();
+
   // Extract and strip CLARIFY blocks — Atlas asks structured follow-up questions when blocked
   type ClarifyPayload = {
     steps: Array<{
@@ -3078,6 +3149,43 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     ...(imageGenResult ? { imageGen: imageGenResult } : {}),
     ...(autoName ? { autoName } : {}),
   };
+
+  // Execute BROWSER_VISIT token Atlas emitted — append result to final payload
+  let browserVisitResult: { type: string; url: string; screenshotBase64?: string; analysis?: string; isHealthy?: boolean; issues?: string[] } | null = null;
+  if (browserVisitToken) {
+    const bvt = browserVisitToken as BrowserVisitToken;
+    const endpoint = bvt.mode === "scrape" ? "scrape" : bvt.mode === "health" ? "health" : "screenshot";
+    try {
+      const bvRes = await fetch(
+        `${req.protocol}://${req.get("host")}/api/browser/${endpoint}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
+          body: JSON.stringify(bvt.mode === "scrape"
+            ? { url: bvt.url, maxLength: 6000, analyze: true }
+            : { url: bvt.url, analyze: true }),
+          signal: AbortSignal.timeout(60_000),
+        }
+      );
+      if (bvRes.ok) {
+        const bvData = await bvRes.json() as {
+          screenshotBase64?: string; analysis?: string; isHealthy?: boolean; issues?: string[];
+          title?: string; text?: string;
+        };
+        browserVisitResult = {
+          type: bvt.mode,
+          url: bvt.url,
+          ...(bvData.screenshotBase64 ? { screenshotBase64: bvData.screenshotBase64 } : {}),
+          ...(bvData.analysis ? { analysis: bvData.analysis } : {}),
+          ...(bvt.mode === "health" && bvData.isHealthy !== undefined ? { isHealthy: bvData.isHealthy, issues: bvData.issues ?? [] } : {}),
+        };
+        // Patch the finalPayload so the frontend gets it
+        (finalPayload as Record<string, unknown>).browserResult = browserVisitResult;
+      }
+    } catch (err) {
+      logger.warn({ err: String(err), url: bvt.url, mode: bvt.mode }, "BROWSER_VISIT execution failed");
+    }
+  }
 
   const fullText = displayContent;
   const inputTokenCount = assistantUsage.inputTokens;
