@@ -4,7 +4,7 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────
 
 type ImageMode = "render" | "schematic";
 
@@ -21,7 +21,7 @@ interface GeneratedImage {
   mode: ImageMode;
 }
 
-// ── Prompt builders ───────────────────────────────────────────────────────────
+// ── Prompt builders ────────────────────────────────────────────────
 
 function buildRenderPrompt(prompt: string): string {
   return `${prompt} Ultra-premium, cinematic quality. Sleek dark-mode aesthetic with obsidian depth, luxury glassmorphism elements, subtle amber/gold accent glows. Sophisticated editorial lighting, razor-sharp modern typography where relevant, presentation-ready professional finish. Hyper-realistic materials and subtle environmental light. 8K resolution output quality.`;
@@ -31,11 +31,75 @@ function buildSchematicPrompt(prompt: string): string {
   return `${prompt} Clean flat 2D technical diagram. High-contrast dark background with crisp white or bright accent lines. Strict geometric layout, precise spatial placement of every element. Clear directional connectors, sharp boundaries between sections, minimal decorative noise. Exact label placement, no atmospheric effects — pure structural accuracy and readability.`;
 }
 
-// ── Engine: Gemini Inline Image (RENDER + SCHEMATIC modes) ──────────────────
-// Uses gemini-2.5-flash-image which supports both image and text output.
-// This is the ONLY working image generation engine with the current API key.
+// ── Engine 1: Gemini Imagen 3 (RENDER mode) ─────────────────────────
 
 async function generateWithGemini(
+  prompt: string,
+  size: ImagineBody["size"] = "square"
+): Promise<string | null> {
+  const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
+  if (!apiKey) return null;
+
+  const aspectRatio = size === "landscape" ? "16:9" : size === "portrait" ? "9:16" : "1:1";
+
+  const ai = new GoogleGenAI({ apiKey });
+  const response = await ai.models.generateImages({
+    model: "imagen-3.0-generate-004",
+    prompt,
+    config: { numberOfImages: 1, outputMimeType: "image/jpeg", aspectRatio },
+  });
+
+  const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+  if (!imageBytes) return null;
+
+  const base64 =
+    typeof imageBytes === "string"
+      ? imageBytes
+      : Buffer.from(imageBytes as Uint8Array).toString("base64");
+
+  return `data:image/jpeg;base64,${base64}`;
+}
+
+// ── Engine 2: DALL·E 3 (SCHEMATIC mode) ────────────────────────────
+
+async function generateWithDalle(
+  prompt: string,
+  size: ImagineBody["size"] = "square"
+): Promise<{ url: string; revisedPrompt: string } | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const { default: OpenAI } = await import("openai");
+  const openai = new OpenAI({ apiKey });
+
+  const sizeMap = {
+    square: "1024x1024",
+    landscape: "1792x1024",
+    portrait: "1024x1792",
+  } as const;
+
+  const response = await openai.images.generate({
+    model: "dall-e-3",
+    prompt,
+    n: 1,
+    size: sizeMap[size],
+    response_format: "b64_json",
+  });
+
+  const item = response.data?.[0];
+  if (!item?.b64_json) return null;
+
+  return {
+    url: `data:image/png;base64,${item.b64_json}`,
+    revisedPrompt: item.revised_prompt ?? prompt,
+  };
+}
+
+// ── Engine 3: Gemini Flash Inline Image (universal fallback) ────────────
+// Uses gemini-2.5-flash-image which supports both image and text output.
+// This is the fallback engine when Imagen 3 or DALL-E 3 are unavailable.
+
+async function generateWithGeminiFlash(
   prompt: string,
   _size: ImagineBody["size"] = "square"
 ): Promise<{ imageUrl: string; revisedPrompt: string } | null> {
@@ -63,60 +127,16 @@ async function generateWithGemini(
   };
 }
 
-// ── Engine: DALL·E 3 (SCHEMATIC mode fallback) ───────────────────────────────
-// NOTE: DALL-E 3 is currently non-functional with the current key (model does not exist).
-// Kept as a stub so we can re-enable when a proper OpenAI key is configured.
-
-async function generateWithDalle(
-  prompt: string,
-  _size: ImagineBody["size"] = "square"
-): Promise<{ imageUrl: string; revisedPrompt: string } | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-
-  const { default: OpenAI } = await import("openai");
-  const openai = new OpenAI({ apiKey });
-
-  const sizeMap = {
-    square: "1024x1024",
-    landscape: "1792x1024",
-    portrait: "1024x1792",
-  } as const;
-
-  const response = await openai.images.generate({
-    model: "dall-e-3",
-    prompt,
-    n: 1,
-    size: sizeMap[_size],
-  });
-
-  const item = response.data?.[0];
-  if (!item?.url) return null;
-
-  // Fetch the image from the URL and convert to base64
-  try {
-    const imgRes = await fetch(item.url, { signal: AbortSignal.timeout(15_000) });
-    if (!imgRes.ok) return { imageUrl: item.url, revisedPrompt: item.revised_prompt ?? prompt };
-    const buffer = Buffer.from(await imgRes.arrayBuffer());
-    return {
-      imageUrl: `data:image/png;base64,${buffer.toString("base64")}`,
-      revisedPrompt: item.revised_prompt ?? prompt,
-    };
-  } catch {
-    return { imageUrl: item.url, revisedPrompt: item.revised_prompt ?? prompt };
-  }
-}
-
-// ── Route ─────────────────────────────────────────────────────────────────────
+// ── Route ──────────────────────────────────────────────────────────
 
 // POST /api/imagine
 //
-// Dual-engine image generation:
-//   mode "render"    → Gemini Imagen 3 (premium cinematic, client-facing visuals)
-//   mode "schematic" → DALL·E 3       (technical diagrams, architecture maps)
+// Three-engine image generation:
+//   mode "render"    → Imagen 3 → DALL·E 3 → Gemini Flash
+//   mode "schematic" → DALL·E 3 → Imagen 3 → Gemini Flash
 //
-// Each mode has a fallback: if the primary engine fails or its key is missing,
-// the other engine is tried automatically so generation is never silently lost.
+// Each engine is tried in order; if one fails, the next is attempted
+// so generation is never silently lost.
 //
 // Returns: { images: GeneratedImage[] }
 // Always an array — callers should expect 1 item (or 0 on total failure).
@@ -138,26 +158,38 @@ router.post("/imagine", async (req, res): Promise<void> => {
   const images: GeneratedImage[] = [];
 
   if (mode === "render") {
-    // Primary: Gemini Imagen 3
+    // Primary: Imagen 3
     const enginePrompt = buildRenderPrompt(trimmedPrompt);
     try {
-      const result = await generateWithGemini(enginePrompt, size);
-      if (result) {
-        images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "gemini-flash-image", mode });
+      const url = await generateWithGemini(enginePrompt, size);
+      if (url) {
+        images.push({ imageUrl: url, prompt: enginePrompt, model: "imagen-3", mode });
       }
     } catch (err) {
-      logger.warn({ err }, "Gemini inline image failed for render mode — trying DALL·E fallback");
+      logger.warn({ err }, "Imagen 3 failed for render mode — trying DALL·E fallback");
     }
 
-    // Fallback: DALL·E 3
+    // Fallback 1: DALL·E 3
     if (images.length === 0) {
       try {
         const result = await generateWithDalle(enginePrompt, size);
         if (result) {
-          images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "dall-e-3", mode });
+          images.push({ imageUrl: result.url, prompt: result.revisedPrompt, model: "dall-e-3", mode });
         }
       } catch (err) {
-        logger.error({ err }, "DALL·E fallback also failed for render mode");
+        logger.warn({ err }, "DALL·E fallback failed for render mode — trying Gemini Flash");
+      }
+    }
+
+    // Fallback 2: Gemini Flash
+    if (images.length === 0) {
+      try {
+        const result = await generateWithGeminiFlash(enginePrompt, size);
+        if (result) {
+          images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "gemini-flash-image", mode });
+        }
+      } catch (err) {
+        logger.error({ err }, "Gemini Flash fallback also failed for render mode");
       }
     }
   } else {
@@ -167,28 +199,40 @@ router.post("/imagine", async (req, res): Promise<void> => {
     try {
       const result = await generateWithDalle(enginePrompt, size);
       if (result) {
-        images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "dall-e-3", mode });
+        images.push({ imageUrl: result.url, prompt: result.revisedPrompt, model: "dall-e-3", mode });
       }
     } catch (err) {
-      logger.warn({ err }, "DALL·E 3 failed for schematic mode — trying Gemini fallback");
+      logger.warn({ err }, "DALL·E 3 failed for schematic mode — trying Imagen 3");
     }
 
-    // Fallback: Gemini inline image
+    // Fallback 1: Imagen 3
     if (images.length === 0) {
       try {
-        const result = await generateWithGemini(enginePrompt, size);
+        const url = await generateWithGemini(enginePrompt, size);
+        if (url) {
+          images.push({ imageUrl: url, prompt: enginePrompt, model: "imagen-3", mode });
+        }
+      } catch (err) {
+        logger.warn({ err }, "Imagen 3 fallback failed for schematic mode — trying Gemini Flash");
+      }
+    }
+
+    // Fallback 2: Gemini Flash
+    if (images.length === 0) {
+      try {
+        const result = await generateWithGeminiFlash(enginePrompt, size);
         if (result) {
           images.push({ imageUrl: result.imageUrl, prompt: result.revisedPrompt, model: "gemini-flash-image", mode });
         }
       } catch (err) {
-        logger.error({ err }, "Gemini fallback also failed for schematic mode");
+        logger.error({ err }, "Gemini Flash fallback also failed for schematic mode");
       }
     }
   }
 
   if (images.length === 0) {
     res.status(503).json({
-      error: "Image generation unavailable. For render mode: check GOOGLE_GEMINI_API_KEY. For schematic mode: check OPENAI_API_KEY.",
+      error: "Image generation unavailable. All three engines failed. Check GOOGLE_GEMINI_API_KEY and OPENAI_API_KEY.",
     });
     return;
   }
