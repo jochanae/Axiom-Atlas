@@ -657,7 +657,7 @@ const ScheduleBody = z.object({
  * Returns the created scheduled_check row.
  */
 router.post("/browser/schedule", async (req, res): Promise<void> => {
-  const userId = (req as any).user?.id as number | undefined;
+  const userId = (req as any).authUser?.id as number | undefined;
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -712,7 +712,7 @@ router.post("/browser/schedule", async (req, res): Promise<void> => {
  * Deactivate (soft-delete) a scheduled check.
  */
 router.delete("/browser/schedule/:id", async (req, res): Promise<void> => {
-  const userId = (req as any).user?.id as number | undefined;
+  const userId = (req as any).authUser?.id as number | undefined;
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -749,7 +749,7 @@ router.delete("/browser/schedule/:id", async (req, res): Promise<void> => {
  * Query params: limit (default 20, max 100)
  */
 router.get("/browser/checks/:projectId", async (req, res): Promise<void> => {
-  const userId = (req as any).user?.id as number | undefined;
+  const userId = (req as any).authUser?.id as number | undefined;
   if (!userId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
