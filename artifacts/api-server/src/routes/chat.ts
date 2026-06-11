@@ -701,17 +701,20 @@ Emit a BROWSER_VISIT token at the END of your response when you want to visit a 
 BROWSER_VISIT:{"url":"https://example.com","mode":"screenshot"}
 BROWSER_VISIT:{"url":"https://example.com","mode":"scrape"}
 BROWSER_VISIT:{"url":"https://example.com","mode":"health"}
+BROWSER_VISIT:{"url":"https://example.com","mode":"monitor"}
 
 - mode "screenshot" — takes a screenshot and gives you an AI visual description. Use when the user wants to SEE a page, do visual QA, or check what a deployed app looks like.
 - mode "scrape" — fetches the page content and gives you a strategic AI summary. Use for competitor research, product analysis, or reading any public page.
-- mode "health" — full health check (HTTP status + screenshot + visual AI assessment). Use after a deploy to check if the live app is rendering correctly.
+- mode "health" — HTTP status + screenshot + visual AI assessment. Use after a deploy to check if the live app is rendering correctly.
+- mode "monitor" — live error capture: checks for JS console errors, failed resource loads (404 JS/CSS bundles), framework crash patterns (React error boundaries, Next.js crash overlay, Vite error overlay, ChunkLoadError), and uncaught exception handlers. Returns structured { consoleErrors[], resourceErrors[], errorPatterns[], summary }. Use when the user says "is my app broken?", "check for errors", or after a deploy to catch runtime issues the screenshot might miss.
 
 RULES:
 - Only emit BROWSER_VISIT when you actually have a URL to visit (user provided it, or it's the deployed app URL).
 - One BROWSER_VISIT per response. The result appears immediately after your message.
 - Never say "I'll visit that" and then not emit the token. Just emit it.
-- After deploy confirmation (when you see FILE_EDIT_CONFIRMED), emit BROWSER_VISIT with the live URL and mode "health" to verify the deploy automatically.
+- After deploy confirmation (when you see FILE_EDIT_CONFIRMED), emit BROWSER_VISIT with the live URL and mode "monitor" to catch runtime errors automatically.
 - For competitor research ("how does X work?", "what does their pricing look like?"), emit BROWSER_VISIT with mode "scrape".
+- For "is my app broken?" / "check for errors", use mode "monitor". For "show me what it looks like", use mode "screenshot".
 
 You are Atlas. Just be it.`;
 
@@ -2770,13 +2773,13 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
 
   // Extract and strip BROWSER_VISIT tokens — Atlas requests browser visits at end of response
   const BROWSER_VISIT_RE = /^BROWSER_VISIT:\s*(\{[^\n]+\})\s*$/gm;
-  type BrowserVisitToken = { url: string; mode: "screenshot" | "scrape" | "health" };
+  type BrowserVisitToken = { url: string; mode: "screenshot" | "scrape" | "health" | "monitor" };
   let browserVisitToken: BrowserVisitToken | null = null;
   rawContent = rawContent.replace(BROWSER_VISIT_RE, (_match, json: string) => {
     if (!browserVisitToken) {
       try {
         const parsed = JSON.parse(json) as BrowserVisitToken;
-        if (parsed.url && (parsed.mode === "screenshot" || parsed.mode === "scrape" || parsed.mode === "health")) {
+        if (parsed.url && (parsed.mode === "screenshot" || parsed.mode === "scrape" || parsed.mode === "health" || parsed.mode === "monitor")) {
           browserVisitToken = parsed;
           writeStep(res, { verb: parsed.mode === "scrape" ? "Analyzing" : "Visiting", target: parsed.url, phase: "execute" });
         }
@@ -3154,22 +3157,33 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let browserVisitResult: { type: string; url: string; screenshotBase64?: string; analysis?: string; isHealthy?: boolean; issues?: string[] } | null = null;
   if (browserVisitToken) {
     const bvt = browserVisitToken as BrowserVisitToken;
-    const endpoint = bvt.mode === "scrape" ? "scrape" : bvt.mode === "health" ? "health" : "screenshot";
+    const endpointMap: Record<BrowserVisitToken["mode"], string> = {
+      screenshot: "screenshot",
+      scrape: "scrape",
+      health: "health",
+      monitor: "monitor",
+    };
+    const endpoint = endpointMap[bvt.mode];
+    const bodyByMode: Record<BrowserVisitToken["mode"], Record<string, unknown>> = {
+      screenshot: { url: bvt.url, analyze: true },
+      scrape: { url: bvt.url, maxLength: 6000, analyze: true },
+      health: { url: bvt.url },
+      monitor: { url: bvt.url, checkResources: true },
+    };
     try {
       const bvRes = await fetch(
         `${req.protocol}://${req.get("host")}/api/browser/${endpoint}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
-          body: JSON.stringify(bvt.mode === "scrape"
-            ? { url: bvt.url, maxLength: 6000, analyze: true }
-            : { url: bvt.url, analyze: true }),
+          body: JSON.stringify(bodyByMode[bvt.mode]),
           signal: AbortSignal.timeout(60_000),
         }
       );
       if (bvRes.ok) {
         const bvData = await bvRes.json() as {
           screenshotBase64?: string; analysis?: string; isHealthy?: boolean; issues?: string[];
+          hasErrors?: boolean; consoleErrors?: string[]; resourceErrors?: string[]; errorPatterns?: string[]; summary?: string;
           title?: string; text?: string;
         };
         browserVisitResult = {
@@ -3178,6 +3192,13 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           ...(bvData.screenshotBase64 ? { screenshotBase64: bvData.screenshotBase64 } : {}),
           ...(bvData.analysis ? { analysis: bvData.analysis } : {}),
           ...(bvt.mode === "health" && bvData.isHealthy !== undefined ? { isHealthy: bvData.isHealthy, issues: bvData.issues ?? [] } : {}),
+          ...(bvt.mode === "monitor" ? {
+            hasErrors: bvData.hasErrors ?? false,
+            consoleErrors: bvData.consoleErrors ?? [],
+            resourceErrors: bvData.resourceErrors ?? [],
+            errorPatterns: bvData.errorPatterns ?? [],
+            summary: bvData.summary ?? "",
+          } : {}),
         };
         // Patch the finalPayload so the frontend gets it
         (finalPayload as Record<string, unknown>).browserResult = browserVisitResult;

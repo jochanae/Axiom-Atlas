@@ -23,6 +23,11 @@ const HealthBody = z.object({
   url: z.string().url(),
 });
 
+const MonitorBody = z.object({
+  url: z.string().url(),
+  checkResources: z.boolean().optional().default(true),
+});
+
 /**
  * POST /api/browser/screenshot
  * Screenshot a URL via Microlink (no API key needed).
@@ -319,6 +324,174 @@ router.post("/browser/health", async (req, res): Promise<void> => {
     issues,
     ...(screenshotBase64 ? { screenshotBase64 } : {}),
     ...(analysis ? { analysis } : {}),
+  });
+});
+
+/**
+ * POST /api/browser/monitor
+ * Live error capture — multi-signal page analysis without a headless browser.
+ * Covers: HTTP errors, failed resource loads (JS/CSS 404s), HTML error patterns,
+ * inline script console.error detection, and framework-specific crash overlays.
+ * Returns { url, hasErrors, consoleErrors[], resourceErrors[], errorPatterns[], summary }.
+ */
+router.post("/browser/monitor", async (req, res): Promise<void> => {
+  const parsed = MonitorBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const { url, checkResources } = parsed.data;
+
+  const consoleErrors: string[] = [];
+  const resourceErrors: string[] = [];
+  const errorPatterns: string[] = [];
+  let httpStatus: number | null = null;
+  let pageContent = "";
+
+  // ── 1. Fetch page HTML ──────────────────────────────────────────────────────
+  try {
+    const pageResp = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Atlas-Monitor/1.0)", Accept: "text/html" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    httpStatus = pageResp.status;
+
+    if (pageResp.status >= 400) {
+      errorPatterns.push(`HTTP ${pageResp.status}: page returned an error status`);
+    }
+
+    if (pageResp.status < 400) {
+      pageContent = await pageResp.text();
+    }
+  } catch (err) {
+    errorPatterns.push(`Unreachable: ${String(err).split("\n")[0]}`);
+  }
+
+  if (pageContent) {
+    // ── 2. Framework crash pattern detection ─────────────────────────────────
+    const crashPatterns: Array<{ re: RegExp; label: string }> = [
+      { re: /Minified React error #(\d+)/i, label: "React minified error" },
+      { re: /Application error: a client-side exception has occurred/i, label: "Next.js application error" },
+      { re: /ChunkLoadError/i, label: "Webpack chunk load failure" },
+      { re: /__webpack_error__|__vite_error__/i, label: "Bundler error overlay" },
+      { re: /window\.__SENTRY_REPLAY_ERROR__/i, label: "Sentry error capture" },
+      { re: /<title[^>]*>[^<]*(404|not found|error|crashed|unavailable)[^<]*<\/title>/i, label: "Error in page title" },
+      { re: /Something went wrong\./i, label: "Generic 'Something went wrong' UI" },
+      { re: /Internal Server Error/i, label: "Internal Server Error in page body" },
+      { re: /#error-boundary|class="error-boundary|id="error-boundary/i, label: "React error boundary rendered" },
+      { re: /data-nextjs-dialog-overlay|__nextjs__toast/i, label: "Next.js error overlay active" },
+      { re: /vite-error-overlay|plugin-vue-error/i, label: "Vite error overlay active" },
+    ];
+    for (const { re, label } of crashPatterns) {
+      if (re.test(pageContent)) {
+        errorPatterns.push(label);
+      }
+    }
+
+    // ── 3. Inline script console.error / uncaught exception scanning ─────────
+    const scriptTagRe = /<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/gi;
+    let scriptMatch: RegExpExecArray | null;
+    const consoleErrRe = /console\.(error|warn)\s*\(/gi;
+    const throwRe = /\bthrow\s+new\s+Error\s*\(/gi;
+    const uncaughtRe = /window\.(onerror|addEventListener)\s*[=(]/i;
+    let inlineScriptCount = 0;
+
+    while ((scriptMatch = scriptTagRe.exec(pageContent)) !== null && inlineScriptCount < 10) {
+      inlineScriptCount++;
+      const scriptBody = scriptMatch[1] ?? "";
+      // Skip small utility scripts (< 200 chars) and minified bundles > 50KB
+      if (scriptBody.length < 50 || scriptBody.length > 50_000) continue;
+
+      const errCalls = scriptBody.match(consoleErrRe);
+      if (errCalls && errCalls.length > 0) {
+        // Distinguish deliberate production error logging from dev artifacts
+        const snippet = scriptBody.slice(0, 300).replace(/\s+/g, " ").trim();
+        consoleErrors.push(`Inline script calls console.error/warn (${errCalls.length}×): …${snippet.slice(0, 120)}…`);
+      }
+      if (throwRe.test(scriptBody)) {
+        consoleErrors.push(`Inline script throws uncaught Error (may be in error handler)`);
+        throwRe.lastIndex = 0;
+      }
+      if (uncaughtRe.test(scriptBody)) {
+        consoleErrors.push(`Inline script registers window.onerror / uncaught exception handler`);
+      }
+    }
+
+    // ── 4. Resource 404 check — JS/CSS bundles only ───────────────────────────
+    if (checkResources) {
+      const origin = new URL(url).origin;
+      const resourceRe = /<(?:script|link)[^>]+(?:src|href)="([^"]+\.(js|css))"/gi;
+      const resourceUrls = new Set<string>();
+      let rm: RegExpExecArray | null;
+      while ((rm = resourceRe.exec(pageContent)) !== null) {
+        const href = rm[1];
+        if (!href) continue;
+        try {
+          const resolved = new URL(href, origin).href;
+          if (resolved.startsWith(origin)) resourceUrls.add(resolved);
+        } catch { /* ignore invalid URLs */ }
+      }
+
+      // Check up to 12 resources in parallel
+      const toCheck = [...resourceUrls].slice(0, 12);
+      const results = await Promise.allSettled(
+        toCheck.map(async (resUrl) => {
+          const r = await fetch(resUrl, {
+            method: "HEAD",
+            headers: { "User-Agent": "Atlas-Monitor/1.0" },
+            signal: AbortSignal.timeout(8_000),
+          });
+          return { resUrl, status: r.status };
+        })
+      );
+
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value.status >= 400) {
+          resourceErrors.push(`${result.value.status} — ${result.value.resUrl}`);
+        } else if (result.status === "rejected") {
+          resourceErrors.push(`Unreachable — ${toCheck[results.indexOf(result)]}`);
+        }
+      }
+    }
+  }
+
+  // ── 5. AI synthesis ─────────────────────────────────────────────────────────
+  const hasErrors = errorPatterns.length > 0 || resourceErrors.length > 0;
+  const allSignals = [
+    ...errorPatterns.map(p => `ERROR_PATTERN: ${p}`),
+    ...consoleErrors.map(c => `CONSOLE_ERROR: ${c}`),
+    ...resourceErrors.map(r => `RESOURCE_404: ${r}`),
+  ];
+
+  let summary = "";
+  if (allSignals.length > 0) {
+    try {
+      const synthResp = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 250,
+        messages: [{
+          role: "user",
+          content: `Live error capture for ${url}. Signals detected:\n${allSignals.join("\n")}\n\nSummarize in 2-3 sentences for a developer: what's broken, what caused it, and what to check first. Be specific and direct.`,
+        }],
+      });
+      const textBlock = synthResp.content.find(b => b.type === "text");
+      summary = textBlock?.type === "text" ? textBlock.text.trim() : "";
+    } catch (err) {
+      logger.warn({ err, url }, "Monitor AI synthesis failed");
+      summary = allSignals.join("; ");
+    }
+  } else {
+    summary = `No errors detected on ${url}. Page loaded with HTTP ${httpStatus ?? "unknown"}, all checked resources returned 200, no crash patterns found.`;
+  }
+
+  res.json({
+    url,
+    httpStatus,
+    hasErrors,
+    consoleErrors,
+    resourceErrors,
+    errorPatterns,
+    summary,
   });
 });
 
