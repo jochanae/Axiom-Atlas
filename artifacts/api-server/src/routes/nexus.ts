@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable } from "@workspace/db";
-import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, type SQL } from "drizzle-orm";
+import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, gte, type SQL } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { findSemanticTensionsForProject } from "./tensions";
@@ -1233,6 +1233,28 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     .filter(Boolean)
     .join("\n\n");
 
+  // Portfolio health snapshot — Atlas speaks to this when asked about momentum/health
+  const portfolioHealth = await (async () => {
+    if (projectIds.length === 0) return null;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [sessionsResult, violationsResult] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(sessionsTable)
+        .where(and(inArray(sessionsTable.projectId, projectIds), gte(sessionsTable.createdAt, sevenDaysAgo))),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(entriesTable)
+        .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.isViolation, true))),
+    ]);
+    return {
+      sessionsThisWeek: sessionsResult[0]?.count ?? 0,
+      committedDecisions: committedEntries.length,
+      violations: violationsResult[0]?.count ?? 0,
+      totalProjects: projects.length,
+    };
+  })();
+
   // Always source conversation context from the persisted Living Thread (last 40 turns)
   const conversationHistory = dbMessages.slice(-40).map((m) => ({
     role: m.role as "user" | "assistant",
@@ -1266,6 +1288,15 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
   // Always inject the full project roster so Atlas knows every room, even empty ones
   systemPrompt += `\n\n--- YOUR PROJECT PORTFOLIO (${projects.length} project${projects.length !== 1 ? "s" : ""}) ---\n${projectRoster}`;
+  if (portfolioHealth) {
+    const healthLines = [
+      `Sessions this week: ${portfolioHealth.sessionsThisWeek}`,
+      `Committed decisions (total): ${portfolioHealth.committedDecisions}`,
+      `Decision violations: ${portfolioHealth.violations}`,
+      `Total projects: ${portfolioHealth.totalProjects}`,
+    ].join("\n");
+    systemPrompt += `\n\n--- PORTFOLIO HEALTH ---\n${healthLines}\nUse this when the user asks about momentum, health, activity, or progress across the portfolio.\n--- END PORTFOLIO HEALTH ---`;
+  }
   if (committedLedger) {
     systemPrompt += `\n\n--- COMMITTED DECISIONS ACROSS PORTFOLIO (use for cross-project tension detection) ---\n${committedLedger}\n--- END COMMITTED DECISIONS ---`;
   }
@@ -1309,6 +1340,54 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
           // tree fetch failed silently — continue without it
         }
       }
+
+      // Fetch recent commits for the focused project so Atlas can interpret them
+      let focusRecentCommits = "";
+      if (focusProject.linkedRepo) {
+        try {
+          const repoFull = parseRepo(focusProject.linkedRepo ?? null);
+          const ghToken = process.env.GITHUB_TOKEN ?? null;
+          if (repoFull && ghToken) {
+            const commitsResp = await fetch(
+              `https://api.github.com/repos/${repoFull}/commits?per_page=7`,
+              {
+                headers: {
+                  Authorization: `Bearer ${ghToken}`,
+                  Accept: "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "User-Agent": "Atlas-Nexus/1.0",
+                },
+                signal: AbortSignal.timeout(5000),
+              }
+            );
+            if (commitsResp.ok) {
+              const commitData = await commitsResp.json() as Array<{
+                sha?: string;
+                commit?: { message?: string; author?: { name?: string; date?: string | null } | null };
+              }>;
+              const nowMs = Date.now();
+              const commitLines = commitData
+                .map((c) => {
+                  const sha = (c.sha ?? "").slice(0, 7);
+                  const message = (c.commit?.message ?? "").split("\n")[0]?.trim() ?? "";
+                  const author = c.commit?.author?.name ?? "Unknown";
+                  const dateStr = c.commit?.author?.date;
+                  if (!sha || !message) return null;
+                  const ageDays = dateStr ? Math.floor((nowMs - new Date(dateStr).getTime()) / 86_400_000) : null;
+                  const ageLabel = ageDays == null ? "" : ageDays === 0 ? ", today" : ageDays === 1 ? ", 1 day ago" : `, ${ageDays} days ago`;
+                  return `  ${sha} ${message} — ${author}${ageLabel}`;
+                })
+                .filter((l): l is string => l !== null);
+              if (commitLines.length > 0) {
+                focusRecentCommits = commitLines.join("\n");
+              }
+            }
+          }
+        } catch {
+          // Non-fatal — continue without commit context
+        }
+      }
+
       const focusEntries = committedEntries
         .filter(e => e.projectId === focusProjectId)
         .map(e => `  • ${e.title}${e.summary ? ` — ${e.summary.slice(0, 120)}` : ""}`)
@@ -1342,6 +1421,9 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       systemPrompt += `\n\n--- FOCUSED PROJECT: ${focusProject.name.toUpperCase()} ---\nThe user has zoomed in on "${focusProject.name}" for this conversation. Prioritize this project's context. Open your FIRST response by explicitly naming the project — begin with "${focusProject.name} —" or "On ${focusProject.name}:" so the user knows the focus is active. After that, answer normally without repeating the label on every message.`;
       if (focusEntries) systemPrompt += `\nCommitted decisions:\n${focusEntries}`;
       if (focusMemory) systemPrompt += `\nProject memory:\n${focusMemory}`;
+      if (focusRecentCommits) {
+        systemPrompt += `\nRecent commits (interpret narratively — group by area of impact, synthesize what's changing, don't enumerate SHAs):\n${focusRecentCommits}`;
+      }
       systemPrompt += `\n\nFULL LEDGER STATE:
 LEDGER STATE:
 Committed (${ledgerGroups.committed.length}): ${formatTitles(ledgerGroups.committed)}

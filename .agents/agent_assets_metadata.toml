@@ -78,3 +78,9 @@ id = "1aNg3v6r5EGW9pQhVoitc"
 uri = "file://neon-migration-complete.txt"
 type = "text"
 title = "Neon Database Migration — Run in SQL Editor"
+
+[[outputs]]
+id = "S0ELRIRnU_UzEzphQOfYx"
+uri = "file://cursor-prompt-phase2-visual-layer.md"
+type = "text"
+title = "Phase 2 — Visual Canvas: Cursor Prompt for atlas-idk"

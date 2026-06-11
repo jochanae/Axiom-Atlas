@@ -2,6 +2,9 @@
 
 Apply these changes to `jochanae/atlas-idk` (the live frontend repo).
 
+> **Upgrading from the earlier image-wiring prompt?**
+> If you already applied `cursor-prompt-workspace-images.md`, this prompt **replaces** that earlier wiring. The old version used `imageUrl` (a data URL string on the ImageVersion object) and `activeCanvasVersion` (the full object). This new version uses `dataUrl` and `activeCanvasVersionId` (just the id string). The new `CanvasPanel.tsx` is a complete rewrite — overwrite the old file. For the workspace state, **replace** the old `imageVersions` / `activeCanvasVersion` declarations with the new ones in Change 5.
+
 ---
 
 ## Step 1 — Run install first
@@ -459,14 +462,27 @@ Replace with:
 
 ---
 
-### Change 5: Add canvas state to the main Workspace component
+### Change 5: Add (or replace) canvas state in the main Workspace component
 
-In the main `Workspace()` function, find:
+**If you already applied the earlier image-wiring prompt**, search for and **replace** these old lines:
+```
+  const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [activeCanvasVersion, setActiveCanvasVersion] = useState<ImageVersion | null>(null);
+```
+with:
+```tsx
+  const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [activeCanvasVersionId, setActiveCanvasVersionId] = useState<string | null>(null);
+  const processedImageIds = useRef(new Set<string>());
+```
+
+**If you have NOT applied any image wiring yet**, find:
 ```
   const [activeCatch, setActiveCatch] = useState<CatchPayload | null>(null);
 ```
-
-Add immediately after:
+and add immediately after it:
 ```tsx
   const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
   const [canvasOpen, setCanvasOpen] = useState(false);
@@ -688,7 +704,7 @@ Find the desktop right panel `<div>` wrapper. It looks like:
                 onFileContext={setFileContext}
 ```
 
-Replace the entire `<div>` (through its closing `</div>`) with:
+Replace the entire `<div>` (through its closing `</div>`) with this — **keep all your existing RightPanel props exactly as they are inside the else branch**:
 ```tsx
             <div style={{ flex: 1, minWidth: 240, overflow: "hidden" }}>
               {canvasOpen && imageVersions.length > 0 ? (
@@ -706,13 +722,43 @@ Replace the entire `<div>` (through its closing `</div>`) with:
                   entries={entries || []}
                   activeCatch={activeCatch}
                   onFileContext={setFileContext}
-                  {/* ... rest of existing RightPanel props unchanged ... */}
+                  onLinkedRepoChange={setLinkedRepo}
+                  pushHistory={pushHistory}
+                  onRollbackPush={handleRollbackPush}
+                  onHomeNav={() => setLocation("/home")}
+                  forceTab={isMobile && mobileTab === "map" ? "map" : isMobile && mobileTab === "files" ? "files" : desktopForceTab}
+                  onSendIntent={sendFromIntentCapture}
+                  onFillIntent={(text) => { setInput(text); setTimeout(() => autoResize(), 0); }}
+                  onMapReadinessChange={setMapReadiness}
+                  displayedReadinessScore={displayedReadinessScore}
+                  onSystemNodeMessage={pushSystemNodeMessage}
+                  onHandover={handleHandover}
+                  handoverPending={handoverPending}
+                  lastHandoverHash={project?.lastHandoverHash ?? null}
+                  isMobile={false}
+                  resolvedNodeIds={pendingResolvedNodeIds}
+                  onResolvedConsumed={() => setPendingResolvedNodeIds([])}
+                  currentSnapshot={currentSnapshot}
+                  onSnapshotChange={setCurrentSnapshot}
+                  handoverOpen={handoverOpen}
+                  onHandoverOpenChange={setHandoverOpen}
+                  sandboxCode={sandboxCode}
+                  onSandboxConsumed={() => setSandboxCode(null)}
+                  previewRefreshTrigger={previewRefreshTrigger}
+                  pendingTerminalCommand={pendingTerminalCommand}
+                  onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
+                  onCommandComplete={handleTerminalComplete}
+                  wsLens={wsLens}
+                  onOpenForge={() => setShowForgeExternal(true)}
+                  externalForgeNodes={externalForgeNodes}
+                  onForgeNodesConsumed={() => setExternalForgeNodes([])}
+                  onForgeCompleted={() => void updateForgeState("forged")}
                 />
               )}
             </div>
 ```
 
-> **Note:** Keep all the existing RightPanel props exactly as they are — just wrap the `<RightPanel>` in the else branch of the conditional. Do not change anything else.
+> **Note:** Your live repo's RightPanel may have slightly different props than this reference list — if a prop name doesn't exist in your version, skip it. The key addition is the `{canvasOpen && imageVersions.length > 0 ? ... : ...}` conditional wrapping the existing `<RightPanel>`.
 
 ---
 
@@ -740,6 +786,52 @@ Add before it:
 
 ```
 
+### Change 14: Update `doSend` signature to accept `imageData`
+
+Find the `doSend` `useCallback` declaration. It starts with something like:
+```tsx
+  const doSend = useCallback(
+    (text: string, sid: number, currentMessages: ChatMessage[], ctx?: string | null) => {
+```
+
+If the last parameter does NOT already include `imageData`, update the signature line to add it:
+```tsx
+  const doSend = useCallback(
+    (text: string, sid: number, currentMessages: ChatMessage[], ctx?: string | null, imageData?: { base64: string; mediaType: string }) => {
+```
+
+> **Skip this change** if `doSend` already has an `imageData` parameter — it won't need updating.
+
+---
+
+### Change 15: Pass `imageData` in the fetch body inside `doSend`
+
+Inside `doSend`, find the body object that's passed to `fetch("/api/chat", ...)`. It will have several spread props. Find the closing section of that object, which looks like:
+```tsx
+        ...(userProfileStr ? { userProfile: userProfileStr } : {}),
+        ...(projectMap ? { projectMap } : {}),
+```
+
+Add this line after `projectMap`:
+```tsx
+        ...(imageData ? { imageData } : {}),
+```
+
+> **Skip this change** if `imageData` is already being spread into the body.
+
+---
+
+### Change 16: Handle `imageB64` in the assistant message from the API response
+
+Inside `doSend`, find the block where the assistant message is constructed after `fetch` resolves. It will include spreads like `...(res.plan ? ... : {})`. Add the image fields after the existing spreads:
+
+```tsx
+            ...(res.imageB64 ? { imageB64: res.imageB64, imageMimeType: res.imageMimeType } : {}),
+            ...(res.imageGen?.images?.[0]?.imageUrl ? { imageB64: res.imageGen.images[0].imageUrl.split(",")[1], imageMimeType: res.imageGen.images[0].imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png" } : {}),
+```
+
+> **Skip this change** if you can already see `res.imageB64` being spread into the assistant message.
+
 ---
 
 ## Step 4 — Typecheck and push
@@ -754,11 +846,11 @@ Fix any errors, then push to main.
 
 ## What this does
 
-- **Inline image rendering** — images already appear inline in AssistantBubble. They now have a "TAP TO EXPAND" badge and are wrapped in a clickable button.
-- **Canvas panel** — `CanvasPanel.tsx` shows the image large with a version history strip at the bottom and a refinement input at the bottom.
-- **Version history** — every new image Atlas generates is automatically added to the version strip. Thumbnails are clickable.
-- **Multi-turn refinement** — typing a message in the canvas panel sends it to Atlas with the active image as visual context (base64 attached).
-- **Desktop split pane** — when an image is generated, the right panel automatically switches to CanvasPanel. Closing CanvasPanel restores the Decision Ledger / right panel.
+- **Inline image rendering** — images appear inline in AssistantBubble with a "TAP TO EXPAND" badge, wrapped in a tappable button.
+- **Canvas panel** — `CanvasPanel.tsx` shows the image full-size with a version history strip at the bottom and a refinement input.
+- **Version history** — every new image Atlas generates is automatically added to the version strip. Thumbnails are clickable. Versions persist across session reloads via the backend.
+- **Multi-turn refinement** — typing in the canvas panel sends the prompt to Atlas with the active image attached as base64 context. Atlas refines the image.
+- **Desktop split pane** — when an image is generated the right panel switches to CanvasPanel automatically. Closing it restores the Decision Ledger.
 - **Mobile modal** — on mobile, CanvasPanel opens as a full-screen overlay (z-index 200).
-- **Proactive visual generation** — Atlas now proactively emits IMAGE_GEN when the conversation is about visual/aesthetic/spatial topics without being explicitly asked.
+- **Proactive visual generation** — Atlas now proactively emits IMAGE_GEN when the conversation touches visual/aesthetic/spatial topics without being explicitly asked. (Backend change — already live in the deployed API.)
 - **Refinement keywords** — IMAGE_REQUEST_RE in chat.ts updated to catch "refine", "improve", "redesign", "iterate", etc. so the auto-injection also fires on refinement requests.
