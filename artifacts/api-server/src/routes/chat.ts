@@ -3228,6 +3228,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       health: { url: bvt.url },
       monitor: { url: bvt.url, checkResources: true },
     };
+    writeStep(res, { verb: "Visiting", target: bvt.url, phase: "start" });
     try {
       const bvRes = await fetch(
         `${req.protocol}://${req.get("host")}/api/browser/${endpoint}`,

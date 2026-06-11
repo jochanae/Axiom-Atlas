@@ -2089,6 +2089,7 @@ function atlasActivityStatus(content: string): string {
   if (/FILE_EDIT/i.test(content)) return "Preparing changes...";
   if (/FILE_READ/i.test(content)) return "Reading files...";
   if (/\b(git|push)\b/i.test(content)) return "Pushing to GitHub...";
+  if (content.startsWith("Visiting ")) return content;
   return "Atlas is thinking...";
 }
 
@@ -2153,6 +2154,7 @@ function parseLiveGeneration(content: string, pending: boolean): { mode: LiveGen
 }
 
 function AtlasActivityBar({ content }: { content: string }) {
+  const isVisiting = content.startsWith("Visiting ");
   return (
     <div
       style={{
@@ -2167,24 +2169,42 @@ function AtlasActivityBar({ content }: { content: string }) {
         pointerEvents: "none",
       }}
     >
-      <span
-        className="atlas-pulse-dot"
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: "var(--atlas-gold)",
-          display: "inline-block",
-          flexShrink: 0,
-        }}
-      />
+      {isVisiting ? (
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--atlas-gold)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ flexShrink: 0, opacity: 0.85 }}
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+      ) : (
+        <span
+          className="atlas-pulse-dot"
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: "var(--atlas-gold)",
+            display: "inline-block",
+            flexShrink: 0,
+          }}
+        />
+      )}
       <span
         style={{
           fontFamily: "var(--app-font-mono)",
           fontSize: 10,
           letterSpacing: "0.08em",
           color: "var(--atlas-muted)",
-          textTransform: "uppercase",
+          textTransform: isVisiting ? "none" : "uppercase",
         }}
       >
         {atlasActivityStatus(content)}
@@ -11235,7 +11255,7 @@ export default function Workspace() {
               </div>
             )}
 
-            {activityStream.active && liveGeneration.shouldShow ? (
+            {activityStream.active && liveGeneration.shouldShow && !activityStream.content.startsWith("Visiting ") ? (
               <LiveGenerationCard
                 mode={liveGeneration.mode}
                 steps={liveGeneration.steps}
