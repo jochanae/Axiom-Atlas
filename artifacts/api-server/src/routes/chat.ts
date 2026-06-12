@@ -3037,7 +3037,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         if (!placed) {
           try {
             const r = await genai.models.generateContent({
-              model: "gemini-2.0-flash-preview-image-generation",
+              model: "gemini-2.5-flash-image",
               contents: enginePrompt,
               config: { responseModalities: ["IMAGE", "TEXT"] },
             });
@@ -3048,7 +3048,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
               generatedImages.push({
                 imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
                 prompt: textPart?.text ?? enginePrompt,
-                model: "gemini-2.0-flash-image",
+                model: "gemini-2.5-flash-image",
                 mode: token.mode,
               });
               placed = true;
@@ -3084,7 +3084,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
         if (!placed) {
           try {
             const r = await genai.models.generateContent({
-              model: "gemini-2.0-flash-preview-image-generation",
+              model: "gemini-2.5-flash-image",
               contents: enginePrompt,
               config: { responseModalities: ["IMAGE", "TEXT"] },
             });
@@ -3095,7 +3095,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
               generatedImages.push({
                 imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
                 prompt: textPart?.text ?? enginePrompt,
-                model: "gemini-2.0-flash-image",
+                model: "gemini-2.5-flash-image",
                 mode: token.mode,
               });
             }
