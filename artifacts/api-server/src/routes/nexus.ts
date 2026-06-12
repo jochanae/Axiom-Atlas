@@ -1509,6 +1509,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     systemPrompt += `\n\n--- DEEP DIVE MODE ACTIVE ---\nThe user wants depth, not breadth. Lock onto the specific topic they raise and explore it thoroughly — underlying assumptions, trade-offs, edge cases, second-order implications, what could go wrong, what could go right. Stay focused. Don't jump to other projects unless directly relevant.\n--- END DEEP DIVE MODE ---`;
   }
 
+  systemPrompt += `\n\n--- BROWSER AGENT ---\nYou can visit URLs for competitor research or health checks. Emit a BROWSER_VISIT token at the END of your response when you want to visit a URL:\n\nBROWSER_VISIT:{"url":"https://example.com","mode":"scrape"}\nBROWSER_VISIT:{"url":"https://example.com","mode":"screenshot"}\nBROWSER_VISIT:{"url":"https://example.com","mode":"health"}\n\n- "scrape" — fetches page content and gives a strategic summary. Use for competitor research, product analysis, or reading any public page.\n- "screenshot" — takes a screenshot with AI visual description. Use when the user wants to SEE a page.\n- "health" — HTTP status + visual check. Use to verify a live app is rendering correctly.\n\nRULES:\n- Only emit BROWSER_VISIT when you actually have a URL to visit.\n- One BROWSER_VISIT per response, at the very end.\n- Never say "I'll check that" without emitting the token. Just emit it.\n- For competitor research ("how does X work?", "what does their pricing look like?", "compare us to X"), emit BROWSER_VISIT with mode "scrape". If you know the URL, use it directly.\n--- END BROWSER AGENT ---`;
+
   // Load Visual Vault images (project-scoped if focused, otherwise skip for global)
   vault = focusProjectId
     ? await loadVaultContext(userId, focusProjectId)
@@ -1615,10 +1617,92 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
   const finishStream = async (rawContent: string) => {
     streamDone = true;
+
+    // Extract and strip BROWSER_VISIT tokens — Atlas requests browser visits at end of response
+    const BROWSER_VISIT_RE = /^BROWSER_VISIT:\s*(\{[^\n]+\})\s*$/gm;
+    type BrowserVisitToken = { url: string; mode: "screenshot" | "scrape" | "health" | "monitor" };
+    let browserVisitToken: BrowserVisitToken | null = null;
+    rawContent = rawContent.replace(BROWSER_VISIT_RE, (_match, json: string) => {
+      if (!browserVisitToken) {
+        try {
+          const parsed = JSON.parse(json) as BrowserVisitToken;
+          if (parsed.url && ["screenshot", "scrape", "health", "monitor"].includes(parsed.mode)) {
+            browserVisitToken = parsed;
+          }
+        } catch { /* ignore malformed tokens */ }
+      }
+      return "";
+    }).trim();
+
     // Strip MEMORY_Tn tags from persisted output
-    const { content: visibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
+    const { content: rawVisibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
+    let visibleContent = rawVisibleContent;
     const memoryUpdated = parsedMemoryUpdated;
     writeStep({ verb: "Saved", target: "response", detail: "Thread updated" });
+
+    // Execute BROWSER_VISIT if Atlas emitted one — emit visiting step so UI shows the globe indicator
+    if (browserVisitToken) {
+      const bvt = browserVisitToken as BrowserVisitToken;
+      writeStep({ verb: "Visiting", target: bvt.url });
+      try {
+        const endpointMap: Record<BrowserVisitToken["mode"], string> = {
+          screenshot: "screenshot",
+          scrape: "scrape",
+          health: "health",
+          monitor: "monitor",
+        };
+        const bodyByMode: Record<BrowserVisitToken["mode"], Record<string, unknown>> = {
+          screenshot: { url: bvt.url, analyze: true },
+          scrape: { url: bvt.url, maxLength: 6000, analyze: true },
+          health: { url: bvt.url },
+          monitor: { url: bvt.url, checkResources: true },
+        };
+        const bvRes = await fetch(
+          `${req.protocol}://${req.get("host")}/api/browser/${endpointMap[bvt.mode]}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Cookie: req.headers.cookie ?? "" },
+            body: JSON.stringify(bodyByMode[bvt.mode]),
+            signal: AbortSignal.timeout(60_000),
+          }
+        );
+        if (bvRes.ok) {
+          const bvData = await bvRes.json() as {
+            screenshotBase64?: string; analysis?: string; isHealthy?: boolean; issues?: string[];
+            hasErrors?: boolean; summary?: string; title?: string; headings?: string[];
+          };
+          const lines: string[] = [];
+          if (bvt.mode === "health") {
+            const badge = bvData.isHealthy ? "✅ Healthy" : `⚠️ ${bvData.issues?.length ?? 0} issue(s) found`;
+            lines.push(`**Site check — ${bvt.url}**\n${badge}`);
+            if (bvData.issues?.length) lines.push(bvData.issues.map((i: string) => `- ${i}`).join("\n"));
+            if (bvData.analysis) lines.push(bvData.analysis);
+          } else if (bvt.mode === "monitor") {
+            const badge = bvData.hasErrors ? "⚠️ Errors detected" : "✅ No errors found";
+            lines.push(`**Monitor — ${bvt.url}**\n${badge}`);
+            if (bvData.summary) lines.push(bvData.summary);
+          } else if (bvt.mode === "scrape") {
+            lines.push(`**${bvData.title ?? bvt.url}**  \`${bvt.url}\``);
+            if (bvData.analysis) lines.push(bvData.analysis);
+            if (bvData.headings && bvData.headings.length > 0) {
+              lines.push(`**Key sections:** ${bvData.headings.slice(0, 6).join(" · ")}`);
+            }
+          } else if (bvData.analysis) {
+            lines.push(`**Screenshot — ${bvt.url}**\n${bvData.analysis}`);
+          }
+          if (lines.length > 0) {
+            const appendText = "\n\n" + lines.join("\n\n");
+            visibleContent = visibleContent.trimEnd() + appendText;
+            // Send the browser result as a token so the streaming message shows it
+            if (!res.writableEnded && !res.destroyed) {
+              res.write(`event: token\ndata: ${JSON.stringify(appendText)}\n\n`);
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn({ err: String(err), url: bvt.url, mode: bvt.mode }, "BROWSER_VISIT execution failed in nexus");
+      }
+    }
     const runMetadata = buildRunMetadata(visibleContent, {
       ...modelUsage,
       runActions: runActions.length > 0 ? runActions : null,

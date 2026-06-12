@@ -1038,6 +1038,7 @@ export default function Home() {
   const [homeMessages, setHomeMessages] = useState<HomeMessage[]>([]);
   const [isAtlasStreaming, setIsAtlasStreaming] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [visitingUrl, setVisitingUrl] = useState<string | null>(null);
   const [pendingPhraseIdx, setPendingPhraseIdx] = useState(0);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -1371,8 +1372,14 @@ export default function Home() {
               setHomeMessages(prev => prev.map(m =>
                 (m as any).id === streamingId ? { ...m, content: streamedText } : m
               ));
+            } else if (evtName === "step") {
+              const step = JSON.parse(evtData) as { verb: string; target?: string };
+              if (step.verb === "Visiting" && step.target) {
+                setVisitingUrl(step.target);
+              }
             } else if (evtName === "done") {
               const meta = JSON.parse(evtData) as { memoryUpdated: boolean; detectedMode: string; handoffSignal?: HomeHandoffSignal };
+              setVisitingUrl(null);
               const plan = detectPlanFromText(streamedText);
               setHomeMessages(prev => prev.map(m =>
                 (m as any).id === streamingId ? { ...m, streaming: false, handoffSignal: meta.handoffSignal, ...(plan ? { plan } : {}) } : m
@@ -1381,6 +1388,7 @@ export default function Home() {
               if (meta.detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) setShowHandoff(true);
             } else if (evtName === "error") {
               const errMsg = JSON.parse(evtData) as string;
+              setVisitingUrl(null);
               setHomeMessages(prev => prev.map(m =>
                 (m as any).id === streamingId
                   ? { ...m, content: errMsg || "Something went wrong. Tap send again.", streaming: false }
@@ -1397,6 +1405,7 @@ export default function Home() {
     } finally {
       setIsAtlasStreaming(false);
       setIsSending(false);
+      setVisitingUrl(null);
       document.body.dataset.voiceActive = "false";
     }
   }, [input, attachedFiles, isSending, homeModel, homeFocus, homeUserType, projects, activeConversationId, homeMessages.length]);
@@ -2072,12 +2081,25 @@ export default function Home() {
                         <div style={{ fontSize: 9, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--atlas-gold)", opacity: 0.4, marginBottom: 6 }}>
                           Atlas
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <LoadingSpinner size="sm" color="atlas" />
-                          <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", letterSpacing: "0.07em", opacity: 0.7, transition: "opacity 400ms ease" }}>
-                            {HOME_PENDING_PHRASES[pendingPhraseIdx]}
-                          </span>
-                        </div>
+                        {visitingUrl ? (
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 999, background: "color-mix(in oklab, var(--atlas-gold) 7%, transparent)", border: "1px solid color-mix(in oklab, var(--atlas-gold) 14%, transparent)", pointerEvents: "none" }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--atlas-gold)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.85 }}>
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="2" y1="12" x2="22" y2="12" />
+                              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, letterSpacing: "0.08em", color: "var(--atlas-muted)" }}>
+                              Visiting {visitingUrl}…
+                            </span>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <LoadingSpinner size="sm" color="atlas" />
+                            <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 10, color: "var(--atlas-muted)", letterSpacing: "0.07em", opacity: 0.7, transition: "opacity 400ms ease" }}>
+                              {HOME_PENDING_PHRASES[pendingPhraseIdx]}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
