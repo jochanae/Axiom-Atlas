@@ -2500,6 +2500,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
 • If the scenario has clearly evolved into something the user wants to commit to, end your response with: LENS_DRIFT: build`,
   };
   systemPrompt += workspaceLensInstructions[workspaceLens] ?? workspaceLensInstructions.flow;
+  systemPrompt += `\n\n--- IMAGE_GEN AVAILABILITY OVERRIDE ---\nIMAGE_GEN is available in EVERY mode and lens, including THINK and FLOW. Generating a visual is part of thinking and exploring — it is NOT a "build" action restricted by mode/lens instructions above. Never let THINK mode, FLOW lens, or "not a builder" framing stop you from using IMAGE_GEN when the user asks for an image, sketch, mockup, or visual. This instruction takes priority over any mode/lens language suggesting otherwise.`;
 
   // Legacy project-level lens — style modifier (builder/strategist/reviewer/teacher)
   const activeLens = (body.lens ?? "builder").toLowerCase();
