@@ -170,6 +170,7 @@ interface ChatMessage {
   terminalResult?: { command: string; output: string; exitCode: number | null } | null;
   browserResult?: BrowserResult | null;
   deployQa?: DeployQa | null;
+  deployInProgress?: boolean;
 }
 
 type ChatStepEvent = {
@@ -11522,13 +11523,28 @@ export default function Workspace() {
                         messagesRef.current,
                       );
                     }
+                    // Show 'Deploy in progress…' immediately — removed if Vercel isn't configured.
+                    setMessages((prev) => [
+                      ...prev,
+                      {
+                        role: "assistant" as const,
+                        content: "Deploy in progress…",
+                        model: "system",
+                        intentType: "BUILD",
+                        sentAt: new Date().toISOString(),
+                        deployInProgress: true,
+                      },
+                    ]);
                     // Background deploy status check — polls Vercel for up to 90 s after push.
                     // When Vercel is configured, BROWSER_VISIT is deferred until after-push confirms
                     // the deploy is "ready" — this prevents visiting a mid-deploy / stale snapshot.
                     fetch(`/api/deploy/after-push?atlasProjectId=${id}`, { credentials: "include" })
                       .then((r) => (r.ok ? r.json() : null))
                       .then((data: { hasVercel?: boolean; status?: string; alias?: string; url?: string; visualQa?: DeployQa; autoMonitoringSetUp?: boolean; autoMonitoringMessage?: string } | null) => {
-                        if (!data?.hasVercel) return;
+                        if (!data?.hasVercel) {
+                          setMessages((prev) => prev.filter((m) => !m.deployInProgress));
+                          return;
+                        }
                         const host = data.alias
                           ? `https://${data.alias}`
                           : data.url
@@ -11543,18 +11559,24 @@ export default function Workspace() {
                             : data.status === "failed"
                               ? "Deploy failed. Check your Vercel dashboard — the build may need a fix."
                               : null;
-                        if (!content) return;
-                        setMessages((prev) => [
-                          ...prev,
-                          {
-                            role: "assistant" as const,
-                            content,
-                            model: "system",
-                            intentType: "BUILD",
-                            sentAt: new Date().toISOString(),
-                            ...(data.visualQa ? { deployQa: data.visualQa } : {}),
-                          },
-                        ]);
+                        if (!content) {
+                          // Timeout or unknown status — remove placeholder silently
+                          setMessages((prev) => prev.filter((m) => !m.deployInProgress));
+                          return;
+                        }
+                        // Replace the in-progress placeholder with the final deploy result
+                        setMessages((prev) =>
+                          prev.map((m) =>
+                            m.deployInProgress
+                              ? {
+                                  ...m,
+                                  content,
+                                  deployInProgress: false,
+                                  ...(data.visualQa ? { deployQa: data.visualQa } : {}),
+                                }
+                              : m,
+                          ),
+                        );
                         // Trigger the post-deploy health check now that the site is confirmed live.
                         // The backend gates BROWSER_VISIT on this signal when Vercel is connected,
                         // so the health badge reflects the actual deployed state, not mid-deploy.
@@ -11567,7 +11589,9 @@ export default function Workspace() {
                           );
                         }
                       })
-                      .catch(() => {});
+                      .catch(() => {
+                        setMessages((prev) => prev.filter((m) => !m.deployInProgress));
+                      });
                   }}
                   onEditDeclined={() => {
                     if (sessionId) {
