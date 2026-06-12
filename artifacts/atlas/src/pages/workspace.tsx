@@ -133,6 +133,8 @@ interface BrowserResult {
   resourceErrors?: string[];
   errorPatterns?: string[];
   summary?: string;
+  title?: string;
+  headings?: string[];
 }
 
 interface DeployQa {
@@ -2213,6 +2215,305 @@ function AtlasActivityBar({ content }: { content: string }) {
   );
 }
 
+// ── BrowserResultCard ─────────────────────────────────────────────────────────
+function BrowserResultCard({
+  result,
+  onOpenCanvas,
+}: {
+  result: BrowserResult;
+  onOpenCanvas?: (dataUrl: string) => void;
+}) {
+  const typeConfig: Record<
+    BrowserResult["type"],
+    { label: string; icon: React.ReactNode; accentColor: string; borderColor: string; bgColor: string }
+  > = {
+    screenshot: {
+      label: "SCREENSHOT",
+      icon: (
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+          <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M5.5 3V2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          <path d="M10.5 3V2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      ),
+      accentColor: "rgba(201,162,76,0.9)",
+      borderColor: "rgba(201,162,76,0.18)",
+      bgColor: "rgba(201,162,76,0.04)",
+    },
+    scrape: {
+      label: "SCRAPE",
+      icon: (
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M8 2C8 2 5.5 5 5.5 8s2.5 6 2.5 6M8 2c0 0 2.5 3 2.5 6S8 14 8 14M2 8h12" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+        </svg>
+      ),
+      accentColor: "rgba(96,165,250,0.9)",
+      borderColor: "rgba(96,165,250,0.18)",
+      bgColor: "rgba(96,165,250,0.04)",
+    },
+    health: {
+      label: "HEALTH CHECK",
+      icon: (
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+          <path d="M8 13.5C8 13.5 2 10 2 5.5a3.5 3.5 0 0 1 6-2.45A3.5 3.5 0 0 1 14 5.5C14 10 8 13.5 8 13.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        </svg>
+      ),
+      accentColor: result.isHealthy ? "rgba(134,239,172,0.9)" : "rgba(252,165,165,0.9)",
+      borderColor: result.isHealthy ? "rgba(74,222,128,0.2)" : "rgba(239,68,68,0.2)",
+      bgColor: result.isHealthy ? "rgba(74,222,128,0.04)" : "rgba(239,68,68,0.04)",
+    },
+    monitor: {
+      label: "MONITOR",
+      icon: (
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="2" width="14" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
+          <path d="M5 14h6M8 11v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M4 7l2.5-2.5L8.5 7l2-2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+      accentColor: result.hasErrors ? "rgba(252,165,165,0.9)" : "rgba(134,239,172,0.9)",
+      borderColor: result.hasErrors ? "rgba(239,68,68,0.2)" : "rgba(74,222,128,0.2)",
+      bgColor: result.hasErrors ? "rgba(239,68,68,0.04)" : "rgba(74,222,128,0.04)",
+    },
+  };
+
+  const cfg = typeConfig[result.type];
+
+  const shortUrl = (() => {
+    try {
+      const u = new URL(result.url);
+      return u.hostname + (u.pathname !== "/" ? u.pathname.slice(0, 28) + (u.pathname.length > 28 ? "…" : "") : "");
+    } catch {
+      return result.url.slice(0, 40);
+    }
+  })();
+
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        borderRadius: 10,
+        border: `1px solid ${cfg.borderColor}`,
+        background: cfg.bgColor,
+        overflow: "hidden",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          padding: "8px 12px",
+          borderBottom: `1px solid ${cfg.borderColor}`,
+          background: "rgba(0,0,0,0.15)",
+        }}
+      >
+        <span style={{ color: cfg.accentColor, display: "flex", alignItems: "center", flexShrink: 0 }}>
+          {cfg.icon}
+        </span>
+        <span
+          style={{
+            fontFamily: "var(--app-font-mono)",
+            fontSize: 9,
+            letterSpacing: "0.1em",
+            fontWeight: 700,
+            color: cfg.accentColor,
+            flexShrink: 0,
+          }}
+        >
+          {cfg.label}
+        </span>
+        <span
+          style={{
+            fontFamily: "var(--app-font-mono)",
+            fontSize: 9,
+            color: "var(--atlas-muted)",
+            opacity: 0.55,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap" as const,
+            minWidth: 0,
+          }}
+        >
+          {shortUrl}
+        </span>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column" as const, gap: 8 }}>
+
+        {/* Screenshot thumbnail */}
+        {result.screenshotBase64 && (
+          <button
+            onClick={() => onOpenCanvas?.(result.screenshotBase64!)}
+            title="Tap to open in canvas"
+            style={{
+              display: "block",
+              padding: 0,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              width: "100%",
+              borderRadius: 7,
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <img
+              src={result.screenshotBase64}
+              alt="Browser screenshot"
+              style={{
+                maxWidth: "100%",
+                borderRadius: 7,
+                border: "1px solid rgba(255,255,255,0.06)",
+                display: "block",
+                width: "100%",
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                bottom: 7,
+                right: 7,
+                background: "rgba(0,0,0,0.6)",
+                backdropFilter: "blur(4px)",
+                borderRadius: 4,
+                padding: "2px 6px",
+                fontSize: 8,
+                fontFamily: "var(--app-font-mono)",
+                color: cfg.accentColor,
+                letterSpacing: "0.08em",
+                pointerEvents: "none",
+              }}
+            >
+              TAP TO EXPAND
+            </div>
+          </button>
+        )}
+
+        {/* Health / Monitor status badge */}
+        {(result.type === "health" || result.type === "monitor") && (
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: 6 }}>
+            <div style={{ display: "inline-flex", alignItems: "center" }}>
+              {result.type === "health" ? (
+                result.isHealthy ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 5, background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "rgba(134,239,172,0.9)", fontWeight: 700 }}>
+                    ✓ HEALTHY
+                  </span>
+                ) : (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 5, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "rgba(252,165,165,0.9)", fontWeight: 700 }}>
+                    ✗ ISSUES
+                  </span>
+                )
+              ) : (
+                result.hasErrors ? (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 5, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "rgba(252,165,165,0.9)", fontWeight: 700 }}>
+                    ✗ RUNTIME ERRORS
+                  </span>
+                ) : (
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 5, background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "rgba(134,239,172,0.9)", fontWeight: 700 }}>
+                    ✓ NO ERRORS
+                  </span>
+                )
+              )}
+            </div>
+            {result.issues && result.issues.length > 0 && (
+              <ul style={{ margin: 0, paddingLeft: 15, fontSize: 11, color: "rgba(252,165,165,0.8)", lineHeight: 1.7 }}>
+                {result.issues.slice(0, 5).map((issue, i) => (
+                  <li key={i}>{issue}</li>
+                ))}
+              </ul>
+            )}
+            {result.consoleErrors && result.consoleErrors.length > 0 && (
+              <ul style={{ margin: 0, paddingLeft: 15, fontSize: 10, color: "rgba(252,165,165,0.75)", lineHeight: 1.7, fontFamily: "var(--app-font-mono)" }}>
+                {result.consoleErrors.slice(0, 5).map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Scrape: site title + headings */}
+        {result.type === "scrape" && (
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: 6 }}>
+            {result.title && result.title !== result.url && (
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--atlas-fg)", lineHeight: 1.4, opacity: 0.9 }}>
+                {result.title}
+              </div>
+            )}
+            {result.headings && result.headings.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4 }}>
+                {result.headings.map((h, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      display: "inline-block",
+                      padding: "2px 8px",
+                      borderRadius: 4,
+                      background: "rgba(96,165,250,0.08)",
+                      border: "1px solid rgba(96,165,250,0.15)",
+                      fontSize: 10,
+                      color: "rgba(147,197,253,0.8)",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {h}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Analysis / summary text */}
+        {result.analysis && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--atlas-fg)",
+              opacity: 0.75,
+              lineHeight: 1.65,
+              display: "-webkit-box",
+              WebkitLineClamp: result.type === "screenshot" ? 4 : 6,
+              WebkitBoxOrient: "vertical" as const,
+              overflow: "hidden",
+            }}
+          >
+            {result.analysis}
+          </div>
+        )}
+
+        {result.type === "scrape" && !result.analysis && result.summary && (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--atlas-fg)",
+              opacity: 0.75,
+              lineHeight: 1.65,
+              display: "-webkit-box",
+              WebkitLineClamp: 5,
+              WebkitBoxOrient: "vertical" as const,
+              overflow: "hidden",
+            }}
+          >
+            {result.summary}
+          </div>
+        )}
+
+        {result.type === "monitor" && result.summary && !result.hasErrors && (
+          <div style={{ fontSize: 11.5, color: "var(--atlas-fg)", opacity: 0.6, lineHeight: 1.6 }}>
+            {result.summary}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── AssistantBubble ───────────────────────────────────────────────────────────
 function AssistantBubble({
   message,
@@ -2293,20 +2594,40 @@ function AssistantBubble({
 
   // Parse CMD_EXEC block from Atlas response
   const { cmdExec, cleanContent } = useMemo(() => {
-    const m = message.content.match(/CMD_EXEC:(\{[^}]*\})/);
+    let base = message.content;
+    let cmdExecResult: { command: string; description?: string } | null = null;
+    const m = base.match(/CMD_EXEC:(\{[^}]*\})/);
     if (m) {
       try {
         const parsed = JSON.parse(m[1]) as { command: string; description?: string };
         if (typeof parsed.command === "string") {
-          return {
-            cmdExec: parsed,
-            cleanContent: message.content.replace(/\n?CMD_EXEC:\{[^}]*\}/g, "").trim(),
-          };
+          cmdExecResult = parsed;
+          base = base.replace(/\n?CMD_EXEC:\{[^}]*\}/g, "").trim();
         }
       } catch {}
     }
-    return { cmdExec: null, cleanContent: message.content };
-  }, [message.content]);
+    // Strip browser-result markdown the backend appends to message.content (chat.ts:3291-3326).
+    // The backend always writes: trimmedText + "\n\n" + browserResultLines, where each type
+    // starts with a recognizable marker containing the URL. Stripping here keeps the card
+    // as the sole display of visit data — no duplicated inline text.
+    if (message.browserResult) {
+      const url = message.browserResult.url;
+      const markers = [
+        `**Site check — ${url}**`,
+        `**Monitor — ${url}**`,
+        `**Screenshot — ${url}**`,
+        `\`${url}\``,  // scrape pattern ends with backtick-wrapped url
+      ];
+      for (const marker of markers) {
+        const idx = base.lastIndexOf(marker);
+        if (idx !== -1) {
+          base = base.slice(0, idx).trimEnd();
+          break;
+        }
+      }
+    }
+    return { cmdExec: cmdExecResult, cleanContent: base };
+  }, [message.content, message.browserResult]);
 
   // Detect previewable code block (html, jsx, tsx, css, or untagged with HTML tags)
   const previewableCode = useMemo(() => {
@@ -2597,115 +2918,6 @@ function AssistantBubble({
           </div>
         )}
 
-        {message.browserResult && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 8 }}>
-              <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
-                <circle cx="8" cy="8" r="6" stroke="var(--atlas-gold)" strokeWidth="1.3" />
-                <path d="M8 2C8 2 5.5 5 5.5 8s2.5 6 2.5 6M8 2c0 0 2.5 3 2.5 6S8 14 8 14M2 8h12" stroke="var(--atlas-gold)" strokeWidth="1.1" strokeLinecap="round" />
-              </svg>
-              <span style={{ fontFamily: "var(--app-font-mono)", fontSize: 9.5, color: "var(--atlas-muted)", opacity: 0.6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const, maxWidth: 260 }}>
-                {message.browserResult.url}
-              </span>
-            </div>
-
-            {message.browserResult.screenshotBase64 && (
-              <div style={{ marginBottom: 8 }}>
-                <button
-                  onClick={() => onOpenCanvas?.(message.browserResult!.screenshotBase64!)}
-                  title="Tap to open in canvas"
-                  style={{
-                    display: "block",
-                    padding: 0,
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    width: "100%",
-                    borderRadius: 10,
-                    position: "relative",
-                  }}
-                >
-                  <img
-                    src={message.browserResult.screenshotBase64}
-                    alt="Browser screenshot"
-                    style={{ maxWidth: "100%", borderRadius: 10, border: "1px solid rgba(201,162,76,0.2)", display: "block", width: "100%" }}
-                  />
-                  <div style={{
-                    position: "absolute",
-                    bottom: 8,
-                    right: 8,
-                    background: "rgba(0,0,0,0.55)",
-                    backdropFilter: "blur(4px)",
-                    borderRadius: 5,
-                    padding: "3px 7px",
-                    fontSize: 9,
-                    fontFamily: "var(--app-font-mono)",
-                    color: "rgba(201,162,76,0.9)",
-                    letterSpacing: "0.08em",
-                    pointerEvents: "none",
-                  }}>
-                    TAP TO EXPAND
-                  </div>
-                </button>
-              </div>
-            )}
-
-            {(message.browserResult.type === "health" || message.browserResult.type === "monitor") && (
-              <div style={{ display: "flex", flexDirection: "column" as const, gap: 6 }}>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {message.browserResult.type === "health" ? (
-                    message.browserResult.isHealthy ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 5, background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "rgba(134,239,172,0.9)", fontWeight: 700 }}>
-                        ✓ HEALTHY
-                      </span>
-                    ) : (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 5, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "rgba(252,165,165,0.9)", fontWeight: 700 }}>
-                        ✗ ISSUES
-                      </span>
-                    )
-                  ) : (
-                    message.browserResult.hasErrors ? (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 5, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "rgba(252,165,165,0.9)", fontWeight: 700 }}>
-                        ✗ RUNTIME ERRORS
-                      </span>
-                    ) : (
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 5, background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", fontSize: 10, fontFamily: "var(--app-font-mono)", letterSpacing: "0.08em", color: "rgba(134,239,172,0.9)", fontWeight: 700 }}>
-                        ✓ NO ERRORS
-                      </span>
-                    )
-                  )}
-                </div>
-                {message.browserResult.issues && message.browserResult.issues.length > 0 && (
-                  <ul style={{ margin: "2px 0 0", paddingLeft: 16, fontSize: 11, color: "rgba(252,165,165,0.75)", lineHeight: 1.7 }}>
-                    {message.browserResult.issues.slice(0, 5).map((issue, i) => (
-                      <li key={i}>{issue}</li>
-                    ))}
-                  </ul>
-                )}
-                {message.browserResult.consoleErrors && message.browserResult.consoleErrors.length > 0 && (
-                  <ul style={{ margin: "2px 0 0", paddingLeft: 16, fontSize: 11, color: "rgba(252,165,165,0.75)", lineHeight: 1.7 }}>
-                    {message.browserResult.consoleErrors.slice(0, 5).map((err, i) => (
-                      <li key={i} style={{ fontFamily: "var(--app-font-mono)", fontSize: 10 }}>{err}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-
-            {message.browserResult.analysis && (
-              <div style={{ fontSize: 12.5, color: "var(--atlas-fg)", opacity: 0.78, lineHeight: 1.65, marginTop: 6 }}>
-                {message.browserResult.analysis}
-              </div>
-            )}
-
-            {message.browserResult.type === "scrape" && !message.browserResult.analysis && message.browserResult.summary && (
-              <div style={{ fontSize: 12.5, color: "var(--atlas-fg)", opacity: 0.78, lineHeight: 1.65, marginTop: 6 }}>
-                {message.browserResult.summary}
-              </div>
-            )}
-          </div>
-        )}
-
         {message.deployQa && (
           <div style={{ marginTop: 10, marginBottom: 10, padding: "10px 14px", borderRadius: 8, background: message.deployQa.isHealthy ? "rgba(74,222,128,0.04)" : "rgba(239,68,68,0.04)", border: `1px solid ${message.deployQa.isHealthy ? "rgba(74,222,128,0.2)" : "rgba(239,68,68,0.2)"}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: (message.deployQa.issues.length > 0 || message.deployQa.analysis || message.deployQa.screenshotBase64) ? 8 : 0 }}>
@@ -2801,6 +3013,10 @@ function AssistantBubble({
           onComplete={onStreamActivityComplete}
           textStyle={{ fontSize: 14, lineHeight: 1.78, color: "var(--atlas-fg)", opacity: 0.9, whiteSpace: "pre-wrap" }}
         />
+
+        {message.browserResult && (
+          <BrowserResultCard result={message.browserResult} onOpenCanvas={onOpenCanvas} />
+        )}
 
         {message.plan && planState !== "skipped" && (
           <PlanCard
