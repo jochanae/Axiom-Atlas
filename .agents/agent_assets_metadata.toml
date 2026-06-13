@@ -102,3 +102,9 @@ id = "DoQEDh2_zPq8Y9yc26_q9"
 uri = "file://.local/output/cursor-sketch-this-fix.md"
 type = "text"
 title = "Cursor — Wire Sketch This to Image Backend"
+
+[[outputs]]
+id = "6jJFBbRZzJUDCTM1KHu9d"
+uri = "file://.local/output/cursor-fix-image-generator.md"
+type = "text"
+title = "Cursor — Fix Image Generator (wrong page + broken API)"
