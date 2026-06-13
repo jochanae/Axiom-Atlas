@@ -90,3 +90,9 @@ id = "fPt_qtZ4XWKP8070jb3sY"
 uri = "file://artifacts/api-server/frontend-prompts/PHASE2-VISUAL-LAYER.md"
 type = "text"
 title = "Phase 2 — Visual Layer Cursor Prompts"
+
+[[outputs]]
+id = "GhTVtlw7jq2IAdRT1PTsM"
+uri = "file://.local/output/cursor-image-generator.md"
+type = "text"
+title = "Image Generator — 3 Cursor Prompts"

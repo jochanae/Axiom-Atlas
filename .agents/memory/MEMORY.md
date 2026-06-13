@@ -6,5 +6,6 @@
 - [Helium vs Neon prod DB](helium-vs-neon-db.md) — this Replit's DATABASE_URL=helium (Replit-managed), NOT Neon. Cloud Run prod uses its own Neon URL unreachable here; prod schema fixes must run in Neon SQL editor.
 - [Prod schema drift — status check](prod-schema-drift-status.md) — "Failed to create project" = status CHECK rejects default 'active' (prod allows shaping/committed/archived), NOT a missing column; Drizzle error hides the real cause
 - [Dual-engine image generation](dual-engine-image.md) — IMAGE_GEN tokens: render→Gemini Imagen 3, schematic→DALL·E 3; auto-fallback each way; OPENAI_API_KEY required in Cloud Run for schematic mode
+- [Claude image gen refusal](image-gen-claude-refusal.md) — never tell Claude "YOU CAN generate images"; frame IMAGE_GEN as external Gemini service it triggers by token; standalone endpoint POST /api/image/generate already wired
 - [Atlas future builds](atlas-future-builds.md) — two approved: live dev server preview + new project bootstrapping from Atlas
 - [Post-merge setup pattern](post-merge-setup.md) — script only runs pnpm install; DB migrations run at server startup, not in post-merge
