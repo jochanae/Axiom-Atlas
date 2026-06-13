@@ -917,6 +917,24 @@ router.post("/github/auto-link", async (req, res): Promise<void> => {
   res.json({ linked, skipped, tokenBackfilled: tokenUpdates.length });
 });
 
+// POST /api/github/bootstrap-repo — create a new repo + push React/Vite/Tailwind scaffold + link to project
+router.post("/github/bootstrap-repo", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+
+  const { projectId, projectName } = req.body as { projectId?: number; projectName?: string };
+  if (!projectId || !projectName) { res.status(400).json({ error: "projectId and projectName are required" }); return; }
+
+  const { getGithubTokenForUser, bootstrapGitHubRepo } = await import("../lib/githubBootstrap");
+  const token = await getGithubTokenForUser(userId);
+  if (!token) { res.status(401).json({ error: "No GitHub token found. Connect GitHub in your account settings." }); return; }
+
+  const result = await bootstrapGitHubRepo({ token, projectId, projectName });
+  if (!result.ok) { res.status(500).json({ error: result.error }); return; }
+
+  res.json({ linkedRepo: result.linkedRepo, htmlUrl: result.htmlUrl, repoName: result.repoName });
+});
+
 // POST /api/github/apply-local — write proposed file(s) directly to workspace filesystem (triggers Vite HMR)
 router.post("/github/apply-local", async (req, res): Promise<void> => {
   const { files } = req.body as { files?: Array<{ path: string; content: string }> };

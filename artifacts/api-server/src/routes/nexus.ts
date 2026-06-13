@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable, scheduledChecksTable, checkResultsTable } from "@workspace/db";
 import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, gte, type SQL } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
+import { getGithubTokenForUser, bootstrapGitHubRepo } from "../lib/githubBootstrap";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { findSemanticTensionsForProject } from "./tensions";
 import { calculateModelCostUsd } from "../pricing";
@@ -2106,10 +2107,42 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       };
       writeStep({ verb: "Created", target: project.name, detail: `Project ${project.id}` });
       pendingNavProjectId = project.id;
+
+      // Attempt GitHub repo creation — graceful degradation if no token or API error
+      let githubRepo: string | null = null;
+      let githubHtmlUrl: string | null = null;
+      try {
+        const ghToken = await getGithubTokenForUser(userId);
+        if (ghToken) {
+          writeStep({ verb: "Creating", target: "GitHub repo", detail: parsedInput.name });
+          const bootstrapResult = await bootstrapGitHubRepo({
+            token: ghToken,
+            projectId: project.id,
+            projectName: parsedInput.name,
+          });
+          if (bootstrapResult.ok) {
+            githubRepo = bootstrapResult.linkedRepo;
+            githubHtmlUrl = bootstrapResult.htmlUrl;
+            writeStep({ verb: "Created", target: "GitHub repo", detail: bootstrapResult.linkedRepo });
+          } else {
+            logger.warn({ err: bootstrapResult.error, projectId: project.id }, "GitHub repo bootstrap failed — continuing without repo");
+            writeStep({ verb: "Skipped", target: "GitHub repo", detail: bootstrapResult.error, status: "warn" });
+          }
+        }
+      } catch (ghErr) {
+        logger.warn({ err: String(ghErr), projectId: project.id }, "GitHub bootstrap threw unexpectedly — continuing without repo");
+      }
+
+      const repoNote = githubRepo
+        ? ` GitHub repo created at https://github.com/${githubRepo}.`
+        : " No GitHub account connected, so no repo was created — the user can link one from the workspace.";
+
       return {
         ok: true as const,
         project: projectCreated,
-        instruction: `Project "${project.name}" created with id ${project.id}. End your response with exactly: NAVIGATE_TO:{"route":"/project/${project.id}"}`,
+        githubRepo,
+        githubHtmlUrl,
+        instruction: `Project "${project.name}" created with id ${project.id}.${repoNote} End your response with exactly: NAVIGATE_TO:{"route":"/project/${project.id}"}`,
       };
     } catch (error) {
       const message = error instanceof ProjectLimitReachedError
