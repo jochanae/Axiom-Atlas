@@ -25,7 +25,6 @@ import { ResearchCard } from "../components/ResearchCard";
 import { ComposerActions } from "../components/composer/ComposerActions";
 import { GlobalInsightSurface } from "@/components/home/GlobalInsightSurface";
 import { SessionHistorySheet } from "@/components/SessionHistorySheet";
-import { ImageGenerator } from "../components/ImageGenerator";
 
 import { VisualVault } from "../components/VisualVault";
 import { InviteModal } from "../components/InviteModal";
@@ -4295,11 +4294,6 @@ export default function Home() {
             </div>
           </div>
           </div>
-
-          <div style={{ marginTop: 24 }}>
-            <ImageGenerator />
-          </div>
-
 
           {/* Intent row — soft orientation under the input. Permission, not features. */}
 
