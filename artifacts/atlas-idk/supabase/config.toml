@@ -1,0 +1,4 @@
+project_id = "lmrpnsjckljdwqudtelk"
+
+[functions.atlas-chat]
+verify_jwt = true

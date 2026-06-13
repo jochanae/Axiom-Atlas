@@ -1,0 +1,18 @@
+{
+  "framework": null,
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "https://axiom-atlas-689827072865.us-east1.run.app/api/$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

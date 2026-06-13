@@ -1,0 +1,1 @@
+ALTER TABLE public.entries ADD COLUMN IF NOT EXISTS mode text DEFAULT NULL;

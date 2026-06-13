@@ -1,0 +1,1 @@
+ALTER TABLE public.ledger_entries ADD COLUMN IF NOT EXISTS extracted_from_session_id uuid REFERENCES public.sessions(id) NULL;
