@@ -638,6 +638,57 @@ router.post("/projects/:id/readiness-snapshots", async (req, res): Promise<void>
   res.status(201).json({ ...snapshot, recordedAt: snapshot.recordedAt.toISOString() });
 });
 
+router.get("/projects/:id/greeting", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [project] = await db
+    .select({
+      name: projectsTable.name,
+      linkedRepo: projectsTable.linkedRepo,
+      memory: projectsTable.memory,
+      createdAt: projectsTable.createdAt,
+    })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
+
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  // Parse linked repo name
+  let repoName: string | null = null;
+  if (project.linkedRepo) {
+    try {
+      const parsed = JSON.parse(project.linkedRepo as string);
+      repoName = typeof parsed === "string" ? parsed : (parsed.fullName ?? null);
+    } catch {
+      repoName = project.linkedRepo as string;
+    }
+  }
+
+  // Count sessions to detect fresh bootstrapped project
+  const [{ sessionCount }] = await db
+    .select({ sessionCount: sql<number>`count(*)::int` })
+    .from(sessionsTable)
+    .where(eq(sessionsTable.projectId, id));
+
+  const ageMs = Date.now() - new Date(project.createdAt).getTime();
+  const isFreshBootstrap = !!repoName && ageMs < 60 * 60 * 1000 && sessionCount <= 1;
+
+  let message: string;
+
+  if (isFreshBootstrap) {
+    message = `Scaffold's live. I pushed a React + Vite + Tailwind base to \`${repoName}\` — \`src/App.tsx\`, \`vite.config.ts\`, \`tailwind.config.js\`, and 7 more files. Open the StackBlitz tab to see it.\n\nWhat are we building?`;
+  } else if (repoName) {
+    message = `Back on \`${repoName}\`. What are we working on?`;
+  } else {
+    message = `${project.name} — what are we working on?`;
+  }
+
+  res.json({ message });
+});
+
 router.get("/projects/:id/flow", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid project id" }); return; }

@@ -651,7 +651,7 @@ RULES:
 - Only emit BROWSER_VISIT when you actually have a URL to visit (user provided it, or it's the deployed app URL).
 - One BROWSER_VISIT per response. The result appears immediately after your message.
 - Never say "I'll visit that" and then not emit the token. Just emit it.
-- After deploy confirmation (when you see FILE_EDIT_CONFIRMED), emit BROWSER_VISIT with the live URL and mode "monitor" to catch runtime errors automatically.
+- After deploy confirmation (when you see [FILE_COMMITTED]), emit BROWSER_VISIT with the live URL and mode "monitor" to catch runtime errors automatically.
 - For competitor research ("how does X work?", "what does their pricing look like?", "compare us to X", "what does Y charge?"), emit BROWSER_VISIT with mode "scrape". If the user mentions a product or company by name and you know its URL, use it — don't ask for the URL.
 - For "is my app broken?" / "check for errors", use mode "monitor". For "show me what it looks like", use mode "screenshot".
 - Users can also type /research <url> to trigger scrape directly — that's handled separately, no BROWSER_VISIT token needed for those.
@@ -2355,7 +2355,7 @@ You are now in BUILD mode. This changes how you respond:
 • Multiple files changed? Emit multiple FILE_EDIT blocks back-to-back.
 • GitHub push is enabled — the user will push your FILE_EDIT output directly to their repo.
 • Do NOT stop short with explanations. If you can write the code, write it.
-• When you receive FILE_EDIT_CONFIRMED: — the push succeeded. Acknowledge it briefly ("Pushed.") and move to the next step. Deploy status is checked automatically in the background and will appear in the chat — do not ask about it or try to check it yourself.
+• When you receive [FILE_COMMITTED] — the push succeeded. Acknowledge it briefly ("Pushed.") and move to the next step. Deploy status is checked automatically in the background and will appear in the chat — do not ask about it or try to check it yourself.
 • When you receive DEPLOY_READY_VISIT: — the Vercel deploy is confirmed live. Say nothing (the health check result appears automatically in the chat). Do not comment on it or summarize it.`,
     plan: `\n\n--- ACTIVE MODE: PLAN ---
 You are now in PLAN mode. This changes how you respond:
@@ -2415,7 +2415,7 @@ You are in BUILD lens. This means:
 • Use FILE_EDIT blocks for all code changes. No partial snippets.
 • Be surgical — know what to change and why. Explain concisely before the FILE_EDIT.
 • GitHub push is enabled — your output goes directly to the repo.
-• When you receive FILE_EDIT_CONFIRMED: — the push succeeded. Say "Pushed." and continue to the next step. Deploy status surfaces automatically in the chat — you do not need to poll, ask, or check it.
+• When you receive [FILE_COMMITTED] — the push succeeded. Say "Pushed." and continue to the next step. Deploy status surfaces automatically in the chat — you do not need to poll, ask, or check it.
 • If the user is clearly exploring concepts or asking "what if" questions with no code intent, end your response with: LENS_DRIFT: flow`,
     look: `\n\n--- LENS: LOOK ---
 You are in LOOK lens. This means:
@@ -2788,12 +2788,12 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     return "";
   }).trim();
 
-  // Auto-inject BROWSER_VISIT monitor after FILE_EDIT_CONFIRMED when project has a known live URL.
+  // Auto-inject BROWSER_VISIT monitor after FILE_COMMITTED when project has a known live URL.
   // Skip when the user has a Vercel connection — in that case the /api/deploy/after-push endpoint
   // waits for the deploy to reach "ready" before running visual QA, so visiting immediately would
   // capture the mid-deploy state. Fall back to immediate visit only when no Vercel integration
   // is configured (e.g. projects hosted on Railway, Render, or a custom domain).
-  if (!browserVisitToken && message.includes("FILE_EDIT_CONFIRMED:") && project?.previewUrl && !hasVercelConnection) {
+  if (!browserVisitToken && message.includes("[FILE_COMMITTED]") && project?.previewUrl && !hasVercelConnection) {
     browserVisitToken = { url: project.previewUrl, mode: "monitor" };
     writeStep(res, { verb: "Visiting", target: project.previewUrl, phase: "execute" });
   }
