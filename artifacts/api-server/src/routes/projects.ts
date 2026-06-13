@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, sql, desc, and, isNotNull, inArray } from "drizzle-orm";
+import { eq, sql, desc, and, inArray } from "drizzle-orm";
 import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable } from "@workspace/db";
 import { encryptToken, decryptToken } from "../lib/tokenCrypto";
+import { createProjectForUser, ensureProjectSchema, ProjectLimitReachedError } from "../lib/projectCreation";
 import {
   CreateProjectBody,
   UpdateProjectBody,
@@ -17,23 +18,6 @@ import {
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
-
-let projectSchemaReady = false;
-
-async function ensureProjectSchema(): Promise<void> {
-  if (projectSchemaReady) return;
-  await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "entity_type" text DEFAULT 'project' NOT NULL`);
-  await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "last_opened_at" timestamp with time zone DEFAULT now() NOT NULL`);
-  await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "shape" JSONB NOT NULL DEFAULT '{"identity":[],"constraints":[],"formats":[]}'::jsonb`);
-  await db.execute(sql`
-    DO $$ BEGIN
-      ALTER TABLE "projects" ADD CONSTRAINT "projects_entity_type_check" CHECK ("entity_type" IN ('project', 'idea'));
-    EXCEPTION
-      WHEN duplicate_object THEN null;
-    END $$
-  `);
-  projectSchemaReady = true;
-}
 
 type MapNode = {
   id: string;
@@ -153,47 +137,25 @@ router.post("/projects", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
   const authUser = (req as any).authUser;
 
-  if (authUser?.subscriptionTier === "free" && authUser?.role !== "super_admin") {
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(projectsTable)
-      .where(eq(projectsTable.userId, userId));
-    if (count >= 1) {
-      res.status(402).json({
-        error: "Free plan is limited to 1 project.",
-        code: "PROJECT_LIMIT_REACHED",
-      });
-      return;
-    }
-  }
-
-  const [project] = await db
-    .insert(projectsTable)
-    .values({
+  try {
+    const project = await createProjectForUser({
+      userId,
+      authUser,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       entityType: parsed.data.entity_type ?? "project",
-      userId,
-    })
-    .returning();
-
-  // Auto-propagate GitHub token from any existing project of this user
-  if (!project.githubToken) {
-    const [sibling] = await db
-      .select({ githubToken: projectsTable.githubToken })
-      .from(projectsTable)
-      .where(and(eq(projectsTable.userId, userId), isNotNull(projectsTable.githubToken)))
-      .limit(1);
-    if (sibling?.githubToken) {
-      await db
-        .update(projectsTable)
-        .set({ githubToken: sibling.githubToken })
-        .where(eq(projectsTable.id, project.id));
-      project.githubToken = sibling.githubToken;
+    });
+    res.status(201).json(serializeProject(project, true));
+  } catch (error) {
+    if (error instanceof ProjectLimitReachedError) {
+      res.status(error.status).json({
+        error: error.message,
+        code: error.code,
+      });
+      return;
     }
+    throw error;
   }
-
-  res.status(201).json(serializeProject(project, true));
 });
 
 router.get("/projects/recent", async (req, res): Promise<void> => {
