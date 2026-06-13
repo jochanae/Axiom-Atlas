@@ -202,7 +202,7 @@ createRoot(document.getElementById('root')!).render(
 }
 
 export type BootstrapResult =
-  | { ok: true; linkedRepo: string; htmlUrl: string; repoName: string }
+  | { ok: true; linkedRepo: string; htmlUrl: string; repoName: string; previewUrl: string }
   | { ok: false; error: string; noToken?: boolean };
 
 export async function bootstrapGitHubRepo(opts: {
@@ -293,11 +293,12 @@ export async function bootstrapGitHubRepo(opts: {
     body: JSON.stringify({ default_branch: "main" }),
   });
 
-  // 8. Link the repo to the project in DB
+  // 8. Link the repo + set StackBlitz preview URL on the project
+  const stackblitzUrl = `https://stackblitz.com/github/${fullName}`;
   await db
     .update(projectsTable)
-    .set({ linkedRepo: fullName })
+    .set({ linkedRepo: fullName, previewUrl: stackblitzUrl })
     .where(eq(projectsTable.id, projectId));
 
-  return { ok: true, linkedRepo: fullName, htmlUrl: repoData.html_url, repoName };
+  return { ok: true, linkedRepo: fullName, htmlUrl: repoData.html_url, repoName, previewUrl: stackblitzUrl };
 }

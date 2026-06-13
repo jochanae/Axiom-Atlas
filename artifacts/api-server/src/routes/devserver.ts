@@ -5,6 +5,104 @@ import { mkdirSync, existsSync, readFileSync, rmSync } from "fs";
 import path from "path";
 import { logger } from "../lib/logger";
 
+// ── Build-check work dir (separate from live devserver) ───────────────────
+const BUILD_CHECK_DIR = "/tmp/atlas-build-check";
+
+export interface BuildCheckResult {
+  clean: boolean;
+  errors: string[];
+  duration: number;
+}
+
+function parseErrors(output: string): string[] {
+  const lines = output.split("\n");
+  const errors: string[] = [];
+  for (const line of lines) {
+    const clean = line.replace(/\x1B\[[0-9;]*m/g, "").trim();
+    if (!clean) continue;
+    // TypeScript errors
+    if (/error TS\d+:/.test(clean)) { errors.push(clean); continue; }
+    // Vite build errors
+    if (/^\s*✗/.test(clean) || /^(ERROR|error)(\s|:)/.test(clean)) { errors.push(clean); continue; }
+    // Rollup / esbuild module-not-found
+    if (/Module not found|Failed to resolve import|Cannot find module/.test(clean)) { errors.push(clean); continue; }
+    // React JSX transform errors
+    if (/React is not defined|JSX/.test(clean) && /error/i.test(clean)) { errors.push(clean); continue; }
+  }
+  // Deduplicate, cap at 20
+  return [...new Set(errors)].slice(0, 20);
+}
+
+/**
+ * Clone (or fast-update) a repo, install deps once, run `npm run build`,
+ * and return whether it compiled cleanly.
+ * Safe to call from the chat route — uses its own work dir, no shared state.
+ */
+export async function runBuildCheck(
+  repoFullName: string,
+  token: string,
+): Promise<BuildCheckResult> {
+  const t0 = Date.now();
+  mkdirSync(BUILD_CHECK_DIR, { recursive: true });
+  const repoName = repoFullName.split("/")[1];
+  const repoDir = path.join(BUILD_CHECK_DIR, repoName);
+  const logs: string[] = [];
+
+  function capture(cmd: string, args: string[], cwd?: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const out: string[] = [];
+      const proc = spawn(cmd, args, {
+        cwd,
+        shell: true,
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1", CI: "true" },
+      });
+      proc.stdout?.on("data", (d: Buffer) => { const s = d.toString(); out.push(s); logs.push(s); });
+      proc.stderr?.on("data", (d: Buffer) => { const s = d.toString(); out.push(s); logs.push(s); });
+      proc.on("exit", (code) => {
+        const combined = out.join("");
+        if (code === 0) resolve(combined);
+        else reject(Object.assign(new Error(`${cmd} exited ${code}`), { output: combined }));
+      });
+      proc.on("error", reject);
+    });
+  }
+
+  try {
+    if (existsSync(path.join(repoDir, ".git"))) {
+      // Fast-path: just pull latest commit
+      await capture("git", [
+        "-C", repoDir,
+        "fetch", "--depth=1",
+        `https://x-access-token:${token}@github.com/${repoFullName}.git`,
+        "main",
+      ]);
+      await capture("git", ["-C", repoDir, "reset", "--hard", "FETCH_HEAD"]);
+    } else {
+      // Fresh clone
+      if (existsSync(repoDir)) rmSync(repoDir, { recursive: true, force: true });
+      await capture("git", [
+        "clone", "--depth=1", "--branch=main",
+        `https://x-access-token:${token}@github.com/${repoFullName}.git`,
+        repoDir,
+      ]);
+    }
+
+    // Install only when node_modules is absent (cache across checks)
+    if (!existsSync(path.join(repoDir, "node_modules"))) {
+      await capture("npm", ["install", "--legacy-peer-deps"], repoDir);
+    }
+
+    // Run build — Vite + tsc both emit on this command for the scaffold
+    const buildOut = await capture("npm", ["run", "build"], repoDir);
+    return { clean: true, errors: [], duration: Date.now() - t0 };
+  } catch (err: unknown) {
+    const output = (err as { output?: string }).output ?? logs.join("");
+    const errors = parseErrors(output);
+    logger.warn({ repo: repoFullName, errorCount: errors.length }, "build-check: errors found");
+    return { clean: false, errors: errors.length ? errors : ["Build failed — no parseable errors captured"], duration: Date.now() - t0 };
+  }
+}
+
 type DevStatus = "idle" | "cloning" | "installing" | "starting" | "running" | "error";
 
 const state: {
@@ -304,6 +402,22 @@ router.get("/devserver/status", (_req, res): void => {
     logs: state.logs.slice(-50),
     errorMsg: state.errorMsg,
   });
+});
+
+router.post("/devserver/build-check", (req, res): void => {
+  const { repo } = req.body as { repo?: string };
+  const rawToken = req.headers["x-github-token"] as string | undefined;
+  const token = (rawToken && rawToken !== "__server__") ? rawToken : (process.env.GITHUB_TOKEN ?? "");
+
+  if (!repo) { res.status(400).json({ error: "Missing repo" }); return; }
+  if (!token) { res.status(400).json({ error: "No GitHub token available" }); return; }
+
+  runBuildCheck(repo, token)
+    .then((result) => res.json(result))
+    .catch((err) => {
+      logger.error({ err }, "build-check route error");
+      res.status(500).json({ error: "Build check failed", details: String(err) });
+    });
 });
 
 router.post("/devserver/stop", (_req, res): void => {

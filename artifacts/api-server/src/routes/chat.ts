@@ -19,6 +19,7 @@ import {
 import { prepareProjectRepo } from "../lib/terminalSandbox";
 import { ATLAS_PLATFORM_KNOWLEDGE } from "../lib/atlasKnowledge";
 import { ATLAS_IDENTITY } from "../lib/atlasIdentity";
+import { runBuildCheck } from "./devserver";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
@@ -651,7 +652,7 @@ RULES:
 - Only emit BROWSER_VISIT when you actually have a URL to visit (user provided it, or it's the deployed app URL).
 - One BROWSER_VISIT per response. The result appears immediately after your message.
 - Never say "I'll visit that" and then not emit the token. Just emit it.
-- After deploy confirmation (when you see [FILE_COMMITTED]), emit BROWSER_VISIT with the live URL and mode "monitor" to catch runtime errors automatically.
+- After deploy confirmation (when you see [FILE_COMMITTED]) for non-StackBlitz projects, emit BROWSER_VISIT with the live URL and mode "monitor" to catch runtime errors automatically. For StackBlitz projects the build check runs server-side and appears as [BUILD_VERIFY] — you do not need to emit BROWSER_VISIT.
 - For competitor research ("how does X work?", "what does their pricing look like?", "compare us to X", "what does Y charge?"), emit BROWSER_VISIT with mode "scrape". If the user mentions a product or company by name and you know its URL, use it — don't ask for the URL.
 - For "is my app broken?" / "check for errors", use mode "monitor". For "show me what it looks like", use mode "screenshot".
 - Users can also type /research <url> to trigger scrape directly — that's handled separately, no BROWSER_VISIT token needed for those.
@@ -2355,7 +2356,12 @@ You are now in BUILD mode. This changes how you respond:
 • Multiple files changed? Emit multiple FILE_EDIT blocks back-to-back.
 • GitHub push is enabled — the user will push your FILE_EDIT output directly to their repo.
 • Do NOT stop short with explanations. If you can write the code, write it.
-• When you receive [FILE_COMMITTED] — the push succeeded. Acknowledge it briefly ("Pushed.") and move to the next step. Deploy status is checked automatically in the background and will appear in the chat — do not ask about it or try to check it yourself.
+• When you receive [FILE_COMMITTED] — the push succeeded. A build check runs automatically and the result appears in the same message as [BUILD_VERIFY]. Act on it immediately:
+  - [BUILD_VERIFY: clean] — build compiled. If this is the first push with no prior errors say "Pushed. Build verified ✓" and move to the next step. If you resolved errors in prior attempts say exactly: "Feature implemented. Encountered N compilation error(s) during build, resolved automatically." (replace N with the real count from the build-verify messages).
+  - [BUILD_VERIFY: errors found] — build failed. Emit FILE_EDIT blocks fixing ALL listed errors right away. No preamble, no explanation — just fix and emit. The next push will re-verify automatically.
+  - [BUILD_VERIFY: max_attempts_reached] — stop auto-fixing. Show the user the last error in a plain summary and ask for their strategic direction.
+  - [BUILD_VERIFY: check_failed] — verify couldn't run. Acknowledge the push briefly and continue.
+  - No [BUILD_VERIFY] at all — non-StackBlitz project. Acknowledge the push briefly ("Pushed.") and move to the next step.
 • When you receive DEPLOY_READY_VISIT: — the Vercel deploy is confirmed live. Say nothing (the health check result appears automatically in the chat). Do not comment on it or summarize it.`,
     plan: `\n\n--- ACTIVE MODE: PLAN ---
 You are now in PLAN mode. This changes how you respond:
@@ -2528,6 +2534,51 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     // error fetch failed silently — continue without it
   }
 
+  // ── Build-verify intercept for StackBlitz repos ──────────────────────────
+  // When [FILE_COMMITTED] arrives for a StackBlitz-hosted project, run a
+  // server-side build check (clone → install → npm run build) and append the
+  // result to the user message before Claude sees it. Atlas then acts on
+  // [BUILD_VERIFY] immediately — fixing errors or announcing success.
+  let buildVerifyAppend = "";
+  const isStackBlitzProject = !!(project?.previewUrl?.includes("stackblitz.com") && project?.linkedRepo);
+
+  if (message.includes("[FILE_COMMITTED]") && isStackBlitzProject) {
+    const priorAttempts = (history as Array<{ role: string; content: string }>).filter(
+      (m) => m.role === "user" && typeof m.content === "string" && m.content.includes("[FILE_COMMITTED]"),
+    ).length;
+
+    if (priorAttempts >= 3) {
+      buildVerifyAppend =
+        "\n\n[BUILD_VERIFY: max_attempts_reached]\nThe build has failed 3 consecutive times. Stop auto-fixing. Show the user the last error and ask for their direction.";
+    } else {
+      writeStep(res, { verb: "Checking", target: "build", phase: "execute" });
+      const ghToken = resolvedGithubToken ?? process.env.GITHUB_TOKEN ?? "";
+      if (ghToken) {
+        try {
+          const parsed = JSON.parse(project!.linkedRepo ?? "null") as string | { fullName?: string } | null;
+          const repoFullName = typeof parsed === "string" ? parsed : (parsed?.fullName ?? "");
+          if (repoFullName) {
+            const result = await runBuildCheck(repoFullName, ghToken);
+            if (result.clean) {
+              const fixCount = priorAttempts;
+              buildVerifyAppend =
+                `\n\n[BUILD_VERIFY: clean]\nBuild passed in ${Math.round(result.duration / 1000)}s. The app compiles without errors.` +
+                (fixCount > 0 ? ` You auto-resolved ${fixCount} error(s) across prior attempts.` : "");
+            } else {
+              const errorList = result.errors.join("\n");
+              buildVerifyAppend =
+                `\n\n[BUILD_VERIFY: errors found]\nBuild failed (attempt ${priorAttempts + 1}/3). Fix ALL errors using FILE_EDIT blocks. Do not explain — just emit the fixes. The next push will re-verify.\n\nErrors:\n${errorList}`;
+            }
+          }
+        } catch (bvErr) {
+          logger.warn({ err: bvErr }, "build-check failed — skipping verify");
+          buildVerifyAppend =
+            "\n\n[BUILD_VERIFY: check_failed]\nThe build check could not run. Acknowledge the push and continue.";
+        }
+      }
+    }
+  }
+
   // ── Build message history for multi-model dispatcher ─────────────────────
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = {
@@ -2568,8 +2619,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     } as ImageBlock);
   }
 
-  // 3. User text
-  contentParts.push({ type: "text", text: message });
+  // 3. User text (with optional build-verify result appended)
+  contentParts.push({ type: "text", text: message + buildVerifyAppend });
 
   const userContent: string | Array<TextBlock | ImageBlock> =
     contentParts.length === 1 ? message : contentParts;
@@ -2793,7 +2844,8 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   // waits for the deploy to reach "ready" before running visual QA, so visiting immediately would
   // capture the mid-deploy state. Fall back to immediate visit only when no Vercel integration
   // is configured (e.g. projects hosted on Railway, Render, or a custom domain).
-  if (!browserVisitToken && message.includes("[FILE_COMMITTED]") && project?.previewUrl && !hasVercelConnection) {
+  // Skip browser monitor for StackBlitz projects — build-check already ran server-side above.
+  if (!browserVisitToken && message.includes("[FILE_COMMITTED]") && project?.previewUrl && !hasVercelConnection && !isStackBlitzProject) {
     browserVisitToken = { url: project.previewUrl, mode: "monitor" };
     writeStep(res, { verb: "Visiting", target: project.previewUrl, phase: "execute" });
   }
