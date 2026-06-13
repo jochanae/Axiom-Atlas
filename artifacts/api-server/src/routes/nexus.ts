@@ -333,7 +333,7 @@ MEMORY_T5: [passing thought — 7 days]
 Save up to 3 MEMORY_Tn lines per response when she shares something significant.
 `;
 
-const CREATE_PROJECT_TOOL = {
+const CREATE_PROJECT_TOOL: Anthropic.Tool = {
   name: "create_project",
   description: "Create a new project workspace when an idea has become concrete enough to start building. Only call this after the user has confirmed they want to proceed.",
   input_schema: {
@@ -344,7 +344,7 @@ const CREATE_PROJECT_TOOL = {
     },
     required: ["name", "summary"],
   },
-} as const;
+};
 
 const CONVERSATIONAL_EXPANSION_PROTOCOL = `--- CONVERSATIONAL EXPANSION PROTOCOL ---
 After the user responds to your opening question, your goal is to build a complete picture of the project through natural conversation — not a form, not a checklist, not bullet points.
@@ -2007,11 +2007,16 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     });
   };
 
-  const findCreateProjectToolUse = (finalMessage: Anthropic.Message) => (
-    finalMessage.content.find((block) => block.type === "tool_use" && block.name === "create_project") ?? null
-  );
+  const findCreateProjectToolUse = (finalMessage: Anthropic.Message): Anthropic.ToolUseBlock | null => {
+    for (const block of finalMessage.content) {
+      if (block.type === "tool_use" && block.name === "create_project") {
+        return block as Anthropic.ToolUseBlock;
+      }
+    }
+    return null;
+  };
 
-  const runCreateProjectTool = async (toolUse: Extract<Anthropic.Message["content"][number], { type: "tool_use" }>) => {
+  const runCreateProjectTool = async (toolUse: Anthropic.ToolUseBlock) => {
     const parsedInput = parseCreateProjectToolInput(toolUse.input);
     if (!parsedInput) {
       return {
