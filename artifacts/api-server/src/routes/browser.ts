@@ -397,20 +397,20 @@ async function runPuppeteerMonitor(url: string, checkResources: boolean): Promis
     const page = await browser.newPage();
     await page.setUserAgent("Mozilla/5.0 (Atlas-Monitor/2.0) AppleWebKit/537.36");
 
-    // ── SSRF guard: block navigation redirects to private network targets ───
+    // ── SSRF guard: block ALL requests (navigation + subresources) to private targets ───
+    // Must cover subresources too — page JS can trigger XHR/fetch/img to internal IPs.
     await page.setRequestInterception(true);
     page.on("request", (req) => {
-      if (req.isNavigationRequest()) {
-        try {
-          const parsed = new URL(req.url());
-          if (isPrivateIp(parsed.hostname.toLowerCase())) {
-            req.abort("blockedbyclient");
-            return;
-          }
-        } catch {
+      try {
+        const parsed = new URL(req.url());
+        const h = parsed.hostname.toLowerCase();
+        if (isPrivateIp(h) || h.endsWith(".localhost")) {
           req.abort("blockedbyclient");
           return;
         }
+      } catch {
+        req.abort("blockedbyclient");
+        return;
       }
       req.continue();
     });

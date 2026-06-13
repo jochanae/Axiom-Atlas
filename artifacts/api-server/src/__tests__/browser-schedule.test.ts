@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import cookieParser from "cookie-parser";
+import dns from "node:dns/promises";
 import { mockUser } from "./setup";
 import { requireAuth } from "../routes/auth";
 import browserRouter from "../routes/browser";
@@ -319,5 +320,59 @@ describe("SSRF redirect bypass protection (safeFetch)", () => {
     // Both hops are public — should succeed
     expect(res.status).toBe(200);
     expect(res.body.title).toBe("Example");
+  });
+});
+
+// ── SSRF hostname edge cases ───────────────────────────────────────────────────
+// These tests cover the fail-closed DNS path and *.localhost subdomain bypass.
+describe("SSRF hostname edge cases (assertSafeUrl)", () => {
+  beforeEach(() => {
+    mockDbState.selectResults = [];
+    mockFetch.mockReset();
+    // Reset DNS mock to default (public IP) before each test
+    vi.mocked(dns.resolve4).mockResolvedValue(["93.184.216.34"]);
+    vi.mocked(dns.resolve6).mockResolvedValue([]);
+  });
+
+  it("blocks a *.localhost subdomain (special-use bypass pattern)", async () => {
+    // e.g. app.localhost — valid hostname structure but routes to local loopback
+    const app = createTestApp();
+    const cookie = withAuth();
+    const res = await request(app)
+      .post("/api/browser/schedule")
+      .set("Cookie", cookie)
+      .send({ url: "https://app.localhost/internal", projectId: 42 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/not allowed/i);
+  });
+
+  it("blocks an unresolvable hostname (fail-closed: no IPs resolved)", async () => {
+    // Both DNS lookups return empty — host cannot be proven public
+    vi.mocked(dns.resolve4).mockResolvedValue([]);
+    vi.mocked(dns.resolve6).mockResolvedValue([]);
+
+    const app = createTestApp();
+    const cookie = withAuth();
+    const res = await request(app)
+      .post("/api/browser/schedule")
+      .set("Cookie", cookie)
+      .send({ url: "https://unresolvable.invalid/page", projectId: 42 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/public address|resolve/i);
+  });
+
+  it("blocks a nip.io-style SSRF (hostname resolves to private IP)", async () => {
+    // 192.168.1.1.nip.io resolves to 192.168.1.1 — a classic SSRF bypass
+    vi.mocked(dns.resolve4).mockResolvedValue(["192.168.1.1"]);
+    vi.mocked(dns.resolve6).mockResolvedValue([]);
+
+    const app = createTestApp();
+    const cookie = withAuth();
+    const res = await request(app)
+      .post("/api/browser/schedule")
+      .set("Cookie", cookie)
+      .send({ url: "https://192.168.1.1.nip.io/admin", projectId: 42 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/private/i);
   });
 });

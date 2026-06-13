@@ -27,20 +27,28 @@ export async function assertSafeUrl(rawUrl: string): Promise<void> {
     throw new Error("Only http/https URLs are allowed");
   }
   const host = parsed.hostname.toLowerCase();
+
+  // Reject private/local IPs and special-use patterns including *.localhost subdomains
   if (isPrivateIp(host)) {
     throw new Error("Requests to private/localhost addresses are not allowed");
   }
-  try {
-    const v4 = await dns.resolve4(host).catch(() => [] as string[]);
-    const v6 = await dns.resolve6(host).catch(() => [] as string[]);
-    for (const addr of [...v4, ...v6]) {
-      if (isPrivateIp(addr)) {
-        throw new Error("URL resolves to a private IP address");
-      }
+  if (host.endsWith(".localhost")) {
+    throw new Error("Requests to *.localhost addresses are not allowed");
+  }
+
+  // DNS resolution — fail-closed: if no IPs resolve we cannot verify the host is public
+  const v4 = await dns.resolve4(host).catch(() => [] as string[]);
+  const v6 = await dns.resolve6(host).catch(() => [] as string[]);
+  const allIps = [...v4, ...v6];
+
+  if (allIps.length === 0) {
+    throw new Error("Could not verify host resolves to a public address");
+  }
+
+  for (const addr of allIps) {
+    if (isPrivateIp(addr)) {
+      throw new Error("URL resolves to a private IP address");
     }
-  } catch (err) {
-    const msg = (err as Error).message ?? "";
-    if (msg.includes("private") || msg.includes("not allowed") || msg.includes("localhost")) throw err;
   }
 }
 
