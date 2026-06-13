@@ -23,6 +23,17 @@ import { runBuildCheck } from "./devserver";
 
 const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
 const MAX_VAULT_B64_SIZE = 1500000;
+const SUPPORTED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+
+type SupportedImageMimeType = (typeof SUPPORTED_IMAGE_MIME_TYPES)[number];
+type TextBlock = { type: "text"; text: string };
+type ImageBlock = {
+  type: "image";
+  source: { type: "base64"; media_type: SupportedImageMimeType; data: string };
+};
+type MessageContent = string | Array<TextBlock | ImageBlock>;
+type ChatDispatchMessage = { role: "user" | "assistant"; content: MessageContent };
+type UploadedImageData = { base64: string; mediaType: SupportedImageMimeType };
 
 const openaiClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -35,6 +46,61 @@ const router: IRouter = Router();
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+
+function asSupportedImageMimeType(value: unknown): SupportedImageMimeType | null {
+  return typeof value === "string" && (SUPPORTED_IMAGE_MIME_TYPES as readonly string[]).includes(value)
+    ? value as SupportedImageMimeType
+    : null;
+}
+
+function stripDataUrlPrefix(base64OrDataUrl: string, fallbackMediaType: unknown): UploadedImageData | null {
+  const trimmed = base64OrDataUrl.trim();
+  const dataUrlMatch = trimmed.match(/^data:([^;]+);base64,(.+)$/s);
+  const mediaType = asSupportedImageMimeType(dataUrlMatch?.[1] ?? fallbackMediaType ?? "image/jpeg");
+  if (!mediaType) return null;
+
+  const base64 = (dataUrlMatch?.[2] ?? trimmed).replace(/\s/g, "");
+  return base64 ? { base64, mediaType } : null;
+}
+
+function normalizeRequestImageData(body: {
+  imageData?: unknown;
+  imageBase64?: unknown;
+  imageMediaType?: unknown;
+  imageMimeType?: unknown;
+}): { imageData: UploadedImageData | null; error?: string } {
+  const fallbackMediaType = body.imageMediaType ?? body.imageMimeType;
+
+  if (typeof body.imageData === "string") {
+    const imageData = stripDataUrlPrefix(body.imageData, fallbackMediaType);
+    return imageData
+      ? { imageData }
+      : { imageData: null, error: "Unsupported or empty imageData. Supported image types: jpeg, png, gif, webp" };
+  }
+
+  if (body.imageData && typeof body.imageData === "object") {
+    const image = body.imageData as { base64?: unknown; data?: unknown; mediaType?: unknown; mimeType?: unknown };
+    const rawBase64 = typeof image.base64 === "string"
+      ? image.base64
+      : typeof image.data === "string"
+        ? image.data
+        : null;
+    if (!rawBase64) return { imageData: null, error: "imageData.base64 is required when imageData is an object" };
+    const imageData = stripDataUrlPrefix(rawBase64, image.mediaType ?? image.mimeType ?? fallbackMediaType);
+    return imageData
+      ? { imageData }
+      : { imageData: null, error: "Unsupported or empty imageData. Supported image types: jpeg, png, gif, webp" };
+  }
+
+  if (typeof body.imageBase64 === "string" && body.imageBase64.trim()) {
+    const imageData = stripDataUrlPrefix(body.imageBase64, fallbackMediaType);
+    return imageData
+      ? { imageData }
+      : { imageData: null, error: "Unsupported or empty imageBase64. Supported image types: jpeg, png, gif, webp" };
+  }
+
+  return { imageData: null };
+}
 
 function resolveStoredGithubToken(storedToken: string | null | undefined): string | null {
   const plain = storedToken ? decryptToken(storedToken) : null;
@@ -1694,30 +1760,30 @@ function runMetadataInsertValues(content: string, fileEdits: FileEdit[] = []) {
 async function callModel(
   modelId: ModelId,
   systemPrompt: string,
-  messages: Array<{ role: "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> }>,
-  imageData?: { base64: string; mediaType: string }
+  messages: ChatDispatchMessage[],
 ): Promise<ModelCallResult> {
   const startedAt = performance.now();
   if (modelId === "gpt4o") {
     const model = "gpt-4o";
-    // Build OpenAI messages
-    type OAIMsg = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> };
+    type OpenAIContentBlock =
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string } };
+    type OAIMsg = { role: "system" | "user" | "assistant"; content: string | OpenAIContentBlock[] };
+    const toOpenAIContent = (content: MessageContent): string | OpenAIContentBlock[] => {
+      if (typeof content === "string") return content;
+      return content.map((block) => block.type === "text"
+        ? { type: "text", text: block.text }
+        : {
+            type: "image_url",
+            image_url: { url: `data:${block.source.media_type};base64,${block.source.data}` },
+          });
+    };
     const oaiMessages: OAIMsg[] = [{ role: "system", content: systemPrompt }];
     for (const m of messages) {
-      if (m.role === "user" && imageData && m === messages[messages.length - 1]) {
-        oaiMessages.push({
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: `data:${imageData.mediaType};base64,${imageData.base64}` } },
-            { type: "text", text: typeof m.content === "string" ? m.content : JSON.stringify(m.content) },
-          ],
-        });
-      } else {
-        oaiMessages.push({
-          role: m.role as "user" | "assistant",
-          content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-        });
-      }
+      oaiMessages.push({
+        role: m.role,
+        content: toOpenAIContent(m.content),
+      });
     }
     const resp = await openaiClient.chat.completions.create({
       model,
@@ -1740,24 +1806,20 @@ async function callModel(
 
   if (modelId === "gemini") {
     const model = "gemini-2.5-pro";
-    const combinedText = messages.map((m) => {
-      const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
-      return `${m.role === "user" ? "User" : "Atlas"}: ${text}`;
-    }).join("\n\n");
-    let result: Awaited<ReturnType<typeof genai.models.generateContent>>;
-    if (imageData?.base64 && imageData?.mediaType) {
-      result = await genai.models.generateContent({
-        model,
-        contents: [{ role: "user", parts: [{ text: combinedText }, { inlineData: { mimeType: imageData.mediaType, data: imageData.base64 } }] }],
-        config: { systemInstruction: systemPrompt },
-      });
-    } else {
-      result = await genai.models.generateContent({
-        model,
-        contents: combinedText,
-        config: { systemInstruction: systemPrompt },
-      });
-    }
+    const toGeminiParts = (content: MessageContent): Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> => {
+      if (typeof content === "string") return [{ text: content }];
+      return content.map((block) => block.type === "text"
+        ? { text: block.text }
+        : { inlineData: { mimeType: block.source.media_type, data: block.source.data } });
+    };
+    const result = await genai.models.generateContent({
+      model,
+      contents: messages.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: toGeminiParts(m.content),
+      })),
+      config: { systemInstruction: systemPrompt },
+    });
     const usageMetadata = (result as any).usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | undefined;
     const inputTokens = usageMetadata?.promptTokenCount ?? null;
     const outputTokens = usageMetadata?.candidatesTokenCount
@@ -1776,14 +1838,11 @@ async function callModel(
 
   // Default: Claude
   const model = "claude-sonnet-4-6";
-  type TextBlock = { type: "text"; text: string };
-  type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
-  const claudeMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = messages as typeof claudeMessages;
   const response = await anthropic.messages.create({
     model,
     max_tokens: 8192,
     system: systemPrompt,
-    messages: claudeMessages,
+    messages,
   });
   const inputTokens = response.usage.input_tokens ?? null;
   const outputTokens = response.usage.output_tokens ?? null;
@@ -1875,7 +1934,10 @@ router.post("/chat", async (req, res): Promise<void> => {
     entries?: Array<{ id: number; title: string; status: string }>;
     fileContext?: string;
     userProfile?: string;
-    imageData?: { base64: string; mediaType: string };
+    imageData?: unknown;
+    imageBase64?: unknown;
+    imageMediaType?: unknown;
+    imageMimeType?: unknown;
     flowMode?: boolean;
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
     forgeContext?: string;
@@ -1886,6 +1948,12 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   if ((!body.sessionId && !isFlowMode) || !body.projectId || !body.message) {
     res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
+    return;
+  }
+
+  const normalizedImage = normalizeRequestImageData(body);
+  if (normalizedImage.error) {
+    res.status(400).json({ error: normalizedImage.error });
     return;
   }
 
@@ -1900,7 +1968,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
   const clientForgeContext = body.forgeContext ?? "";
-  const imageData = body.imageData;
+  const imageData = normalizedImage.imageData;
   const activeModel = selectChatModelForMessage(message);
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
@@ -2580,12 +2648,6 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   // ── Build message history for multi-model dispatcher ─────────────────────
-  type TextBlock = { type: "text"; text: string };
-  type ImageBlock = {
-    type: "image";
-    source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string };
-  };
-
   // Combine vault images + user-attached image + text into a single content array
   const contentParts: Array<TextBlock | ImageBlock> = [];
 
@@ -2615,19 +2677,20 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   if (imageData) {
     contentParts.push({
       type: "image",
-      source: { type: "base64", media_type: imageData.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData.base64 },
+      source: { type: "base64", media_type: imageData.mediaType, data: imageData.base64 },
     } as ImageBlock);
   }
 
-  // 3. User text (with optional build-verify result appended)
-  contentParts.push({ type: "text", text: message + buildVerifyAppend });
+  // 4. User text (with optional build-verify result appended)
+  const userText = message + buildVerifyAppend;
+  contentParts.push({ type: "text", text: userText });
 
-  const userContent: string | Array<TextBlock | ImageBlock> =
-    contentParts.length === 1 ? message : contentParts;
+  const userContent: MessageContent =
+    contentParts.length === 1 ? userText : contentParts;
 
-  const dispatchMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = [
+  const dispatchMessages: ChatDispatchMessage[] = [
     ...(history || []).map((h: { role: string; content: string }) => ({
-      role: h.role as "user" | "assistant",
+      role: h.role === "assistant" ? "assistant" : "user",
       content: h.content,
     })),
     { role: "user", content: userContent },
@@ -2684,7 +2747,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       : Promise.resolve(undefined);
 
   writeStep(res, { verb: "Analyzing", target: "your request", phase: "analyze" });
-  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages);
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
   let modelUsed = modelResult.model;
@@ -2726,15 +2789,15 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           const filesSummary = validFiles
             .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
             .join("\n\n");
-          const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
-            ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+          const followUpMessages: ChatDispatchMessage[] = [
+            ...dispatchMessages,
             { role: "assistant", content: readCleanedContent },
             {
               role: "user",
               content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`,
             },
           ];
-          modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+          modelResult = await callModel(activeModel, systemPrompt, followUpMessages);
           rawContent = modelResult.content;
           assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
           modelUsed = modelResult.model;
@@ -2748,9 +2811,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   // Max 8 iterations to prevent runaway loops.
   {
     const AGENTIC_MAX = 8;
-    const agentConversation: Array<{ role: "user" | "assistant"; content: string }> = [
-      ...(dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>),
-    ];
+    const agentConversation: ChatDispatchMessage[] = [...dispatchMessages];
     const collectedParts: string[] = [];
 
     for (let iter = 0; iter < AGENTIC_MAX; iter++) {
@@ -2783,7 +2844,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       });
 
       try {
-        const next = await callModel(activeModel, systemPrompt, agentConversation, undefined);
+        const next = await callModel(activeModel, systemPrompt, agentConversation);
         rawContent = next.content;
         assistantUsage = mergeUsage(assistantUsage, next.usage);
         modelUsed = next.model;

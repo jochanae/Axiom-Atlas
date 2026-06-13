@@ -111,15 +111,19 @@ beforeEach(() => {
   anthropicCreate.mockReset();
 });
 
+function seedChatSelectResults(projectName = "Tracked Project") {
+  mockDbState.selectResults.push(
+    [{ id: 7, name: projectName, memory: null, linkedRepo: null, githubToken: null, nodeState: {} }],
+    [],
+    [],
+    [{ name: projectName, description: null }],
+    [],
+  );
+}
+
 describe("POST /api/chat usage tracking", () => {
   it("stores assistant message usage fields and positive cost", async () => {
-    mockDbState.selectResults.push(
-      [{ id: 7, name: "Tracked Project", memory: null, linkedRepo: null, githubToken: null, nodeState: {} }],
-      [],
-      [],
-      [{ name: "Tracked Project", description: null }],
-      [],
-    );
+    seedChatSelectResults();
     anthropicCreate.mockResolvedValue({
       content: [{ type: "text", text: "Tracked response" }],
       usage: { input_tokens: 1000, output_tokens: 200 },
@@ -137,5 +141,40 @@ describe("POST /api/chat usage tracking", () => {
       outputTokens: 200,
     });
     expect(Number(assistantInsert.costUsd)).toBeGreaterThan(0);
+  });
+
+  it("sends raw imageData as a Claude image block with text", async () => {
+    seedChatSelectResults();
+    anthropicCreate.mockResolvedValue({
+      content: [{ type: "text", text: "This looks like a dashboard." }],
+      usage: { input_tokens: 1200, output_tokens: 80 },
+    });
+
+    const res = await request(createChatTestApp())
+      .post("/api/chat")
+      .send({
+        sessionId: 11,
+        projectId: 7,
+        message: "What is in this image?",
+        imageData: "abc123base64",
+        history: [{ role: "assistant", content: "Prior context" }],
+      });
+
+    expect(res.status).toBe(200);
+    const claudeCall = anthropicCreate.mock.calls.find(([payload]) => payload.model === "claude-sonnet-4-6")?.[0];
+    expect(claudeCall?.messages.at(-1)).toEqual({
+      role: "user",
+      content: [
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/jpeg",
+            data: "abc123base64",
+          },
+        },
+        { type: "text", text: "What is in this image?" },
+      ],
+    });
   });
 });
