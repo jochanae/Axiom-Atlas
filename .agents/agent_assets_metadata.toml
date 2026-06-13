@@ -108,3 +108,9 @@ id = "6jJFBbRZzJUDCTM1KHu9d"
 uri = "file://.local/output/cursor-fix-image-generator.md"
 type = "text"
 title = "Cursor — Fix Image Generator (wrong page + broken API)"
+
+[[outputs]]
+id = "IdzpgL_MB-qvQ1YldAvD_"
+uri = "file://.local/cursor-prompts/restore-stackblitz.md"
+type = "text"
+title = "Cursor Prompt — Restore StackBlitz"
