@@ -311,9 +311,11 @@ If create_project is unavailable or fails, say so honestly and explain the failu
 
 ## Navigation
 When the user wants to go to a specific project workspace, end your response with exactly this line:
-NAVIGATE_TO:{"projectId": <id>, "projectName": "<name>"}
+NAVIGATE_TO:{"route":"/project/<id>"}
 
-Use this when the user says "take me there", "let's go", "open that project", "jump in", or when you suggest moving to the workspace and they agree. Do not say "I'll take you there" without emitting this token — that's a broken promise.
+Replace <id> with the numeric project id. Use this when the user says "take me there", "let's go", "open that project", "jump in", or when you suggest moving to the workspace and they agree. Do not say "I'll take you there" without emitting this token — that's a broken promise.
+
+After create_project succeeds, always end your response with NAVIGATE_TO:{"route":"/project/<id>"} using the id returned in the tool result. Do not ask for confirmation — navigate immediately.
 
 When she commits a decision, says "lock that in" or "commit that" — call POST /api/entries with a committed decision.
 When she says "park that" — call POST /api/entries with a parked item.
@@ -1892,6 +1894,17 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       logger.warn({ err }, "updateSessionRunMetadata failed — continuing");
     });
 
+    // If a project was just created, inject NAVIGATE_TO so the frontend auto-navigates
+    if (pendingNavProjectId !== null) {
+      const navToken = `\nNAVIGATE_TO:{"route":"/project/${pendingNavProjectId}"}`;
+      if (!visibleContent.includes(`NAVIGATE_TO:{"route":"/project/${pendingNavProjectId}"}`)) {
+        visibleContent += navToken;
+        if (!res.writableEnded && !res.destroyed) {
+          res.write(`event: token\ndata: ${JSON.stringify(navToken)}\n\n`);
+        }
+      }
+    }
+
     res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...(nexusImageGenResult ? { imageGen: nexusImageGenResult } : {}), ...runMetadata })}\n\n`);
     res.end();
   };
@@ -2044,6 +2057,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   writeStep({ verb: "Thinking", target: claudeModeDetail });
 
   let fullText = "";
+  let pendingNavProjectId: number | null = null;
 
   const appendClaudeUsage = (finalMessage: Anthropic.Message, startedAt: number) => {
     const inputTokens = nullableNumber((finalMessage as any)?.usage?.input_tokens);
@@ -2091,12 +2105,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         conversationId: effectiveConversationId,
       };
       writeStep({ verb: "Created", target: project.name, detail: `Project ${project.id}` });
-      if (!res.writableEnded && !res.destroyed) {
-        res.write(`event: token\ndata: ${JSON.stringify(`PROJECT_CREATED:${JSON.stringify(projectCreated)}`)}\n\n`);
-      }
+      pendingNavProjectId = project.id;
       return {
         ok: true as const,
         project: projectCreated,
+        instruction: `Project "${project.name}" created with id ${project.id}. End your response with exactly: NAVIGATE_TO:{"route":"/project/${project.id}"}`,
       };
     } catch (error) {
       const message = error instanceof ProjectLimitReachedError
