@@ -1576,6 +1576,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
   systemPrompt += `\n\n--- BROWSER AGENT ---\nYou can visit URLs for competitor research or health checks. Emit a BROWSER_VISIT token at the END of your response when you want to visit a URL:\n\nBROWSER_VISIT:{"url":"https://example.com","mode":"scrape"}\nBROWSER_VISIT:{"url":"https://example.com","mode":"screenshot"}\nBROWSER_VISIT:{"url":"https://example.com","mode":"health"}\n\n- "scrape" — fetches page content and gives a strategic summary. Use for competitor research, product analysis, or reading any public page.\n- "screenshot" — takes a screenshot with AI visual description. Use when the user wants to SEE a page.\n- "health" — HTTP status + visual check. Use to verify a live app is rendering correctly.\n\nRULES:\n- Only emit BROWSER_VISIT when you actually have a URL to visit.\n- One BROWSER_VISIT per response, at the very end.\n- Never say "I'll check that" without emitting the token. Just emit it.\n- For competitor research ("how does X work?", "what does their pricing look like?", "compare us to X"), emit BROWSER_VISIT with mode "scrape". If you know the URL, use it directly.\n--- END BROWSER AGENT ---`;
 
+  systemPrompt += `\n\n--- IMAGE GENERATION ---\nYou CAN generate images. When the user asks you to generate, visualize, sketch, render, or show what something looks like — emit IMAGE_GEN at the END of your response:\n\nIMAGE_GEN:{"prompt":"[detailed description of what to generate]","mode":"render","size":"square"}\n\n- Use mode "render" for UI mockups, app screens, product visuals, logos, and creative concepts.\n- Use mode "schematic" for architecture diagrams, technical flows, and wireframes.\n- Use size "landscape" for wide layouts, "portrait" for mobile screens, "square" for general use.\n- Always include detail in the prompt: style, colors, layout, mood.\n- NEVER say "I can't generate images" — you have this capability right now.\n- NEVER say "I'll generate that" — just emit the token and let the backend handle it.\n- Generating a visual is an act of thinking, not building. Use it proactively when ideas benefit from a picture.\n--- END IMAGE GENERATION ---`;
+
   // Load Visual Vault images (project-scoped if focused, otherwise skip for global)
   vault = focusProjectId
     ? await loadVaultContext(userId, focusProjectId)
@@ -1683,6 +1685,20 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   const finishStream = async (rawContent: string) => {
     streamDone = true;
 
+    // Extract and strip IMAGE_GEN tokens
+    const IMAGE_GEN_RE = /^IMAGE_GEN:\s*(\{[^\n]+\})\s*$/gm;
+    type ImageGenToken = { prompt: string; mode: "render" | "schematic"; size?: "square" | "landscape" | "portrait" };
+    const imageGenTokens: ImageGenToken[] = [];
+    rawContent = rawContent.replace(IMAGE_GEN_RE, (_match, json: string) => {
+      try {
+        const parsed = JSON.parse(json) as ImageGenToken;
+        if (parsed.prompt && (parsed.mode === "render" || parsed.mode === "schematic")) {
+          imageGenTokens.push(parsed);
+        }
+      } catch { /* ignore malformed tokens */ }
+      return "";
+    }).trim();
+
     // Extract and strip BROWSER_VISIT tokens — Atlas requests browser visits at end of response
     const BROWSER_VISIT_RE = /^BROWSER_VISIT:\s*(\{[^\n]+\})\s*$/gm;
     type BrowserVisitToken = { url: string; mode: "screenshot" | "scrape" | "health" | "monitor" };
@@ -1698,6 +1714,39 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       }
       return "";
     }).trim();
+
+    // Execute image generation if Atlas emitted IMAGE_GEN token(s)
+    interface NexusGeneratedImage { imageUrl: string; prompt: string; model: string; mode: "render" | "schematic"; }
+    let nexusImageGenResult: { images: NexusGeneratedImage[] } | undefined;
+    if (imageGenTokens.length > 0) {
+      const nexusImages: NexusGeneratedImage[] = [];
+      for (const token of imageGenTokens.slice(0, 2)) {
+        const enginePrompt = token.mode === "render"
+          ? `${token.prompt} Ultra-premium, cinematic quality. Sleek dark-mode aesthetic with obsidian depth, luxury glassmorphism elements, subtle amber/gold accent glows. Sophisticated editorial lighting, presentation-ready professional finish. 8K resolution quality.`
+          : `${token.prompt} Clean flat 2D technical diagram. High-contrast dark background, crisp connector lines, strict geometric layout, precise spatial placement, sharp labels. Pure structural accuracy.`;
+        try {
+          const r = await genai.models.generateContent({
+            model: "gemini-2.5-flash-image",
+            contents: enginePrompt,
+            config: { responseModalities: ["IMAGE", "TEXT"] },
+          });
+          const parts = r.candidates?.[0]?.content?.parts ?? [];
+          const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+          const textPart = parts.find((p: any) => p.text);
+          if (imagePart?.inlineData?.data) {
+            nexusImages.push({
+              imageUrl: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
+              prompt: textPart?.text ?? enginePrompt,
+              model: "gemini-2.5-flash-image",
+              mode: token.mode,
+            });
+          }
+        } catch (err) {
+          logger.warn({ err }, "Nexus image generation failed");
+        }
+      }
+      if (nexusImages.length > 0) nexusImageGenResult = { images: nexusImages };
+    }
 
     // Strip MEMORY_Tn tags from persisted output
     const { content: rawVisibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
@@ -1843,7 +1892,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       logger.warn({ err }, "updateSessionRunMetadata failed — continuing");
     });
 
-    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...runMetadata })}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...(nexusImageGenResult ? { imageGen: nexusImageGenResult } : {}), ...runMetadata })}\n\n`);
     res.end();
   };
 
