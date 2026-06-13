@@ -50,6 +50,13 @@ type HomeHandoffSignal = {
   reason: string | null;
 };
 
+type ProjectCreatedToken = {
+  id: number;
+  name: string;
+  summary?: string | null;
+  conversationId?: string | null;
+};
+
 type HomeUserType = "idea" | "building" | "clients" | "portfolio";
 
 type HomeMessage = {
@@ -70,6 +77,27 @@ type HomeThreadMessage = {
   content: string;
   isBriefing?: boolean;
 };
+
+const PROJECT_CREATED_RE = /(?:^|\n)PROJECT_CREATED:\s*(\{[^\n]+\})\s*/;
+
+function extractProjectCreatedToken(token: string): { visibleText: string; projectCreated: ProjectCreatedToken | null } {
+  let projectCreated: ProjectCreatedToken | null = null;
+  const visibleText = token.replace(PROJECT_CREATED_RE, (_match, json: string) => {
+    try {
+      const parsed = JSON.parse(json) as Partial<ProjectCreatedToken>;
+      if (typeof parsed.id === "number" && Number.isFinite(parsed.id) && typeof parsed.name === "string" && parsed.name.trim()) {
+        projectCreated = {
+          id: parsed.id,
+          name: parsed.name.trim(),
+          summary: typeof parsed.summary === "string" ? parsed.summary : null,
+          conversationId: typeof parsed.conversationId === "string" ? parsed.conversationId : null,
+        };
+      }
+    } catch {}
+    return "";
+  });
+  return { visibleText, projectCreated };
+}
 
 function loadHomeUserType(): HomeUserType | null {
   try {
@@ -1346,6 +1374,7 @@ export default function Home() {
       const decoder = new TextDecoder();
       let buf = "";
       let streamedText = "";
+      let projectCreatedToken: ProjectCreatedToken | null = null;
 
       // Add a streaming message bubble immediately
       const streamingId = Date.now().toString();
@@ -1368,10 +1397,14 @@ export default function Home() {
           try {
             if (evtName === "token") {
               const token = JSON.parse(evtData) as string;
-              streamedText += token;
-              setHomeMessages(prev => prev.map(m =>
-                (m as any).id === streamingId ? { ...m, content: streamedText } : m
-              ));
+              const { visibleText, projectCreated } = extractProjectCreatedToken(token);
+              if (projectCreated) projectCreatedToken = projectCreated;
+              if (visibleText) {
+                streamedText += visibleText;
+                setHomeMessages(prev => prev.map(m =>
+                  (m as any).id === streamingId ? { ...m, content: streamedText } : m
+                ));
+              }
             } else if (evtName === "step") {
               const step = JSON.parse(evtData) as { verb: string; target?: string };
               if (step.verb === "Visiting" && step.target) {
@@ -1386,6 +1419,32 @@ export default function Home() {
               ));
               if (meta.handoffSignal?.projectName) setHandoffProjectName(meta.handoffSignal.projectName);
               if (meta.detectedMode === "deep-dive" && homeMessages.length + 2 >= 4) setShowHandoff(true);
+              if (projectCreatedToken) {
+                const transcriptMessages = [
+                  ...homeMessages.map(({ role, content }) => ({ role, content })),
+                  { role: "user" as const, content: messageText },
+                  { role: "assistant" as const, content: streamedText.trim() },
+                ].slice(-20);
+                const ideaTexts = transcriptMessages
+                  .filter((m) => m.role === "user" && m.content.trim().length > 20)
+                  .slice(-4)
+                  .map((m) => m.content.replace(/\s+/g, " ").trim());
+                try {
+                  sessionStorage.setItem(`atlas-home-handoff-${projectCreatedToken.id}`, JSON.stringify({
+                    parkedCount: ideaTexts.length,
+                    flowNodeCount: 0,
+                    goalLabel: projectCreatedToken.summary?.trim() || projectCreatedToken.name,
+                    nodes: [],
+                    parkedTitles: ideaTexts.map((idea) => idea.slice(0, 80)),
+                    conversation: transcriptMessages,
+                    conversationId: projectCreatedToken.conversationId ?? activeConversationId,
+                    createdBy: "atlas_create_project_tool",
+                  }));
+                  sessionStorage.setItem("atlas-open-tab", "map");
+                } catch {}
+                queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+                setLocation(`/project/${projectCreatedToken.id}?source=home-handoff`);
+              }
             } else if (evtName === "error") {
               const errMsg = JSON.parse(evtData) as string;
               setVisitingUrl(null);
@@ -1408,7 +1467,7 @@ export default function Home() {
       setVisitingUrl(null);
       document.body.dataset.voiceActive = "false";
     }
-  }, [input, attachedFiles, isSending, homeModel, homeFocus, homeUserType, projects, activeConversationId, homeMessages.length]);
+  }, [input, attachedFiles, isSending, homeModel, homeFocus, homeMode, homeUserType, activeConversationId, homeMessages, queryClient, setLocation]);
 
 
   const handleHandoff = useCallback(async (signal?: HomeHandoffSignal, projectNameOverride?: string, plan?: Plan) => {

@@ -11,6 +11,7 @@ import { calculateModelCostUsd } from "../pricing";
 import { logger } from "../lib/logger";
 import { ATLAS_PLATFORM_KNOWLEDGE } from "../lib/atlasKnowledge";
 import { ATLAS_IDENTITY } from "../lib/atlasIdentity";
+import { createProjectForUser, ProjectLimitReachedError } from "../lib/projectCreation";
 
 const router: IRouter = Router();
 
@@ -71,6 +72,11 @@ type FlowMapNode = {
   type: string;
   answered: boolean;
   meta?: string;
+};
+
+type CreateProjectToolInput = {
+  name: string;
+  summary: string;
 };
 
 const HOME_OPENING_FALLBACKS = [
@@ -296,6 +302,13 @@ From this home view you see everything at once. You are not inside any single wo
 
 From here you cannot read code files or push to GitHub — that lives in the workspace. But you can see every project, every committed decision, every cross-project tension. You can help her think, decide, commit, and then take her where she needs to go.
 
+## Project Creation
+You have a real create_project tool. Use it to create a new project workspace when an idea has become concrete enough to start building and the user has confirmed they want to proceed.
+
+When the user confirms they want a project created, CALL THE TOOL. Do not narrate fake API calls, do not write pseudo-code, and do not say "creating now" unless you are actually calling create_project.
+
+If create_project is unavailable or fails, say so honestly and explain the failure briefly. Never pretend a project was created.
+
 ## Navigation
 When the user wants to go to a specific project workspace, end your response with exactly this line:
 NAVIGATE_TO:{"projectId": <id>, "projectName": "<name>"}
@@ -319,6 +332,19 @@ MEMORY_T5: [passing thought — 7 days]
 
 Save up to 3 MEMORY_Tn lines per response when she shares something significant.
 `;
+
+const CREATE_PROJECT_TOOL = {
+  name: "create_project",
+  description: "Create a new project workspace when an idea has become concrete enough to start building. Only call this after the user has confirmed they want to proceed.",
+  input_schema: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "Short project name" },
+      summary: { type: "string", description: "1-2 sentence summary of what this project is" },
+    },
+    required: ["name", "summary"],
+  },
+} as const;
 
 const CONVERSATIONAL_EXPANSION_PROTOCOL = `--- CONVERSATIONAL EXPANSION PROTOCOL ---
 After the user responds to your opening question, your goal is to build a complete picture of the project through natural conversation — not a form, not a checklist, not bullet points.
@@ -372,6 +398,48 @@ function parseMemoryStore(raw: string | null): MemoryStore {
   } catch {
     return { v: 2, entries: [] };
   }
+}
+
+function buildInitialProjectMemory(summary: string): string {
+  const now = new Date().toISOString();
+  const store: MemoryStore = {
+    v: 2,
+    entries: [{
+      tier: 1,
+      text: `Initial project summary from Global Insight: ${summary}`,
+      createdAt: now,
+      retrievalCount: 0,
+      lastRetrievedAt: null,
+    }],
+  };
+  return JSON.stringify(store);
+}
+
+function parseCreateProjectToolInput(input: unknown): CreateProjectToolInput | null {
+  if (!isRecord(input)) return null;
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const summary = typeof input.summary === "string" ? input.summary.trim() : "";
+  if (!name || !summary) return null;
+  return { name, summary };
+}
+
+function mergeNullableNumbers(a: number | null | undefined, b: number | null | undefined): number | null {
+  if (a == null) return b ?? null;
+  if (b == null) return a;
+  return a + b;
+}
+
+function mergeModelUsage(
+  current: Partial<NexusRunMetadata>,
+  next: Partial<NexusRunMetadata>,
+): Partial<NexusRunMetadata> {
+  return {
+    ...current,
+    executionTimeMs: (current.executionTimeMs ?? 0) + (next.executionTimeMs ?? 0),
+    inputTokens: mergeNullableNumbers(current.inputTokens, next.inputTokens),
+    outputTokens: mergeNullableNumbers(current.outputTokens, next.outputTokens),
+    costUsd: mergeNullableNumbers(current.costUsd, next.costUsd),
+  };
 }
 
 function memoryHasConversationContext(raw: string | null, store: MemoryStore, conversationId: string): boolean {
@@ -1128,6 +1196,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
 
   const userId = (req as any).authUser.id as number;
+  const authUser = (req as any).authUser;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
   const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
@@ -1924,42 +1993,124 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     : focusProjectId ? `Strategizing ${focusLabel}`
     : "Cross-portfolio strategy";
   writeStep({ verb: "Thinking", target: claudeModeDetail });
-  const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8192,
-    system: systemPrompt,
-    messages: anthropicMessages,
-  });
 
   let fullText = "";
 
-  stream.on("text", (text) => {
-    fullText += text;
-    res.write(`event: token\ndata: ${JSON.stringify(text)}\n\n`);
-  });
+  const appendClaudeUsage = (finalMessage: Anthropic.Message, startedAt: number) => {
+    const inputTokens = nullableNumber((finalMessage as any)?.usage?.input_tokens);
+    const outputTokens = nullableNumber((finalMessage as any)?.usage?.output_tokens);
+    modelUsage = mergeModelUsage(modelUsage, {
+      executionTimeMs: Math.max(1, Math.round(performance.now() - startedAt)),
+      inputTokens,
+      outputTokens,
+      costUsd: calculateModelCostUsd("claude-sonnet-4-6", inputTokens, outputTokens),
+    });
+  };
 
-  stream.on("error", (err) => {
-    const cancelled = /\b(abort|cancel|cancelled|canceled)\b/i.test(err.message);
-    writeStep({ verb: "Stream", target: "Claude", status: cancelled ? "warn" : "fail" });
-    void failStream(err.message || "Atlas ran into an issue.", cancelled ? "cancelled" : "failed");
-  });
+  const findCreateProjectToolUse = (finalMessage: Anthropic.Message) => (
+    finalMessage.content.find((block) => block.type === "tool_use" && block.name === "create_project") ?? null
+  );
 
-  stream.on("finalMessage", async (message) => {
-    try {
-      const inputTokens = nullableNumber((message as any)?.usage?.input_tokens);
-      const outputTokens = nullableNumber((message as any)?.usage?.output_tokens);
-      modelUsage = {
-        executionTimeMs: Math.max(1, Math.round(performance.now() - modelStartedAt)),
-        inputTokens,
-        outputTokens,
-        costUsd: calculateModelCostUsd("claude-sonnet-4-6", inputTokens, outputTokens),
+  const runCreateProjectTool = async (toolUse: Extract<Anthropic.Message["content"][number], { type: "tool_use" }>) => {
+    const parsedInput = parseCreateProjectToolInput(toolUse.input);
+    if (!parsedInput) {
+      return {
+        ok: false as const,
+        message: "create_project requires both a non-empty name and summary.",
       };
-      await finishStream(fullText);
-    } catch (err) {
-      req.log.error({ err }, "nexus/chat stream finalization error");
-      await failStream("Atlas ran into an issue. Please try again.", "failed");
     }
-  });
+
+    writeStep({ verb: "Creating", target: parsedInput.name, detail: "Project workspace" });
+    try {
+      const project = await createProjectForUser({
+        userId,
+        authUser,
+        name: parsedInput.name,
+        description: parsedInput.summary,
+        entityType: "project",
+        memory: buildInitialProjectMemory(parsedInput.summary),
+      });
+      const projectCreated = {
+        id: project.id,
+        name: project.name,
+        summary: project.description ?? parsedInput.summary,
+        conversationId: effectiveConversationId,
+      };
+      writeStep({ verb: "Created", target: project.name, detail: `Project ${project.id}` });
+      if (!res.writableEnded && !res.destroyed) {
+        res.write(`event: token\ndata: ${JSON.stringify(`PROJECT_CREATED:${JSON.stringify(projectCreated)}`)}\n\n`);
+      }
+      return {
+        ok: true as const,
+        project: projectCreated,
+      };
+    } catch (error) {
+      const message = error instanceof ProjectLimitReachedError
+        ? `${error.message} Upgrade is required before creating another project.`
+        : "Project creation failed unexpectedly.";
+      writeStep({ verb: "Create", target: parsedInput.name, detail: message, status: "fail" });
+      logger.warn({ err: String(error), projectName: parsedInput.name }, "create_project tool failed");
+      return {
+        ok: false as const,
+        message,
+      };
+    }
+  };
+
+  const streamClaude = (
+    messagesForClaude: Anthropic.MessageParam[],
+    options: { tools: boolean; startedAt: number },
+  ): void => {
+    const stream = anthropic.messages.stream({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      system: systemPrompt,
+      messages: messagesForClaude,
+      ...(options.tools ? { tools: [CREATE_PROJECT_TOOL] } : {}),
+    });
+
+    stream.on("text", (text) => {
+      fullText += text;
+      res.write(`event: token\ndata: ${JSON.stringify(text)}\n\n`);
+    });
+
+    stream.on("error", (err) => {
+      const cancelled = /\b(abort|cancel|cancelled|canceled)\b/i.test(err.message);
+      writeStep({ verb: "Stream", target: "Claude", status: cancelled ? "warn" : "fail" });
+      void failStream(err.message || "Atlas ran into an issue.", cancelled ? "cancelled" : "failed");
+    });
+
+    stream.on("finalMessage", async (finalMessage) => {
+      try {
+        appendClaudeUsage(finalMessage, options.startedAt);
+        const toolUse = options.tools ? findCreateProjectToolUse(finalMessage) : null;
+        if (toolUse) {
+          const toolResult = await runCreateProjectTool(toolUse);
+          const continuationMessages: Anthropic.MessageParam[] = [
+            ...messagesForClaude,
+            { role: "assistant", content: finalMessage.content as Anthropic.MessageParam["content"] },
+            {
+              role: "user",
+              content: [{
+                type: "tool_result",
+                tool_use_id: toolUse.id,
+                content: JSON.stringify(toolResult),
+                ...(!toolResult.ok ? { is_error: true } : {}),
+              } as Anthropic.ToolResultBlockParam],
+            },
+          ];
+          streamClaude(continuationMessages, { tools: false, startedAt: performance.now() });
+          return;
+        }
+        await finishStream(fullText);
+      } catch (err) {
+        req.log.error({ err }, "nexus/chat stream finalization error");
+        await failStream("Atlas ran into an issue. Please try again.", "failed");
+      }
+    });
+  };
+
+  streamClaude(anthropicMessages, { tools: true, startedAt: modelStartedAt });
 
   return;
 
