@@ -1186,13 +1186,16 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     mode?: string;
     model?: string;
     imageBase64?: string;
+    imageData?: string;
     imageMimeType?: string;
     conversationId?: string;
     sessionId?: number;
     userType?: HomeUserType;
   };
 
-  const hasImage = !!(body.imageBase64 && body.imageMimeType);
+  const imageBase64 = body.imageBase64 ?? body.imageData ?? undefined;
+  const imageMimeType = body.imageMimeType ?? undefined;
+  const hasImage = !!(imageBase64 && imageMimeType);
   if (!body.message?.trim() && !hasImage) {
     res.status(400).json({ error: "message is required" });
     return;
@@ -1202,7 +1205,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const authUser = (req as any).authUser;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
+  const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", conversationId } = body;
   // Always store messages under a conversation ID so they appear in the
   // conversations list. If the frontend doesn't send one (new thread), we
   // generate a UUID here and return it in the `done` event so the client can

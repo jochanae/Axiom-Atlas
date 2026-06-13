@@ -1875,7 +1875,8 @@ router.post("/chat", async (req, res): Promise<void> => {
     entries?: Array<{ id: number; title: string; status: string }>;
     fileContext?: string;
     userProfile?: string;
-    imageData?: { base64: string; mediaType: string };
+    imageData?: string | { base64: string; mediaType: string };
+    imageMimeType?: string;
     flowMode?: boolean;
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
     forgeContext?: string;
@@ -1900,7 +1901,11 @@ router.post("/chat", async (req, res): Promise<void> => {
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
   const clientForgeContext = body.forgeContext ?? "";
-  const imageData = body.imageData;
+  const rawImageData = body.imageData ?? undefined;
+  const imageData = typeof rawImageData === "string" ? rawImageData : rawImageData?.base64 ?? undefined;
+  const imageMimeType = body.imageMimeType ?? (typeof rawImageData === "object" ? rawImageData.mediaType : undefined);
+  const hasImage = !!(imageData && imageMimeType);
+  const modelImageData = hasImage ? { base64: imageData, mediaType: imageMimeType } : undefined;
   const activeModel = selectChatModelForMessage(message);
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
@@ -2452,6 +2457,9 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   if (activeLens !== "builder") {
     systemPrompt += lensInstructions[activeLens] ?? "";
   }
+  if (hasImage) {
+    systemPrompt += "\n\nThe user has attached an image to this message. You can see and interpret it directly.";
+  }
 
   // ── Deep Dive shortcut — /deep <topic> ───────────────────────────────────────
   const { isDive, topic: diveTopic } = isDeepDive(message);
@@ -2612,10 +2620,10 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   // 3. User-attached image (if any)
-  if (imageData) {
+  if (hasImage) {
     contentParts.push({
       type: "image",
-      source: { type: "base64", media_type: imageData.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData.base64 },
+      source: { type: "base64", media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData! },
     } as ImageBlock);
   }
 
@@ -2684,7 +2692,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       : Promise.resolve(undefined);
 
   writeStep(res, { verb: "Analyzing", target: "your request", phase: "analyze" });
-  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, modelImageData);
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
   let modelUsed = modelResult.model;
