@@ -2688,11 +2688,12 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   const userContent: MessageContent =
     contentParts.length === 1 ? userText : contentParts;
 
+  const historyMessages: ChatDispatchMessage[] = (history || []).map((h: { role: string; content: string }) => ({
+    role: h.role === "assistant" ? "assistant" : "user",
+    content: h.content,
+  }));
   const dispatchMessages: ChatDispatchMessage[] = [
-    ...(history || []).map((h: { role: string; content: string }) => ({
-      role: h.role === "assistant" ? "assistant" : "user",
-      content: h.content,
-    })),
+    ...historyMessages,
     { role: "user", content: userContent },
   ];
 

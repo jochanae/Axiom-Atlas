@@ -53,9 +53,13 @@ vi.mock("@workspace/db", () => {
     connectionsTable: makeTable("connections"),
     db: undefined,
     entriesTable: makeTable("entries"),
+    generatedFiles: makeTable("generated_files"),
+    generationRuns: makeTable("generation_runs"),
+    imageVersionsTable: makeTable("image_versions"),
     projectsTable: makeTable("projects"),
     secretsTable: makeTable("secrets"),
     sessionsTable: makeTable("sessions"),
+    usersTable: makeTable("users"),
   };
 
   const makeSelectChain = (result: any[]) => {
