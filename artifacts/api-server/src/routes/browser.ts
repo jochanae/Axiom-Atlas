@@ -399,20 +399,34 @@ async function runPuppeteerMonitor(url: string, checkResources: boolean): Promis
 
     // ── SSRF guard: block ALL requests (navigation + subresources) to private targets ───
     // Must cover subresources too — page JS can trigger XHR/fetch/img to internal IPs.
+    // DNS-resolves every hostname to defeat nip.io / DNS-rebinding SSRF bypasses.
     await page.setRequestInterception(true);
+    const _dnsCache = new Map<string, boolean>(); // hostname → safe
     page.on("request", (req) => {
-      try {
-        const parsed = new URL(req.url());
-        const h = parsed.hostname.toLowerCase();
-        if (isPrivateIp(h) || h.endsWith(".localhost")) {
-          req.abort("blockedbyclient");
-          return;
-        }
-      } catch {
-        req.abort("blockedbyclient");
+      const url = req.url();
+      // data: / blob: URLs carry no remote host — allow them
+      if (url.startsWith("data:") || url.startsWith("blob:")) {
+        req.continue();
         return;
       }
-      req.continue();
+      // Async DNS validation; Puppeteer allows async handlers as long as
+      // continue()/abort() is called before the timeout.
+      (async () => {
+        try {
+          let safe = _dnsCache.get(new URL(url).hostname);
+          if (safe === undefined) {
+            await assertSafeUrl(url);   // DNS-resolves + private-IP check
+            safe = true;
+            _dnsCache.set(new URL(url).hostname, true);
+          }
+          if (safe) req.continue(); else req.abort("blockedbyclient");
+        } catch {
+          try {
+            _dnsCache.set(new URL(url).hostname, false);
+          } catch { /* ignore parse error */ }
+          req.abort("blockedbyclient");
+        }
+      })();
     });
 
     // ── Live console capture ────────────────────────────────────────────────
