@@ -2072,7 +2072,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Also check for Vercel connection so we know whether to defer BROWSER_VISIT until after deploy.
   const [projectRows, userRows, vercelRows] = await Promise.all([
     db
-      .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name, previewUrl: projectsTable.previewUrl })
+      .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name, previewUrl: projectsTable.previewUrl, description: projectsTable.description })
       .from(projectsTable)
       .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)),
     userId
@@ -2189,14 +2189,15 @@ router.post("/chat", async (req, res): Promise<void> => {
   if (BUILD_INTENT_RE.test(message) && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
     try {
       // Fast selector call: ask Claude which files it needs to read (small, cheap)
+      // Use haiku for speed — sonnet adds 5-8s of silence before streaming starts
       const selectorResp = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 200,
+        model: "claude-haiku-4-5",
+        max_tokens: 100,
         messages: [{
           role: "user",
-          content: `Given this file tree and user request, return ONLY a JSON array of the 1-3 most relevant file paths to read. Return [] if no specific files are needed (planning/conceptual questions only).\n\nUser request: "${message}"\n\nFile tree:\n${repoTreeContext}\n\nReturn ONLY a JSON array like ["src/pages/Login.tsx"] — no explanation, no markdown fences.`,
+          content: `Given this file tree and user request, return ONLY a JSON array of the 1-3 most relevant file paths to read. Return [] if no specific files are needed.\n\nUser request: "${message}"\n\nFile tree:\n${repoTreeContext}\n\nReturn ONLY a JSON array like ["src/pages/Login.tsx"] — no explanation.`,
         }],
-      });
+      }, { signal: AbortSignal.timeout(2000) });
       const selectorText = selectorResp.content[0]?.type === "text" ? selectorResp.content[0].text.trim() : "[]";
       const cleaned = selectorText.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
       let filePaths: unknown = [];
@@ -2241,65 +2242,48 @@ router.post("/chat", async (req, res): Promise<void> => {
     previousContentByPath.set(path, content);
   });
 
-  let recentErrorContext = "";
-  try {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const recentErrors = await db
-      .select({
-        errorMessage: atlasErrorLogsTable.errorMessage,
-        route: atlasErrorLogsTable.route,
-        timestamp: atlasErrorLogsTable.timestamp,
-      })
+  // Run remaining DB queries in parallel — previously sequential, added 400-600ms per request
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [recentErrorsRows, selfMapRows, portfolioRows, committedRows] = await Promise.all([
+    db
+      .select({ errorMessage: atlasErrorLogsTable.errorMessage, route: atlasErrorLogsTable.route, timestamp: atlasErrorLogsTable.timestamp })
       .from(atlasErrorLogsTable)
-      .where(and(
-        eq(atlasErrorLogsTable.projectId, String(projectId)),
-        gte(atlasErrorLogsTable.createdAt, cutoff)
-      ))
+      .where(and(eq(atlasErrorLogsTable.projectId, String(projectId)), gte(atlasErrorLogsTable.createdAt, cutoff)))
       .orderBy(desc(atlasErrorLogsTable.createdAt))
-      .limit(5);
-
-    recentErrorContext = recentErrors
-      .map((error) => `Recent production errors detected: ${error.errorMessage} at ${error.route} — ${error.timestamp.toISOString()}`)
-      .join("\n");
-  } catch {
-    // Non-fatal: Atlas can still respond without production error context.
-  }
-
-  let selfMapContext = "";
-  try {
-    const [selfMap] = await db
+      .limit(5)
+      .catch(() => [] as Array<{ errorMessage: string; route: string; timestamp: Date }>),
+    db
       .select({ fileCount: atlasSelfMapTable.fileCount })
       .from(atlasSelfMapTable)
       .orderBy(desc(atlasSelfMapTable.createdAt))
-      .limit(1);
-    if (selfMap) {
-      selfMapContext = `Current codebase: ${selfMap.fileCount} files indexed. Architecture map available for reasoning.`;
-    }
-  } catch {
-    // Non-fatal: Atlas can still respond without the self map summary.
-  }
+      .limit(1)
+      .catch(() => [] as Array<{ fileCount: number }>),
+    userId
+      ? db.select({ id: projectsTable.id, name: projectsTable.name }).from(projectsTable).where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId))).limit(8).catch(() => [] as Array<{ id: number; name: string }>)
+      : Promise.resolve([] as Array<{ id: number; name: string }>),
+    db
+      .select({ title: entriesTable.title, summary: entriesTable.summary, createdAt: entriesTable.createdAt })
+      .from(entriesTable)
+      .where(and(eq(entriesTable.projectId, projectId), eq(entriesTable.status, "committed")))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(25)
+      .catch(() => [] as Array<{ title: string; summary: string | null; createdAt: Date }>),
+  ]);
 
-  // Build layered system prompt
+  const recentErrorContext = recentErrorsRows
+    .map((e) => `Recent production errors detected: ${e.errorMessage} at ${e.route} — ${e.timestamp.toISOString()}`)
+    .join("\n");
+  const selfMapContext = selfMapRows[0] ? `Current codebase: ${selfMapRows[0].fileCount} files indexed. Architecture map available for reasoning.` : "";
+
+  // Build layered system prompt — use project data already fetched in the first Promise.all
   let systemPrompt = DEV_SYSTEM_PROMPT;
   systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
-  // Inject project identity
-  const [projectRow] = await db
-    .select({ name: projectsTable.name, description: projectsTable.description })
-    .from(projectsTable)
-    .where(eq(projectsTable.id, projectId))
-    .limit(1);
-
-  if (projectRow) {
-    systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${projectRow.name}${projectRow.description ? `\nDescription: ${projectRow.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
+  if (project) {
+    systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${project.name}${project.description ? `\nDescription: ${project.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
   }
-  if (userId) {
-    const portfolioProjects = await db
-      .select({ id: projectsTable.id, name: projectsTable.name })
-      .from(projectsTable)
-      .where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId)))
-      .limit(8);
-    const portfolioNames = portfolioProjects.map((p) => `- ${p.name}`).join("\n");
-    systemPrompt += `\n\n--- YOUR PORTFOLIO ---\n${portfolioNames ? `${portfolioNames}\n` : ""}${portfolioProjects.length}\n--- END PORTFOLIO ---`;
+  if (userId && portfolioRows.length > 0) {
+    const portfolioNames = portfolioRows.map((p) => `- ${p.name}`).join("\n");
+    systemPrompt += `\n\n--- YOUR PORTFOLIO ---\n${portfolioNames}\n${portfolioRows.length}\n--- END PORTFOLIO ---`;
   }
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
@@ -2311,22 +2295,12 @@ router.post("/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
   }
 
-  // Inject committed decisions from the Decision Ledger — Atlas reads these, not just writes them
-  try {
-    const committedEntries = await db
-      .select({ title: entriesTable.title, summary: entriesTable.summary, createdAt: entriesTable.createdAt })
-      .from(entriesTable)
-      .where(and(eq(entriesTable.projectId, projectId), eq(entriesTable.status, "committed")))
-      .orderBy(desc(entriesTable.createdAt))
-      .limit(25);
-    if (committedEntries.length > 0) {
-      const ledgerText = committedEntries
-        .map(e => `• ${e.title}${e.summary ? ` — ${e.summary}` : ""}`)
-        .join("\n");
-      systemPrompt += `\n\n--- COMMITTED DECISIONS (Decision Ledger — reference these naturally, never cite entry numbers) ---\n${ledgerText}\n--- END COMMITTED DECISIONS ---`;
-    }
-  } catch {
-    // Non-fatal — Atlas continues without ledger context
+  // Inject committed decisions from the Decision Ledger (fetched in the parallel batch above)
+  if (committedRows.length > 0) {
+    const ledgerText = committedRows
+      .map(e => `• ${e.title}${e.summary ? ` — ${e.summary}` : ""}`)
+      .join("\n");
+    systemPrompt += `\n\n--- COMMITTED DECISIONS (Decision Ledger — reference these naturally, never cite entry numbers) ---\n${ledgerText}\n--- END COMMITTED DECISIONS ---`;
   }
 
   if (projectMap) {
@@ -2466,10 +2440,13 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   // ── Deep Dive shortcut — /deep <topic> ───────────────────────────────────────
-  const { isDive, topic: diveTopic } = isDeepDive(message);
+  const { isDive: isDiveCmd, topic: diveTopic } = isDeepDive(message);
+  // Also trigger deep dive when the More menu sends mode:"deep" or mode:"deepdive"
+  const isDive = isDiveCmd || activeMode === "deep" || activeMode === "deepdive";
+  const effectiveDiveTopic = isDiveCmd ? diveTopic : message;
   if (isDive) {
     await db.insert(chatMessagesTable).values({ sessionId, role: "user", content: message, intentType: body.mode ?? null });
-    const diveResult = await runDeepDive(diveTopic, systemPrompt);
+    const diveResult = await runDeepDive(effectiveDiveTopic, systemPrompt);
     const surface = detectSurfaceSignal({
       content: diveResult.content,
       userMessage: message,

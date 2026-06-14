@@ -19,6 +19,7 @@ export * from "./atlas_error_logs";
 export * from "./atlas_self_map";
 export * from "./forgeState";
 export * from "./blueprints";
+export * from "./artifacts";
 export * from "./connections";
 export * from "./flowCanvas";
 export * from "./mcp_connections";
