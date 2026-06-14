@@ -1187,6 +1187,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     model?: string;
     imageBase64?: string;
     imageMimeType?: string;
+    attachments?: Array<{ base64: string; mediaType: string; name?: string }>;
     conversationId?: string;
     sessionId?: number;
     userType?: HomeUserType;
@@ -1203,6 +1204,11 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
   const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
+  // Normalise: merge legacy imageBase64/imageMimeType + new attachments array into one list
+  const allAttachments: Array<{ base64: string; mediaType: string; name?: string }> = [
+    ...(body.attachments ?? []),
+    ...(imageBase64 && imageMimeType ? [{ base64: imageBase64, mediaType: imageMimeType }] : []),
+  ];
   // Always store messages under a conversation ID so they appear in the
   // conversations list. If the frontend doesn't send one (new thread), we
   // generate a UUID here and return it in the `done` event so the client can
@@ -1950,10 +1956,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       : "Cross-portfolio strategy";
     writeStep({ verb: "Thinking", target: geminiModeDetail });
     modelStartedAt = performance.now();
-    if (imageBase64 && imageMimeType) {
+    if (allAttachments.length > 0) {
+      const firstAtt = allAttachments[0];
       const result = await genai.models.generateContent({
         model: "gemini-2.5-pro",
-        contents: [{ role: "user", parts: [{ text: combinedText }, { inlineData: { mimeType: imageMimeType, data: imageBase64 } }] }],
+        contents: [{ role: "user", parts: [{ text: combinedText }, { inlineData: { mimeType: firstAtt.mediaType, data: firstAtt.base64 } }] }],
         config: { systemInstruction: systemPrompt },
       });
       rawContent = result.text ?? "";
@@ -2027,14 +2034,14 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     } as VaultBlock);
   }
 
-  // 3. User-attached image (if any)
-  if (imageBase64 && imageMimeType) {
+  // 3. User-attached images (attachments array — supports multiple)
+  for (const att of allAttachments) {
     contentParts.push({
       type: "image",
       source: {
         type: "base64",
-        media_type: imageMimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-        data: imageBase64,
+        media_type: att.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+        data: att.base64,
       },
     } as VaultBlock);
   }
