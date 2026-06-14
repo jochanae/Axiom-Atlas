@@ -1875,7 +1875,8 @@ router.post("/chat", async (req, res): Promise<void> => {
     entries?: Array<{ id: number; title: string; status: string }>;
     fileContext?: string;
     userProfile?: string;
-    imageData?: { base64: string; mediaType: string };
+    imageData?: string | { base64: string; mediaType: string };
+    imageMimeType?: string;
     attachments?: Array<{ base64: string; mediaType: string; name?: string }>;
     flowMode?: boolean;
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
@@ -1901,11 +1902,13 @@ router.post("/chat", async (req, res): Promise<void> => {
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
   const clientForgeContext = body.forgeContext ?? "";
-  const imageData = body.imageData;
-  // Normalise: merge legacy imageData + new attachments array into one list
+  const rawImageData = body.imageData ?? undefined;
+  const legacyBase64 = typeof rawImageData === "string" ? rawImageData : rawImageData?.base64 ?? undefined;
+  const legacyMimeType = body.imageMimeType ?? (typeof rawImageData === "object" ? rawImageData?.mediaType : undefined);
+  // Normalise: merge legacy imageData/imageMimeType + new attachments array into one list
   const allAttachments: Array<{ base64: string; mediaType: string; name?: string }> = [
     ...(body.attachments ?? []),
-    ...(imageData ? [{ base64: imageData.base64, mediaType: imageData.mediaType }] : []),
+    ...(legacyBase64 && legacyMimeType ? [{ base64: legacyBase64, mediaType: legacyMimeType }] : []),
   ];
   const activeModel = selectChatModelForMessage(message);
   const now = new Date();
@@ -2457,6 +2460,9 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   };
   if (activeLens !== "builder") {
     systemPrompt += lensInstructions[activeLens] ?? "";
+  }
+  if (allAttachments.length > 0) {
+    systemPrompt += "\n\nThe user has attached an image to this message. You can see and interpret it directly.";
   }
 
   // ── Deep Dive shortcut — /deep <topic> ───────────────────────────────────────

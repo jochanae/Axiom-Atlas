@@ -1186,6 +1186,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     mode?: string;
     model?: string;
     imageBase64?: string;
+    imageData?: string;
     imageMimeType?: string;
     attachments?: Array<{ base64: string; mediaType: string; name?: string }>;
     conversationId?: string;
@@ -1193,7 +1194,7 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     userType?: HomeUserType;
   };
 
-  const hasImage = !!(body.imageBase64 && body.imageMimeType);
+  const hasImage = !!(body.imageBase64 ?? body.imageData) && !!body.imageMimeType;
   if (!body.message?.trim() && !hasImage) {
     res.status(400).json({ error: "message is required" });
     return;
@@ -1203,7 +1204,9 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const authUser = (req as any).authUser;
   // history from the client body is accepted in the schema for API compatibility
   // but ignored server-side — the Living Thread in nexus_messages is authoritative.
-  const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", imageBase64, imageMimeType, conversationId } = body;
+  const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", conversationId } = body;
+  const imageBase64 = body.imageBase64 ?? body.imageData ?? undefined;
+  const imageMimeType = body.imageMimeType ?? undefined;
   // Normalise: merge legacy imageBase64/imageMimeType + new attachments array into one list
   const allAttachments: Array<{ base64: string; mediaType: string; name?: string }> = [
     ...(body.attachments ?? []),
