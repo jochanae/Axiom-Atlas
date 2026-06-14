@@ -1876,6 +1876,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     fileContext?: string;
     userProfile?: string;
     imageData?: { base64: string; mediaType: string };
+    attachments?: Array<{ base64: string; mediaType: string; name?: string }>;
     flowMode?: boolean;
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
     forgeContext?: string;
@@ -1901,6 +1902,11 @@ router.post("/chat", async (req, res): Promise<void> => {
   const projectMap = (body as any).projectMap as string | undefined;
   const clientForgeContext = body.forgeContext ?? "";
   const imageData = body.imageData;
+  // Normalise: merge legacy imageData + new attachments array into one list
+  const allAttachments: Array<{ base64: string; mediaType: string; name?: string }> = [
+    ...(body.attachments ?? []),
+    ...(imageData ? [{ base64: imageData.base64, mediaType: imageData.mediaType }] : []),
+  ];
   const activeModel = selectChatModelForMessage(message);
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
@@ -2611,11 +2617,11 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     } as ImageBlock);
   }
 
-  // 3. User-attached image (if any)
-  if (imageData) {
+  // 3. User-attached images (attachments array — supports multiple)
+  for (const att of allAttachments) {
     contentParts.push({
       type: "image",
-      source: { type: "base64", media_type: imageData.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: imageData.base64 },
+      source: { type: "base64", media_type: att.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: att.base64 },
     } as ImageBlock);
   }
 
@@ -2684,7 +2690,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       : Promise.resolve(undefined);
 
   writeStep(res, { verb: "Analyzing", target: "your request", phase: "analyze" });
-  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, imageData);
+  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, allAttachments[0]);
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
   let modelUsed = modelResult.model;
