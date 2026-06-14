@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { blueprintsTable, db, nexusMessagesTable, projectsTable, sessionsTable } from "@workspace/db";
+import { blueprintsTable, chatMessagesTable, db, nexusMessagesTable, projectsTable, sessionsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -82,39 +82,54 @@ async function getProject(projectId: number, userId: number) {
   return project ?? null;
 }
 
-async function resolveIdeaModeSession(projectId: number, requestedSessionId: number | null) {
+async function resolveSession(projectId: number, requestedSessionId: number | null) {
   if (requestedSessionId) {
     const [session] = await db
-      .select({ id: sessionsTable.id, ideaMode: (sessionsTable as any).ideaMode })
+      .select({ id: sessionsTable.id })
       .from(sessionsTable)
       .where(and(eq(sessionsTable.id, requestedSessionId), eq(sessionsTable.projectId, projectId)))
       .limit(1);
-    return (session as any)?.ideaMode ? session.id : null;
+    return session?.id ?? null;
   }
 
+  // Use the most recently updated session for this project
   const [session] = await db
     .select({ id: sessionsTable.id })
     .from(sessionsTable)
-    .where(and(eq(sessionsTable.projectId, projectId), eq((sessionsTable as any).ideaMode, true)))
+    .where(eq(sessionsTable.projectId, projectId))
     .orderBy(desc(sessionsTable.updatedAt))
     .limit(1);
   return session?.id ?? null;
 }
 
-async function loadIdeaConversation(projectId: number, sessionId: number) {
-  const rows = await db
+async function loadConversation(projectId: number, sessionId: number | null) {
+  // Workspace chat messages (primary source — project workspace conversations)
+  if (sessionId) {
+    const chatRows = await db
+      .select({ role: chatMessagesTable.role, content: chatMessagesTable.content, createdAt: chatMessagesTable.createdAt })
+      .from(chatMessagesTable)
+      .where(eq(chatMessagesTable.sessionId, sessionId))
+      .orderBy(desc(chatMessagesTable.createdAt))
+      .limit(40);
+
+    if (chatRows.length > 0) {
+      return chatRows.reverse();
+    }
+  }
+
+  // Fall back to nexus (home chat) messages linked to this project
+  const nexusRows = await db
     .select({ role: nexusMessagesTable.role, content: nexusMessagesTable.content, createdAt: nexusMessagesTable.createdAt })
     .from(nexusMessagesTable)
     .where(and(
       eq(nexusMessagesTable.projectId, projectId),
-      eq(nexusMessagesTable.sessionId, sessionId),
       sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'briefing'`,
       sql`${nexusMessagesTable.messageType} IS DISTINCT FROM 'reflection'`,
     ))
     .orderBy(desc(nexusMessagesTable.createdAt))
-    .limit(30);
+    .limit(40);
 
-  return rows.reverse();
+  return nexusRows.reverse();
 }
 
 function formatConversation(messages: Array<{ role: string; content: string }>): string {
@@ -152,15 +167,11 @@ router.post("/projects/:id/blueprint", async (req, res): Promise<void> => {
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
     const requestedSessionId = Number((req.body as { sessionId?: unknown })?.sessionId);
-    const sessionId = await resolveIdeaModeSession(projectId, Number.isInteger(requestedSessionId) && requestedSessionId > 0 ? requestedSessionId : null);
-    if (!sessionId) {
-      res.status(400).json({ error: "No idea mode session found for this project" });
-      return;
-    }
+    const sessionId = await resolveSession(projectId, Number.isInteger(requestedSessionId) && requestedSessionId > 0 ? requestedSessionId : null);
 
-    const messages = await loadIdeaConversation(projectId, sessionId);
+    const messages = await loadConversation(projectId, sessionId);
     if (messages.length === 0) {
-      res.status(400).json({ error: "No idea mode conversation messages found for this project" });
+      res.status(400).json({ error: "No conversation found for this project. Have a chat with Atlas in the workspace first." });
       return;
     }
 
