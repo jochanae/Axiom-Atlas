@@ -172,8 +172,6 @@ ALTER TABLE "invites" ADD CONSTRAINT "invites_invited_by_id_users_id_fk" FOREIGN
 -- Clean up legacy Nexus project rows by their flag before dropping the column,
 -- then create the per-user Living Thread table.
 --> statement-breakpoint
-DELETE FROM projects WHERE is_nexus = true;
---> statement-breakpoint
 ALTER TABLE "projects" DROP COLUMN IF EXISTS "is_nexus";
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "nexus_messages" (
