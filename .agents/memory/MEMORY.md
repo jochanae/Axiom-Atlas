@@ -3,7 +3,7 @@
 - [Agentic loop architecture](agentic-loop-architecture.md) — Claude orchestrates tool_use loop; Gemini=deep read, GPT-4o=code write; most messages go direct (classifier-gated).
 - [Repo split](repo-split.md) — Backend: jochanae/Axiom-Atlas (this Replit). Frontend: jochanae/atlas-idk (Lovable/Cursor). Never mix them up.
 - [Drizzle + Neon stale connection](drizzle-neon-stale-connection.md) — Drizzle queryWithCache fails on Neon idle connection reset; fix: pool keepAlive + idleTimeoutMillis=30s + try/catch in routes
-- [Helium vs Neon prod DB](helium-vs-neon-db.md) — this Replit's DATABASE_URL=helium (Replit-managed), NOT Neon. Cloud Run prod uses its own Neon URL unreachable here; prod schema fixes must run in Neon SQL editor.
+- [Helium vs Supabase prod DB](helium-vs-neon-db.md) — this Replit's DATABASE_URL=helium (Replit-managed), NOT Supabase. Cloud Run prod uses Supabase; schema fixes go to Supabase SQL editor. No FK constraints in migration SQL.
 - [Prod schema drift — status check](prod-schema-drift-status.md) — "Failed to create project" = status CHECK rejects default 'active' (prod allows shaping/committed/archived), NOT a missing column; Drizzle error hides the real cause
 - [Dual-engine image generation](dual-engine-image.md) — IMAGE_GEN tokens: render→Gemini Imagen 3, schematic→DALL·E 3; auto-fallback each way; OPENAI_API_KEY required in Cloud Run for schematic mode
 - [Claude image gen refusal](image-gen-claude-refusal.md) — never tell Claude "YOU CAN generate images"; frame IMAGE_GEN as external Gemini service it triggers by token; standalone endpoint POST /api/image/generate already wired

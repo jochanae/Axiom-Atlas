@@ -1,14 +1,16 @@
 ---
-name: helium vs Neon prod DB
+name: Replit dev DB vs Supabase prod DB
 description: Which database this Replit talks to vs which the deployed backend uses
 ---
 
-This Replit's `DATABASE_URL` host is `helium`/`heliumdb` — the Replit-managed Postgres, NOT Neon. The `executeSql` tool and the local `api-server` workflow both hit helium.
+This Replit's `DATABASE_URL` host is `helium`/`heliumdb` — the Replit-managed Postgres, NOT Supabase. The `executeSql` tool and the local `api-server` workflow both hit helium.
 
-The deployed backend (Cloud Run, `axiom-atlas-689827072865.us-east1.run.app`) uses its OWN `DATABASE_URL` pointing at the live **Neon** database. That Neon connection string is NOT present in this Replit, so the agent cannot read or migrate the live prod DB directly.
+The deployed backend (Cloud Run, `axiom-atlas-689827072865.us-east1.run.app`) uses its OWN `DATABASE_URL` pointing at the live **Supabase** database. That Supabase connection string is NOT present in this Replit, so the agent cannot read or migrate the live prod DB directly.
 
-**Why:** helium happens to contain a copy/seed of real-looking data (e.g. the founder account with many projects), which makes it easy to mistake for prod. Running an `ALTER TABLE` via `executeSql` fixes helium only — the live app is unaffected.
+**Why:** helium happens to contain a copy/seed of real-looking data, which makes it easy to mistake for prod. Running an `ALTER TABLE` via `executeSql` fixes helium only — the live app is unaffected.
 
-**How to apply:** Any production schema fix must be delivered as SQL for Jochanae to run in the **Neon SQL editor** (write it to `neon-migration.txt`). To *verify* a schema fix before handing it over, apply it to helium and test through the local api-server workflow (`localhost:80/api`) — but never assume that touched prod.
+**How to apply:** Any production schema fix must be delivered as SQL for Jochanae to run in the **Supabase SQL editor**. Write it to `supabase-migration.sql`. To verify a schema fix before handing it over, apply it to helium and test through the local api-server workflow (`localhost:80/api`) — but never assume that touched prod.
 
-**Canonical incident:** "Failed to create project" was caused by the code adding a `projects.shape` jsonb column (NOT NULL, default `{identity:[],constraints:[],formats:[]}`) that was never added to Neon. Reads + inserts on projects all 500'd, cascading to briefing and home→workspace handoff. Fix = add the column on Neon.
+**Important:** Do NOT use FK constraints in Supabase migration SQL — they cause `relation does not exist` errors in Supabase's SQL editor even when the referenced tables exist. Use plain integer columns; Drizzle enforces relationships in code.
+
+**Canonical incident:** "Failed to create project" was caused by a `projects.shape` column added in code but never added to Supabase. Fix = add the column in Supabase SQL editor.

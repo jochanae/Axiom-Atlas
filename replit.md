@@ -14,7 +14,7 @@ Repo: `jochanae/Axiom-Atlas` (private)
 | Layer | Technology | Notes |
 |---|---|---|
 | **Backend** | `artifacts/api-server/` | Deployed to **Google Cloud Run** via `cloudbuild.yaml` + Docker |
-| **Database** | **Neon** PostgreSQL | `DATABASE_URL` points to Neon |
+| **Database** | **Supabase** PostgreSQL | `DATABASE_URL` points to Supabase |
 | **Frontend** | **Separate repository** | Not in this Replit — deployed independently |
 
 **This Replit is the backend development environment.** `artifacts/atlas/` here is a drifted reference copy — do not treat it as the live frontend. All meaningful work happens in `artifacts/api-server/` and `lib/`.
@@ -30,7 +30,7 @@ Repo: `jochanae/Axiom-Atlas` (private)
 
 When changes touch the API contract (new routes, new response fields, new DB columns), produce copy-pasteable output files for Jochanae to apply to the frontend repo manually via Cursor.
 
-When DB schema changes are made (`pnpm --filter @workspace/db run push`), also produce a `neon-migration.txt` SQL file for Jochanae to run in the Neon SQL editor.
+When DB schema changes are made (`pnpm --filter @workspace/db run push`), also produce a `supabase-migration.sql` file for Jochanae to run in the Supabase SQL editor.
 
 ---
 
