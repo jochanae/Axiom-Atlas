@@ -1,0 +1,31 @@
+-- Drop all Axiom Atlas tables in reverse dependency order
+-- Run this first, then run the schema file
+
+DROP TABLE IF EXISTS "check_results" CASCADE;
+DROP TABLE IF EXISTS "scheduled_checks" CASCADE;
+DROP TABLE IF EXISTS "image_versions" CASCADE;
+DROP TABLE IF EXISTS "blueprints" CASCADE;
+DROP TABLE IF EXISTS "mcp_connections" CASCADE;
+DROP TABLE IF EXISTS "flow_canvas_nodes" CASCADE;
+DROP TABLE IF EXISTS "forge_state" CASCADE;
+DROP TABLE IF EXISTS "readiness_snapshots" CASCADE;
+DROP TABLE IF EXISTS "gallery" CASCADE;
+DROP TABLE IF EXISTS "invites" CASCADE;
+DROP TABLE IF EXISTS "atlas_self_map" CASCADE;
+DROP TABLE IF EXISTS "atlas_error_logs" CASCADE;
+DROP TABLE IF EXISTS "atlas_incidents" CASCADE;
+DROP TABLE IF EXISTS "nexus_messages" CASCADE;
+DROP TABLE IF EXISTS "messages" CASCADE;
+DROP TABLE IF EXISTS "conversations" CASCADE;
+DROP TABLE IF EXISTS "vault" CASCADE;
+DROP TABLE IF EXISTS "secrets" CASCADE;
+DROP TABLE IF EXISTS "thoughts" CASCADE;
+DROP TABLE IF EXISTS "entries" CASCADE;
+DROP TABLE IF EXISTS "generation_runs" CASCADE;
+DROP TABLE IF EXISTS "generated_files" CASCADE;
+DROP TABLE IF EXISTS "chat_messages" CASCADE;
+DROP TABLE IF EXISTS "connections" CASCADE;
+DROP TABLE IF EXISTS "sessions" CASCADE;
+DROP TABLE IF EXISTS "projects" CASCADE;
+DROP TABLE IF EXISTS "users" CASCADE;
+DROP TABLE IF EXISTS "admin_users" CASCADE;

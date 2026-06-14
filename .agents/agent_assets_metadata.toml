@@ -126,3 +126,9 @@ id = "dyqWIbw55HYFPhMYnLYGW"
 uri = "file://axiom_atlas_schema_safe.txt"
 type = "text"
 title = "Axiom Atlas — Safe Schema (handles partial runs)"
+
+[[outputs]]
+id = "ZFgypfZ3bUANsJDBZ8Lk8"
+uri = "file://axiom_drop_all.txt"
+type = "text"
+title = "Step 1 — Run this first (drops everything)"
