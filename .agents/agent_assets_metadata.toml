@@ -120,3 +120,9 @@ id = "AYNJaRkmrBqpEkTuG1K-J"
 uri = "file://axiom_atlas_schema.txt"
 type = "text"
 title = "Axiom Atlas — Fixed Schema (run this one)"
+
+[[outputs]]
+id = "dyqWIbw55HYFPhMYnLYGW"
+uri = "file://axiom_atlas_schema_safe.txt"
+type = "text"
+title = "Axiom Atlas — Safe Schema (handles partial runs)"
