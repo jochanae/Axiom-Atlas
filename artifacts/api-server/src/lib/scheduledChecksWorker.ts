@@ -18,7 +18,9 @@ import { logger } from "./logger";
 import { safeFetch } from "./ssrf";
 
 const POLL_INTERVAL_MS = 60_000;
+const BACKOFF_AFTER_FAILURE_MS = 30 * 60_000; // 30 minutes
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let dbFailedAt: number | null = null;
 
 async function runHealthCheck(url: string): Promise<{
   httpStatus: number | null;
@@ -130,6 +132,9 @@ async function runDueChecks(): Promise<void> {
     intervalMinutes: number;
   }>;
 
+  // Back off for 30 min after a DB failure (table missing etc.) — avoids log spam
+  if (dbFailedAt !== null && Date.now() - dbFailedAt < BACKOFF_AFTER_FAILURE_MS) return;
+
   try {
     dueChecks = await db
       .select({
@@ -145,8 +150,12 @@ async function runDueChecks(): Promise<void> {
           lte(scheduledChecksTable.nextCheckAt, now)
         )
       );
+    dbFailedAt = null; // reset on success
   } catch (err) {
-    logger.warn({ err }, "Scheduled checks worker: failed to query due checks");
+    if (dbFailedAt === null) {
+      logger.warn({ err }, "Scheduled checks worker: DB unavailable — backing off 30 min");
+    }
+    dbFailedAt = Date.now();
     return;
   }
 

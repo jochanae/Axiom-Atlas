@@ -1959,15 +1959,26 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       : "Cross-portfolio strategy";
     writeStep({ verb: "Thinking", target: geminiModeDetail });
     modelStartedAt = performance.now();
-    if (allAttachments.length > 0) {
-      const firstAtt = allAttachments[0];
-      const result = await genai.models.generateContent({
+    const geminiContents = allAttachments.length > 0
+      ? [{ role: "user" as const, parts: [{ text: combinedText }, { inlineData: { mimeType: allAttachments[0].mediaType, data: allAttachments[0].base64 } }] }]
+      : combinedText;
+    try {
+      const stream = await genai.models.generateContentStream({
         model: "gemini-2.5-pro",
-        contents: [{ role: "user", parts: [{ text: combinedText }, { inlineData: { mimeType: firstAtt.mediaType, data: firstAtt.base64 } }] }],
+        contents: geminiContents,
         config: { systemInstruction: systemPrompt },
       });
-      rawContent = result.text ?? "";
-      const usageMetadata = (result as any).usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | undefined;
+      let usageMetadata: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | undefined;
+      for await (const chunk of stream) {
+        const text = chunk.text;
+        if (text) {
+          rawContent += text;
+          if (!res.writableEnded && !res.destroyed) {
+            res.write(`event: token\ndata: ${JSON.stringify(text)}\n\n`);
+          }
+        }
+        if ((chunk as any).usageMetadata) usageMetadata = (chunk as any).usageMetadata;
+      }
       const inputTokens = nullableNumber(usageMetadata?.promptTokenCount);
       const outputTokens = nullableNumber(usageMetadata?.candidatesTokenCount)
         ?? (usageMetadata?.totalTokenCount != null && inputTokens != null ? Math.max(usageMetadata.totalTokenCount - inputTokens, 0) : null);
@@ -1977,25 +1988,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         outputTokens,
         costUsd: calculateModelCostUsd("gemini-2.5-pro", inputTokens, outputTokens),
       };
-    } else {
-      const result = await genai.models.generateContent({
-        model: "gemini-2.5-pro",
-        contents: combinedText,
-        config: { systemInstruction: systemPrompt },
-      });
-      rawContent = result.text ?? "";
-      const usageMetadata = (result as any).usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } | undefined;
-      const inputTokens = nullableNumber(usageMetadata?.promptTokenCount);
-      const outputTokens = nullableNumber(usageMetadata?.candidatesTokenCount)
-        ?? (usageMetadata?.totalTokenCount != null && inputTokens != null ? Math.max(usageMetadata.totalTokenCount - inputTokens, 0) : null);
-      modelUsage = {
-        executionTimeMs: Math.max(1, Math.round(performance.now() - modelStartedAt)),
-        inputTokens,
-        outputTokens,
-        costUsd: calculateModelCostUsd("gemini-2.5-pro", inputTokens, outputTokens),
-      };
+    } catch (geminiErr) {
+      logger.warn({ err: geminiErr }, "Gemini stream failed in nexus — falling through to error");
+      await failStream("Atlas ran into an issue with Gemini. Try switching to Claude.");
+      return;
     }
-    res.write(`event: token\ndata: ${JSON.stringify(rawContent)}\n\n`);
     await finishStream(rawContent);
     return;
   }
@@ -2039,6 +2036,10 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
   // 3. User-attached images (attachments array — supports multiple)
   for (const att of allAttachments) {
+    if (att.base64.length > MAX_VAULT_B64_SIZE) {
+      logger.warn({ size: att.base64.length }, "User attachment too large — skipped");
+      continue;
+    }
     contentParts.push({
       type: "image",
       source: {
