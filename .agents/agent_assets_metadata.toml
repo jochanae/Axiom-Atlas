@@ -114,3 +114,9 @@ id = "IdzpgL_MB-qvQ1YldAvD_"
 uri = "file://.local/cursor-prompts/restore-stackblitz.md"
 type = "text"
 title = "Cursor Prompt — Restore StackBlitz"
+
+[[outputs]]
+id = "AYNJaRkmrBqpEkTuG1K-J"
+uri = "file://axiom_atlas_schema.txt"
+type = "text"
+title = "Axiom Atlas — Full Database Schema (paste into Supabase SQL editor)"

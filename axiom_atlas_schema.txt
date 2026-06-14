@@ -1,0 +1,475 @@
+-- ============================
+-- lib/db/migrations/0000_small_night_nurse.sql
+-- ============================
+CREATE TABLE "projects" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"description" text,
+	"status" text DEFAULT 'active' NOT NULL,
+	"memory" text,
+	"preview_url" text,
+	"github_token" text,
+	"linked_repo" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "sessions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"project_id" integer NOT NULL,
+	"title" text NOT NULL,
+	"mode" text,
+	"status" text DEFAULT 'active' NOT NULL,
+	"message_count" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "chat_messages" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"session_id" integer NOT NULL,
+	"role" text NOT NULL,
+	"content" text NOT NULL,
+	"intent_type" text,
+	"catch_payload" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "entries" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"project_id" integer NOT NULL,
+	"session_id" integer,
+	"status" text DEFAULT 'committed' NOT NULL,
+	"title" text NOT NULL,
+	"summary" text,
+	"severity" text DEFAULT 'committed' NOT NULL,
+	"verb" text,
+	"is_violation" boolean DEFAULT false NOT NULL,
+	"deviation" boolean DEFAULT false NOT NULL,
+	"mode" text,
+	"details" text,
+	"build_id" text,
+	"touched" text[],
+	"cost_of_lesson" numeric,
+	"source_message_id" integer,
+	"supersedes_id" integer,
+	"locked_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "conversations" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"title" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "messages" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"conversation_id" integer NOT NULL,
+	"role" text NOT NULL,
+	"content" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "chat_messages" ADD CONSTRAINT "chat_messages_session_id_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "entries" ADD CONSTRAINT "entries_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "entries" ADD CONSTRAINT "entries_session_id_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "entries" ADD CONSTRAINT "entries_supersedes_id_entries_id_fk" FOREIGN KEY ("supersedes_id") REFERENCES "public"."entries"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "messages_conversation_id_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."conversations"("id") ON DELETE cascade ON UPDATE no action;
+-- ============================
+-- lib/db/migrations/0001_last_ravenous.sql
+-- ============================
+CREATE TABLE "thoughts" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"content" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "vault" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"project_id" integer,
+	"project_name" text NOT NULL,
+	"title" text NOT NULL,
+	"content" text NOT NULL,
+	"entry_count" integer DEFAULT 0 NOT NULL,
+	"tags" text[],
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "user_sessions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"token" text NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "user_sessions_token_unique" UNIQUE("token")
+);
+--> statement-breakpoint
+CREATE TABLE "users" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"email" text NOT NULL,
+	"password_hash" text,
+	"google_id" text,
+	"name" text,
+	"avatar_url" text,
+	"role" text DEFAULT 'user' NOT NULL,
+	"subscription_tier" text DEFAULT 'free' NOT NULL,
+	"stripe_customer_id" text,
+	"stripe_subscription_id" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "users_email_unique" UNIQUE("email"),
+	CONSTRAINT "users_google_id_unique" UNIQUE("google_id")
+);
+--> statement-breakpoint
+CREATE TABLE "admin_notes" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"content" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "error_logs" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"message" text NOT NULL,
+	"stack" text,
+	"url" text,
+	"user_id" integer,
+	"context" text,
+	"resolved" boolean DEFAULT false NOT NULL,
+	"admin_response" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "invites" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"email" text NOT NULL,
+	"token" text NOT NULL,
+	"invited_by_id" integer,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"accepted_at" timestamp with time zone,
+	CONSTRAINT "invites_token_unique" UNIQUE("token")
+);
+--> statement-breakpoint
+ALTER TABLE "projects" ADD COLUMN "node_state" jsonb DEFAULT '{}'::jsonb;--> statement-breakpoint
+ALTER TABLE "projects" ADD COLUMN "push_history" jsonb DEFAULT '[]'::jsonb;--> statement-breakpoint
+ALTER TABLE "projects" ADD COLUMN "last_handover_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "projects" ADD COLUMN "last_handover_hash" text;--> statement-breakpoint
+ALTER TABLE "entries" ADD COLUMN "deviation_reason" text;--> statement-breakpoint
+ALTER TABLE "entries" ADD COLUMN "catch_against_id" integer;--> statement-breakpoint
+ALTER TABLE "entries" ADD COLUMN "card_schema_version" integer DEFAULT 1;--> statement-breakpoint
+ALTER TABLE "vault" ADD CONSTRAINT "vault_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_sessions" ADD CONSTRAINT "user_sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "error_logs" ADD CONSTRAINT "error_logs_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "invites" ADD CONSTRAINT "invites_invited_by_id_users_id_fk" FOREIGN KEY ("invited_by_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
+-- ============================
+-- lib/db/migrations/0002_nexus_mode.sql
+-- ============================
+-- Nexus Mode Backend Refactor
+-- Nexus is a global MODE (environment state), not a project entity.
+-- Clean up legacy Nexus project rows by their flag before dropping the column,
+-- then create the per-user Living Thread table.
+--> statement-breakpoint
+DELETE FROM projects WHERE is_nexus = true;
+--> statement-breakpoint
+ALTER TABLE "projects" DROP COLUMN IF EXISTS "is_nexus";
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "nexus_messages" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "user_id" integer NOT NULL,
+        "role" text NOT NULL,
+        "content" text NOT NULL,
+        "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+        CONSTRAINT "nexus_messages_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action
+);
+
+-- ============================
+-- lib/db/migrations/0003_nexus_conversations.sql
+-- ============================
+-- Add conversation grouping to the nexus Living Thread
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN "conversation_id" text;
+
+-- ============================
+-- lib/db/migrations/0004_atlas_incidents.sql
+-- ============================
+CREATE TABLE IF NOT EXISTS "atlas_incidents" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"project_id" text NOT NULL,
+	"files_changed" text[] NOT NULL,
+	"commit_message" text NOT NULL,
+	"branch_name" text NOT NULL,
+	"pr_url" text NOT NULL,
+	"validation_passed" boolean DEFAULT false NOT NULL,
+	"outcome" text,
+	"notes" text
+);
+
+-- ============================
+-- lib/db/migrations/0005_atlas_error_logs.sql
+-- ============================
+CREATE TABLE IF NOT EXISTS "atlas_error_logs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"error_message" text NOT NULL,
+	"stack_trace" text,
+	"route" text NOT NULL,
+	"timestamp" timestamp with time zone NOT NULL,
+	"project_id" text NOT NULL
+);
+
+-- ============================
+-- lib/db/migrations/0006_atlas_self_map.sql
+-- ============================
+CREATE TABLE IF NOT EXISTS "atlas_self_map" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"map_json" text NOT NULL,
+	"file_count" integer NOT NULL
+);
+
+-- ============================
+-- lib/db/migrations/0007_atlas_incident_confidence.sql
+-- ============================
+ALTER TABLE "atlas_incidents" ADD COLUMN IF NOT EXISTS "confidence" text;
+--> statement-breakpoint
+ALTER TABLE "atlas_incidents" ADD COLUMN IF NOT EXISTS "blast_radius" text;
+--> statement-breakpoint
+ALTER TABLE "atlas_incidents" ADD COLUMN IF NOT EXISTS "reasoning" text;
+
+-- ============================
+-- lib/db/migrations/0008_nexus_message_type.sql
+-- ============================
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "message_type" text DEFAULT 'message';
+
+-- ============================
+-- lib/db/migrations/0009_session_reflection_mode.sql
+-- ============================
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "reflection_mode" boolean DEFAULT false NOT NULL;
+
+-- ============================
+-- lib/db/migrations/0010_session_idea_mode.sql
+-- ============================
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "idea_mode" boolean DEFAULT false NOT NULL;
+
+-- ============================
+-- lib/db/migrations/0011_blueprints_and_nexus_session_links.sql
+-- ============================
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "project_id" integer;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "session_id" integer;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "nexus_messages" ADD CONSTRAINT "nexus_messages_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "nexus_messages" ADD CONSTRAINT "nexus_messages_session_id_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "blueprints" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"project_id" integer NOT NULL,
+	"user_id" integer NOT NULL,
+	"session_id" integer,
+	"title" text NOT NULL,
+	"content" jsonb NOT NULL,
+	"conversation_summary" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "blueprints" ADD CONSTRAINT "blueprints_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "blueprints" ADD CONSTRAINT "blueprints_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "blueprints" ADD CONSTRAINT "blueprints_session_id_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."sessions"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+-- ============================
+-- lib/db/migrations/0012_project_entity_type.sql
+-- ============================
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "entity_type" text DEFAULT 'project' NOT NULL;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "projects" ADD CONSTRAINT "projects_entity_type_check" CHECK ("entity_type" IN ('project', 'idea'));
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+-- ============================
+-- lib/db/migrations/0013_chat_message_usage.sql
+-- ============================
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "execution_time_ms" integer;
+--> statement-breakpoint
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "input_tokens" integer;
+--> statement-breakpoint
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "output_tokens" integer;
+--> statement-breakpoint
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "cost_usd" numeric(10,5);
+
+-- ============================
+-- lib/db/migrations/0014_run_metadata.sql
+-- ============================
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "run_status" text;
+--> statement-breakpoint
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "run_summary" text;
+--> statement-breakpoint
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "run_actions" jsonb;
+--> statement-breakpoint
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "run_artifacts" jsonb;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "execution_time_ms" integer;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "input_tokens" integer;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "output_tokens" integer;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "cost_usd" numeric(10,5);
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "run_status" text;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "run_summary" text;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "run_actions" jsonb;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" ADD COLUMN IF NOT EXISTS "run_artifacts" jsonb;
+
+-- ============================
+-- lib/db/migrations/0015_chat_message_images.sql
+-- ============================
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "image_b64" text;
+ALTER TABLE "chat_messages" ADD COLUMN IF NOT EXISTS "image_mime_type" text;
+
+-- ============================
+-- lib/db/migrations/0015_connections.sql
+-- ============================
+CREATE TABLE IF NOT EXISTS "connections" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"type" text NOT NULL,
+	"label" text NOT NULL,
+	"url" text,
+	"token" text,
+	"metadata" jsonb,
+	"status" text DEFAULT 'linked' NOT NULL,
+	"last_checked_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "connections" ADD CONSTRAINT "connections_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+
+-- ============================
+-- lib/db/migrations/0016_nexus_session_run_metadata.sql
+-- ============================
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "total_input_tokens" integer DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "total_output_tokens" integer DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "total_cost_usd" numeric DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "total_execution_ms" integer DEFAULT 0;
+--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "run_summary" text;
+--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "run_actions" jsonb;
+--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "run_artifacts" jsonb;
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" DROP COLUMN IF EXISTS "execution_time_ms";
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" DROP COLUMN IF EXISTS "input_tokens";
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" DROP COLUMN IF EXISTS "output_tokens";
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" DROP COLUMN IF EXISTS "cost_usd";
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" DROP COLUMN IF EXISTS "run_status";
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" DROP COLUMN IF EXISTS "run_summary";
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" DROP COLUMN IF EXISTS "run_actions";
+--> statement-breakpoint
+ALTER TABLE "nexus_messages" DROP COLUMN IF EXISTS "run_artifacts";
+
+-- ============================
+-- lib/db/migrations/0017_project_last_opened_at.sql
+-- ============================
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "last_opened_at" timestamp with time zone DEFAULT now() NOT NULL;
+
+-- ============================
+-- lib/db/migrations/0018_sessions_run_status.sql
+-- ============================
+ALTER TABLE "sessions" ADD COLUMN IF NOT EXISTS "run_status" text;
+
+-- ============================
+-- lib/db/migrations/0019_image_versions.sql
+-- ============================
+CREATE TABLE IF NOT EXISTS "image_versions" (
+  "id" serial PRIMARY KEY,
+  "session_id" integer NOT NULL REFERENCES "sessions"("id") ON DELETE CASCADE,
+  "project_id" integer NOT NULL REFERENCES "projects"("id") ON DELETE CASCADE,
+  "message_id" integer,
+  "parent_version_id" integer,
+  "prompt" text NOT NULL,
+  "image_b64" text NOT NULL,
+  "image_mime_type" text NOT NULL DEFAULT 'image/png',
+  "model" text,
+  "mode" text,
+  "created_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+-- ============================
+-- lib/db/migrations/0020_scheduled_checks.sql
+-- ============================
+CREATE TABLE IF NOT EXISTS "scheduled_checks" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "user_id" integer NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+  "project_id" integer NOT NULL REFERENCES "projects"("id") ON DELETE CASCADE,
+  "url" text NOT NULL,
+  "interval_minutes" integer DEFAULT 1440 NOT NULL,
+  "is_active" boolean DEFAULT true NOT NULL,
+  "last_checked_at" timestamp with time zone,
+  "next_check_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "check_results" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+  "schedule_id" uuid NOT NULL REFERENCES "scheduled_checks"("id") ON DELETE CASCADE,
+  "project_id" integer NOT NULL REFERENCES "projects"("id") ON DELETE CASCADE,
+  "url" text NOT NULL,
+  "http_status" integer,
+  "is_healthy" boolean NOT NULL,
+  "issues" text[] DEFAULT '{}' NOT NULL,
+  "analysis" text,
+  "checked_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "scheduled_checks_next_check_at_idx" ON "scheduled_checks"("next_check_at") WHERE "is_active" = true;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "check_results_project_id_idx" ON "check_results"("project_id");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "check_results_schedule_id_idx" ON "check_results"("schedule_id");
+
