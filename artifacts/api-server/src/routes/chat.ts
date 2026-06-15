@@ -825,9 +825,7 @@ function classifySurfaceSignal(content: string): SurfaceSignal | null {
     return { type: "WORKSPACE", reason: "operational shift", label: "Working space prepared" };
   }
 
-  if (scores.mapAnchors > 0 && scores.map >= 7 && scores.concernCount >= 2 && scores.words >= 45) {
-    return { type: "MAP", reason: "interconnected tensions", label: "Tension Map" };
-  }
+  // MAP surface removed — it navigated users away from the conversation mid-flow (confusing)
 
   return null;
 }
@@ -2264,8 +2262,8 @@ router.post("/chat", async (req, res): Promise<void> => {
       .limit(1)
       .catch(() => [] as Array<{ fileCount: number }>),
     userId
-      ? db.select({ id: projectsTable.id, name: projectsTable.name }).from(projectsTable).where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId))).limit(8).catch(() => [] as Array<{ id: number; name: string }>)
-      : Promise.resolve([] as Array<{ id: number; name: string }>),
+      ? db.select({ id: projectsTable.id, name: projectsTable.name, status: projectsTable.status, description: projectsTable.description, memory: projectsTable.memory }).from(projectsTable).where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId))).orderBy(desc(projectsTable.updatedAt)).limit(8).catch(() => [] as Array<{ id: number; name: string; status: string | null; description: string | null; memory: string | null }>)
+      : Promise.resolve([] as Array<{ id: number; name: string; status: string | null; description: string | null; memory: string | null }>),
     db
       .select({ title: entriesTable.title, summary: entriesTable.summary, createdAt: entriesTable.createdAt })
       .from(entriesTable)
@@ -2287,8 +2285,17 @@ router.post("/chat", async (req, res): Promise<void> => {
     systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${project.name}${project.description ? `\nDescription: ${project.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
   }
   if (userId && portfolioRows.length > 0) {
-    const portfolioNames = portfolioRows.map((p) => `- ${p.name}`).join("\n");
-    systemPrompt += `\n\n--- YOUR PORTFOLIO ---\n${portfolioNames}\n${portfolioRows.length}\n--- END PORTFOLIO ---`;
+    const portfolioSummary = portfolioRows.map((p) => {
+      const parts = [`- **${p.name}**`];
+      if (p.status) parts.push(`(${p.status})`);
+      if (p.description) parts.push(`— ${p.description}`);
+      return parts.join(" ");
+    }).join("\n");
+    const portfolioMemory = portfolioRows
+      .filter((p) => p.memory)
+      .map((p) => `**${p.name}:** ${p.memory}`)
+      .join("\n");
+    systemPrompt += `\n\n--- YOUR PORTFOLIO (other projects — use this for cross-project questions, prioritization, and portfolio-wide insight) ---\n${portfolioSummary}\n${portfolioMemory ? `\n### What you already know about each:\n${portfolioMemory}` : ""}\nTotal other projects: ${portfolioRows.length}\n--- END PORTFOLIO ---`;
   }
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
