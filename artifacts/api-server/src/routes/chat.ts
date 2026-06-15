@@ -32,6 +32,9 @@ const IMAGE_REQUEST_RE = /\b(sketch|draw|render|paint|illustrate)\b|\b(generate|
 
 const router: IRouter = Router();
 
+// Detects when user is asking a portfolio-wide question from inside a workspace
+const PORTFOLIO_INTENT_RE = /\b(all\s+(my\s+)?(projects?|apps?|products?|work)|entire\s+portfolio|whole\s+portfolio|across\s+(all|everything|my)|portfolio(\s+view)?|everything\s+i('m|\s+am)\s+building|my\s+other\s+projects?|how\s+(do\s+)?they\s+(all\s+)?compare|prioriti[sz]e\s+(across|all)|big\s+picture|30[,\s]?000\s+foot|zoomed?\s+out)\b/i;
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
@@ -2273,6 +2276,9 @@ router.post("/chat", async (req, res): Promise<void> => {
     previousContentByPath.set(path, content);
   });
 
+  // Detect portfolio-wide question so we can pull cross-project entries
+  const isPortfolioQuestion = !isFoundationMode && PORTFOLIO_INTENT_RE.test(message);
+
   // Run remaining DB queries in parallel — previously sequential, added 400-600ms per request
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const [recentErrorsRows, selfMapRows, portfolioRows, committedRows] = await Promise.all([
@@ -2329,6 +2335,49 @@ router.post("/chat", async (req, res): Promise<void> => {
       ? "YOUR FULL PORTFOLIO (all projects — use this to answer cross-portfolio questions)"
       : "YOUR PORTFOLIO (other projects — use this for cross-project questions, prioritization, and portfolio-wide insight)";
     systemPrompt += `\n\n--- ${portfolioLabel} ---\n${portfolioSummary}\n${portfolioMemory ? `\n### What you already know about each:\n${portfolioMemory}` : ""}\nTotal projects: ${portfolioRows.length}\n--- END PORTFOLIO ---`;
+  }
+
+  // If user is asking a portfolio-wide question from inside a workspace, pull committed
+  // decisions from ALL their projects so Atlas has real data even if memories are empty.
+  if (isPortfolioQuestion && userId) {
+    try {
+      const allProjectIds = portfolioRows.map(p => p.id);
+      allProjectIds.push(projectId); // include current project too
+      if (allProjectIds.length > 0) {
+        const { inArray } = await import("drizzle-orm");
+        const crossEntries = await db
+          .select({
+            projectId: entriesTable.projectId,
+            title: entriesTable.title,
+            summary: entriesTable.summary,
+          })
+          .from(entriesTable)
+          .where(and(
+            inArray(entriesTable.projectId, allProjectIds),
+            eq(entriesTable.status, "committed")
+          ))
+          .orderBy(desc(entriesTable.createdAt))
+          .limit(60);
+
+        if (crossEntries.length > 0) {
+          const projectNameById = new Map<number, string>(
+            portfolioRows.map(p => [p.id, p.name] as [number, string])
+          );
+          if (project) projectNameById.set(projectId, project.name);
+
+          const byProject = new Map<string, string[]>();
+          for (const e of crossEntries) {
+            const name = projectNameById.get(e.projectId) ?? "Unknown";
+            if (!byProject.has(name)) byProject.set(name, []);
+            byProject.get(name)!.push(`  • ${e.title}${e.summary ? ` — ${e.summary.slice(0, 120)}` : ""}`);
+          }
+          const crossSummary = Array.from(byProject.entries())
+            .map(([name, lines]) => `**${name}:**\n${lines.join("\n")}`)
+            .join("\n\n");
+          systemPrompt += `\n\n--- CROSS-PORTFOLIO COMMITTED DECISIONS (user is asking for a portfolio view — answer from ALL projects below) ---\n${crossSummary}\n--- END CROSS-PORTFOLIO ---`;
+        }
+      }
+    } catch { /* non-fatal — portfolio context is additive */ }
   }
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
