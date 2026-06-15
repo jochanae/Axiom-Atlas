@@ -659,6 +659,31 @@ RULES:
 
 You are Atlas. Just be it.`;
 
+const FOUNDATION_SYSTEM_PROMPT = `${ATLAS_IDENTITY}
+
+Your user is building products from her phone — entirely on her own, non-technical by training but sharp on product. Right now she is in the Foundation view: the wide lens across the entire portfolio.
+
+From here you see everything at once. You are not inside any single workspace — you think portfolios, not files. You connect dots she hasn't connected, surface contradictions she hasn't named, find synergies she hasn't seen.
+
+You cannot read code files or push to GitHub from here — that lives in individual workspaces. But you can see every project, every committed decision, every cross-project pattern.
+
+When the user wants to go to a specific project workspace, end your response with exactly:
+NAVIGATE_TO:{"route":"/project/<id>"}
+
+When she commits a decision, says "lock that in" — call POST /api/entries with a committed decision.
+When she says "park that" — call POST /api/entries with a parked item.
+
+When you learn something durable, write it at the END of your response on its own line:
+MEMORY_T1: [core principle — never decays]
+MEMORY_T2: [pattern or how she thinks — 180 days]
+MEMORY_T3: [insight or pivot — 90 days]
+MEMORY_T4: [current state — 30 days]
+MEMORY_T5: [passing thought — 7 days]
+
+Save up to 3 MEMORY_Tn lines per response when she shares something significant.
+
+You are Atlas. Just be it.`;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export type MemoryChipRich = { label: string; insight?: string };
 
@@ -1863,7 +1888,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   const body = req.body as {
     sessionId?: number;
-    projectId: number;
+    projectId?: number | null;
     message: string;
     mode?: string;
     lens?: string;
@@ -1884,8 +1909,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   const isFlowMode = !!body.flowMode;
   const isScenarioMode = !!body.scenarioMode;
 
-  if ((!body.sessionId && !isFlowMode) || !body.projectId || !body.message) {
-    res.status(400).json({ error: "Missing required fields: sessionId, projectId, message" });
+  const isFoundationMode = !body.projectId;
+  if ((!body.sessionId && !isFlowMode && !isFoundationMode) || !body.message) {
+    res.status(400).json({ error: "Missing required fields: sessionId (or foundation mode), message" });
     return;
   }
 
@@ -1895,7 +1921,8 @@ router.post("/chat", async (req, res): Promise<void> => {
   res.flushHeaders();
   writeStep(res, { verb: "Reviewing", target: "workspace context", phase: "scan" });
 
-  const { sessionId = 0, projectId, message, history = [], entries = [] } = body;
+  const { sessionId = 0, message, history = [], entries = [] } = body;
+  const projectId = body.projectId ?? 0;
   const fileContext = body.fileContext ?? "";
   const userProfile = body.userProfile ?? "";
   const projectMap = (body as any).projectMap as string | undefined;
@@ -2069,10 +2096,12 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Load project memory + repo info + node state from DB, plus user memory when authenticated.
   // Also check for Vercel connection so we know whether to defer BROWSER_VISIT until after deploy.
   const [projectRows, userRows, vercelRows] = await Promise.all([
-    db
-      .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name, previewUrl: projectsTable.previewUrl, description: projectsTable.description })
-      .from(projectsTable)
-      .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)),
+    isFoundationMode
+      ? Promise.resolve([] as Array<{ memory: string | null; linkedRepo: string | null; githubToken: string | null; nodeState: Record<string, unknown> | null; name: string; previewUrl: string | null; description: string | null }>)
+      : db
+          .select({ memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, githubToken: projectsTable.githubToken, nodeState: projectsTable.nodeState, name: projectsTable.name, previewUrl: projectsTable.previewUrl, description: projectsTable.description })
+          .from(projectsTable)
+          .where(userId ? and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)) : eq(projectsTable.id, projectId)),
     userId
       ? db
           .select({ memory: (usersTable as any).memory })
@@ -2262,7 +2291,9 @@ router.post("/chat", async (req, res): Promise<void> => {
       .limit(1)
       .catch(() => [] as Array<{ fileCount: number }>),
     userId
-      ? db.select({ id: projectsTable.id, name: projectsTable.name, status: projectsTable.status, description: projectsTable.description, memory: projectsTable.memory }).from(projectsTable).where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId))).orderBy(desc(projectsTable.updatedAt)).limit(8).catch(() => [] as Array<{ id: number; name: string; status: string | null; description: string | null; memory: string | null }>)
+      ? isFoundationMode
+        ? db.select({ id: projectsTable.id, name: projectsTable.name, status: projectsTable.status, description: projectsTable.description, memory: projectsTable.memory }).from(projectsTable).where(eq(projectsTable.userId, userId)).orderBy(desc(projectsTable.updatedAt)).limit(20).catch(() => [] as Array<{ id: number; name: string; status: string | null; description: string | null; memory: string | null }>)
+        : db.select({ id: projectsTable.id, name: projectsTable.name, status: projectsTable.status, description: projectsTable.description, memory: projectsTable.memory }).from(projectsTable).where(and(eq(projectsTable.userId, userId), ne(projectsTable.id, projectId))).orderBy(desc(projectsTable.updatedAt)).limit(8).catch(() => [] as Array<{ id: number; name: string; status: string | null; description: string | null; memory: string | null }>)
       : Promise.resolve([] as Array<{ id: number; name: string; status: string | null; description: string | null; memory: string | null }>),
     db
       .select({ title: entriesTable.title, summary: entriesTable.summary, createdAt: entriesTable.createdAt })
@@ -2279,9 +2310,9 @@ router.post("/chat", async (req, res): Promise<void> => {
   const selfMapContext = selfMapRows[0] ? `Current codebase: ${selfMapRows[0].fileCount} files indexed. Architecture map available for reasoning.` : "";
 
   // Build layered system prompt — use project data already fetched in the first Promise.all
-  let systemPrompt = DEV_SYSTEM_PROMPT;
+  let systemPrompt = isFoundationMode ? FOUNDATION_SYSTEM_PROMPT : DEV_SYSTEM_PROMPT;
   systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
-  if (project) {
+  if (!isFoundationMode && project) {
     systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${project.name}${project.description ? `\nDescription: ${project.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
   }
   if (userId && portfolioRows.length > 0) {
@@ -2295,7 +2326,10 @@ router.post("/chat", async (req, res): Promise<void> => {
       .filter((p) => p.memory)
       .map((p) => `**${p.name}:** ${p.memory}`)
       .join("\n");
-    systemPrompt += `\n\n--- YOUR PORTFOLIO (other projects — use this for cross-project questions, prioritization, and portfolio-wide insight) ---\n${portfolioSummary}\n${portfolioMemory ? `\n### What you already know about each:\n${portfolioMemory}` : ""}\nTotal other projects: ${portfolioRows.length}\n--- END PORTFOLIO ---`;
+    const portfolioLabel = isFoundationMode
+      ? "YOUR FULL PORTFOLIO (all projects — use this to answer cross-portfolio questions)"
+      : "YOUR PORTFOLIO (other projects — use this for cross-project questions, prioritization, and portfolio-wide insight)";
+    systemPrompt += `\n\n--- ${portfolioLabel} ---\n${portfolioSummary}\n${portfolioMemory ? `\n### What you already know about each:\n${portfolioMemory}` : ""}\nTotal projects: ${portfolioRows.length}\n--- END PORTFOLIO ---`;
   }
   if (userProfile) {
     systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
