@@ -19,6 +19,12 @@ Repo: `jochanae/Axiom-Atlas` (private)
 
 **This Replit is the backend development environment.** `artifacts/atlas/` here is a drifted reference copy — do not treat it as the live frontend. All meaningful work happens in `artifacts/api-server/` and `lib/`.
 
+**HARD RULE — AGENT BEHAVIOR:**
+- **Diagnose, explain, wait.** Do not write files, create prompts, execute commands, or restart workflows unless Jochanae explicitly says to do it. "Let's talk about it" means talk. "Scan and tell me what you find" means scan and report — nothing else.
+- Do not proactively create Cursor prompt files unless asked.
+- Do not restart workflows unless asked or a code change requires it.
+- When in doubt: say what you found, ask what she wants to do next.
+
 **HARD RULE — DO NOT TOUCH THE FRONTEND:**
 - `artifacts/atlas/` is a **drifted reference copy**. It does NOT reflect the live frontend at `axiomsystem.app`.
 - `frontend-ref/` is a live read-only clone of `jochanae/atlas-idk`. **Always read from here** before writing Cursor prompts. Refresh with `git -C frontend-ref pull` at session start. It is gitignored and not committed.
