@@ -1,25 +1,34 @@
-# Fix Auth Loop — Build the Token Bridge Page
+# Fix Auth Loop — Build the /auth/callback Page
 
-## The bug
-Google OAuth sign-in works on the backend — the user authenticates with Google, and the backend creates a session token and redirects to `/auth/token-bridge` to complete the handoff.
+## The bug (confirmed)
+Google OAuth sign-in works correctly on the backend. After Google authenticates the user, the backend:
+1. Creates a session token
+2. Sets a session cookie
+3. Redirects to `https://axiomsystem.app/auth/callback?token=<token>`
 
-The problem: `/auth/token-bridge` does not exist as a frontend route. So the user lands on a broken URL, the token is thrown away, and they get sent back to the landing page as if they were never logged in. This is the "auth loop."
+The problem: `/auth/callback` does not exist as a frontend route. The user lands on an unknown URL, gets sent to the landing page, and the token is lost. They appear to never have logged in. This repeats every time they try.
 
 ## The fix
-Create a `/auth/token-bridge` page (or route) in the frontend router. It needs to:
+Add `/auth/callback` to the frontend router and create the page. It needs to:
 
-1. On mount, read the token from the URL query param (the backend passes it as `?token=...` or in the URL hash — check the backend redirect in `artifacts/api-server/src/routes/google-auth.ts` to confirm the exact param name).
-2. Store the token in localStorage or a cookie (however the rest of the app handles auth tokens).
-3. Navigate the user to `/home` (or the appropriate post-login destination).
+1. On mount, read `token` from the URL query string (`?token=...`)
+2. Store it — check how the rest of the app stores auth tokens (localStorage key, cookie, etc.) and use the same approach. The backend already sets a session cookie too, so you may only need to navigate to home.
+3. Navigate to `/home` after storing the token.
+
+## Exact redirect URL from the backend
+```
+https://axiomsystem.app/auth/callback?token=<hex_token>
+```
+The token is a 64-character hex string.
 
 ## Files to look in
-- The frontend router (wherever routes like `/login`, `/home` are registered — likely `App.tsx` or a router config file)
-- `artifacts/api-server/src/routes/google-auth.ts` — check the exact redirect URL and query param name the backend uses when handing off the token
+- The frontend router (wherever `/login`, `/home`, `/project/:id` routes are declared — likely `App.tsx` or a router config file)
+- Search for how `token` or session is stored elsewhere in the app after login (email/password login likely does the same thing — find that and mirror it)
 
 ## What NOT to change
 - The backend Google OAuth flow — it is working correctly.
 - Any other pages or routes.
-- The login page itself.
+- The login page, session handling, or cookie logic.
 
-## After building this
-The Google OAuth loop should be resolved. User clicks "Sign in with Google" → Google authenticates → backend creates session → redirects to `/auth/token-bridge` → frontend stores token → navigates to home. Done.
+## Expected result
+User clicks "Sign in with Google" → Google authenticates → backend creates session → redirects to `/auth/callback?token=...` → frontend stores token → navigates to `/home`. No more loop.
