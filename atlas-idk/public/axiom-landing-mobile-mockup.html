@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=390, initial-scale=1" />
+<title>Axiom — Mobile Mockup v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,500&family=IBM+Plex+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0D0B09;
+    --ink:#E8E4DA;
+    --ink-dim:rgba(232,228,218,0.55);
+    --ink-faint:rgba(232,228,218,0.32);
+    --gold:#D4AF37;
+    --gold-soft:rgba(212,175,55,0.55);
+    --teal:#5FA9A1;
+    --parchment:#E8DFC9;
+    --parchment-ink:#2A2118;
+    --purple:rgba(120,80,180,0.18);
+    --hair:rgba(232,228,218,0.08);
+    --hair-strong:rgba(232,228,218,0.14);
+    --serif:'Cormorant Garamond', serif;
+    --mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif)}
+  body{
+    background:
+      radial-gradient(800px 600px at 20% 10%, var(--purple), transparent 60%),
+      radial-gradient(700px 500px at 80% 60%, rgba(80,40,140,0.10), transparent 70%),
+      var(--bg);
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+  /* gold 1px grid overlay */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:1;
+    background-image:
+      linear-gradient(rgba(212,175,55,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(212,175,55,0.025) 1px, transparent 1px);
+    background-size:40px 40px;
+  }
+  /* noise */
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:2;opacity:.05;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/></svg>");
+  }
+  .wrap{position:relative;z-index:3;max-width:390px;margin:0 auto}
+
+  /* HEADER */
+  header{
+    position:sticky;top:0;z-index:50;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 20px;
+    background:rgba(13,11,9,0.7);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--hair);
+  }
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand-mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#3a2a18,#1a1410);border:1px solid rgba(212,175,55,0.35);display:grid;place-items:center;color:var(--gold);font-family:var(--serif);font-style:italic;font-size:14px;line-height:1}
+  .brand-name{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.22em;color:var(--gold)}
+  .sign{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink-dim);padding:7px 12px;border:1px solid var(--hair-strong);border-radius:6px;background:transparent}
+
+  /* HERO */
+  .hero{position:relative;padding:80px 24px 64px;text-align:center;overflow:hidden}
+  .hero-geo{position:absolute;inset:0;pointer-events:none;opacity:.28}
+  .hero h1{
+    font-family:var(--serif);font-weight:400;
+    font-size:42px;line-height:1.08;letter-spacing:-0.01em;
+    margin:0 0 24px;color:var(--ink);
+  }
+  .hero h1 em{font-style:italic;color:var(--gold);font-weight:500}
+  .hero-sub{
+    font-family:var(--serif);font-style:italic;font-weight:400;
+    font-size:17px;line-height:1.55;color:var(--ink-dim);
+    margin:0 auto 40px;max-width:300px;
+  }
+  .eyebrow{font-family:var(--mono);font-size:9.5px;letter-spacing:.28em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:32px}
+  .pills{display:flex;gap:8px;justify-content:center;margin:0 0 40px;flex-wrap:wrap}
+  .pill{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;color:var(--ink-dim);padding:7px 12px;border:1px solid var(--hair-strong);border-radius:999px;text-transform:uppercase}
+  .cta{
+    display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--ink);padding:14px 28px;
+    border:1px solid var(--gold-soft);border-radius:4px;background:transparent;
+  }
+
+  /* INTERROGATION — fragment cadence */
+  .interrog{position:relative;padding:96px 28px 96px;border-top:1px solid var(--hair)}
+  .interrog .rail{position:absolute;left:28px;top:60px;bottom:60px;width:1px;background:linear-gradient(180deg, transparent, var(--gold-soft) 20%, var(--gold-soft) 80%, transparent)}
+  .frag{position:relative;padding-left:28px;margin-bottom:72px}
+  .frag::before{
+    content:"";position:absolute;left:-3px;top:14px;width:7px;height:7px;border-radius:50%;
+    background:var(--gold);box-shadow:0 0 12px rgba(212,175,55,0.5);
+  }
+  .frag:last-child{margin-bottom:0}
+  .frag p{
+    font-family:var(--serif);font-weight:400;font-size:28px;line-height:1.25;
+    color:var(--ink);margin:0;letter-spacing:-0.005em;
+  }
+  .frag.dim p{color:var(--ink-dim)}
+  .frag.gold p em{font-style:italic;color:var(--gold);font-weight:500}
+  .frag-mono{font-family:var(--mono);font-size:9.5px;letter-spacing:.28em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:12px;display:block}
+
+  /* MANIFEST — lens system */
+  .manifest{padding:96px 24px 80px;border-top:1px solid var(--hair)}
+  .section-eyebrow{font-family:var(--mono);font-size:9.5px;letter-spacing:.28em;color:var(--ink-faint);text-transform:uppercase;text-align:center;margin-bottom:14px}
+  .section-title{font-family:var(--serif);font-weight:400;font-size:30px;line-height:1.15;text-align:center;margin:0 0 8px;letter-spacing:-0.01em}
+  .section-title em{font-style:italic;color:var(--gold);font-weight:500}
+  .section-lede{font-family:var(--serif);font-style:italic;font-size:15px;line-height:1.5;color:var(--ink-dim);text-align:center;margin:0 auto 40px;max-width:300px}
+
+  .seed{
+    font-family:var(--mono);font-size:11px;letter-spacing:.04em;
+    color:var(--ink-dim);text-align:center;padding:14px 16px;
+    border:1px dashed rgba(212,175,55,0.25);border-radius:6px;margin-bottom:24px;
+  }
+  .seed .label{color:var(--ink-faint);margin-right:8px}
+
+  .chips{display:flex;gap:0;justify-content:space-between;border-bottom:1px solid var(--hair);margin-bottom:28px}
+  .chip{
+    flex:1;text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+    text-transform:uppercase;padding:14px 4px;color:var(--ink-faint);
+    border-bottom:1px solid transparent;margin-bottom:-1px;cursor:pointer;
+    transition:color .2s;
+  }
+  .chip.active{color:var(--gold);border-bottom-color:var(--gold)}
+
+  .lens{position:relative;min-height:340px}
+  .lens-panel{position:relative;padding:8px 2px 24px;animation:lensIn .4s ease-out}
+  @keyframes lensIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+  /* Storyteller view */
+  .ls-h{font-family:var(--serif);font-weight:400;font-size:26px;line-height:1.2;margin:8px 0 14px;letter-spacing:-0.005em}
+  .ls-meta{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:18px}
+  .ls-steps{list-style:none;padding:0;margin:0;position:relative}
+  .ls-steps li{
+    font-family:var(--serif);font-size:20px;line-height:1.4;color:var(--ink);
+    padding:10px 0 10px 36px;position:relative;
+  }
+  .ls-steps li::before{
+    content:counter(s);counter-increment:s;
+    position:absolute;left:0;top:14px;width:22px;height:22px;border-radius:50%;
+    border:1px solid var(--gold-soft);color:var(--gold);font-family:var(--mono);font-size:10px;
+    display:grid;place-items:center;
+  }
+  .ls-steps{counter-reset:s}
+
+  /* Designer view — node graph */
+  .ld-svg{display:block;width:100%;height:auto;margin:6px 0 14px}
+  .ld-caption{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);text-align:center}
+
+  /* Builder view — schema */
+  .lb-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 14px}
+  .lb-table{border:1px solid var(--hair-strong);border-radius:6px;overflow:hidden;background:rgba(255,255,255,0.015)}
+  .lb-thead{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--gold);padding:8px 10px;border-bottom:1px solid var(--hair);background:rgba(212,175,55,0.04)}
+  .lb-row{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);padding:6px 10px;border-bottom:1px solid var(--hair)}
+  .lb-row:last-child{border-bottom:none}
+  .lb-join{text-align:center;font-family:var(--mono);font-size:10px;color:var(--teal);letter-spacing:.14em;margin:6px 0}
+
+  /* STRUCTURAL OUTPUTS */
+  .outputs{padding:96px 24px 80px;border-top:1px solid var(--hair)}
+  .out-item{position:relative;padding:32px 0;border-top:1px solid var(--hair)}
+  .out-item:first-of-type{border-top:none;padding-top:8px}
+  .out-idx{
+    position:absolute;right:-4px;top:18px;font-family:var(--mono);font-weight:700;
+    font-size:72px;line-height:1;color:rgba(232,228,218,0.05);letter-spacing:-0.02em;
+  }
+  .out-eye{font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;color:var(--gold-soft);text-transform:uppercase;margin-bottom:10px}
+  .out-h{font-family:var(--serif);font-weight:400;font-size:24px;line-height:1.2;margin:0 0 10px;letter-spacing:-0.005em}
+  .out-p{font-family:var(--serif);font-size:15.5px;line-height:1.55;color:var(--ink-dim);margin:0;max-width:300px}
+
+  /* PARCHMENT BEAT */
+  .parchment{
+    margin-top:8px;background:var(--parchment);color:var(--parchment-ink);
+    padding:88px 28px 88px;position:relative;
+  }
+  .parchment::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.06;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  .parchment-eye{font-family:var(--mono);font-size:9.5px;letter-spacing:.28em;color:rgba(42,33,24,0.5);text-transform:uppercase;margin-bottom:24px;text-align:left}
+  .parchment h2{
+    font-family:var(--serif);font-weight:400;font-size:34px;line-height:1.15;
+    margin:0 0 24px;letter-spacing:-0.01em;color:var(--parchment-ink);max-width:320px;
+  }
+  .parchment p{
+    font-family:var(--serif);font-size:16px;line-height:1.6;
+    color:rgba(42,33,24,0.78);margin:0;max-width:320px;
+  }
+
+  /* BRIDGE */
+  .bridge{padding:96px 24px 80px;text-align:center;border-top:1px solid var(--hair)}
+  .bridge .section-eyebrow{margin-bottom:18px}
+  .bridge h2{font-family:var(--serif);font-weight:400;font-size:34px;line-height:1.18;letter-spacing:-0.01em;margin:0 0 16px}
+  .bridge h2 em{font-style:italic;color:var(--gold);font-weight:500}
+  .bridge p{font-family:var(--serif);font-style:italic;font-size:15px;color:var(--ink-dim);max-width:280px;margin:0 auto 36px;line-height:1.55}
+
+  /* FOOTER spacer */
+  .foot{padding:48px 24px 72px;text-align:center;border-top:1px solid var(--hair);font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;color:var(--ink-faint);text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <div class="brand-name">AXIOM</div>
+    </div>
+    <button class="sign">Sign In</button>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <svg class="hero-geo" viewBox="0 0 390 500" preserveAspectRatio="none" aria-hidden="true">
+      <g stroke="rgba(212,175,55,0.35)" stroke-width="0.6" fill="none">
+        <circle cx="60" cy="80" r="2.5" fill="rgba(212,175,55,0.6)"/>
+        <circle cx="320" cy="120" r="2" fill="rgba(212,175,55,0.45)"/>
+        <circle cx="100" cy="380" r="2" fill="rgba(212,175,55,0.5)"/>
+        <circle cx="290" cy="420" r="2.5" fill="rgba(212,175,55,0.55)"/>
+        <circle cx="200" cy="240" r="1.6" fill="rgba(212,175,55,0.4)"/>
+        <path d="M60 80 L200 240 L320 120"/>
+        <path d="M200 240 L100 380"/>
+        <path d="M200 240 L290 420"/>
+      </g>
+    </svg>
+    <div class="eyebrow">Axiom // where ideas become decisions become reality</div>
+    <h1>Every great thing <em>started</em> as a conversation.</h1>
+    <div class="hero-sub">A workspace where ideas hold their shape long enough to become real.</div>
+    <div class="pills">
+      <span class="pill">Think it through</span>
+      <span class="pill">Map it out</span>
+      <span class="pill">Build it</span>
+    </div>
+    <a href="#" class="cta">Enter Axiom →</a>
+  </section>
+
+  <!-- INTERROGATION -->
+  <section class="interrog">
+    <div class="rail"></div>
+    <span class="frag-mono" style="margin-left:28px">02 // Interrogation</span>
+    <div class="frag"><p>You had the idea.</p></div>
+    <div class="frag dim"><p>You had momentum.</p></div>
+    <div class="frag dim"><p>Then the architecture shifted.</p></div>
+    <div class="frag gold"><p>Most ideas don't fail. They <em>drift.</em></p></div>
+  </section>
+
+  <!-- MANIFEST / LENSES -->
+  <section class="manifest">
+    <div class="section-eyebrow">03 // Strategic Manifest</div>
+    <h2 class="section-title">One idea. <em>Three lenses.</em></h2>
+    <p class="section-lede">The same seed, seen the way you need to see it.</p>
+
+    <div class="seed"><span class="label">// seed:</span>a weekly podcast about cities.</div>
+
+    <div class="chips">
+      <div class="chip">Storyteller</div>
+      <div class="chip active">Designer</div>
+      <div class="chip">Builder</div>
+    </div>
+
+    <div class="lens">
+      <!-- DESIGNER LENS (active) -->
+      <div class="lens-panel">
+        <svg class="ld-svg" viewBox="0 0 340 240" aria-hidden="true">
+          <defs>
+            <radialGradient id="hub" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="rgba(212,175,55,0.35)"/>
+              <stop offset="100%" stop-color="rgba(212,175,55,0)"/>
+            </radialGradient>
+          </defs>
+          <g stroke="rgba(95,169,161,0.45)" stroke-width="0.8" fill="none">
+            <path d="M170 120 L70 60"/>
+            <path d="M170 120 L270 60"/>
+            <path d="M170 120 L70 200"/>
+            <path d="M170 120 L270 200"/>
+            <path d="M170 120 L320 130"/>
+          </g>
+          <circle cx="170" cy="120" r="44" fill="url(#hub)"/>
+          <circle cx="170" cy="120" r="32" fill="rgba(13,11,9,0.6)" stroke="rgba(212,175,55,0.6)" stroke-width="1"/>
+          <text x="170" y="118" text-anchor="middle" font-family="Cormorant Garamond" font-style="italic" font-size="13" fill="#D4AF37">City</text>
+          <text x="170" y="132" text-anchor="middle" font-family="Cormorant Garamond" font-style="italic" font-size="13" fill="#D4AF37">Hub</text>
+
+          <g font-family="IBM Plex Mono" font-size="8.5" fill="rgba(232,228,218,0.7)">
+            <g><circle cx="70" cy="60" r="22" fill="rgba(13,11,9,0.7)" stroke="rgba(232,228,218,0.18)"/><text x="70" y="58" text-anchor="middle">Guest</text><text x="70" y="68" text-anchor="middle">List</text></g>
+            <g><circle cx="270" cy="60" r="22" fill="rgba(13,11,9,0.7)" stroke="rgba(232,228,218,0.18)"/><text x="270" y="58" text-anchor="middle">Episode</text><text x="270" y="68" text-anchor="middle">Flow</text></g>
+            <g><circle cx="70" cy="200" r="22" fill="rgba(13,11,9,0.7)" stroke="rgba(232,228,218,0.18)"/><text x="70" y="198" text-anchor="middle">Topic</text><text x="70" y="208" text-anchor="middle">Map</text></g>
+            <g><circle cx="270" cy="200" r="22" fill="rgba(13,11,9,0.7)" stroke="rgba(232,228,218,0.18)"/><text x="270" y="198" text-anchor="middle">Auth</text><text x="270" y="208" text-anchor="middle">Service</text></g>
+            <g><circle cx="320" cy="130" r="16" fill="rgba(13,11,9,0.7)" stroke="rgba(232,228,218,0.18)"/><text x="320" y="133" text-anchor="middle">API</text></g>
+          </g>
+        </svg>
+        <div class="ld-caption">System shape — entities, edges, intent</div>
+      </div>
+    </div>
+
+    <!-- Static reference: also show Storyteller & Builder as separate panels stacked, dimmed, so you can judge all three states at once -->
+    <div style="margin-top:48px;padding-top:32px;border-top:1px dashed var(--hair-strong)">
+      <div class="frag-mono" style="text-align:center;margin-bottom:20px">↓ other lens states (reference only)</div>
+
+      <!-- Storyteller -->
+      <div class="chips" style="margin-bottom:20px">
+        <div class="chip active">Storyteller</div>
+        <div class="chip">Designer</div>
+        <div class="chip">Builder</div>
+      </div>
+      <div class="lens-panel">
+        <div class="ls-meta">// S1·E1 — opening arc</div>
+        <h3 class="ls-h">The Sound of Density.</h3>
+        <ol class="ls-steps">
+          <li>Interview Jane Jacobs.</li>
+          <li>Edit the "Density" segment.</li>
+          <li>Publish to Spotify.</li>
+        </ol>
+      </div>
+
+      <!-- Builder -->
+      <div class="chips" style="margin:48px 0 20px">
+        <div class="chip">Storyteller</div>
+        <div class="chip">Designer</div>
+        <div class="chip active">Builder</div>
+      </div>
+      <div class="lens-panel">
+        <div class="ls-meta" style="margin-bottom:14px">// schema · v0.1</div>
+        <div class="lb-grid">
+          <div class="lb-table">
+            <div class="lb-thead">guests</div>
+            <div class="lb-row">id : uuid</div>
+            <div class="lb-row">name : text</div>
+            <div class="lb-row">city : text</div>
+          </div>
+          <div class="lb-table">
+            <div class="lb-thead">episodes</div>
+            <div class="lb-row">id : uuid</div>
+            <div class="lb-row">title : text</div>
+            <div class="lb-row">guest_id : fk</div>
+          </div>
+        </div>
+        <div class="lb-join">↳ join on guest_id</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STRUCTURAL OUTPUTS -->
+  <section class="outputs">
+    <div class="section-eyebrow">04 // Structural Outputs</div>
+    <h2 class="section-title">What you leave with.</h2>
+    <p class="section-lede">Three artifacts. Every conversation produces them.</p>
+
+    <div class="out-item">
+      <div class="out-idx">01</div>
+      <div class="out-eye">Continuity Vector</div>
+      <h3 class="out-h">The through-line that survives any pivot.</h3>
+      <p class="out-p">Direction outlasts the conversation that produced it.</p>
+    </div>
+
+    <div class="out-item">
+      <div class="out-idx">02</div>
+      <div class="out-eye">Architectural Compass</div>
+      <h3 class="out-h">A system shape you can hand to anyone.</h3>
+      <p class="out-p">Entities, edges, intent — visible, not implied.</p>
+    </div>
+
+    <div class="out-item">
+      <div class="out-idx">03</div>
+      <div class="out-eye">Decision Ledger</div>
+      <h3 class="out-h">Every commitment, every override, kept honest.</h3>
+      <p class="out-p">Decisions hold their weight long after the moment passes.</p>
+    </div>
+  </section>
+
+  <!-- PARCHMENT BEAT -->
+  <section class="parchment">
+    <div class="parchment-eye">05 // a quiet aside</div>
+    <h2>Axiom was never designed to manage tasks.</h2>
+    <p>It was designed for the part that happens before tasks exist — when an idea is still finding its shape, and the wrong system would flatten it. Most tools wait for you to be sure. Axiom is for the time before you are.</p>
+  </section>
+
+  <!-- BRIDGE -->
+  <section class="bridge">
+    <div class="section-eyebrow">06 // The Bridge</div>
+    <h2>Decide here. <em>Build anywhere.</em></h2>
+    <p>What you commit in Axiom travels with you — into Lovable, Figma, your team, your next quiet hour.</p>
+    <a href="#" class="cta">Enter Axiom →</a>
+  </section>
+
+  <div class="foot">Axiom // 2026</div>
+
+</div>
+</body>
+</html>

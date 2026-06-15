@@ -1,0 +1,1222 @@
+@import url('https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.min.css');
+@import url('https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-mono/style.min.css');
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--atlas-bg);
+  --color-foreground: var(--atlas-fg);
+  --color-border: var(--atlas-border);
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+
+  /* ── Original Lovable design tokens — exact values from source ── */
+  --color-gold:             oklch(0.76 0.12 85);
+  --color-gold-muted:       oklch(0.68 0.08 85);
+  --color-gold-foreground:  oklch(0.15 0.01 60);
+  --color-obsidian:         oklch(0.15 0.01 60);
+  --color-obsidian-surface: oklch(0.25 0.012 60);
+  --color-amber-glow:       oklch(0.70 0.15 70);
+  --color-silver:           oklch(0.70 0.015 80);
+  --color-silver-muted:     oklch(0.62 0.01 80);
+
+  /* shadow-gold utility — enables hover:shadow-gold */
+  --shadow-gold: 0 0 20px oklch(0.76 0.12 85 / 15%);
+  --shadow-gold-intense: 0 0 40px oklch(0.76 0.12 85 / 25%);
+
+  /* animate-amber-pulse — unresolved SystemMap nodes */
+  --animate-amber-pulse: amber-pulse 2s ease-in-out infinite;
+  /* animate-node-resolve — pop on resolve */
+  --animate-node-resolve: node-resolve-pop 0.4s ease-out;
+}
+
+html, body {
+  touch-action: pan-x pan-y;
+  overscroll-behavior-y: auto;
+}
+
+:focus-visible {
+  outline: 2px solid var(--atlas-gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@keyframes amber-pulse {
+  0%, 100% { box-shadow: 0 0 8px oklch(0.70 0.15 70 / 40%); }
+  50%       { box-shadow: 0 0 20px oklch(0.70 0.15 70 / 70%); }
+}
+
+@keyframes shapingPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes atlas-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50%       { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes node-resolve-pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Unified shell layout tokens */
+  --atlas-header-height: 50px;
+  --atlas-dock-height: 64px;
+  --atlas-dock-clearance: calc(var(--atlas-dock-height) + env(safe-area-inset-bottom, 0px) + 24px);
+
+  /* Type scale — mono-forward, 4-step minor */
+  --ts-tiny:    10px;  /* promoted: was 8px → now meets iOS legibility floor */
+  --ts-xs:      11px;  /* promoted: was 9px → now meets iOS legibility floor */
+  --ts-micro:   10px;  /* dock labels, badges, tiny meta */
+  --ts-sm:      11px;  /* promoted: was 10.5px → aligned with --ts-caption */
+  --ts-caption: 11px;  /* status chip, mono captions */
+  --ts-label:   12px;  /* wordmark, mono UI labels */
+  --ts-body:    13px;  /* default UI body, switcher, buttons */
+  --ts-md:      14px;  /* body+, CTA inline */
+  --ts-h3:      15px;  /* section headings */
+  --ts-base:    16px;  /* prose body */
+  --ts-h2:      18px;
+  --ts-display: 20px;  /* small hero */
+  --ts-h1:      22px;
+  --ts-display-lg: 28px;
+  --ts-display-xl: 30px;
+
+  /* Line heights */
+  --lh-tight:   1.2;
+  --lh-snug:    1.4;
+  --lh-body:    1.6;
+
+  /* Letter spacing */
+  --ls-mono-cap: 0.1em;
+  --ls-tight:    -0.01em;
+
+  /* Motion — durations */
+  --motion-instant: 80ms;   /* hover tints, pressed states */
+  --motion-fast:    140ms;  /* button press, small fades */
+  --motion-base:    220ms;  /* default UI transitions */
+  --motion-slow:    320ms;  /* drawers, dock slot swaps */
+  --motion-deliberate: 480ms; /* mode shifts, large reveals */
+
+  /* Motion — easings */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);       /* default — decisive entry */
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1.0);   /* alias for standard */
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);    /* exits, settles */
+  --ease-in-sharp: cubic-bezier(0.4, 0, 1, 1);       /* dismissals */
+  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);/* playful, overshoots */
+
+  /* Motion — composed transitions */
+  --transition-color: color var(--motion-fast) var(--ease-standard), background-color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard);
+  --transition-transform: transform var(--motion-base) var(--ease-standard);
+  --transition-opacity: opacity var(--motion-base) var(--ease-standard);
+  --transition-all: all var(--motion-base) var(--ease-standard);
+
+
+
+
+
+
+  --background: 20 14% 4%;
+  --foreground: 20 8% 90%;
+  --border: 20 8% 14%;
+  --input: 20 8% 12%;
+  --ring: 24 82% 31%;
+  --card: 20 10% 9%;
+  --card-foreground: 20 8% 90%;
+  --popover: 20 10% 8%;
+  --popover-foreground: 20 8% 90%;
+  --primary: 24 82% 31%;
+  --primary-foreground: 20 8% 90%;
+  --secondary: 20 8% 13%;
+  --secondary-foreground: 20 8% 90%;
+  --muted: 20 8% 13%;
+  --muted-foreground: 20 5% 58%;
+  --accent: 40 49% 54%;
+  --accent-foreground: 20 14% 4%;
+  --destructive: 0 63% 30%;
+  --destructive-foreground: 20 8% 90%;
+  --sidebar: 20 10% 7%;
+  --sidebar-foreground: 20 8% 90%;
+  --sidebar-border: 20 8% 12%;
+  --sidebar-primary: 24 82% 31%;
+  --sidebar-primary-foreground: 20 8% 90%;
+  --sidebar-accent: 20 8% 12%;
+  --sidebar-accent-foreground: 20 8% 90%;
+
+  /* Atlas identity tokens — dark mode (crisp charcoal, no warm tint) */
+  --atlas-bg:           #0B0A0F;
+  --atlas-surface:      #121115;
+  --atlas-surface-alt:  #16151B;
+  --atlas-fg:           rgba(255, 255, 255, 0.92);
+  --atlas-muted:        rgba(255, 255, 255, 0.72);
+  --atlas-ember:        #C4521A;
+  --atlas-ember-glow:   rgba(196, 82, 26, 0.40);
+  --atlas-gold:         #E6C687;
+  --atlas-gold-glow:    rgba(230, 198, 135, 0.35);
+  --atlas-gold-dim:     rgba(230, 198, 135, 0.12);
+  --atlas-gold-border:  rgba(230, 198, 135, 0.22);
+  --atlas-phosphor:     #06B6D4;
+  --atlas-border:       rgba(230, 198, 135, 0.15);
+  --atlas-glass-bg:     rgba(11, 10, 15, 0.72);
+  --atlas-glass-border: rgba(230, 198, 135, 0.1);
+  --atlas-shadow-sm:    rgba(0,0,0,0.18);
+  --atlas-shadow-md:    rgba(0,0,0,0.35);
+  --atlas-shadow-lg:    rgba(0,0,0,0.55);
+  --ease-cinematic:     cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Theme-aware tokens for home page */
+  --atlas-home-atmosphere: radial-gradient(circle, rgba(88,28,135,0.30) 0%, rgba(88,28,135,0.08) 45%, transparent 70%);
+  --atlas-home-bg-gradient: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,28,135,0.25) 0%, transparent 70%), radial-gradient(ellipse 60% 40% at 80% 100%, rgba(88,28,135,0.15) 0%, transparent 60%);
+  --atlas-home-header-shadow: 0 1px 24px rgba(0,0,0,0.5);
+  --atlas-nav-arch-fill: rgba(11,10,15,0.97);
+  --atlas-home-btn-bg: var(--atlas-bg);
+
+  --app-font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --app-font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Alias tokens so ported original components work without modification */
+  --ember:        var(--atlas-ember);
+  --accent-gold:  var(--atlas-gold);
+  --surface:      var(--atlas-surface);
+  --surface-alt:  var(--atlas-surface-alt);
+  --foreground:   var(--atlas-fg);
+  --border:       var(--atlas-border);
+  --background:   var(--atlas-bg);
+  --muted-text:   var(--atlas-muted);
+  --phosphor:     var(--atlas-phosphor);
+  --violated:     var(--atlas-ember);
+  --warning:      #F59E0B;
+  --shell-edge:   20px;
+  --glass-bg:     var(--atlas-glass-bg);
+  --glass-border: var(--atlas-glass-border);
+  --gold-glow:    var(--atlas-gold-glow);
+  --gold-border:  var(--atlas-gold-border);
+}
+
+/* ── Parchment theme (light mode) ─────────────────────────────────────────── */
+[data-theme="parchment"],
+[data-theme="parchment"] body,
+[data-theme="parchment"] #root {
+  background-image: none;
+}
+
+/* Parchment text color only — never force a background on textareas/inputs,
+   or composers that intentionally render transparent textareas get a gray
+   inset rectangle that also hides streaming placeholder text. */
+[data-theme="parchment"] input,
+[data-theme="parchment"] textarea,
+[data-theme="parchment"] select {
+  color: var(--atlas-fg);
+}
+
+:root {
+  --atlas-gold-rgb: 212, 175, 55;
+  --atlas-bg-rgb: 13, 11, 9;
+  --atlas-surface-rgb: 20, 18, 14;
+  --atlas-muted-rgb: 166, 160, 154;
+  --atlas-flow-pane-bg: oklch(0.11 0.01 60);
+}
+
+[data-theme="parchment"] {
+  color-scheme: light;
+  /* Frosted Ice — cool desaturated neutrals, gold accent preserved */
+  --atlas-gold-rgb: 139, 94, 60;
+  --atlas-bg-rgb: 248, 250, 252;
+  --atlas-surface-rgb: 255, 255, 255;
+  --atlas-muted-rgb: 100, 116, 139;
+  --atlas-flow-pane-bg: #ffffff;
+
+  /* Home page theme overrides */
+  --atlas-home-atmosphere: none;
+  --atlas-home-bg-gradient: none;
+  --atlas-home-header-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 4px 12px rgba(15,23,42,0.06);
+  --atlas-nav-arch-fill: rgba(248,250,252,0.92);
+  --atlas-home-btn-bg: #ffffff;
+
+  /* Frosted Ice surfaces — desaturated cool gray-white */
+  --atlas-bg:           #F8FAFC;
+  --atlas-surface:      #FFFFFF;
+  --atlas-surface-alt:  #F1F5F9;
+
+  /* Obsidian typography */
+  --atlas-fg:           #0F172A;
+  --atlas-muted:        #64748B;
+
+  /* Signature gold accent — locked, brand-critical */
+  --atlas-ember:        #6f4a30;
+  --atlas-ember-glow:   rgba(139, 94, 60, 0.20);
+  --atlas-gold:         #8B5E3C;
+  --atlas-gold-glow:    rgba(139, 94, 60, 0.20);
+  --atlas-gold-dim:     rgba(139, 94, 60, 0.10);
+  --atlas-gold-border:  rgba(139, 94, 60, 0.30);
+  --atlas-phosphor:     #0284C7;
+
+  /* Search rail trigger — bronze on ice */
+  --atlas-search-btn-bg:     rgba(255,255,255,0.85);
+  --atlas-search-btn-border: rgba(139,94,60,0.55);
+  --atlas-search-btn-fg:     #6f4a30;
+
+  /* Frosted glass — translucent white over cool canvas */
+  --atlas-border:       rgba(15, 23, 42, 0.08);
+  --atlas-glass-bg:     rgba(255, 255, 255, 0.72);
+  --atlas-glass-border: rgba(255, 255, 255, 0.90);
+
+  /* Cool occlusion shadows */
+  --atlas-shadow-sm:    rgba(15,23,42,0.04);
+  --atlas-shadow-md:    rgba(15,23,42,0.08);
+  --atlas-shadow-lg:    rgba(15,23,42,0.12);
+
+  /* Obsidian Shield — gold isolation container */
+  --atlas-brand-shield-bg:     #0F172A;
+  --atlas-brand-shield-border: rgba(255, 255, 255, 0.15);
+
+  /* shadcn tokens — Frosted Ice mapping */
+  --background: 210 40% 98%;        /* #F8FAFC */
+  --foreground: 222 47% 11%;        /* #0F172A */
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 26 40% 39%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 26 40% 39%;            /* gold — locked */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;  /* #64748B */
+  --accent: 26 40% 39%;
+  --accent-foreground: 0 0% 100%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-border: 220 13% 91%;
+  --sidebar-accent: 210 40% 96%;
+  --sidebar-accent-foreground: 222 47% 11%;
+}
+
+/* Frosted glass on overlays and sheet surfaces in light mode */
+[data-theme="parchment"] [data-radix-popper-content-wrapper] > *,
+[data-theme="parchment"] [role="dialog"],
+[data-theme="parchment"] [data-state="open"][data-side],
+[data-theme="parchment"] [data-radix-popover-content],
+[data-theme="parchment"] [data-radix-dropdown-menu-content],
+[data-theme="parchment"] [data-radix-select-content],
+[data-theme="parchment"] [data-sonner-toaster] {
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    overscroll-behavior-y: auto;
+    background-color: var(--atlas-bg);
+    background-image:
+      radial-gradient(
+        ellipse 80% 60% at 50% 0%,
+        rgba(88, 28, 135, 0.10) 0%,
+        transparent 70%
+      ),
+      radial-gradient(
+        ellipse 60% 40% at 80% 100%,
+        rgba(88, 28, 135, 0.06) 0%,
+        transparent 60%
+      );
+    background-attachment: fixed;
+    color: var(--atlas-fg);
+    font-family: var(--app-font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  input, textarea {
+    font-family: var(--app-font-sans);
+    font-size: 15px;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* ── Scrollbar ──
+   The branded TimelineRail is the single vertical rail. Hide native
+   scrollbars globally across browsers so they don't render as a second
+   gold/visible rail (especially on mobile WebKit). */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: transparent; }
+
+/* Hide scrollbar for single-row chip carousel */
+.suggestion-chips-row::-webkit-scrollbar { display: none; }
+
+/* ── Sonner welcome toast: obsidian glass, mobile-safe lift ───────────────── */
+.atlas-sonner-toaster {
+  z-index: 2147483647 !important;
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast {
+  min-height: 58px;
+  padding: 14px 16px !important;
+  border-radius: 14px !important;
+  overflow: hidden;
+  transform-origin: bottom center;
+  transition: transform 360ms var(--ease-cinematic), opacity 240ms ease !important;
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.08), transparent 38%),
+    radial-gradient(circle at 18% 0%, rgba(212,175,55,0.14), transparent 38%);
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast [data-title] {
+  font-family: var(--app-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--atlas-fg);
+}
+
+.atlas-sonner-toaster .atlas-luxury-toast-description {
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+  color: var(--atlas-fg) !important;
+  letter-spacing: 0.01em;
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast[data-mounted="true"] {
+  animation: atlas-toast-slide-up 360ms var(--ease-cinematic) both;
+}
+
+.atlas-sonner-toaster [data-sonner-toast].atlas-luxury-toast[data-removed="true"] {
+  animation: atlas-toast-fade-out 220ms ease both;
+}
+
+@keyframes atlas-toast-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes atlas-toast-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ── Atlas composer shell — transparent by default; chrome handled per-surface ── */
+.atlas-input-shell {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+body[data-axiom-thread="active"] .atlas-input-shell {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+/* Mobile / tablet: active-thread composer goes edge-to-edge like workspace,
+   breaking out of the .atlas-home-responsive-shell 24px side gutter.
+   Rounded top corners + glassmorphism are preserved. */
+@media (max-width: 1023px) {
+  body[data-axiom-thread="active"] .atlas-input-shell {
+    margin-left: -24px;
+    margin-right: -24px;
+  }
+
+  body[data-axiom-thread="active"][data-axiom-global-insight="true"] .atlas-input-shell {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+body[data-axiom-global-insight="true"] .atlas-home-chat-column,
+body[data-axiom-global-insight="true"] .atlas-home-chat-inner {
+  min-height: 0;
+}
+
+body[data-axiom-global-insight="true"] .atlas-home-chat-messages-scroll {
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+}
+
+/* GI: kill the active-thread glass/border on the composer so it matches the
+   ambient home — no panel, no border, no rounded top. */
+body[data-axiom-global-insight="true"] .atlas-input-shell,
+body[data-axiom-thread="active"][data-axiom-global-insight="true"] .atlas-input-shell {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+/* parchment composer chrome handled at .atlas-input-shell block above */
+[data-theme="parchment"] .atlas-input-shell textarea,
+[data-theme="parchment"] .atlas-input-shell input {
+  box-shadow: none !important;
+  border: none !important;
+}
+/* GI must always win — strip composer chrome in both themes */
+body[data-axiom-global-insight="true"] .atlas-input-shell,
+[data-theme="parchment"] body[data-axiom-global-insight="true"] .atlas-input-shell {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+body[data-axiom-global-insight="true"] .atlas-input-shell textarea,
+body[data-axiom-global-insight="true"] .atlas-input-shell input {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.atlas-input-shell:focus-within {
+  animation: none;
+  border: none;
+  box-shadow: none;
+}
+
+/* ── Timeline rail (theme-aware spine + chips) ── */
+.atlas-rail-spine {
+  background: linear-gradient(180deg,
+    transparent 0%,
+    color-mix(in oklab, var(--atlas-gold) 35%, transparent) 12%,
+    color-mix(in oklab, var(--atlas-gold) 55%, transparent) 50%,
+    color-mix(in oklab, var(--atlas-gold) 35%, transparent) 88%,
+    transparent 100%);
+}
+[data-theme="parchment"] .atlas-rail-daychip {
+  background: rgba(255,255,255,0.85) !important;
+  border-color: rgba(17,17,17,0.14) !important;
+  color: #5b3a1f !important;
+  box-shadow: 0 1px 3px rgba(17,17,17,0.06);
+}
+
+/* ── Light-mode workspace composer contrast ── */
+[data-theme="parchment"] .atlas-input-shell textarea {
+  color: #171717 !important;
+}
+[data-theme="parchment"] .atlas-input-shell textarea::placeholder {
+  color: rgba(23,23,23,0.45) !important;
+}
+[data-theme="parchment"] .atlas-input-actionrow button {
+  color: #404040;
+}
+[data-theme="parchment"] .atlas-input-actionrow button:hover {
+  color: #171717;
+}
+
+
+@keyframes atlas-breathing-glow {
+  0%, 100% {
+    border-color: var(--atlas-gold-border);
+    box-shadow: 0 4px 20px var(--atlas-shadow-md), 0 0 8px -4px var(--atlas-gold-dim);
+  }
+  50% {
+    border-color: var(--atlas-gold-glow);
+    box-shadow: 0 4px 20px var(--atlas-shadow-md), 0 0 20px -3px var(--atlas-gold-glow);
+  }
+}
+
+/* ── Sticky page header (theme-aware) ── */
+.atlas-home-header {
+  background: rgba(12, 10, 9, 0.88);
+  backdrop-filter: blur(16px) saturate(120%);
+}
+[data-theme="parchment"] .atlas-home-header {
+  background: rgba(245, 241, 232, 0.92);
+}
+
+/* ── Mobile footer (theme-aware) ── */
+.atlas-mobile-footer {
+  background: rgba(12, 10, 9, 0.96);
+  backdrop-filter: blur(20px);
+}
+[data-theme="parchment"] .atlas-mobile-footer {
+  background: rgba(245, 241, 232, 0.96);
+}
+
+/* ── App header (workspace top bar — theme-aware, frosted glass) ── */
+.atlas-app-header {
+  background: color-mix(in oklab, var(--atlas-bg) 55%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  border-bottom: none;
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  /* Safe-area padding — respects iOS notch / Dynamic Island / Android status bar */
+  padding-top: env(safe-area-inset-top, 0px);
+}
+/* Header bottom fade removed — was rendering as a visible blurred line. */
+
+[data-theme="parchment"] .atlas-app-header {
+  background: color-mix(in oklab, var(--atlas-bg) 55%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  border-bottom: none;
+}
+[data-theme="parchment"] .atlas-app-header * {
+  --atlas-surface: #EDE9DF;
+}
+[data-theme="parchment"] .atlas-app-header-row {
+  box-shadow: none !important;
+  border-bottom-color: transparent !important;
+}
+
+/* Composer — floating glass with no hard border or panel.
+   Content scrolls cleanly underneath; only a soft blur separates it. */
+.atlas-composer-glass {
+  background: color-mix(in oklab, var(--atlas-bg) 18%, transparent);
+  backdrop-filter: blur(28px) saturate(160%);
+  border-top: 1px solid color-mix(in oklab, var(--atlas-gold) 38%, transparent);
+  border-left: 1px solid color-mix(in oklab, var(--atlas-gold) 22%, transparent);
+  border-right: 1px solid color-mix(in oklab, var(--atlas-gold) 22%, transparent);
+  border-bottom: none;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: 0 -8px 28px -18px color-mix(in oklab, var(--atlas-gold) 35%, transparent);
+}
+[data-theme="parchment"] .atlas-composer-glass {
+  background: color-mix(in oklab, var(--atlas-bg) 32%, transparent);
+  border-top-color: color-mix(in oklab, var(--atlas-gold) 55%, transparent);
+  border-left-color: color-mix(in oklab, var(--atlas-gold) 35%, transparent);
+  border-right-color: color-mix(in oklab, var(--atlas-gold) 35%, transparent);
+}
+
+/* ── Side drawer mobile sizing ──
+   The mobile footer is 64px tall + safe-area-inset-bottom and sits at zIndex 150.
+   Cap the drawer height below it so the footer (Edit profile, Sign out, etc.) is visible. */
+@media (max-width: 768px) {
+  .atlas-side-drawer {
+    height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(100dvh - 64px - env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* ── Discovery cards (below-fold) ── */
+.atlas-discovery-card {
+  background: var(--atlas-surface);
+  border: 1px solid var(--atlas-gold-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+[data-theme="parchment"] .atlas-discovery-card {
+  box-shadow: 0 1px 6px var(--atlas-shadow-sm);
+}
+
+@keyframes atlas-cursor-blink {
+  0%  { opacity: 0.7; }
+  50% { opacity: 0;   }
+}
+
+/* ── Bloom spinner keyframes + classes ── */
+@keyframes atlas-bloom-circle {
+  0%, 100% { transform: scale(0.25); opacity: 0; }
+  35%, 65% { transform: scale(1);    opacity: 1; }
+}
+@keyframes atlas-bloom-blur {
+  0%, 100% { transform: scale(0.15); opacity: 0; }
+  35%, 65% { transform: scale(1.8);  opacity: 0.38; }
+}
+.atlas-bloom-circle {
+  animation: atlas-bloom-circle 1800ms ease-in-out infinite;
+}
+.atlas-bloom-blur {
+  animation: atlas-bloom-blur 1800ms ease-in-out infinite;
+}
+
+/* ── Message bubble in ── */
+@keyframes atlas-bubble-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.atlas-bubble-in {
+  animation: atlas-bubble-in 260ms var(--ease-cinematic) both;
+}
+
+/* ── Pulsing status dot ── */
+@keyframes atlas-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.75); }
+}
+.atlas-pulse-dot {
+  animation: atlas-dot-pulse 2.2s ease-in-out infinite;
+}
+
+/* ── Thinking-label shimmer (gold sweep across muted text) ── */
+@keyframes atlas-label-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.atlas-label-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--atlas-muted) 0%,
+    var(--atlas-muted) 35%,
+    var(--atlas-gold) 50%,
+    var(--atlas-muted) 65%,
+    var(--atlas-muted) 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: atlas-label-shimmer 2.8s linear infinite;
+}
+
+
+/* ── Readiness ring — 100% pulse ── */
+@keyframes atlas-ring-pulse {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px rgba(201,162,76,0.8)); }
+  50%       { opacity: 0.72; filter: drop-shadow(0 0 10px rgba(201,162,76,0.55)); }
+}
+.atlas-ring-pulse {
+  animation: atlas-ring-pulse 2.4s ease-in-out infinite;
+}
+
+/* ── Send button ── */
+.atlas-send-btn {
+  border-radius: 10px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 200ms var(--ease-cinematic);
+  flex-shrink: 0;
+}
+.atlas-send-btn:disabled { cursor: default; }
+
+/* ── Decision log card ── */
+.atlas-catch-card {
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, #92400E 40%, #252220);
+  background: linear-gradient(180deg, color-mix(in oklab, #92400E 6%, transparent) 0%, transparent 100%);
+  box-shadow: 0 0 0 1px color-mix(in oklab, #92400E 8%, transparent) inset;
+}
+
+/* ── Chat card top header ── */
+@keyframes atlasChatCardShimmer {
+  0%   { background-position: -200% 0; opacity: 0.35; }
+  50%  { opacity: 0.85; }
+  100% { background-position: 200% 0; opacity: 0.35; }
+}
+.atlas-chat-card-top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 5px 8px 5px 12px;
+  min-height: 32px;
+  flex-shrink: 0;
+  border-radius: 12px 12px 0 0;
+  background: rgba(20, 17, 14, 0.72);
+  backdrop-filter: blur(14px);
+  border-left: 1px solid rgba(212, 175, 55, 0.07);
+  border-right: 1px solid rgba(212, 175, 55, 0.07);
+}
+.atlas-chat-card-top::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(212,175,55,0.0) 10%, rgba(212,175,55,0.75) 50%, rgba(201,162,76,0.0) 90%, transparent 100%);
+  background-size: 200% 100%;
+  animation: atlasChatCardShimmer 4s ease-in-out infinite;
+}
+[data-theme="parchment"] .atlas-chat-card-top {
+  background: transparent;
+  backdrop-filter: none;
+  border: none;
+}
+[data-theme="parchment"] .atlas-chat-card-top::before {
+  background: linear-gradient(90deg, transparent 0%, rgba(180,83,9,0.0) 10%, rgba(180,83,9,0.55) 50%, rgba(180,83,9,0.0) 90%, transparent 100%);
+  background-size: 200% 100%;
+  animation: atlasChatCardShimmer 4s ease-in-out infinite;
+}
+/* Full-bleed variant — used as the active-mode subheader so it matches the
+   main header edge-to-edge (no inset borders, shimmer line spans wall-to-wall). */
+.atlas-chat-card-top--fullbleed {
+  border-left: none !important;
+  border-right: none !important;
+  border-radius: 0 !important;
+  background: rgba(14, 12, 10, 0.92);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.08);
+}
+.atlas-chat-card-top--fullbleed::before {
+  background: linear-gradient(90deg, rgba(212,175,55,0.0) 0%, rgba(212,175,55,0.55) 50%, rgba(212,175,55,0.0) 100%);
+}
+[data-theme="parchment"] .atlas-chat-card-top--fullbleed {
+  background: rgba(245, 235, 215, 0.92);
+  border-bottom: 1px solid rgba(180, 83, 9, 0.15);
+}
+[data-theme="parchment"] .atlas-chat-card-top--fullbleed::before {
+  background: linear-gradient(90deg, rgba(180,83,9,0.0) 0%, rgba(180,83,9,0.55) 50%, rgba(180,83,9,0.0) 100%);
+}
+
+
+/* ── Home page theme-aware classes ── */
+.atlas-home-bg {
+  background-image: var(--atlas-home-bg-gradient);
+}
+.atlas-home-atmosphere {
+  background: var(--atlas-home-atmosphere) !important;
+}
+.atlas-home-header-glow {
+  box-shadow: var(--atlas-home-header-shadow) !important;
+}
+.atlas-home-center-btn {
+  background: var(--atlas-bg) !important;
+}
+
+/* ── Decision log card (parchment-aware) ── */
+[data-theme="parchment"] .atlas-catch-card {
+  border-color: rgba(139,69,19,0.30);
+  background: linear-gradient(180deg, rgba(139,69,19,0.06) 0%, transparent 100%);
+  box-shadow: 0 0 0 1px rgba(139,69,19,0.06) inset;
+}
+
+/* ── Resize handle ── */
+/* 16px invisible hit area, 1px visible gold thread */
+.atlas-resize-thread {
+  width: 1px;
+  background: transparent;
+  transition: background 200ms;
+  pointer-events: none;
+}
+*:hover > .atlas-resize-thread,
+*:active > .atlas-resize-thread {
+  background: rgba(201, 162, 76, 0.35);
+}
+
+/* ── Mobile slide-in from right ── */
+@keyframes atlas-slide-in-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.atlas-slide-in-right {
+  animation: atlas-slide-in-right 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* ── Themed popover (header dropdowns, mode menu, source picker) ── */
+/* Theme-aware so it works in both Obsidian and Parchment modes,
+   and uses position:fixed via JS positioning to escape parent stacking contexts. */
+.atlas-popover {
+  background: var(--atlas-surface);
+  border: 1px solid var(--atlas-border);
+  border-radius: 10px;
+  padding: 6px 4px;
+  box-shadow:
+    0 12px 40px color-mix(in oklab, var(--atlas-bg) 60%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--atlas-gold) 4%, transparent) inset;
+  backdrop-filter: blur(16px);
+}
+[data-theme="parchment"] .atlas-popover {
+  box-shadow:
+    0 12px 40px rgba(60, 40, 20, 0.18),
+    0 0 0 1px color-mix(in oklab, var(--atlas-gold) 8%, transparent) inset;
+}
+
+/* ── Voice input pulse ── */
+@keyframes atlas-voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(146, 64, 14, 0.7); }
+  50%       { box-shadow: 0 0 0 7px rgba(146, 64, 14, 0); }
+}
+.atlas-voice-active {
+  background: var(--atlas-ember) !important;
+  animation: atlas-voice-pulse 1.3s ease-out infinite;
+}
+
+/* ── Waveform bars (mic animation) ── */
+@keyframes atlas-wave-bar {
+  0%, 100% { transform: scaleY(0.35); }
+  50%       { transform: scaleY(1); }
+}
+.atlas-waveform {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 14px;
+}
+.atlas-waveform span {
+  display: inline-block;
+  width: 2.5px;
+  height: 100%;
+  background: currentColor;
+  border-radius: 2px;
+  transform-origin: center;
+  transform: scaleY(0.55);
+  animation: none;
+}
+.atlas-waveform.is-active span {
+  animation: atlas-wave-bar 900ms ease-in-out infinite;
+}
+.atlas-waveform.is-active span:nth-child(1) { animation-delay: 0ms; animation-duration: 800ms; }
+.atlas-waveform.is-active span:nth-child(2) { animation-delay: 160ms; animation-duration: 1000ms; }
+.atlas-waveform.is-active span:nth-child(3) { animation-delay: 320ms; animation-duration: 750ms; }
+
+/* ── Typewriter cursor ── */
+@keyframes atlas-cursor-blink {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 0; }
+}
+.atlas-cursor {
+  display: inline-block;
+  width: 1.5px;
+  height: 0.85em;
+  background: var(--atlas-gold);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: atlas-cursor-blink 700ms step-end infinite;
+}
+
+/* ── First-run overlay animations ── */
+@keyframes atlas-overlay-fadein {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes atlas-btn-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes atlas-btn-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,0); }
+  50%       { box-shadow: 0 0 22px 5px rgba(212,175,55,0.28); }
+}
+
+/* ── Utility ── */
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* ── Chat timeline — vertical gold thread on the right side ─────────────────── */
+.atlas-chat-timeline {
+  position: relative;
+}
+.atlas-chat-timeline::before {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 28px;
+  bottom: 28px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(201,162,76,0.20) 4%,
+    rgba(201,162,76,0.20) 96%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Icon-only action button — utility phantoms, no chrome ───────────────────── */
+.atlas-icon-action {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--atlas-muted);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: color 140ms ease, opacity 140ms ease, background 140ms ease;
+  flex-shrink: 0;
+}
+.atlas-icon-action:hover {
+  color: rgba(201,162,76,0.95);
+  opacity: 1;
+  background: rgba(201,162,76,0.04);
+}
+.atlas-icon-action.done {
+  color: var(--atlas-gold);
+  opacity: 0.9;
+  cursor: default;
+}
+.atlas-icon-action.copy-done {
+  color: #4ade80;
+  opacity: 0.95;
+  cursor: default;
+}
+
+/* ── Ledger status bar above input — whispered ──────────────────────────────── */
+.atlas-ledger-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 16px;
+  background: transparent;
+  flex-shrink: 0;
+}
+[data-theme="parchment"] .atlas-ledger-bar {
+  background: transparent;
+}
+
+/* ── Landing page: allow scrolling (overrides global overflow:hidden) ──────── */
+html.atlas-landing-active,
+.atlas-landing-active body,
+.atlas-landing-active #root {
+  overflow: auto !important;
+  height: auto !important;
+}
+
+/* ── Login / auth page: allow scrolling ────────────────────────────────────── */
+.atlas-login-active,
+.atlas-login-active body,
+.atlas-login-active #root {
+  overflow: auto !important;
+  height: auto !important;
+}
+
+/* ── Landing page animation keyframes ─────────────────────────────────────── */
+@keyframes atlas-lp-gold-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(212,175,55,0.3); }
+  50%       { box-shadow: 0 0 24px rgba(212,175,55,0.6); }
+}
+@keyframes atlas-lp-amber-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(212,160,70,0.4); }
+  50%       { box-shadow: 0 0 20px rgba(212,160,70,0.7); }
+}
+@keyframes atlas-lp-node-resolve {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+@keyframes atlas-lp-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.atlas-lp-gold-pulse  { animation: atlas-lp-gold-pulse  2s ease-in-out infinite; }
+.atlas-lp-amber-pulse { animation: atlas-lp-amber-pulse 2s ease-in-out infinite; }
+.atlas-lp-node-resolve { animation: atlas-lp-node-resolve 0.4s ease-out; }
+
+/* ── System Map — exact from original Lovable source ─────────────────────────── */
+.system-map-glow {
+  position: relative;
+  background: oklch(0.15 0.01 60);
+}
+.system-map-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, oklch(0.30 0.15 300 / 35%) 0%, transparent 70%);
+}
+[data-theme="parchment"] .system-map-glow::before {
+  background: radial-gradient(ellipse 70% 60% at 50% 50%, oklch(0.75 0.08 75 / 8%) 0%, transparent 70%);
+}
+.pulse-lovable { box-shadow: 0 0 30px oklch(0.55 0.25 300 / 50%); }
+.pulse-cursor  { box-shadow: 0 0 30px oklch(0.55 0.20 240 / 50%); }
+.pulse-replit  { box-shadow: 0 0 30px oklch(0.55 0.20 150 / 50%); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Readiness rescan button ────────────────────────────────────────────── */
+@keyframes atlas-rescan-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.atlas-rescan-wrap:hover .atlas-rescan-btn,
+.atlas-rescan-wrap:focus-within .atlas-rescan-btn {
+  opacity: 1 !important;
+}
+.atlas-rescan-btn:hover {
+  border-color: rgba(201, 162, 76, 0.55) !important;
+}
+
+/* ── Toast pill matching the header readiness pill ─────────────────────── */
+.atlas-toast-pill {
+  background: rgba(14, 14, 16, 0.92) !important;
+  border: 1px solid rgba(201, 162, 76, 0.35) !important;
+  border-radius: 999px !important;
+  color: rgba(245, 240, 224, 0.95) !important;
+  font-family: "Geist Sans", system-ui, sans-serif !important;
+  font-size: 13px !important;
+  letter-spacing: -0.01em !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
+  backdrop-filter: blur(8px);
+}
+.atlas-toast-pill[data-type="error"] {
+  border-color: rgba(220, 90, 90, 0.45) !important;
+}
+.atlas-toast-pill [data-description] {
+  color: rgba(245, 240, 224, 0.65) !important;
+  font-size: 12px !important;
+}
+
+/* ── Narrow-screen header tightening (outer-fold etc. ≤ 420px) ─────────── */
+@media (max-width: 420px) {
+  .atlas-app-header-row {
+    gap: 6px !important;
+    padding: 5px 10px !important;
+  }
+  .atlas-app-header-row svg { max-width: 16px; max-height: 16px; }
+  .atlas-app-header-row .atlas-readiness-pill { padding: 2px 5px !important; }
+}
+
+/* ── Restore full header on inner-fold / tablets (≥ 600px) ─────────────── */
+@media (min-width: 600px) {
+  .atlas-app-header-row { gap: 8px; }
+}
+
+/* ── Global Insight shredder animation ───────────────────────────────── */
+@keyframes atlas-shred {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(40px); opacity: 0; }
+}
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Blueprint print styles ──────────────────────────────────────────── */
+@media print {
+  .screen-only { display: none !important; }
+  nav, header, [data-tab-bar] { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .blueprint-detail-root { background: white !important; }
+  .blueprint-detail-root h1, .blueprint-detail-root p, .blueprint-detail-root li { color: black !important; }
+  .blueprint-section-label { color: #8B6914 !important; }
+}
+
+/* Compact input action row on phone/tablet so Send stays on one line and icons sit tight */
+@media (max-width: 900px) {
+  .atlas-input-actionrow > div > label,
+  .atlas-input-actionrow > div > button,
+  .atlas-input-actionrow > div > div > button {
+    min-width: 32px !important;
+    min-height: 32px !important;
+    padding: 4px !important;
+  }
+  .atlas-input-actionrow > div { gap: 0 !important; }
+  .atlas-input-actionrow .atlas-send-btn,
+  .atlas-input-actionrow > div:last-child > button {
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+}
+
+
+/* In-thread search highlights (TimelineRail search pill) */
+mark.atlas-search-hit {
+  background: color-mix(in oklab, #f59e0b 22%, transparent);
+  color: #d97706;
+  border-bottom: 1px solid color-mix(in oklab, #f59e0b 55%, transparent);
+  border-radius: 2px;
+  padding: 0 1px;
+  margin: 0;
+  font: inherit;
+  text-decoration: none;
+}
+:root.dark mark.atlas-search-hit,
+[data-theme="dark"] mark.atlas-search-hit {
+  color: #fbbf24;
+}
+mark.atlas-search-hit.atlas-search-hit--active {
+  background: color-mix(in oklab, #f59e0b 42%, transparent);
+  outline: 1px solid color-mix(in oklab, #f59e0b 70%, transparent);
+}
+
+/* Mental Shredder — fall animation */
+@keyframes atlasShredFall {
+  0%   { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(80px); opacity: 0; }
+}
+
+/* Premium gold toast (sonner) */
+.atlas-toast-premium {
+  background: linear-gradient(135deg, rgba(242,216,154,0.14) 0%, rgba(201,162,76,0.06) 100%) !important;
+  border: 1px solid rgba(230,198,135,0.45) !important;
+  color: var(--atlas-fg) !important;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 24px rgba(230,198,135,0.18) !important;
+  backdrop-filter: blur(10px);
+}
+.atlas-toast-premium [data-description] {
+  color: var(--atlas-gold) !important;
+  opacity: 0.85;
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+@keyframes axiomShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
