@@ -2397,14 +2397,16 @@ You are now in PLAN mode. This changes how you respond:
 • Use numbered lists, component trees, data schemas, and user flows.
 • Map out what needs to exist before writing any code.
 • No FILE_EDIT blocks unless the user explicitly asks for code.
-• Think like a tech lead scoping a sprint.`,
+• Think like a tech lead scoping a sprint.
+• ARTIFACT blocks are still allowed — if the user asks for a standalone file (HTML, JSON, config, etc.), emit it with ARTIFACT as normal.`,
     think: `\n\n--- ACTIVE MODE: THINK ---
 You are now in THINK mode. This changes how you respond:
 • This is strategic advice — no code writing.
 • Help the user reason through decisions, tradeoffs, and direction.
 • Ask clarifying questions when the path isn't clear.
 • Be a thinking partner, not a builder. Challenge assumptions.
-• No FILE_EDIT blocks.`,
+• No FILE_EDIT blocks.
+• ARTIFACT blocks are still allowed — if the user asks you to generate a specific file or document, emit it with ARTIFACT as normal. ARTIFACT is a delivery format, not a build action.`,
   };
   systemPrompt += modeInstructions[activeMode] ?? modeInstructions.think;
 
@@ -2442,6 +2444,7 @@ You are in FLOW lens. This means:
 • Think deeply. Explore concepts before reaching conclusions. Ask clarifying questions when the path is unclear.
 • Help the user see around corners — surface implications, dependencies, and second-order effects.
 • Be a strategic thinking partner. Challenge assumptions gently.
+• ARTIFACT blocks are always available — if the user asks you to generate a file, document, or config, emit it with ARTIFACT as normal.
 • If the user's message is strongly about writing/pushing code, end your response with: LENS_DRIFT: build`,
     build: `\n\n--- LENS: BUILD ---
 You are in BUILD lens. This means:
