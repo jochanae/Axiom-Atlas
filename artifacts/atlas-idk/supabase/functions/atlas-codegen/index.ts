@@ -8,7 +8,7 @@ import { composeAtlasPrompt } from "../_shared/atlas-core.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-atlas-user-id, x-atlas-bridge-secret",
 };
 
 const CODEGEN_ROLE = `═══════════════════════════════════════════════════════════════
@@ -46,9 +46,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Missing auth");
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -58,16 +55,32 @@ Deno.serve(async (req) => {
       throw new Error("No AI API key configured");
     }
 
-    // Verify the user
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const {
-      data: { user },
-      error: authError,
-    } = await userClient.auth.getUser();
-    if (authError || !user) throw new Error("Unauthorized");
+    // Auth — PATH 1: Cloud Run bridge
+    let userId: string;
+    const bridgeUserId = req.headers.get("x-atlas-user-id");
+    const bridgeSecret = req.headers.get("x-atlas-bridge-secret");
+
+    if (bridgeUserId && bridgeSecret) {
+      const expectedSecret = Deno.env.get("ATLAS_BRIDGE_SECRET");
+      if (bridgeSecret !== expectedSecret) {
+        throw new Error("Unauthorized — bridge secret mismatch");
+      }
+      userId = bridgeUserId;
+    } else {
+      // PATH 2: Legacy Supabase JWT fallback
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) throw new Error("Missing auth");
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const {
+        data: { user },
+        error: authError,
+      } = await userClient.auth.getUser();
+      if (authError || !user) throw new Error("Unauthorized");
+      userId = user.id;
+    }
 
     const { projectId, sessionId, prompt, context } = await req.json();
     if (!projectId || !prompt) throw new Error("Missing projectId or prompt");
@@ -80,7 +93,7 @@ Deno.serve(async (req) => {
         .from("project_compass")
         .select("compass_md, aesthetics, audience")
         .eq("project_id", projectId)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .order("version", { ascending: false })
         .limit(1),
       sessionId
@@ -88,7 +101,7 @@ Deno.serve(async (req) => {
             .from("chat_messages")
             .select("role, content")
             .eq("session_id", sessionId)
-            .eq("user_id", user.id)
+            .eq("user_id", userId)
             .order("created_at", { ascending: true })
             .limit(20)
         : Promise.resolve({ data: [] }),
@@ -204,7 +217,7 @@ Deno.serve(async (req) => {
     const { data: saved, error: saveError } = await admin
       .from("generated_files")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         project_id: projectId,
         session_id: sessionId || null,
         filename: parsed.filename,
