@@ -852,6 +852,345 @@ ${fileBlock}`;
   }
 });
 
+// POST /api/github/full-import — deep analysis: seeds project memory (v2 tiers) + ledger decisions
+router.post("/github/full-import", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { projectId, repo: bodyRepo, branch: bodyBranch } = req.body as {
+    projectId: number;
+    repo?: string;
+    branch?: string;
+  };
+  if (!projectId || !Number.isFinite(projectId)) {
+    res.status(400).json({ error: "Missing projectId" }); return;
+  }
+
+  // 1. Load project + verify ownership
+  const [project] = await db
+    .select({
+      id: projectsTable.id,
+      name: projectsTable.name,
+      description: projectsTable.description,
+      linkedRepo: projectsTable.linkedRepo,
+      memory: projectsTable.memory,
+    })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)));
+
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  // 2. Resolve repo + branch
+  let repo = bodyRepo;
+  let branch = bodyBranch ?? "main";
+  if (!repo && project.linkedRepo) {
+    try {
+      const lr = typeof project.linkedRepo === "string"
+        ? JSON.parse(project.linkedRepo) as { fullName?: string; defaultBranch?: string }
+        : project.linkedRepo as { fullName?: string; defaultBranch?: string };
+      repo = lr.fullName;
+      branch = bodyBranch ?? lr.defaultBranch ?? "main";
+    } catch { /* fall through — repo stays undefined */ }
+  }
+  if (!repo) { res.status(400).json({ error: "No GitHub repo linked to this project" }); return; }
+
+  // 3. Resolve token
+  const token = await getToken(req);
+  if (!token) { res.status(401).json({ error: "Missing x-github-token header" }); return; }
+
+  // 4. Fetch file tree
+  let blobPaths: string[] = [];
+  let actualBranch = branch;
+  for (const b of [branch, branch === "main" ? "master" : "main"]) {
+    const r = await fetch(`${GH_API}/repos/${repo}/git/trees/${b}?recursive=1`, { headers: ghHeaders(token) });
+    if (r.ok) {
+      const data = await r.json() as any;
+      blobPaths = (data.tree as any[]).filter(n => n.type === "blob").map(n => n.path as string);
+      actualBranch = b;
+      break;
+    }
+  }
+  if (blobPaths.length === 0) { res.status(404).json({ error: "Could not read repo tree — check token and repo name" }); return; }
+
+  // 5. Select up to 15 key files — broader than the quick analyze scan
+  const deepCandidates = [
+    "README.md", "readme.md", "README.mdx",
+    "ARCHITECTURE.md", "CONTRIBUTING.md",
+    "package.json",
+    "src/App.tsx", "src/App.jsx", "App.tsx",
+    "src/main.tsx", "src/index.tsx",
+    "src/router.tsx", "src/routes.tsx", "src/routes/index.tsx",
+    "supabase/schema.sql",
+  ];
+
+  // Add docs directory files
+  const docFiles = blobPaths.filter(p => /^docs?\//i.test(p) && /\.(md|txt)$/.test(p)).slice(0, 3);
+  deepCandidates.push(...docFiles);
+
+  // Add migration / schema files
+  const migFiles = blobPaths.filter(p =>
+    (p.startsWith("supabase/migrations/") || p.startsWith("prisma/migrations/") || p === "prisma/schema.prisma" || p === "drizzle/schema.ts")
+    && (p.endsWith(".sql") || p.endsWith(".ts"))
+  ).slice(0, 2);
+  deepCandidates.push(...migFiles);
+
+  // Add main backend entry point
+  const backendEntry = blobPaths.find(p =>
+    /^(src\/|server\/|api\/)?(index|server|app)\.(ts|js)$/.test(p)
+  );
+  if (backendEntry) deepCandidates.push(backendEntry);
+
+  // Add a routes index or main routes file
+  const routesFile = blobPaths.find(p =>
+    /routes?\/(index\.(ts|js)|_index\.(ts|js)|routes\.(ts|js))$/.test(p)
+    || p === "src/routes.ts"
+  );
+  if (routesFile) deepCandidates.push(routesFile);
+
+  const toFetch = deepCandidates.filter(p => blobPaths.includes(p)).slice(0, 15);
+
+  // 6. Fetch file contents in parallel (300 lines max each)
+  const fileResults = await Promise.all(
+    toFetch.map(async (path) => {
+      try {
+        const r = await fetch(`${GH_API}/repos/${repo}/contents/${path}?ref=${actualBranch}`, { headers: ghHeaders(token) });
+        if (!r.ok) return null;
+        const data = await r.json() as any;
+        if (data.encoding !== "base64") return null;
+        const content = Buffer.from(data.content.replace(/\n/g, ""), "base64").toString("utf-8");
+        const lines = content.split("\n");
+        return { path, content: lines.slice(0, 300).join("\n"), truncated: lines.length > 300 };
+      } catch { return null; }
+    })
+  );
+  const validFiles = fileResults.filter(Boolean) as { path: string; content: string; truncated: boolean }[];
+
+  // 7. Build directory summary
+  const dirCounts: Record<string, number> = {};
+  for (const p of blobPaths) {
+    const parts = p.split("/");
+    if (parts.length > 1) {
+      const dir = parts.slice(0, Math.min(2, parts.length - 1)).join("/");
+      dirCounts[dir] = (dirCounts[dir] || 0) + 1;
+    }
+  }
+  const treeSummary = Object.entries(dirCounts)
+    .sort((a, b) => b[1] - a[1]).slice(0, 30)
+    .map(([d, c]) => `${d}/ (${c} files)`).join("\n");
+
+  const fileBlock = validFiles
+    .map(f => `=== ${f.path}${f.truncated ? " [truncated at 300 lines]" : ""} ===\n${f.content}`)
+    .join("\n\n");
+
+  // 8. Deep Claude prompt — extract identity, decisions, open questions
+  const importPrompt = `You are doing a deep architectural import of a software project from its GitHub repository.
+Your goal is to extract durable facts that a strategic AI partner (Atlas) needs to know permanently — especially locked architectural decisions already made.
+
+Return ONLY a valid JSON object — no markdown fences, no explanation — with exactly this shape:
+{
+  "identity": {
+    "name": "project name from package.json or README",
+    "description": "one clear sentence: what this product does for users",
+    "stage": "idea | shaping | in-progress | live — based on code completeness",
+    "targetUser": "who this is built for (one phrase, or null if unclear)",
+    "coreProblem": "what problem it solves (one sentence, or null if unclear)"
+  },
+  "decisions": [
+    {
+      "title": "Short verb-noun title, e.g. 'Use Supabase for auth and database'",
+      "rationale": "Why this was chosen or what evidence in the code confirms this is locked in",
+      "severity": "structure | logic | aesthetic | general"
+    }
+  ],
+  "stack": ["specific technologies found, e.g. React, TypeScript, Tailwind CSS, Supabase, Vite, Express"],
+  "openQuestions": ["unresolved things visible in the code — TODOs, placeholder text, commented-out features — max 5"],
+  "routes": ["URL paths found in router config — max 20"],
+  "tables": ["database table names from schema or .from() calls — max 20"],
+  "relatedProjects": ["names of other products mentioned in README or config — max 5"],
+  "summary": "3-4 sentences: what this is, what stage it is at, what the main decisions already made are, and what remains open"
+}
+
+Rules:
+- decisions array: extract 4–10 real decisions. Each must be something genuinely locked in (chosen tech, architecture pattern, data model choice). Skip obvious/trivial ones.
+- severity: "structure" = core architecture; "logic" = business logic / data flow; "aesthetic" = UI/UX; "general" = everything else
+- If info is not found, use [] or null. Never invent.
+- Be specific. "Use Supabase for postgres + auth" is better than "Use a database".
+
+PROJECT: ${project.name}
+REPO: ${repo} (${blobPaths.length} total files)
+
+DIRECTORY TREE:
+${treeSummary}
+
+KEY FILE CONTENTS (${validFiles.length} files read):
+${fileBlock}`;
+
+  let raw = "";
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2500,
+      messages: [{ role: "user", content: importPrompt }],
+    });
+    raw = response.content[0]?.type === "text" ? response.content[0].text : "{}";
+  } catch (e: any) {
+    res.status(500).json({ error: "AI extraction failed", detail: e.message }); return;
+  }
+
+  // 9. Parse AI response
+  let importData: {
+    identity?: { name?: string; description?: string; stage?: string; targetUser?: string; coreProblem?: string };
+    decisions?: Array<{ title: string; rationale: string; severity: string }>;
+    stack?: string[];
+    openQuestions?: string[];
+    routes?: string[];
+    tables?: string[];
+    relatedProjects?: string[];
+    summary?: string;
+  };
+  try {
+    const cleaned = raw.replace(/^```json\s*/m, "").replace(/\s*```$/m, "").trim();
+    importData = JSON.parse(cleaned);
+  } catch {
+    res.status(500).json({ error: "Failed to parse AI response", raw }); return;
+  }
+
+  const now = new Date().toISOString();
+  const identity = importData.identity ?? {};
+  const decisions = Array.isArray(importData.decisions) ? importData.decisions : [];
+  const stack = Array.isArray(importData.stack) ? importData.stack : [];
+  const routes = Array.isArray(importData.routes) ? importData.routes : [];
+  const tables = Array.isArray(importData.tables) ? importData.tables : [];
+  const openQuestions = Array.isArray(importData.openQuestions) ? importData.openQuestions : [];
+
+  // 10. Build v2 memory store — write with proper tiers so Atlas scores them correctly
+  type MemEntry = { tier: 1|2|3|4|5; text: string; createdAt: string; retrievalCount: number; lastRetrievedAt: string | null };
+
+  const newEntries: MemEntry[] = [];
+
+  // Tier 2 — project identity (180-day lifetime)
+  if (identity.description) {
+    newEntries.push({ tier: 2, text: `Project: ${identity.description}`, createdAt: now, retrievalCount: 0, lastRetrievedAt: null });
+  }
+  if (identity.targetUser) {
+    newEntries.push({ tier: 2, text: `Target user: ${identity.targetUser}`, createdAt: now, retrievalCount: 0, lastRetrievedAt: null });
+  }
+  if (identity.coreProblem) {
+    newEntries.push({ tier: 2, text: `Core problem: ${identity.coreProblem}`, createdAt: now, retrievalCount: 0, lastRetrievedAt: null });
+  }
+  if (identity.stage) {
+    newEntries.push({ tier: 2, text: `Project stage: ${identity.stage}`, createdAt: now, retrievalCount: 0, lastRetrievedAt: null });
+  }
+
+  // Tier 1 — locked architectural decisions (no decay, protected, max score)
+  for (const d of decisions) {
+    newEntries.push({
+      tier: 1,
+      text: `Decision: ${d.title}. ${d.rationale}`,
+      createdAt: now,
+      retrievalCount: 0,
+      lastRetrievedAt: null,
+    });
+  }
+
+  // Tier 4 — contextual: stack, routes, tables (30-day lifetime)
+  if (stack.length > 0) {
+    newEntries.push({ tier: 4, text: `Tech stack: ${stack.join(", ")}`, createdAt: now, retrievalCount: 0, lastRetrievedAt: null });
+  }
+  if (routes.length > 0) {
+    newEntries.push({ tier: 4, text: `Routes: ${routes.slice(0, 15).join(", ")}`, createdAt: now, retrievalCount: 0, lastRetrievedAt: null });
+  }
+  if (tables.length > 0) {
+    newEntries.push({ tier: 4, text: `DB tables: ${tables.join(", ")}`, createdAt: now, retrievalCount: 0, lastRetrievedAt: null });
+  }
+  if (openQuestions.length > 0) {
+    newEntries.push({ tier: 4, text: `Open questions: ${openQuestions.join(" | ")}`, createdAt: now, retrievalCount: 0, lastRetrievedAt: null });
+  }
+
+  // Tier 3 — episodic: record the import event itself
+  newEntries.push({
+    tier: 3,
+    text: `Full repo import completed ${now.split("T")[0]}: ${validFiles.length} files read from ${repo}, ${decisions.length} decisions extracted, ${tables.length} tables identified.`,
+    createdAt: now,
+    retrievalCount: 0,
+    lastRetrievedAt: null,
+  });
+
+  // Merge with existing memory — strip old scan/import entries, keep user-written memories
+  let existingEntries: MemEntry[] = [];
+  try {
+    const parsed = project.memory ? JSON.parse(project.memory) as { v?: number; entries?: MemEntry[] } : null;
+    if (parsed?.v === 2 && Array.isArray(parsed.entries)) {
+      // Keep entries that look user-authored (not auto-imports)
+      existingEntries = parsed.entries.filter(e =>
+        !e.text.startsWith("Decision: ") &&
+        !e.text.startsWith("Project: ") &&
+        !e.text.startsWith("Target user: ") &&
+        !e.text.startsWith("Core problem: ") &&
+        !e.text.startsWith("Project stage: ") &&
+        !e.text.startsWith("Tech stack: ") &&
+        !e.text.startsWith("Routes: ") &&
+        !e.text.startsWith("DB tables: ") &&
+        !e.text.startsWith("Open questions: ") &&
+        !e.text.startsWith("Full repo import completed")
+      );
+    }
+  } catch { /* start fresh */ }
+
+  const newMemory = JSON.stringify({ v: 2, entries: [...newEntries, ...existingEntries] });
+
+  // 11. Write memory + optionally update description in a single update
+  const descriptionUpdate = (!project.description && identity.description)
+    ? { memory: newMemory, description: identity.description }
+    : { memory: newMemory };
+
+  await db.update(projectsTable).set(descriptionUpdate).where(eq(projectsTable.id, projectId));
+
+  // 12. Seed ledger entries for each extracted decision
+  //     Only insert if we don't already have import-seeded entries (idempotent on re-import: replace them)
+  const validSeverities = new Set(["structure", "logic", "aesthetic", "general"]);
+  let ledgerEntriesCreated = 0;
+
+  if (decisions.length > 0) {
+    // Delete old auto-import ledger entries first (prevent duplicates on re-import)
+    await db
+      .delete(entriesTable)
+      .where(and(
+        eq(entriesTable.projectId, projectId),
+        sql`${entriesTable.verb} = 'auto-import'`
+      ));
+
+    const ledgerRows = decisions.map(d => ({
+      projectId,
+      title: d.title,
+      summary: d.rationale,
+      status: "committed" as const,
+      severity: validSeverities.has(d.severity) ? d.severity : "general",
+      mode: "think" as const,
+      verb: "auto-import",
+    }));
+
+    await db.insert(entriesTable).values(ledgerRows);
+    ledgerEntriesCreated = ledgerRows.length;
+  }
+
+  res.json({
+    ok: true,
+    projectId,
+    repo,
+    filesRead: validFiles.length,
+    totalFiles: blobPaths.length,
+    identity,
+    stack,
+    decisions: decisions.map(d => d.title),
+    openQuestions,
+    tables,
+    routes,
+    ledgerEntriesCreated,
+    summary: importData.summary ?? null,
+  });
+});
+
 // GET /api/github/deployment — auto-detect live deployment URL from repo
 router.get("/github/deployment", async (req, res): Promise<void> => {
   const token = await getToken(req);

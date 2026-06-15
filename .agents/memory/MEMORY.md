@@ -10,3 +10,5 @@
 - [Atlas future builds](atlas-future-builds.md) — two approved: live dev server preview + new project bootstrapping from Atlas
 - [Post-merge setup pattern](post-merge-setup.md) — script only runs pnpm install; DB migrations run at server startup, not in post-merge
 - [Frontend reference clone](frontend-ref.md) — `frontend-ref/` = live clone of jochanae/atlas-idk; pull at session start before any Cursor prompt; never use artifacts/atlas/ for frontend truth
+- [Project memory v2 format](memory-v2-format.md) — memory column uses {v:2, entries:[{tier,text,createdAt,...}]}; tiers: 1=foundational/decisions, 2=identity, 3=episodic, 4=contextual, 5=transient; full-import writes T1 for decisions, T2 for identity; plain text is auto-migrated by parseMemoryStore
+- [Full-import endpoint](full-import-endpoint.md) — POST /api/github/full-import in github.ts: reads 15 files, extracts decisions/identity/stack, writes v2 memory + ledger (verb="auto-import", idempotent on re-import); cursor prompt in cursor-instructions/full-import-ui.md
