@@ -842,9 +842,8 @@ function classifySurfaceSignal(content: string): SurfaceSignal | null {
     || (scores.workspaceAnchors >= 2 && scores.words >= 12);
   if (!hasSubstance) return null;
 
-  if (scores.decisionAnchors > 0 && scores.decision >= 3) {
-    return { type: "DECISION", reason: "commitment signal", label: "Log this decision" };
-  }
+  // DECISION surface removed — fired too aggressively (e.g. "want me to build these?" triggering PARK/COMMIT)
+  // Real decision logging should be user-initiated, not auto-triggered by AI response content.
 
   if (scores.workspaceAnchors > 0 && scores.workspace >= 5 && (scores.words >= 24 || scores.numberedSteps > 0)) {
     return { type: "WORKSPACE", reason: "operational shift", label: "Working space prepared" };
@@ -2719,7 +2718,19 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       : Promise.resolve(undefined);
 
   writeStep(res, { verb: "Analyzing", target: "your request", phase: "analyze" });
-  let modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, allAttachments[0]);
+  let modelResult: Awaited<ReturnType<typeof callModel>>;
+  try {
+    modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, allAttachments[0]);
+  } catch (modelErr: unknown) {
+    logger.error({ err: modelErr }, "callModel failed — sending error event to client");
+    const isOverload = String(modelErr).includes("overloaded") || String(modelErr).includes("529");
+    const errorMsg = isOverload
+      ? "Atlas is under heavy load right now. Wait a moment and try again."
+      : "Something went wrong on our end. Please try again.";
+    res.write(`data: ${JSON.stringify({ type: "error", content: errorMsg })}\n\n`);
+    res.end();
+    return;
+  }
   let rawContent = modelResult.content;
   let assistantUsage = modelResult.usage;
   let modelUsed = modelResult.model;
