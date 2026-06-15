@@ -21,6 +21,7 @@ Repo: `jochanae/Axiom-Atlas` (private)
 
 **HARD RULE — DO NOT TOUCH THE FRONTEND:**
 - `artifacts/atlas/` is a **drifted reference copy**. It does NOT reflect the live frontend at `axiomsystem.app`.
+- `frontend-ref/` is a live read-only clone of `jochanae/atlas-idk`. **Always read from here** before writing Cursor prompts. Refresh with `git -C frontend-ref pull` at session start. It is gitignored and not committed.
 - The live frontend is maintained separately in `jochanae/atlas-idk` (Cursor/Lovable).
 - **Never** modify frontend code in this repo unless explicitly asked.
 - **Never** place mockups on the Canvas that pretend to show the live app UI — they will not match.

@@ -9,3 +9,4 @@
 - [Claude image gen refusal](image-gen-claude-refusal.md) — never tell Claude "YOU CAN generate images"; frame IMAGE_GEN as external Gemini service it triggers by token; standalone endpoint POST /api/image/generate already wired
 - [Atlas future builds](atlas-future-builds.md) — two approved: live dev server preview + new project bootstrapping from Atlas
 - [Post-merge setup pattern](post-merge-setup.md) — script only runs pnpm install; DB migrations run at server startup, not in post-merge
+- [Frontend reference clone](frontend-ref.md) — `frontend-ref/` = live clone of jochanae/atlas-idk; pull at session start before any Cursor prompt; never use artifacts/atlas/ for frontend truth
