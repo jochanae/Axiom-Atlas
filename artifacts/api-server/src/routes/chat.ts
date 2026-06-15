@@ -2143,14 +2143,18 @@ router.post("/chat", async (req, res): Promise<void> => {
     }
   }
 
-  // Auto-fetch repo file tree (Phase 1 — always injected when a repo is linked)
+  // Auto-fetch repo file tree (Phase 1 — injected when a repo is linked and message needs code context)
+  // Skip for short/conversational messages — saves up to 3s of silence before Claude starts
+  const CODE_CONTEXT_RE = /\b(fix|build|create|implement|write|refactor|debug|error|broken|doesn't work|won't work|failing|crash|not working|file|component|function|route|api|endpoint|schema|migration|deploy|page|button|layout|style|hook|class|module|import|export|install|package|config|test|spec|type|interface|column|table|query|pull|push|commit|branch|pr|diff|preview|stackblitz)\b/i;
+  const needsCodeContext = CODE_CONTEXT_RE.test(message) || message.length > 200 || (body.fileContext?.length ?? 0) > 0;
+
   let repoTreeContext: string | null = null;
   let repoFiles: Set<string> | null = null;
   let recentRepoActivityContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
   const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project?.githubToken);
 
-  if (project?.linkedRepo) {
+  if (project?.linkedRepo && needsCodeContext) {
     try {
       const parsedRepo = JSON.parse(project.linkedRepo) as string | { fullName?: string; defaultBranch?: string };
       repoData = typeof parsedRepo === "string"
@@ -2181,12 +2185,13 @@ router.post("/chat", async (req, res): Promise<void> => {
   }
 
   // Phase 2 — auto-fetch file contents when the user asks to build/fix something
-  const BUILD_INTENT_RE = /\b(fix|build|add|change|update|create|implement|write|modify|edit|refactor|debug|bug|error|broken|doesn't work|won't work|failing|crash|not working)\b/i;
+  // Intentionally narrower than CODE_CONTEXT_RE — only triggers selector API call for explicit build requests
+  const BUILD_INTENT_RE = /\b(fix|build|create|implement|write|refactor|debug|error|broken|doesn't work|won't work|failing|crash|not working)\b/i;
   let autoFetchedFiles: string[] = [];
   let autoFetchedContext = "";
   const previousContentByPath = new Map<string, string>();
 
-  if (BUILD_INTENT_RE.test(message) && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
+  if (BUILD_INTENT_RE.test(message) && message.length > 20 && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
     try {
       // Fast selector call: ask Claude which files it needs to read (small, cheap)
       // Use haiku for speed — sonnet adds 5-8s of silence before streaming starts
