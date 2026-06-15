@@ -20,6 +20,7 @@ import {
   buildTree,
 } from "@/components/workspace/CommitHistory";
 import { getLinkedRepoFullName, parseLinkedRepo, serializeLinkedRepo } from "@/lib/githubRepo";
+import { getAuthHeaders } from "@/lib/api";
 
 // ── Lens-aware file bucket helpers ─────────────────────────────────
 const IMAGE_EXT = new Set(["png","jpg","jpeg","gif","webp","svg","ico","avif","bmp","heic"]);
@@ -266,6 +267,22 @@ export function FilesPanel({
   const [tokenInput, setTokenInput] = useState("");
   const [tokenSaveError, setTokenSaveError] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "done" | "error">("idle");
+  const importKey = `atlas-full-import-${projectId}`;
+  const [importStatus, setImportStatus] = useState<"idle" | "importing" | "done" | "error">(() => {
+    try { return localStorage.getItem(importKey) ? "done" : "idle"; } catch { return "idle"; }
+  });
+  const [importResult, setImportResult] = useState<{
+    decisions: string[];
+    tables: string[];
+    stack: string[];
+    ledgerEntriesCreated: number;
+    summary: string | null;
+  } | null>(() => {
+    try {
+      const raw = localStorage.getItem(importKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
   const [fileSearch, setFileSearch] = useState("");
   const [treeViewMode, setTreeViewMode] = useState<"tree" | "buckets">(() => (wsLens === "build" ? "tree" : "buckets"));
   const lastLensRef = useRef<WorkspaceLens>(wsLens);
@@ -311,6 +328,33 @@ export function FilesPanel({
       .catch(() => setScanStatus("error"));
   };
 
+  const runFullImport = () => {
+    if (importStatus === "importing") return;
+    const token = selectedRepo
+      ? (localStorage.getItem(`atlas-github-token-${projectId}`) || localStorage.getItem("atlas-github-token") || "__server__")
+      : "__server__";
+    setImportStatus("importing");
+    fetch("/api/github/full-import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders(), "x-github-token": token },
+      body: JSON.stringify({ projectId }),
+    })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(data => {
+        const result = {
+          decisions: data.decisions ?? [],
+          tables: data.tables ?? [],
+          stack: data.stack ?? [],
+          ledgerEntriesCreated: data.ledgerEntriesCreated ?? 0,
+          summary: data.summary ?? null,
+        };
+        try { localStorage.setItem(importKey, JSON.stringify(result)); } catch {}
+        setImportResult(result);
+        setImportStatus("done");
+      })
+      .catch(() => setImportStatus("error"));
+  };
+
   // Reset auto-load gate when project switches
   useEffect(() => {
     autoLoadedRef.current = false;
@@ -323,6 +367,8 @@ export function FilesPanel({
     setCommits([]);
     setCommitsError(null);
     setCommitsReason(null);
+    setImportStatus(localStorage.getItem(`atlas-full-import-${projectId}`) ? "done" : "idle");
+    setImportResult(null);
     onFileContext(null);
   }, [projectId]);
 
@@ -1130,19 +1176,141 @@ export function FilesPanel({
 
       {/* File tree */}
       {filesSubTab === "files" && view === "tree" && (
-        <div style={{ flex: 1, overflowY: "auto", padding: "6px 2px" }} className="scrollbar-none">
-          {treeLoading && (
-            <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 10, ...sMuted, opacity: 0.4 }}>
-              Loading tree…
+        <>
+          {selectedRepo && (
+            <div style={{
+              margin: "8px 10px",
+              borderRadius: 8,
+              border: `1px solid ${importStatus === "done" ? "rgba(201,162,76,0.25)" : "rgba(255,255,255,0.06)"}`,
+              background: importStatus === "done" ? "rgba(201,162,76,0.04)" : "rgba(255,255,255,0.02)",
+              padding: "10px 12px",
+              flexShrink: 0,
+            }}>
+              {importStatus === "idle" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-fg)", marginBottom: 2 }}>
+                      Deep Import
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--atlas-muted)", lineHeight: 1.4 }}>
+                      Atlas reads your repo and seeds your ledger with the architectural decisions already made.
+                    </div>
+                  </div>
+                  <button
+                    onClick={runFullImport}
+                    style={{
+                      flexShrink: 0,
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "1px solid rgba(201,162,76,0.35)",
+                      background: "rgba(201,162,76,0.1)",
+                      color: "var(--atlas-gold)",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      letterSpacing: "0.04em",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Import
+                  </button>
+                </div>
+              )}
+
+              {importStatus === "importing" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: "50%",
+                    background: "var(--atlas-gold)", opacity: 0.7,
+                    animation: "pulse 1.2s ease-in-out infinite", flexShrink: 0,
+                  }} />
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--atlas-fg)", marginBottom: 1 }}>
+                      Analyzing repo…
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--atlas-muted)" }}>
+                      Reading files and extracting decisions. This takes ~20 seconds.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {importStatus === "done" && importResult && (
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10, color: "var(--atlas-gold)", fontWeight: 700, letterSpacing: "0.06em" }}>◆ IMPORTED</span>
+                    <span style={{ fontSize: 9, color: "var(--atlas-muted)" }}>
+                      {importResult.ledgerEntriesCreated} decision{importResult.ledgerEntriesCreated !== 1 ? "s" : ""} added to ledger
+                    </span>
+                    <button
+                      onClick={runFullImport}
+                      title="Re-run full import"
+                      style={{
+                        marginLeft: "auto", background: "transparent", border: "none",
+                        cursor: "pointer", color: "var(--atlas-muted)", fontSize: 9,
+                        fontFamily: "var(--app-font-mono)", letterSpacing: "0.06em", opacity: 0.5,
+                        padding: "2px 4px",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.opacity = "0.9"; }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity = "0.5"; }}
+                    >
+                      re-import
+                    </button>
+                  </div>
+                  {importResult.summary && (
+                    <p style={{ fontSize: 10, color: "var(--atlas-muted)", lineHeight: 1.5, margin: "0 0 6px" }}>
+                      {importResult.summary}
+                    </p>
+                  )}
+                  {importResult.decisions.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {importResult.decisions.slice(0, 5).map((d, i) => (
+                        <span key={i} style={{
+                          fontSize: 9, padding: "2px 6px", borderRadius: 4,
+                          background: "rgba(201,162,76,0.08)", color: "var(--atlas-gold)",
+                          border: "0.5px solid rgba(201,162,76,0.2)",
+                        }}>
+                          {d.length > 40 ? d.slice(0, 40) + "…" : d}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {importStatus === "error" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flex: 1, fontSize: 10, color: "var(--atlas-muted)" }}>
+                    Import failed. Check your GitHub token in the Files tab.
+                  </div>
+                  <button
+                    onClick={runFullImport}
+                    style={{
+                      flexShrink: 0, padding: "5px 10px", borderRadius: 6,
+                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
+                      color: "var(--atlas-muted)", fontSize: 10, cursor: "pointer",
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
             </div>
           )}
-          {treeError && (
-            <div style={{ padding: "16px 12px", textAlign: "center", fontSize: 11, color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)" }}>
-              {treeError}
-            </div>
-          )}
-          {/* Search input + Tree/Type toggle */}
-          <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--atlas-border)", display: "flex", flexDirection: "column", gap: 8 }}>
+
+          <div style={{ flex: 1, overflowY: "auto", padding: "6px 2px" }} className="scrollbar-none">
+            {treeLoading && (
+              <div style={{ padding: "24px 12px", textAlign: "center", fontSize: 10, ...sMuted, opacity: 0.4 }}>
+                Loading tree…
+              </div>
+            )}
+            {treeError && (
+              <div style={{ padding: "16px 12px", textAlign: "center", fontSize: 11, color: "var(--atlas-ember)", fontFamily: "var(--app-font-mono)" }}>
+                {treeError}
+              </div>
+            )}
+            {/* Search input + Tree/Type toggle */}
+            <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--atlas-border)", display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, background: "var(--atlas-bg)", border: "1px solid var(--atlas-border)" }}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--atlas-muted)" strokeWidth="1.5" strokeLinecap="round">
                 <circle cx="6.5" cy="6.5" r="4.5"/><path d="M11 11l2.5 2.5"/>
@@ -1292,7 +1460,8 @@ export function FilesPanel({
               />
             )
           )}
-        </div>
+          </div>
+        </>
       )}
 
       {/* File content */}

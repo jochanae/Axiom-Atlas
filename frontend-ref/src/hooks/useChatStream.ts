@@ -379,7 +379,7 @@ export function useChatStream(
       const effectiveModel = lensCtx.wsModel && lensCtx.wsModel !== "multi" ? lensCtx.wsModel : undefined;
       const body = {
         sessionId: sid,
-        projectId,
+        ...(projectId ? { projectId } : {}),
         message: routedText,
         ...(effectiveModel ? { model: effectiveModel } : {}),
         orchestrate: !effectiveModel,

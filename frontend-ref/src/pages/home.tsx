@@ -1847,6 +1847,18 @@ export default function Home() {
   const { setDepth, setActiveProjectId, setActiveConversationTitle } = useShellState();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { data: projects, isLoading } = useListProjects();
+  const mostRecentActiveProjectId = useMemo(() => {
+    const activeProjects = (projects ?? []).filter((project: Project) => project.status === "committed" || (project as { entity_type?: string }).entity_type === "idea");
+    const candidates = activeProjects.length > 0 ? activeProjects : projects ?? [];
+    const latest = candidates.reduce<Project | null>((current, project: Project) => {
+      if (!current) return project;
+      return new Date(project.updatedAt).getTime() > new Date(current.updatedAt).getTime()
+        ? project
+        : current;
+    }, null);
+    return latest?.id ?? null;
+  }, [projects]);
   const previousHomeMessageCountRef = useRef(0);
   const [globalInsightComposerHeight, setGlobalInsightComposerHeight] = useState(148);
   const globalInsightSeedPendingRef = useRef(false);
@@ -1940,14 +1952,18 @@ export default function Home() {
       setShowHistory(false);
       setShowFocusPicker(false);
       setGlobalInsightOpen(true);
-      void callGlobalInsightMode(true);
+      if (mostRecentActiveProjectId) {
+        setLocation(`/project/${mostRecentActiveProjectId}?global=true`);
+      } else {
+        setLocation("/projects");
+      }
       window.setTimeout(() => window.dispatchEvent(new Event("atlas:focus-composer")), 120);
       toast("Global Insight · Strategic view", {
         className: "atlas-toast-premium",
         description: "Macro view across every project.",
       });
     }
-  }, [globalInsightOpen, vibrate, callGlobalInsightMode, nexusChat.setMessages, setDepth]);
+  }, [globalInsightOpen, mostRecentActiveProjectId, vibrate, callGlobalInsightMode, nexusChat.setMessages, setDepth, setLocation]);
 
   const handleKeepIt = useCallback(async () => {
     const messagesToKeep = nexusChat.messages;
@@ -2137,7 +2153,6 @@ export default function Home() {
   const [inputFocused, setInputFocused] = useState(false);
   const placeholder = useTypewriter(PLACEHOLDERS, typewriterPaused);
 
-  const { data: projects, isLoading } = useListProjects();
   useEffect(() => {
     if (!projects || projects.length === 0) return;
     const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 24 hours ago
@@ -2182,17 +2197,6 @@ export default function Home() {
       nexusChat.setShapingHeld(false);
     }
   }, [projects, nexusChat.shapingHeld, nexusChat.setShapingHeld, nexusChat.setShapingPayload]);
-  const mostRecentActiveProjectId = useMemo(() => {
-    const activeProjects = (projects ?? []).filter((project: Project) => project.status === "committed" || (project as { entity_type?: string }).entity_type === "idea");
-    const candidates = activeProjects.length > 0 ? activeProjects : projects ?? [];
-    const latest = candidates.reduce<Project | null>((current, project: Project) => {
-      if (!current) return project;
-      return new Date(project.updatedAt).getTime() > new Date(current.updatedAt).getTime()
-        ? project
-        : current;
-    }, null);
-    return latest?.id ?? null;
-  }, [projects]);
   const handleHomeFocusSelect = useCallback((projectId: number) => {
     homeFocusUserInitiatedRef.current = true;
     setHomeFocus(projectId);
@@ -2431,9 +2435,13 @@ export default function Home() {
   useEffect(() => {
     if (nexusChat.messages.length > 0 && !globalInsightOpen) {
       setGlobalInsightOpen(true);
-      void callGlobalInsightMode(true);
+      if (mostRecentActiveProjectId) {
+        setLocation(`/project/${mostRecentActiveProjectId}?global=true`);
+      } else {
+        setLocation("/projects");
+      }
     }
-  }, [callGlobalInsightMode, globalInsightOpen, nexusChat.messages.length]);
+  }, [globalInsightOpen, mostRecentActiveProjectId, nexusChat.messages.length, setLocation]);
 
   // Rehydrate Global Insight mode on hard refresh / initial load.
   // The server is the source of truth (reflection_mode is set per-session
@@ -2619,7 +2627,11 @@ export default function Home() {
     const shouldStayOnHome = true;
     if (!globalInsightOpen && !thinkOutLoudInlineRef.current) {
       setGlobalInsightOpen(true);
-      void callGlobalInsightMode(true);
+      if (mostRecentActiveProjectId) {
+        setLocation(`/project/${mostRecentActiveProjectId}?global=true`);
+      } else {
+        setLocation("/projects");
+      }
     }
     if (!shouldStayOnHome && !backendReady) {
       setCreateError(
@@ -2742,6 +2754,7 @@ export default function Home() {
     attachedFiles,
     isSending,
     globalInsightOpen,
+    mostRecentActiveProjectId,
     backendReady,
     isFree,
     projects,
@@ -3532,7 +3545,16 @@ export default function Home() {
                 only by the subheader "● Global Insight" pill, so the home shell
                 stays visually identical. */}
             {nexusChat.messages.length === 0 && (
-              <div style={{ textAlign: "center", marginBottom: 24, marginTop: 72, position: "relative", zIndex: 1 }}>
+              <div style={{
+                textAlign: "center",
+                marginBottom: 24,
+                marginTop: 72,
+                position: "relative",
+                zIndex: 1,
+                transform: inputFocused ? "translateY(-12px)" : "translateY(0)",
+                opacity: inputFocused ? 0.3 : 1,
+                transition: "transform 200ms ease-in-out, opacity 200ms ease-in-out",
+              }}>
                 <h1 style={{
                   fontSize: "var(--ts-display-xl)", fontWeight: 300,
                   letterSpacing: "-0.025em", lineHeight: 1.2, margin: "0 0 10px",
@@ -4128,11 +4150,20 @@ export default function Home() {
 
             <div style={{
               position: "relative",
-              borderRadius: 0,
-              padding: 0,
-              background: "transparent",
-              border: "none",
-              boxShadow: "none",
+              borderRadius: 14,
+              padding: (inputFocused || hasInput || attachedFiles.length > 0) ? "12px 14px" : 0,
+              background: (inputFocused || hasInput || attachedFiles.length > 0)
+                ? "rgba(20,16,10,0.32)"
+                : "transparent",
+              border: "1px solid",
+              borderColor: (inputFocused || hasInput || attachedFiles.length > 0)
+                ? "rgba(212,175,55,0.45)"
+                : "rgba(212,175,55,0)",
+              boxShadow: (inputFocused || hasInput || attachedFiles.length > 0)
+                ? "inset 0 0 22px rgba(212,175,55,0.08), 0 0 18px rgba(212,175,55,0.06)"
+                : "none",
+              backdropFilter: (inputFocused || hasInput || attachedFiles.length > 0) ? "blur(6px)" : "none",
+              transition: "border-color 200ms ease-in-out, box-shadow 200ms ease-in-out, background 200ms ease-in-out, padding 200ms ease-in-out",
             }}>
               {!hasInput && !inputFocused && (nexusChat.messages.length === 0 || globalInsightOpen) && (
                 <div
@@ -4194,8 +4225,13 @@ export default function Home() {
               />
             </div>
 
-            {/* Bottom action bar */}
-            <div style={{ display: "flex", alignItems: "center", marginTop: 12, gap: 2, position: "relative" }}>
+            {/* Bottom action bar — hidden at rest, fades in when the surface anchors */}
+            <div style={{
+              display: "flex", alignItems: "center", marginTop: 12, gap: 2, position: "relative",
+              opacity: (inputFocused || hasInput || attachedFiles.length > 0) ? 1 : 0,
+              pointerEvents: (inputFocused || hasInput || attachedFiles.length > 0) ? "auto" : "none",
+              transition: "opacity 200ms ease-in-out",
+            }}>
               <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, justifyContent: "flex-start", minWidth: 0 }}>
 
               {/* Global Insight history — gold clock pill. Always visible so

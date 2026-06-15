@@ -3066,6 +3066,9 @@ export default function Workspace() {
   const id = Number(projectId) || Number(window.location.pathname.split('/project/')[1]?.split('/')[0]);
   const searchParams = new URLSearchParams(window.location.search);
   const [showIntake, setShowIntake] = useState(searchParams.get("intake") === "true");
+  const [globalMode, setGlobalMode] = useState(searchParams.get("global") === "true");
+  const effectiveId = globalMode ? 0 : id;
+  const [globalModeChipSlot, setGlobalModeChipSlot] = useState<HTMLElement | null>(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [createProjectError, setCreateProjectError] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -3307,7 +3310,7 @@ export default function Workspace() {
     setMemoryChips,
     doSend,
     handleRegenerate,
-  } = useChatStream(id, {
+  } = useChatStream(effectiveId, {
     sessions,
     sessionsLoading,
     createSession,
@@ -4121,6 +4124,27 @@ export default function Workspace() {
       titleSpan.removeAttribute("data-atlas-autoname-placeholder");
     };
   }, [autoNameKey, showProjectNameSkeleton]);
+
+  useEffect(() => {
+    const projectButton = document.querySelector<HTMLButtonElement>(
+      ".atlas-app-header button[title^='Tap to switch project']",
+    );
+    const parent = projectButton?.parentElement;
+    if (!projectButton || !parent) return;
+
+    const slot = document.createElement("span");
+    slot.setAttribute("data-atlas-global-mode-slot", "true");
+    slot.style.display = "inline-flex";
+    slot.style.alignItems = "center";
+    slot.style.flexShrink = "0";
+    projectButton.insertAdjacentElement("afterend", slot);
+    setGlobalModeChipSlot(slot);
+
+    return () => {
+      slot.remove();
+      setGlobalModeChipSlot(null);
+    };
+  }, [projectName]);
 
 
   useEffect(() => {
@@ -4966,6 +4990,27 @@ export default function Workspace() {
     if (!Number.isFinite(id)) return;
     if (!silent) setIsScanning(true);
     try {
+      const parsedRepo = project?.linkedRepo ? parseLinkedRepo(project.linkedRepo) : null;
+      if (parsedRepo?.fullName) {
+        const scanKey = `atlas-scan-${id}`;
+        try { localStorage.removeItem(scanKey); } catch {}
+        try {
+          const token = githubPushToken ?? "__server__";
+          const analyze = await fetch("/api/github/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...getAuthHeaders(), "x-github-token": token },
+            body: JSON.stringify({ repo: parsedRepo.fullName, branch: parsedRepo.defaultBranch ?? "main" }),
+          });
+          if (analyze.ok) {
+            const data = await analyze.json().catch(() => null);
+            if (data) {
+              try { localStorage.setItem(scanKey, JSON.stringify(data)); } catch {}
+            }
+          }
+        } catch {
+          // Silent — never block readiness scanning if GitHub analyze fails
+        }
+      }
       const r = await fetch(`/api/projects/${id}/scan`, {
         method: "POST",
         credentials: "include",
@@ -5022,7 +5067,7 @@ export default function Workspace() {
     } finally {
       if (!silent) setIsScanning(false);
     }
-  }, [id, queryClient, mapReadiness]);
+  }, [githubPushToken, id, queryClient, mapReadiness, project?.linkedRepo]);
 
   useEffect(() => {
     if (!Number.isFinite(id) || !hasLinkedRepo) return;
@@ -5600,6 +5645,34 @@ export default function Workspace() {
 
   return (
     <>
+      {globalModeChipSlot && createPortal(
+        <button
+          type="button"
+          onClick={() => setGlobalMode(prev => !prev)}
+          style={{
+            marginLeft: 8,
+            padding: "2px 10px",
+            borderRadius: 999,
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+            border: globalMode
+              ? "1px solid rgba(201,162,76,0.6)"
+              : "1px solid rgba(255,255,255,0.12)",
+            background: globalMode
+              ? "rgba(201,162,76,0.12)"
+              : "transparent",
+            color: globalMode ? "var(--atlas-gold, #C9A24C)" : "var(--atlas-muted, #78716C)",
+            cursor: "pointer",
+            transition: "all 0.15s",
+            WebkitTapHighlightColor: "transparent",
+            flexShrink: 0,
+          }}
+        >
+          {globalMode ? "All Projects" : "This project"}
+        </button>,
+        globalModeChipSlot
+      )}
       {showIntake && (
         <ForgeIntake
           projectId={id}
@@ -6808,11 +6881,27 @@ export default function Workspace() {
                 onSelect: () => {
                   if (isScanning) return;
                   toast.info("Rescanning repository", {
-                    description: "Pulling the latest from GitHub to refresh your readiness score.",
+                    description: "Pulling the latest from GitHub and refreshing project memory.",
                     className: "atlas-toast-pill",
                   });
                   void runScan(false);
                   setShowMoreSheet(false);
+                },
+              }] : []),
+              ...(hasLinkedRepo ? [{
+                id: "fullimport" as const,
+                label: "Deep Import",
+                icon: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                ),
+                onSelect: () => {
+                  setMobileTab("files");
+                  setShowMoreSheet(false);
+                  toast.info("Opening Files tab — tap Import to begin.", { className: "atlas-toast-pill" });
                 },
               }] : []),
             ]).map(({ id, label, icon, onSelect }) => {
