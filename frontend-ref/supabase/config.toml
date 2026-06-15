@@ -1,0 +1,7 @@
+project_id = "osuasytymbzurjvklhde"
+
+[functions.atlas-chat]
+verify_jwt = true
+
+[functions.atlas-image]
+verify_jwt = false

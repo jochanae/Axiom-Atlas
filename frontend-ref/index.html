@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <script>
+      (function() {
+        var ATLAS = 'https://axiom-atlas-689827072865.us-east1.run.app/api/errors/report';
+        var PROJECT_ID = 30;
+        function report(msg, stack, url) {
+          try { fetch(ATLAS, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({projectId: PROJECT_ID, appName: 'Axiom', message: String(msg), stack: stack||null, url: url||location.href}) }); } catch(e) {}
+        }
+        window.addEventListener('error', function(e) { report(e.message, e.error&&e.error.stack, location.href); });
+        window.addEventListener('unhandledrejection', function(e) { report(String(e.reason), e.reason&&e.reason.stack, location.href); });
+      })();
+      </script>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      <link rel="manifest" href="/manifest.json" />
+      <title>Axiom — Strategic Thinking Partner</title>
+      <meta name="description" content="Axiom: a decision enforcement system." />
+    </head>
+    <body>
+      <div id="root"></div>
+      <script type="module" src="/src/main.tsx"></script>
+    </body>
+  </html>
+  
