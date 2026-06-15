@@ -175,21 +175,8 @@ export async function prepareProjectRepo(projectId: number, userId: number, opti
       await runGit(["clone", "--depth", "1", cloneUrl, sandboxDir], githubToken);
     }
 
-    const hasPackageJson = await pathExists(`${sandboxDir}/package.json`);
-    const hasNodeModules = await pathExists(`${sandboxDir}/node_modules`);
-
-    if (hasPackageJson && !hasNodeModules) {
-      const pm = await detectPackageManager(sandboxDir);
-      onStatus?.(`Installing dependencies with ${pm}...`);
-      try {
-        await runInstall(pm, sandboxDir);
-        onStatus?.("Dependencies installed.");
-      } catch (installErr: unknown) {
-        const msg = installErr instanceof Error ? installErr.message : "install failed";
-        logger.warn({ projectId, pm, err: installErr }, "Dependency install failed — continuing anyway");
-        onStatus?.(`Warning: ${pm} install failed (${msg.slice(0, 120)}). Some commands may not work.`);
-      }
-    }
+    // Auto-install is intentionally skipped — it hangs on Cloud Run with no local cache.
+    // Users can run `pnpm install`, `npm install`, or `yarn` themselves in the terminal.
   } catch (err: unknown) {
     if (err instanceof TerminalHttpError) throw err;
     const message = err instanceof Error ? err.message : "unknown git error";

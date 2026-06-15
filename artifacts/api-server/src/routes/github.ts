@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { atlasIncidentsTable, connectionsTable, db, projectsTable } from "@workspace/db";
-import { eq, and, desc, isNotNull } from "drizzle-orm";
+import { atlasIncidentsTable, connectionsTable, db, entriesTable, projectsTable } from "@workspace/db";
+import { eq, and, desc, isNotNull, sql } from "drizzle-orm";
 import { spawn } from "child_process";
 import { writeFile, mkdir, rm } from "fs/promises";
 import { randomBytes } from "crypto";
@@ -762,14 +762,91 @@ ${fileBlock}`;
 
   try {
     const cleaned = raw.replace(/^```json\s*/m, "").replace(/\s*```$/m, "").trim();
-    const analysis = JSON.parse(cleaned);
-    res.json({
+    const analysis = JSON.parse(cleaned) as {
+      projectName?: string;
+      description?: string;
+      stack?: string[];
+      routes?: string[];
+      pages?: string[];
+      components?: string[];
+      tables?: string[];
+      authEnabled?: boolean;
+      summary?: string;
+    };
+
+    const response = {
       ...analysis,
       scannedAt: new Date().toISOString(),
       repo,
       branch: actualBranch,
       totalFiles: blobPaths.length,
-    });
+    };
+
+    // Write analysis to project memory so Atlas has permanent context.
+    // Find the project by userId + linkedRepo containing this repo name.
+    const userId = (req as any).authUser?.id as number | undefined;
+    if (userId) {
+      try {
+        const userProjects = await db
+          .select({ id: projectsTable.id, linkedRepo: projectsTable.linkedRepo, memory: projectsTable.memory })
+          .from(projectsTable)
+          .where(eq(projectsTable.userId, userId));
+
+        const matchedProject = userProjects.find(p => {
+          try {
+            const lr = typeof p.linkedRepo === "string" ? JSON.parse(p.linkedRepo) as { fullName?: string } : p.linkedRepo as { fullName?: string } | null;
+            return lr?.fullName === repo;
+          } catch { return false; }
+        });
+
+        if (matchedProject) {
+          const stackStr = analysis.stack?.join(", ") ?? "unknown";
+          const memoryEntry = [
+            `[REPO SCAN — ${new Date().toISOString().split("T")[0]}]`,
+            analysis.summary ? `Summary: ${analysis.summary}` : null,
+            analysis.description ? `Description: ${analysis.description}` : null,
+            stackStr ? `Stack: ${stackStr}` : null,
+            analysis.routes?.length ? `Routes: ${analysis.routes.slice(0, 10).join(", ")}` : null,
+            analysis.tables?.length ? `DB tables: ${analysis.tables.join(", ")}` : null,
+            analysis.authEnabled != null ? `Auth: ${analysis.authEnabled ? "enabled" : "not found"}` : null,
+            `Total files: ${blobPaths.length}`,
+          ].filter(Boolean).join("\n");
+
+          // Prepend scan to existing memory (keep the most recent scan at top)
+          const existing = matchedProject.memory ?? "";
+          const stripped = existing.replace(/\[REPO SCAN[^\]]*\][\s\S]*?(?=\[REPO SCAN|\[PROJECT_MEMORY|$)/g, "").trim();
+          const newMemory = [memoryEntry, stripped].filter(Boolean).join("\n\n");
+
+          await db
+            .update(projectsTable)
+            .set({ memory: newMemory })
+            .where(eq(projectsTable.id, matchedProject.id));
+
+          // Seed one ledger entry if no entries exist for this project yet
+          const [existing_entry] = await db
+            .select({ id: entriesTable.id })
+            .from(entriesTable)
+            .where(eq(entriesTable.projectId, matchedProject.id))
+            .limit(1);
+
+          if (!existing_entry && analysis.summary) {
+            await db.insert(entriesTable).values({
+              projectId: matchedProject.id,
+              title: `Repo scan: ${analysis.projectName ?? repo}`,
+              summary: analysis.summary,
+              status: "committed",
+              severity: "general",
+              mode: "think",
+            }).catch(() => { /* non-blocking */ });
+          }
+        }
+      } catch (memErr) {
+        // Non-blocking — never fail the analyze response because of memory write
+        console.warn("github/analyze: failed to write project memory", memErr);
+      }
+    }
+
+    res.json(response);
   } catch {
     res.status(500).json({ error: "Failed to parse AI response", raw });
   }
