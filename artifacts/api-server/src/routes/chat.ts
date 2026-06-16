@@ -1918,7 +1918,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   const buildMode = Boolean(body.buildMode);
 
   const isFoundationMode = !body.projectId;
-  if ((!body.sessionId && !isFlowMode && !isFoundationMode) || !body.message) {
+  if ((!body.sessionId && !isFlowMode && !isFoundationMode) || (!body.message && !body.attachments?.length)) {
     res.status(400).json({ error: "Missing required fields: sessionId (or foundation mode), message" });
     return;
   }
