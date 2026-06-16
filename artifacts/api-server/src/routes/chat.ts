@@ -2319,12 +2319,16 @@ router.post("/chat", async (req, res): Promise<void> => {
     .map((e) => `Recent production errors detected: ${e.errorMessage} at ${e.route} — ${e.timestamp.toISOString()}`)
     .join("\n");
   const selfMapContext = selfMapRows[0] ? `Current codebase: ${selfMapRows[0].fileCount} files indexed. Architecture map available for reasoning.` : "";
+  const DEFAULT_NAMES = new Set(["New Project", "New Idea", "My Project", ""]);
 
   // Build layered system prompt — use project data already fetched in the first Promise.all
   let systemPrompt = isFoundationMode ? FOUNDATION_SYSTEM_PROMPT : DEV_SYSTEM_PROMPT;
   systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
   if (!isFoundationMode && project) {
-    systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${project.name}${project.description ? `\nDescription: ${project.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.\n--- END ACTIVE PROJECT ---`;
+    const projectAlreadyNamedInstruction = !DEFAULT_NAMES.has((project.name ?? "").trim())
+      ? `\nThis project is already named ${project.name}. Do not suggest renaming it, do not ask the user for a name, and do not propose alternative names unless the user explicitly asks.`
+      : "";
+    systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${project.name}${project.description ? `\nDescription: ${project.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.${projectAlreadyNamedInstruction}\n--- END ACTIVE PROJECT ---`;
   }
   if (userId && portfolioRows.length > 0) {
     const portfolioSummary = portfolioRows.map((p) => {
@@ -2751,8 +2755,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   }
 
   // Auto-name: on first message, generate a real project name from the user's intent.
-  const isFirstMessage = history.length === 0;
-  const DEFAULT_NAMES = new Set(["New Project", "New Idea", "My Project", ""]);
+  const isFirstMessage = history.length <= 2;
   const autoNamePromise: Promise<string | undefined> =
     !isFlowMode && !isScenarioMode && isFirstMessage && DEFAULT_NAMES.has((project?.name ?? "").trim())
       ? (async () => {
@@ -2774,6 +2777,19 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           return undefined;
         })()
       : Promise.resolve(undefined);
+
+  const generatedAutoName = await autoNamePromise;
+  if (generatedAutoName && project) {
+    systemPrompt = systemPrompt.replace(
+      project.name,
+      generatedAutoName
+    );
+    // Also update the ACTIVE PROJECT block if present
+    systemPrompt = systemPrompt.replace(
+      `Project name: ${project.name}`,
+      `Project name: ${generatedAutoName}`
+    );
+  }
 
   writeStep(res, { verb: "Analyzing", target: "your request", phase: "analyze" });
   let modelResult: Awaited<ReturnType<typeof callModel>>;
@@ -3081,7 +3097,6 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     linePatches: fileChangesAllowed ? linePatches : [],
   });
 
-  const generatedAutoName = await autoNamePromise;
   if (generatedAutoName) {
     await db.update(projectsTable).set({ name: generatedAutoName }).where(eq(projectsTable.id, projectId));
   }
