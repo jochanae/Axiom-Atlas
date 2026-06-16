@@ -33,6 +33,13 @@ function serializeEntry(e: typeof entriesTable.$inferSelect) {
   };
 }
 
+async function touchProjectActivity(projectId: number): Promise<void> {
+  await db
+    .update(projectsTable)
+    .set({ updatedAt: new Date() })
+    .where(eq(projectsTable.id, projectId));
+}
+
 function parseContextJson(raw: string): EntryContextResponse | null {
   try {
     const cleaned = raw.replace(/```(?:json)?\s*/g, "").replace(/```/g, "").trim();
@@ -89,7 +96,7 @@ router.get("/entries/all", async (req, res): Promise<void> => {
     })
     .from(entriesTable)
     .innerJoin(projectsTable, eq(entriesTable.projectId, projectsTable.id))
-    .where(eq(projectsTable.userId, userId))
+    .where(and(eq(projectsTable.userId, userId), eq(entriesTable.status, "committed")))
     .orderBy(desc(entriesTable.createdAt));
   res.json(rows.map(e => ({
     ...e,
@@ -145,6 +152,7 @@ router.post("/projects/:projectId/entries", async (req, res): Promise<void> => {
     title: parsed.data.title.trim(),
     ...(costOfLesson != null ? { costOfLesson: String(costOfLesson) } : {}),
   }).returning();
+  await touchProjectActivity(params.data.projectId);
   res.status(201).json(serializeEntry(entry));
 });
 
@@ -244,6 +252,7 @@ router.patch("/entries/:id", async (req, res): Promise<void> => {
   }
   const [entry] = await db.update(entriesTable).set(updateData).where(eq(entriesTable.id, params.data.id)).returning();
   if (!entry) { res.status(404).json({ error: "Entry not found" }); return; }
+  await touchProjectActivity(entry.projectId);
   res.json(serializeEntry(entry));
 });
 
@@ -254,7 +263,8 @@ router.delete("/entries/:id", async (req, res): Promise<void> => {
   if (!(await entryBelongsToUser(params.data.id, userId))) {
     res.status(404).json({ error: "Entry not found" }); return;
   }
-  await db.delete(entriesTable).where(eq(entriesTable.id, params.data.id));
+  const [deleted] = await db.delete(entriesTable).where(eq(entriesTable.id, params.data.id)).returning({ projectId: entriesTable.projectId });
+  if (deleted) await touchProjectActivity(deleted.projectId);
   res.sendStatus(204);
 });
 
@@ -287,6 +297,7 @@ router.post("/entries/:id/reopen", async (req, res): Promise<void> => {
     ...(original.costOfLesson != null ? { costOfLesson: String(original.costOfLesson) } : {}),
     supersedesId: original.id,
   }).returning();
+  await touchProjectActivity(original.projectId);
   res.status(201).json(serializeEntry(newEntry));
 });
 

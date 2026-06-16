@@ -134,12 +134,7 @@ export default function Ledger() {
   const isLoading = isAllProjects ? allEntriesLoading : projectEntriesLoading;
   // Full lookup for walking supersedesId chains in EntryRow
   const allEntriesById = useMemo(() => new Map(entries.map((e: Entry) => [e.id, e])), [entries]);
-  const { data: projectsRaw = [] } = useListProjects();
-  // Ledger is the system of record — shaping projects must never appear here.
-  const projects = useMemo(
-    () => projectsRaw.filter((p: Project) => p.status === "committed"),
-    [projectsRaw],
-  );
+  const { data: projects = [] } = useListProjects();
 
   // Auto-expand and scroll to an entry from ?expand=<id>, then clear the param
   useEffect(() => {
@@ -629,10 +624,15 @@ function GlobalDecisionsView({
   const [searchOpen, setSearchOpen] = useState(false);
 
   // ── Stats ────────────────────────────────────────────────────────
-  const committed = useMemo(() => allEntries.filter((e) => e.status === "committed"), [allEntries]);
+  const committed = useMemo(
+    () => allEntries
+      .filter((e) => e.status === "committed")
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [allEntries],
+  );
   const now = Date.now();
   const thisWeek = committed.filter((e) => now - new Date(e.createdAt).getTime() < 7 * 86400000);
-  const flagged = allEntries.filter((e) => e.severity === "blocker");
+  const flagged = committed.filter((e) => e.severity === "blocker");
 
   const mostActiveProject = useMemo(() => {
     const counts = new Map<string, number>();
@@ -644,21 +644,36 @@ function GlobalDecisionsView({
   }, [committed]);
 
   // ── Per-project cards ────────────────────────────────────────────
-  const projectStats = useMemo(() =>
-    projects.map((p) => {
-      const pe = allEntries.filter((e) => e.projectId === p.id && e.status === "committed");
+  const projectStats = useMemo(() => {
+    const projectsById = new Map(projects.map((p) => [p.id, p]));
+    const byProject = new Map<number, { project: { id: number; name: string }; entries: GlobalEntry[] }>();
+    for (const entry of committed) {
+      const bucket = byProject.get(entry.projectId);
+      if (bucket) {
+        bucket.entries.push(entry);
+        continue;
+      }
+      const project = projectsById.get(entry.projectId);
+      byProject.set(entry.projectId, {
+        project: {
+          id: entry.projectId,
+          name: project?.name ?? entry.projectName ?? `Project ${entry.projectId}`,
+        },
+        entries: [entry],
+      });
+    }
+    return [...byProject.values()].map(({ project, entries: pe }) => {
       const cats = { structure: 0, aesthetic: 0, logic: 0, general: 0 };
       for (const e of pe) cats[inferCategory(e)]++;
       const total = pe.length || 1;
-      return { project: p, count: pe.length, lastEntry: pe[0] ?? null, cats, total };
-    }).filter((s) => s.count > 0).sort((a, b) => b.count - a.count),
-  [allEntries, projects]);
+      return { project, count: pe.length, lastEntry: pe[0] ?? null, cats, total };
+    }).sort((a, b) => new Date(b.lastEntry?.createdAt ?? 0).getTime() - new Date(a.lastEntry?.createdAt ?? 0).getTime());
+  }, [committed, projects]);
 
   // ── Filtered stream, deduped + grouped (×N within 24h on same project+title) ──
   const stream = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const filtered = allEntries.filter((e) => {
-      if (e.status !== "committed") return false;
+    const filtered = committed.filter((e) => {
       if ((e.status as string) === "archived_duplicate") return false;
       if (focusProjectId && e.projectId !== focusProjectId) return false;
       if (categoryFilter !== "all" && inferCategory(e) !== categoryFilter) return false;
@@ -684,7 +699,7 @@ function GlobalDecisionsView({
     }
 
     return groups.slice(0, 50);
-  }, [allEntries, focusProjectId, categoryFilter, searchQuery]);
+  }, [committed, focusProjectId, categoryFilter, searchQuery]);
 
   const STAT_TILES = [
     { label: "Total Decisions", value: committed.length, color: "var(--foreground)" },

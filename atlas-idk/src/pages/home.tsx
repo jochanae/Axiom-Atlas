@@ -2592,7 +2592,7 @@ export default function Home() {
         id: p.id,
         name: p.name,
         description: p.description,
-        updatedAt: p.createdAt,
+        updatedAt: p.updatedAt,
         latestSnapshotScore: p.latestSnapshotScore ?? null,
       }))}
       onOpenProject={(id) => {

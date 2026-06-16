@@ -239,7 +239,9 @@ export function BelowFoldDashboard({ projects, onOpenProject, onOpenLedger, onOp
   const [showBriefing, setShowBriefing] = useState(false);
   if (projects.length === 0) return null;
 
-  const recent = projects.slice(0, 5);
+  const recent = [...projects]
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 5);
   const actualParked = parkedCount ?? projects.length;
 
   return (

@@ -65,6 +65,15 @@ function serializeProject(p: typeof projectsTable.$inferSelect, includeToken = f
   };
 }
 
+function latestProjectActivityIso(projectUpdatedAt: Date, latestEntryAt?: string | null): string {
+  if (!latestEntryAt) return projectUpdatedAt.toISOString();
+  const entryTime = new Date(latestEntryAt).getTime();
+  if (!Number.isFinite(entryTime) || entryTime <= projectUpdatedAt.getTime()) {
+    return projectUpdatedAt.toISOString();
+  }
+  return new Date(entryTime).toISOString();
+}
+
 router.use("/projects", async (_req, _res, next) => {
   try {
     await ensureProjectSchema();
@@ -111,7 +120,7 @@ router.get("/projects", async (req, res): Promise<void> => {
       .select({
         projectId: entriesTable.projectId,
         entryCount: sql<number>`count(*)::int`,
-        latestEntryAt: sql<string | null>`max(created_at)::text`,
+        latestEntryAt: sql<string | null>`max(greatest(${entriesTable.createdAt}, ${entriesTable.updatedAt}))::text`,
       })
       .from(entriesTable)
       .where(inArray(entriesTable.projectId, projectIds))
@@ -119,12 +128,18 @@ router.get("/projects", async (req, res): Promise<void> => {
     entryStatsMap = new Map(entryStats.map(s => [s.projectId, { entryCount: s.entryCount, latestEntryAt: s.latestEntryAt }]));
   }
 
-  res.json(projects.map(p => ({
-    ...serializeProject(p, false),
-    latestSnapshotScore: scoreMap.get(p.id) ?? null,
-    entryCount: entryStatsMap.get(p.id)?.entryCount ?? 0,
-    latestEntryAt: entryStatsMap.get(p.id)?.latestEntryAt ?? null,
-  })));
+  res.json(projects
+    .map(p => {
+      const entryStats = entryStatsMap.get(p.id);
+      return {
+        ...serializeProject(p, false),
+        updatedAt: latestProjectActivityIso(p.updatedAt, entryStats?.latestEntryAt),
+        latestSnapshotScore: scoreMap.get(p.id) ?? null,
+        entryCount: entryStats?.entryCount ?? 0,
+        latestEntryAt: entryStats?.latestEntryAt ?? null,
+      };
+    })
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()));
 });
 
 router.post("/projects", async (req, res): Promise<void> => {
