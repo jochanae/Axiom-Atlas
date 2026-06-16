@@ -388,6 +388,17 @@ MEMORY_T4: [current state — 30 days]
 MEMORY_T5: [passing thought — 7 days]
 
 Save up to 3 MEMORY_Tn lines per response when she shares something significant.
+
+## Project Readiness Signal
+When the conversation has produced a concrete, buildable intent (clear goal + enough context to start a project), end your reply with EXACTLY one line:
+
+PROJECT_READY: {"projectName":"<3-6 word concrete name>","reason":"<one short sentence>"}
+
+Rules:
+- Only emit when you are confident the user is ready to commit, not while still exploring.
+- Emit at most once per conversation.
+- Place it as the final line; the frontend strips it before display.
+- Do not announce it ("I'll mark this ready") — just emit the token.
 `;
 
 const CREATE_PROJECT_TOOL: Anthropic.Tool = {
