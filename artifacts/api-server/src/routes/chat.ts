@@ -1899,6 +1899,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     mode?: string;
     lens?: string;
     workspaceLens?: string;
+    buildMode?: boolean;
     scenarioMode?: boolean;
     history?: Array<{ role: string; content: string }>;
     entries?: Array<{ id: number; title: string; status: string }>;
@@ -1914,6 +1915,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   const isFlowMode = !!body.flowMode;
   const isScenarioMode = !!body.scenarioMode;
+  const buildMode = Boolean(body.buildMode);
 
   const isFoundationMode = !body.projectId;
   if ((!body.sessionId && !isFlowMode && !isFoundationMode) || !body.message) {
@@ -2179,7 +2181,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   // Auto-fetch repo file tree (Phase 1 — injected when a repo is linked and message needs code context)
   // Skip for short/conversational messages — saves up to 3s of silence before Claude starts
   const CODE_CONTEXT_RE = /\b(fix|build|create|implement|write|refactor|debug|error|broken|doesn't work|won't work|failing|crash|not working|file|component|function|route|api|endpoint|schema|migration|deploy|page|button|layout|style|hook|class|module|import|export|install|package|config|test|spec|type|interface|column|table|query|pull|push|commit|branch|pr|diff|preview|stackblitz)\b/i;
-  const needsCodeContext = CODE_CONTEXT_RE.test(message) || message.length > 200 || (body.fileContext?.length ?? 0) > 0;
+  const needsCodeContext = buildMode || CODE_CONTEXT_RE.test(message) || message.length > 200 || (body.fileContext?.length ?? 0) > 0;
 
   let repoTreeContext: string | null = null;
   let repoFiles: Set<string> | null = null;
@@ -2224,7 +2226,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   let autoFetchedContext = "";
   const previousContentByPath = new Map<string, string>();
 
-  if (BUILD_INTENT_RE.test(message) && message.length > 20 && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
+  if ((buildMode || BUILD_INTENT_RE.test(message)) && message.length > 20 && repoData?.fullName && resolvedGithubToken && repoTreeContext) {
     try {
       // Fast selector call: ask Claude which files it needs to read (small, cheap)
       // Use haiku for speed — sonnet adds 5-8s of silence before streaming starts
@@ -2427,7 +2429,7 @@ If this is the first assistant message in this session (no prior assistant messa
   }
 
   // Mode-specific instructions — these override the default disposition
-  const activeMode = (body.mode ?? "think").toLowerCase();
+  const activeMode = buildMode ? "build" : (body.mode ?? "think").toLowerCase();
   const modeInstructions: Record<string, string> = {
     build: `\n\n--- ACTIVE MODE: BUILD ---
 You are now in BUILD mode. This changes how you respond:
@@ -2463,7 +2465,7 @@ You are now in THINK mode. This changes how you respond:
   };
   systemPrompt += modeInstructions[activeMode] ?? modeInstructions.think;
 
-  if (isFlowMode) {
+  if (isFlowMode && !buildMode) {
     const existingNodes = (body.flowNodes ?? []);
     const nodeList = existingNodes.length > 0
       ? `\n\nCurrent canvas nodes:\n${existingNodes.map(n => `- [${n.type}] ${n.label}${n.strategicAnswer ? ` (answered)` : " (unanswered)"}`).join("\n")}`
@@ -2490,7 +2492,7 @@ Rules:
   }
 
   // Workspace lens — new four-lens system (FLOW / BUILD / LOOK / SCENARIO)
-  const workspaceLens = (body.workspaceLens ?? "flow").toLowerCase();
+  const workspaceLens = buildMode ? "build" : (body.workspaceLens ?? "flow").toLowerCase();
   const workspaceLensInstructions: Record<string, string> = {
     flow: `\n\n--- LENS: FLOW ---
 You are in FLOW lens. This means:
