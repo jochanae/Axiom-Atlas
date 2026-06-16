@@ -1,318 +1,190 @@
-# Axiom-Atlas — Strategic Thinking Partner
+# Axiom-Atlas — Backend Development Environment
 
-## Product Identity
+## READ THIS FIRST — AGENT BEHAVIOR RULES
 
-**Axiom** is the product. **Atlas** is the intelligence inside it. Nexus is retired as a user-facing name — internal file names (`nexus.ts`, `nexus.tsx`) stay as-is.
+**DIAGNOSE AND WAIT. DO NOT ACT UNLESS EXPLICITLY TOLD TO.**
 
-Live URL: `https://axiomsystem.app`
-Repo: `jochanae/Axiom-Atlas` (private)
+These rules exist because unsolicited agent action has caused real production damage.
 
----
-
-## Deployment Architecture (Current)
-
-| Layer | Technology | Notes |
-|---|---|---|
-| **Backend** | `artifacts/api-server/` | Deployed to **Google Cloud Run** via `cloudbuild.yaml` + Docker |
-| **Database** | **Supabase** PostgreSQL | `DATABASE_URL` points to Supabase |
-| **Frontend** | **Separate repository** | Not in this Replit — deployed independently |
-
-**This Replit is the backend development environment.** `artifacts/atlas/` here is a drifted reference copy — do not treat it as the live frontend. All meaningful work happens in `artifacts/api-server/` and `lib/`.
-
-**HARD RULE — AGENT BEHAVIOR:**
-- **Diagnose, explain, wait.** Do not write files, create prompts, execute commands, or restart workflows unless Jochanae explicitly says to do it. "Let's talk about it" means talk. "Scan and tell me what you find" means scan and report — nothing else.
-- Do not proactively create Cursor prompt files unless asked.
-- Do not restart workflows unless asked or a code change requires it.
+- **Do not write files** unless Jochanae says "do it" or "fix it" or "push it."
+- **Do not commit to GitHub** unless explicitly asked. Do not put planning documents, markdown files, or strategy documents into this repo. Code changes only.
+- **Do not restart workflows** unless a code change requires it or you're told to.
+- **Do not deploy to Cloud Run** without explicit instruction.
+- **Do not touch the database schema** without explicit instruction. Never run `pnpm --filter @workspace/db run push` without being told to.
+- **Do not modify environment variables** in Cloud Run or anywhere else without explicit instruction.
+- When asked to "look at" or "check" or "find" something — look, check, find. Report back. Stop there.
 - When in doubt: say what you found, ask what she wants to do next.
 
-**HARD RULE — DO NOT TOUCH THE FRONTEND:**
-- `artifacts/atlas/` is a **drifted reference copy**. It does NOT reflect the live frontend at `axiomsystem.app`.
-- `frontend-ref/` is a live read-only clone of `jochanae/atlas-idk`. **Always read from here** before writing Cursor prompts. Refresh with `git -C frontend-ref pull` at session start. It is gitignored and not committed.
-- The live frontend is maintained separately in `jochanae/atlas-idk` (Cursor/Lovable).
-- **Never** modify frontend code in this repo unless explicitly asked.
-- **Never** place mockups on the Canvas that pretend to show the live app UI — they will not match.
-- When backend changes affect the frontend contract, produce **copy-pasteable output files** for Jochanae to apply manually via Cursor.
-
-**Cloud Run deployment:** Changes are pushed to GitHub → Cloud Build triggers → builds Docker image → deploys to `axiom-atlas` service in `us-east1`. Backend changes require a Cloud Build trigger to go live.
-
-When changes touch the API contract (new routes, new response fields, new DB columns), produce copy-pasteable output files for Jochanae to apply to the frontend repo manually via Cursor.
-
-When DB schema changes are made (`pnpm --filter @workspace/db run push`), also produce a `supabase-migration.sql` file for Jochanae to run in the Supabase SQL editor.
+**If Jochanae has not told you to start — do not start.**
 
 ---
 
-## Who This Is For
+## Current Mission
 
-Jochanae — founder of Into Innovations. Builds production SaaS entirely from her phone using Cursor Agent on mobile. Four live products: CoinsBloom, Compani, PresentQ, IntoIQ. Axiom-Atlas is her fifth.
+The mission is not to expand Atlas.
 
-### How To Work With Her
-- She builds from her phone. Always. Every prompt must assume mobile.
-- She reviews screenshots before moving on.
-- She builds by understanding, not just executing. Answer the "why."
-- She has a strong visual eye. Trust her when something looks wrong.
-- When things spiral, stop. Simplify or defer.
-- "Let's move on" means done or deferred. Don't revisit unless she brings it back.
+The mission is to make the Phase 1 core loop work end-to-end:
+
+**Chat → Project → Build → Run → Continue**
+
+Anything outside that loop is parked unless Jochanae explicitly says otherwise.
 
 ---
 
-## Architecture
+## Current Production Architecture (June 2026)
 
-### Stack
-- **Backend:** Express 5 (`artifacts/api-server/`) — deployed to Google Cloud Run, served at `/api`
-- **Database:** Neon PostgreSQL via Drizzle ORM (`lib/db/`)
-- **Frontend:** Separate repository (not in this Replit) — React + Vite, deployed independently
-- **AI:** Anthropic Claude `claude-sonnet-4-6` + Google Gemini `gemini-2.5-pro`
-- **Monorepo:** pnpm workspaces
+| Layer | Technology | Status |
+|---|---|---|
+| **Backend** | `artifacts/api-server/` → Google Cloud Run | Live |
+| **Database** | **Supabase** PostgreSQL | Live — DATABASE_URL on Cloud Run points here |
+| **Frontend** | `jochanae/atlas-idk` → Vercel → axiomsystem.app | Live — separate repo, not here |
+| **AI** | Anthropic `claude-sonnet-4-6` + Google `gemini-2.5-pro` | Live |
 
-### Two Separate Chat Experiences
+**The only recent infrastructure change:** DATABASE_URL in Cloud Run was changed from Neon to Supabase (June 15, 2026). The backend code was not changed. Neon still exists but is no longer the active database.
 
-**1. Home Chat (Global / Atlas layer)**
-- Lives permanently on the home page (`/home`) — does NOT navigate away
-- Backend: `POST /api/nexus/chat`
-- Focus chip: "All Projects" (default) or zoom into one project
-- Mode chip: Strategic / Audit / Deep Dive
-- Model picker: Claude (Nuance & Strategy) / Gemini (Long Context & Speed) — both fully wired
-- Briefing: auto-generated portfolio intelligence on page load (`/api/nexus/briefing`)
-- Briefing shortcut on "Where were we" card in below-fold section
-- This is the wide-lens strategic layer — cross-portfolio visibility
-
-**2. Workspace Chat (Project-specific / deep lens)**
-- Lives at `/project/:id` — two-pane layout (chat left, Decision Ledger right)
-- Backend: `POST /api/chat`
-- Scope: one project, one linked GitHub repo
-- Auto-indexes linked repo on workspace open (file tree + key files + analyze scan)
-- Decision Catch Engine, FILE_EDIT protocol, GitHub write-back
-- StackBlitz tab embeds the linked repo for live preview/edit
+**The frontend is NOT in this repository.** `artifacts/atlas/` is a stale reference copy. The live frontend lives at `jochanae/atlas-idk`. Do not touch it here.
 
 ---
 
-## Navigation Structure (Mobile)
+## Phase 1 Atlas — The Governing Documents
 
-Bottom nav: **HOME | PROJECTS | [A] | LEDGER | YOU**
+On June 16, 2026, five governance documents were written that define what Atlas is and what it is allowed to do. These documents are the authority. Every decision should be checked against them.
 
-Center A button → navigates to most recent project workspace
+**ATLAS_ZERO** — Why Atlas exists, its promise, who it's for, what Phase 1 must do, and what Atlas explicitly refuses to do in Phase 1. Contains the Founder Filter: "If a new idea does not directly improve one of the three Phase 1 actions, it waits."
 
-**Side drawer (folder icon):**
-- ATLAS — Global View · All Projects (top card)
-- PROJECTS section + project list
-- NAVIGATE: Dashboard, Master Map, Parking Lot, Think Freely
-- TOOLS: Workshop, Project Compass
+**ATLAS_ONE** — The first successful user experience. The test every future feature must pass.
 
----
+**ATLAS_FOUNDATION** — The five minimum systems required, in order. No Phase 2 system may be prioritized until the Phase 1 core loop works end-to-end. Nothing else gets built until these five work.
 
-## Key Pages
+**ATLAS_OWNERSHIP** — What Atlas owns (conversation, project, builder orchestration, continuity, decisions, UX) vs. what Atlas integrates with optionally (GitHub, database providers, deployment providers, third-party APIs). Contains the Atlas Test: three questions to ask before adding any technology.
 
-```
-artifacts/atlas/src/pages/
-  home.tsx          — Home chat, briefing animation, focus/mode/model chips
-  workspace.tsx     — Two-pane: left chat + right Decision Ledger canvas + StackBlitz tab
-  projects.tsx      — Project list with archive/active sections
-  ledger.tsx        — Full ledger; filter pills (ALL/STRUCTURE/AESTHETIC/LOGIC/GENERAL)
-  parking-lot.tsx   — Parked ideas per project
-  master-map.tsx    — Master Map / AxiomFlow canvas
-  dashboard.tsx     — Dashboard
-  think-freely.tsx  — Think Freely mode
-  workshop.tsx      — Workshop
-  project-compass.tsx — Project Compass
-  nexus.tsx         — Redirects to /home (legacy)
-  login.tsx         — Auth with Google OAuth, email/password, Apple
-  vault.tsx         — Secrets Vault
-  help.tsx          — Help & FAQ (updated — no Nexus branding)
-```
+**ATLAS_ARCHITECTURE** — The current production chain is Vercel frontend → Cloud Run backend → Supabase database. The architecture decision is to contain Phase 1 inside this chain, with Cloud Run as the single backend authority and Supabase as the single database.
 
-## Key Components
-
-```
-artifacts/atlas/src/components/
-  ProjectsDrawer.tsx    — Left slide-in drawer: Atlas card, projects, nav, tools
-  UserMenuDropdown.tsx  — Avatar dropdown
-  BelowFoldDashboard.tsx — Below-fold section on home (includes briefing shortcut)
-  AxiomFlow.tsx         — Flow canvas / Master Map
-  TheForge.tsx          — Prompt Forge — strategic extraction engine, solid system prompt
-  AccountHubPanel.tsx   — In-app account management (password change wired)
-  CockpitBar.tsx        — Mobile bottom navigation
-  ReadinessRing.tsx     — Project readiness indicator
-  SystemMap.tsx         — System map component
-```
-
-## Key Backend Routes
-
-```
-artifacts/api-server/src/routes/
-  nexus.ts          — Home chat (/api/nexus/chat, model-aware) + briefing + activity
-  chat.ts           — Workspace AI chat with Decision Catch Engine + FILE_EDIT + IMAGE_GEN
-  github.ts         — GitHub read/write/analyze/auto-link pipeline
-  google-auth.ts    — Google OAuth (registered, wired end-to-end)
-  projects.ts       — CRUD + summary stats + archive/restore
-  sessions.ts       — Session management + message history
-  entries.ts        — Decision Ledger entries
-  auth.ts           — Auth + Resend password reset + in-app password change
-  forge.ts          — Strategic extraction engine (solid prompt, produces structured nodes)
-  vault.ts          — Secrets Vault
-  thoughts.ts       — Thoughts/parking lot
-  stripe.ts         — Stripe webhook + subscription sync
-  errorlog.ts       — Error ingestion from frontend
-  terminal.ts       — Terminal command execution with sandbox
-  image.ts          — Image generation (Gemini Imagen 3 + DALL-E 3 fallback)
-  devserver.ts      — Dev server streaming logs
-  codegen.ts        — Code generation utilities
-  shell.ts          — Shell execution pipeline
-```
+**The line that governs everything:** Phase 1 Atlas is intentionally smaller than the vision.
 
 ---
 
-## Session Memory System (Workspace)
+## What Atlas Promises (Do Not Forget This)
 
-Three-layer persistent memory:
+You bring the vision. Atlas helps make it real.
 
-1. **Project Memory (DB)** — `memory` column on projects table. AI writes facts using `PROJECT_MEMORY:` protocol. Injected into system prompt.
-2. **User Profile (localStorage)** — name, stack, projects. Sent as `userProfile` with every chat request.
-3. **Repo Scan (localStorage)** — `atlas-scan-{projectId}`. Auto-populated on workspace open. Sent as `projectMap` with every chat request.
+Atlas is for people whose imagination outpaces their ability to execute alone. Phase 1 must do exactly three things:
+1. Turn an idea into a project
+2. Turn the project into something working
+3. Let the user continue building from where they left off
 
----
-
-## Auto-Indexing (Workspace)
-
-When a workspace opens with a linked GitHub repo:
-1. File tree + up to 5 key files are fetched and set as `fileContext` (immediate)
-2. `/api/github/analyze` runs in background → caches structured map (routes, pages, components, tables, stack, summary) in `localStorage` as `atlas-scan-{id}` — skips if cache < 24h old
-3. Server-side also auto-fetches file tree on every chat request
-4. Server auto-selects and reads relevant files when build intent is detected
-
-Result: Atlas knows the full codebase from message one — no FILES tab required.
+If a proposed feature does not improve one of those three things — it waits.
 
 ---
 
-## Decision Catch Engine
+## What This Replit Is
 
-When user says something contradicting a committed decision, AI returns `DECISION_CATCH:{...}` JSON. Frontend renders a catch card:
-1. Lead sentence explaining the tension
-2. "Proceed anyway" → reason textarea
-3. "Confirm" → logs deviation to ledger
-4. "Adjust" (gold) → clears catch, refocuses input
+This is the **backend development environment** for Axiom-Atlas.
 
----
+- `artifacts/api-server/` — the Express 5 backend, deployed to Cloud Run
+- `lib/db/` — Drizzle ORM schema and database client
 
-## FILE_EDIT Protocol (GitHub Write-Back)
-
-AI returns `FILE_EDIT_START / FILE_EDIT_CONTENT / FILE_EDIT_END` blocks. Frontend shows diff modal → user reviews → pushes to GitHub or creates PR. Multiple files per response supported.
+**This Replit is NOT:**
+- The frontend (that is `jochanae/atlas-idk` on Vercel)
+- A place to commit strategy documents or markdown files
+- A place to act without asking first
 
 ---
 
-## Design System
+## Database (Supabase)
 
-### Themes
-- **Obsidian** (default/dark): Deep black-brown volcanic identity
-- **Parchment** (light): Warm cream / cognac
+The production database is Supabase PostgreSQL. The backend connects via `DATABASE_URL` in Cloud Run environment variables.
 
-### Identity Tokens
-```css
---atlas-bg:          #0C0A09
---atlas-surface:     #1C1917
---atlas-fg:          #E7E5E4
---atlas-muted:       #78716C
---atlas-ember:       #92400E   /* Decision Catch, send button */
---atlas-gold:        #C9A24C   /* Accent — Ledger, labels, borders */
---atlas-border:      #252220
-```
+**lib/db/src/index.ts — DO NOT TOUCH THIS FILE.** It has caused a 3-day outage before.
+
+When schema changes are needed: produce a `.sql` file for Jochanae to run in the Supabase SQL editor. Do not run `pnpm --filter @workspace/db run push` without explicit instruction.
 
 ---
 
-## What's Working (Verified in Code)
+## Deployment
 
-- Home chat with Claude and Gemini — both wired, model switching real
-- Briefing — AI portfolio summary on load with cinematic reveal animation
-- Focus chip (All Projects / specific project)
-- Mode chip (Strategic / Audit / Deep Dive) — wired to system prompt
-- Briefing shortcut on "Where were we" card — expands inline
-- Password reset via Resend email
-- In-app password change — wired in AccountHubPanel + backend
-- Copy button on chat bubbles — home page
-- Clear conversation — with confirmation step
-- Session persistence — authenticated users skip landing
-- Google OAuth — route registered and wired (needs live end-to-end test)
-- Project archive/restore — active/archived sections in project list
-- Workspace: Decision Ledger, catch engine, FILE_EDIT, GitHub read/write
-- Auto-indexing on workspace open
-- StackBlitz tab in workspace — embeds linked repo (public free; private needs StackBlitz login)
-- Forge — strategic extraction engine with structured node output
-- Stripe webhook auto-configures on server start; free plan capped at 1 project
-- `/deep` research in workspace
-- Terminal command execution with sandbox — backend wired, frontend has CONSOLE tab
-- IMAGE_GEN dual-engine (Gemini Imagen 3 + DALL-E 3) — backend wired, frontend renders in chat
-- Error ingestion from frontend to backend DB
-- Auto-indexing — server + localStorage cache
+Changes pushed to GitHub main → Cloud Build → deployed to `axiom-atlas` service in `us-east1`.
+
+Cloud Run URL: `https://axiom-atlas-689827072865.us-east1.run.app`
+
+Every Cursor prompt must start with: `Run pnpm install --frozen-lockfile first.`
 
 ---
 
-## Requirements for Key Features
+## Who Jochanae Is
 
-- **Google OAuth** — confirmed working in production
-- **FILE_EDIT / GitHub write-back** — fully built. Requires: (1) a repo linked to the workspace, and (2) a personal GitHub token entered in the Files tab. Token is saved to the project in DB and sent as `x-github-token` on every write. Server's own `GITHUB_TOKEN` only covers reads — writes always use the user's token.
+Founder of Into Innovations LLC. Builds production SaaS from her phone (Samsung Z Fold 6). Non-technical founder with strong product instincts.
 
----
-
-## Deferred — Do Not Lose
-
-1. **Forge UI surfacing** — the backend is solid; the frontend needs better entry points and result integration into the workspace flow
-2. **Secrets Vault** — per-project API key management (built, needs UX polish)
-3. **Focus chip Atlas acknowledgment** — Atlas should open with the focused project named when a focus is active
-4. **Lens per project** — changes Atlas response style per workspace
-5. **Unified activity feed** — commits, decisions, sessions in one timeline
+- She understands the why before executing. Explain before acting.
+- Honest assessments only. No pep talks.
+- "Do not change anything else" means exactly that.
+- She reviews before you proceed. Always.
+- When things spiral: stop and report back.
 
 ---
 
-## Product Decisions — Locked
+## Backend Route Inventory
 
-- Axiom = product. Atlas = intelligence inside it.
-- Home page IS the global intelligence layer — lives there, never navigates away
-- Two modes: wide lens (home, all projects), deep lens (workspace, one project)
-- Think Freely, Master Map, AxiomFlow, Parking Lot all stay
-- Model picker: Claude + Gemini only — GPT-4o, Perplexity, DeepSeek removed
+Do not expand route scope. Repair only what directly supports Chat → Project → Build → Run → Continue.
 
----
+**Core loop — Phase 1, keep working:**
+- `nexus.ts` — Home/portfolio AI chat + briefing
+- `chat.ts` — Workspace AI chat + memory + decision catch + file edit
+- `projects.ts` — Project CRUD
+- `sessions.ts` — Session management
+- `entries.ts` — Decision Ledger
+- `auth.ts` / `google-auth.ts` — Authentication
 
-## Cursor Prompt Pattern (Critical)
+**Builder/Runtime — Phase 1 gap, do not break:**
+- `codegen.ts`, `generation.ts`, `preview.ts`
 
-Every Cursor Agent prompt must follow this exact structure:
-1. "Run `pnpm install` first if node_modules is missing."
-2. Exact file path
-3. Exact change — quote specific lines to find
-4. "Do not change anything else"
-5. "Run typecheck, push to main."
-
-Installing packages: `pnpm add [pkg] --filter @workspace/api-server` or `--filter @workspace/atlas`. Never root-level.
-
-After every push: Replit Git tab → Pull (manual pull required).
+**Phase 2 — do not prioritize:**
+- GitHub integration, blueprints, artifacts, connections, MCP, forge, deploy, terminal, stripe, everything else
 
 ---
 
-## Environment Variables
+## Known Issues (June 16, 2026)
 
-- `DATABASE_URL` — Neon PostgreSQL (production), auto-provisioned in dev
-- `ANTHROPIC_API_KEY` — Claude sonnet-4-6 (via Replit AI integration proxy)
-- `GOOGLE_GEMINI_API_KEY` — Gemini 2.5 Pro (image + text generation)
-- `OPENAI_API_KEY` — DALL-E 3 fallback for image generation
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth
+1. Auto-navigation after project creation doesn't fire
+2. Project naming uses first message text instead of Atlas-suggested name
+3. Scroll position on workspace arrival lands at top instead of bottom
+4. Memory extractor only fires in workspace, not home surface
+5. Blueprints/artifacts are parked for Phase 2. Current errors should not be prioritized unless they block the Phase 1 core loop.
+
+---
+
+## Environment Variables (Cloud Run)
+
+- `DATABASE_URL` — Supabase PostgreSQL (changed from Neon on June 15, 2026)
+- `ANTHROPIC_API_KEY` — Claude claude-sonnet-4-6
+- `GOOGLE_GEMINI_API_KEY` — Gemini 2.5 Pro
 - `SESSION_SECRET` — Express sessions
-- `STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — Billing
-- `GITHUB_TOKEN` — Server-side GitHub fallback
-- `RESEND_API_KEY` — Password reset emails
+- `TOKEN_ENCRYPTION_KEY` — GitHub token decryption (required)
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — GitHub OAuth
-- `APP_URL` — Backend URL (e.g., `https://axiom-atlas-xxx.run.app`)
-- `REPLIT_DOMAINS` — Comma-separated, auto-set by Replit
-- `CLOUD_BUILD_TRIGGER` — Push to main → Cloud Run deploy
-- `ATLAS_REPORTING_KEY` — Admin reporting auth
-- `RAILWAY_API_TOKEN` — Server token middleware
-- `LOG_LEVEL` — `info` (default), `debug` for verbose
+- `GITHUB_TOKEN` — Server-side read-only fallback
+- `RESEND_API_KEY` — Password reset emails
+- `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` — Billing
+- `APP_URL` — Backend URL
 
 ---
 
 ## Dev Commands
 
 ```bash
-pnpm --filter @workspace/api-spec run codegen   # After OpenAPI spec changes
-pnpm --filter @workspace/db run push            # Push DB schema changes
-pnpm --filter @workspace/atlas run typecheck    # Typecheck frontend
+pnpm install --frozen-lockfile                  # Always run this first
 pnpm --filter @workspace/api-server run build   # Rebuild API server
+pnpm --filter @workspace/db run push            # Push DB schema — ASK BEFORE RUNNING
 ```
+
+---
+
+## What Not To Do
+
+- Do not touch `lib/db/src/index.ts`
+- Do not commit markdown or strategy documents to this repo
+- Do not run migrations without being asked
+- Do not change Cloud Run environment variables without being asked
+- Do not start building when asked to diagnose
+- Do not treat `artifacts/atlas/` as the live frontend
+- Do not build around broken foundations — fix the foundation first
