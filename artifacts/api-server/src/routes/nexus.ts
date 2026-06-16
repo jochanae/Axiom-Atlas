@@ -247,6 +247,60 @@ function parseJsonObject<T>(raw: string): T | null {
   }
 }
 
+type NexusTitleMessage = { role: "user" | "assistant"; content: string };
+
+const CONVERSATION_TITLE_PROMPT = "Based on this conversation, generate a short working title (3-5 words, Title Case, no punctuation). Respond with only the title.";
+
+function cleanConversationTitle(raw: string): string | null {
+  const cleaned = raw
+    .split("\n")[0]
+    .replace(/[*_`]/g, "")
+    .replace(/[""'']/g, "")
+    .replace(/[.!?]$/g, "")
+    .trim();
+  if (!cleaned || cleaned.length > 80) return null;
+  return cleaned;
+}
+
+function extractExplicitConversationTitle(content: string): string | null {
+  const patterns = [
+    /\blet['']?s\s+call\s+(?:it|this)\s+["'`*]*([^"'\n.,!?;:—–*]+)/i,
+    /\bname\s*:\s*["'`*]*([^"'\n.,!?;:—–*]+)/i,
+    /\bi(?:['']?d|\s+would)\s+call\s+this\s+["'`*]*([^"'\n.,!?;:—–*]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = content.match(pattern);
+    const title = match?.[1] ? cleanConversationTitle(match[1]) : null;
+    if (title) return title;
+  }
+
+  return null;
+}
+
+async function generateConversationTitle(messages: NexusTitleMessage[]): Promise<string | null> {
+  const context = messages
+    .slice(-3)
+    .map((m) => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`)
+    .join("\n\n");
+  if (!context) return null;
+
+  try {
+    const titleResp = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 20,
+      messages: [{
+        role: "user",
+        content: `${CONVERSATION_TITLE_PROMPT}\n\nConversation:\n${context}`,
+      }],
+    });
+    const raw = titleResp.content[0]?.type === "text" ? titleResp.content[0].text.trim() : "";
+    return cleanConversationTitle(raw);
+  } catch {
+    return null;
+  }
+}
+
 async function detectHomeHandoff(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): Promise<HandoffSignal | null> {
@@ -1202,9 +1256,18 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
 
   const userId = (req as any).authUser.id as number;
   const authUser = (req as any).authUser;
-  // history from the client body is accepted in the schema for API compatibility
-  // but ignored server-side — the Living Thread in nexus_messages is authoritative.
+  // history from the client body is accepted in the schema for API compatibility.
+  // The Living Thread in nexus_messages remains authoritative for model context.
   const { userProfile = "", focusProjectId: requestedFocusProjectId = null, mode = "strategic", model = "claude", conversationId } = body;
+  const requestHistory: NexusTitleMessage[] = (body.history ?? [])
+    .filter((m): m is NexusTitleMessage =>
+      (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim().length > 0
+    );
+  const hasWorkingTitle = ["workingTitle", "conversationTitle", "title"].some((key) => {
+    const value = (body as Record<string, unknown>)[key];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+  const shouldAutoGenerateConversationTitle = !hasWorkingTitle && requestHistory.length >= 2;
   const imageBase64 = body.imageBase64 ?? body.imageData ?? undefined;
   const imageMimeType = body.imageMimeType ?? undefined;
   // Normalise: merge legacy imageBase64/imageMimeType + new attachments array into one list
@@ -1694,6 +1757,24 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   const activeModel = model === "gemini" ? "gemini" : "claude";
   const modelUsed = activeModel === "gemini" ? "gemini-2.5-pro" : "claude-sonnet-4-6";
 
+  const emitConversationTitle = async (assistantContent: string) => {
+    if (hasWorkingTitle || res.writableEnded || res.destroyed) return;
+    const explicitTitle = extractExplicitConversationTitle(assistantContent);
+    const titleContext: NexusTitleMessage[] = [
+      ...requestHistory,
+      { role: "user" as const, content: message },
+      { role: "assistant" as const, content: assistantContent },
+    ].slice(-3);
+    const title = explicitTitle ?? (
+      shouldAutoGenerateConversationTitle
+        ? await generateConversationTitle(titleContext)
+        : null
+    );
+    if (title && !res.writableEnded && !res.destroyed) {
+      res.write(`data: ${JSON.stringify({ type: "conversationTitle", title })}\n\n`);
+    }
+  };
+
   const finishStream = async (rawContent: string) => {
     streamDone = true;
 
@@ -1914,6 +1995,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         }
       }
     }
+
+    await emitConversationTitle(visibleContent);
 
     res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...(nexusImageGenResult ? { imageGen: nexusImageGenResult } : {}), ...runMetadata })}\n\n`);
     res.end();
