@@ -15,6 +15,7 @@ export const ProjectStatus = {
   shaping: "shaping",
   committed: "committed",
   archived: "archived",
+  built: "built",
 } as const;
 
 export type ProjectEntityType =
@@ -77,6 +78,7 @@ export const UpdateProjectBodyStatus = {
   shaping: "shaping",
   committed: "committed",
   archived: "archived",
+  built: "built",
 } as const;
 
 export type UpdateProjectBodyNodeState = { [key: string]: unknown } | null;
@@ -109,6 +111,7 @@ export const RecentProjectStatus = {
   shaping: "shaping",
   committed: "committed",
   archived: "archived",
+  built: "built",
 } as const;
 
 export interface RecentProject {
