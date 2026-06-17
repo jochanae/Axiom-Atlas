@@ -2233,23 +2233,42 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   };
 
   const extractNarratedToolCall = (text: string): { name: string; summary: string } | null => {
-    const match = text.match(/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/);
-    if (!match) return null;
-    try {
-      const parsed = JSON.parse(match[1]) as Record<string, unknown>;
-      if (parsed.name !== "create_project") return null;
-      const params = (parsed.parameters ?? parsed.input ?? {}) as Record<string, unknown>;
-      const name = typeof params.name === "string" && params.name.trim() ? params.name.trim() : null;
-      const summary = typeof params.summary === "string" && params.summary.trim()
-        ? params.summary.trim()
-        : typeof params.description === "string" && params.description.trim()
-          ? params.description.trim()
-          : "";
-      if (!name) return null;
-      return { name, summary };
-    } catch {
-      return null;
+    // Pattern 1: explicit <tool_call> XML
+    const xmlMatch = text.match(/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/);
+    if (xmlMatch) {
+      try {
+        const parsed = JSON.parse(xmlMatch[1]) as Record<string, unknown>;
+        if (parsed.name !== "create_project") return null;
+        const params = (parsed.parameters ?? parsed.input ?? {}) as Record<string, unknown>;
+        const name = typeof params.name === "string" && params.name.trim() ? params.name.trim() : null;
+        const summary = typeof params.summary === "string" && params.summary.trim()
+          ? params.summary.trim()
+          : typeof params.description === "string" && params.description.trim()
+            ? params.description.trim()
+            : "";
+        if (!name) return null;
+        return { name, summary };
+      } catch {
+        return null;
+      }
     }
+
+    // Pattern 2: italic markdown narration — *Creating project: Name* or *Creating project "Name"*
+    const italicMatch = text.match(/\*[Cc]reating project[:\s"]+([^*\n"]{2,60}?)["*\n]/);
+    if (italicMatch) {
+      const name = italicMatch[1].trim();
+      if (name) return { name, summary: "" };
+    }
+
+    // Pattern 3: plain prose narration — "Creating project: Name" or "Setting up the Name workspace"
+    const proseMatch = text.match(/[Cc]reating project[:\s"]+([^.\n"]{2,60}?)(?:[".\n]|$)/)
+      || text.match(/[Ss]etting up (?:the\s+)?["']?([^"'.\n]{2,60}?)["']? workspace/);
+    if (proseMatch) {
+      const name = proseMatch[1].trim();
+      if (name && name.length > 1) return { name, summary: "" };
+    }
+
+    return null;
   };
 
   const runCreateProjectTool = async (toolUse: Anthropic.ToolUseBlock) => {
