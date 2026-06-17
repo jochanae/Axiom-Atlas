@@ -299,7 +299,7 @@ async function generateConversationTitle(messages: NexusTitleMessage[]): Promise
 async function detectHomeHandoff(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): Promise<HandoffSignal | null> {
-  if (messages.length < 4) return null;
+  if (messages.length < 2) return null;
   const context = messages
     .slice(-10)
     .map((m) => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`)
@@ -351,7 +351,7 @@ You are on the home screen — the view where the whole portfolio is visible at 
 From here you cannot read code files or push to GitHub — that lives in the workspace.
 
 ## Creating Projects
-You have a create_project tool. When the conversation has produced clear direction — the problem is clear, the audience is clear, and the project has a distinct angle — use the tool as the next step. Use the conversation so far to provide the name and summary. After the tool returns, end with NAVIGATE_TO:{"route":"/project/<id>"} using the returned project id.
+You have a create_project tool. When the conversation has produced clear direction — the problem is clear, the audience is clear, and the project has a distinct angle — use the tool as the next step. Use the conversation so far to provide the name and summary. After the tool returns, end with NAVIGATE_TO:{"route":"/project/<id>"} using the returned project id. Always close with: "Your workspace is opening now. If it doesn't come up — tap the folder icon in the chat bar to get there."
 
 Project creation is the natural continuation of the conversation, not a separate workflow.
 
@@ -360,6 +360,9 @@ When the user wants to open an existing project, end your response with:
 NAVIGATE_TO:{"route":"/project/<id>"}
 
 Use this when they say "take me there", "open that", "let's go", or agree to go to a workspace.
+
+## Addressing the User by Name
+You know the user's first name from the session context. Use it sparingly — only when making a meaningful point that warrants direct attention, or when the moment genuinely calls for it. Never in greetings. Never repetitively. Once per conversation at most, and only if it feels natural.
 
 ## Decisions
 When a decision should be recorded, state it clearly.
@@ -1480,9 +1483,17 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     .limit(20);
 
   // Build system prompt
+  const userFirstName = typeof authUser?.name === "string" && authUser.name.trim()
+    ? authUser.name.trim().split(/\s+/)[0]
+    : null;
+  const sessionContextLines = [
+    `reflection_mode: false`,
+    `idea_mode: ${ideaMode ? "true" : "false"}`,
+    ...(userFirstName ? [`user_first_name: ${userFirstName}`] : []),
+  ].join("\n");
   let systemPrompt = ideaMode
-      ? `${NEXUS_SYSTEM_PROMPT}\n\n${IDEA_MODE_POSTURE}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: true\n--- END SESSION CONTEXT ---`
-      : `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: false\n--- END SESSION CONTEXT ---`;
+      ? `${NEXUS_SYSTEM_PROMPT}\n\n${IDEA_MODE_POSTURE}\n\n--- SESSION CONTEXT ---\n${sessionContextLines}\n--- END SESSION CONTEXT ---`
+      : `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\n${sessionContextLines}\n--- END SESSION CONTEXT ---`;
   systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
   let vault: Awaited<ReturnType<typeof loadVaultContext>> = { imageBlocks: [], systemNote: "", hasImages: false };
   let urlBlocks: Awaited<ReturnType<typeof screenshotUrlsToBlocks>> = [];
@@ -1985,7 +1996,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
           { role: "user", content: message },
           { role: "assistant", content: visibleContent },
         ]);
-    if (!focusProjectId && !ideaMode && handoffSignal?.readyToHandoff && handoffSignal.confidence === "high" && pendingNavProjectId === null) {
+    if (!focusProjectId && !ideaMode && handoffSignal?.readyToHandoff && (handoffSignal.confidence === "high" || handoffSignal.confidence === "medium") && pendingNavProjectId === null) {
       try {
         const autoName = handoffSignal.projectName ?? "New Project";
         writeStep({ verb: "Creating", target: autoName, detail: "Project workspace" });
