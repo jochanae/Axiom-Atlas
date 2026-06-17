@@ -2539,6 +2539,7 @@ If no clear project name was discussed, use "New Project".`,
           name: brief.projectName,
           description: brief.description,
           entityType: ideaModeActive ? "idea" : "project",
+          status: "committed",
           userId,
         })
         .returning();
