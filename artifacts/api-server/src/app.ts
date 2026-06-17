@@ -80,7 +80,7 @@ app.use(
   }),
 );
 app.use(cookieParser());
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "50mb" }));
 // Fallback: some clients (Lovable preview, certain fetch polyfills) omit the
 // Content-Type header. express.json() silently skips those — body stays
 // undefined. express.text('*/*') reads whatever body-parser left unread, then
@@ -100,7 +100,7 @@ app.use((req, _res, next) => {
   }
   next();
 });
-app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 app.use("/api/shell", shellRouter);
 app.use("/api", router);
