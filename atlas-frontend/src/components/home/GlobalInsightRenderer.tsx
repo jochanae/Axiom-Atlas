@@ -11,15 +11,14 @@ interface Props {
 }
 
 const FILE_PATH_RE = /`([^`]*\/[^`]+\.[a-z]{2,4})`|(?<!\w)((?:src|artifacts|packages|apps)\/[\w./-]+\.(?:tsx?|jsx?|css|json|md|ts))/g;
-const BOLD_RE = /\*\*([^*\n]{1,80})\*\*/g;
-const TRIGGER_RE = /\b(create the project|set it up|go set it up|workspace is ready|name it)\b/i;
 
 export function GlobalInsightRenderer({ content, projects, onNavigate, isParchment, onCreateProject }: Props) {
   if (!content) return null;
 
   void useLocation;
+  void onCreateProject;
 
-  const hasHandoffTrigger = !!onCreateProject && TRIGGER_RE.test(content);
+  const hasHandoffTrigger = false;
 
   // Build a regex from all project names, longest first to avoid partial matches
   const sorted = [...projects].sort((a, b) => b.name.length - a.name.length);
