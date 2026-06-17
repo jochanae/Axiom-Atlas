@@ -362,6 +362,8 @@ You have a real create_project tool. Use it to create a new project workspace wh
 
 When the user confirms they want a project created, CALL THE TOOL. Do not narrate fake API calls, do not write pseudo-code, and do not say "creating now" unless you are actually calling create_project.
 
+A project name is not required before creation. If no name has been provided, use a descriptive placeholder — the name can always be changed later.
+
 If create_project is unavailable or fails, say so honestly and explain the failure briefly. Never pretend a project was created.
 
 ## Navigation
@@ -2277,17 +2279,54 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     }
   };
 
-  const streamClaude = (
+  const streamClaude = async (
     messagesForClaude: Anthropic.MessageParam[],
     options: { tools: boolean; startedAt: number; forceCreate?: boolean },
-  ): void => {
+  ): Promise<void> => {
+    if (options.forceCreate) {
+      try {
+        const forcedMessage = await anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: messagesForClaude,
+          tools: [CREATE_PROJECT_TOOL],
+          tool_choice: { type: "tool", name: "create_project" },
+        });
+        appendClaudeUsage(forcedMessage, options.startedAt);
+        const toolUse = findCreateProjectToolUse(forcedMessage);
+        if (toolUse) {
+          const toolResult = await runCreateProjectTool(toolUse);
+          const continuationMessages: Anthropic.MessageParam[] = [
+            ...messagesForClaude,
+            { role: "assistant", content: forcedMessage.content as Anthropic.MessageParam["content"] },
+            {
+              role: "user",
+              content: [{
+                type: "tool_result",
+                tool_use_id: toolUse.id,
+                content: JSON.stringify(toolResult),
+                ...(!toolResult.ok ? { is_error: true } : {}),
+              } as Anthropic.ToolResultBlockParam],
+            },
+          ];
+          streamClaude(continuationMessages, { tools: false, startedAt: performance.now() });
+          return;
+        }
+        await finishStream("");
+      } catch (err) {
+        req.log.error({ err }, "forced create_project call failed");
+        await failStream("Atlas ran into an issue creating the project. Please try again.");
+      }
+      return;
+    }
+
     const stream = anthropic.messages.stream({
       model: "claude-sonnet-4-6",
       max_tokens: 8192,
       system: systemPrompt,
       messages: messagesForClaude,
       ...(options.tools ? { tools: [CREATE_PROJECT_TOOL] } : {}),
-      ...(options.forceCreate ? { tool_choice: { type: "tool", name: "create_project" } } : {}),
     });
 
     stream.on("text", (text) => {
