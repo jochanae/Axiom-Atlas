@@ -126,10 +126,16 @@ function extractNavigateTo(content: string): { target: NavigateTarget; cleanCont
   const match = content.match(NAVIGATE_TO_RE);
   if (!match) return { target: null, cleanContent: content };
   try {
-    const parsed = JSON.parse(match[1]) as { projectId?: unknown; projectName?: unknown };
+    const parsed = JSON.parse(match[1]) as { projectId?: unknown; projectName?: unknown; route?: unknown };
+    const cleanContent = content.replace(NAVIGATE_TO_RE, "").replace(/\n{3,}/g, "\n\n").trim();
     if (typeof parsed.projectId === "number" && typeof parsed.projectName === "string") {
-      const cleanContent = content.replace(NAVIGATE_TO_RE, "").replace(/\n{3,}/g, "\n\n").trim();
       return { target: { projectId: parsed.projectId, projectName: parsed.projectName }, cleanContent };
+    }
+    if (typeof parsed.route === "string") {
+      const idMatch = parsed.route.match(/\/project\/(\d+)/);
+      if (idMatch) {
+        return { target: { projectId: Number(idMatch[1]), projectName: "Project" }, cleanContent };
+      }
     }
   } catch {}
   return { target: null, cleanContent: content };
