@@ -372,13 +372,11 @@ Replace <id> with the numeric project id. Use this when the user says "take me t
 
 After create_project succeeds, always end your response with NAVIGATE_TO:{"route":"/project/<id>"} using the id returned in the tool result. Do not ask for confirmation — navigate immediately.
 
-When she commits a decision, says "lock that in" or "commit that" — call POST /api/entries with a committed decision.
-When she says "park that" — call POST /api/entries with a parked item.
-When she says "override that" — call PATCH /api/entries/:id with {status: "overridden"}.
+When a decision should be recorded, express the intent clearly in your response. Do not narrate API calls or describe HTTP requests in your text.
+
+When project creation is needed, use the create_project tool. Do not say you are calling an API. Do not describe the call in text. Do not write 'Calling POST /api/projects'. Just call the tool.
+
 When something she says conflicts with a committed decision, flag it: "This conflicts with a committed decision: [title]."
-When she says "scan this project" — call POST /api/projects/:projectId/scan.
-When she answers a flow map node — call PATCH /api/projects/:projectId/flow-nodes/:nodeId.
-When she says "add that to the map" — call POST /api/projects/:projectId/flow-nodes.
 
 When you learn something durable, write it at the END of your response on its own line:
 MEMORY_T1: [core principle — never decays]
@@ -403,7 +401,7 @@ Rules:
 
 const CREATE_PROJECT_TOOL: Anthropic.Tool = {
   name: "create_project",
-  description: "Create a new project workspace. Call this immediately when: (1) the user says yes to creating a project, (2) the user says 'create it', 'set it up', 'let's build it', or any confirmation, or (3) the conversation has produced a clear project name, problem, and audience. Do not wait. Do not ask for more confirmation. Just call this tool.",
+  description: "Create a new project workspace. Call this tool immediately — do not narrate it, do not describe it, do not say you are calling an API. Call this when: (1) the user confirms they want a project created, (2) the user says 'create it', 'set it up', 'let's build it', or any equivalent confirmation, or (3) the conversation has produced a clear project name, problem, and audience and you have decided it is ready. Do not wait for additional confirmation.",
   input_schema: {
     type: "object",
     properties: {
@@ -2281,7 +2279,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
   const streamClaude = (
     messagesForClaude: Anthropic.MessageParam[],
-    options: { tools: boolean; startedAt: number },
+    options: { tools: boolean; startedAt: number; forceCreate?: boolean },
   ): void => {
     const stream = anthropic.messages.stream({
       model: "claude-sonnet-4-6",
@@ -2289,6 +2287,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       system: systemPrompt,
       messages: messagesForClaude,
       ...(options.tools ? { tools: [CREATE_PROJECT_TOOL] } : {}),
+      ...(options.forceCreate ? { tool_choice: { type: "tool", name: "create_project" } } : {}),
     });
 
     stream.on("text", (text) => {
@@ -2332,7 +2331,16 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     });
   };
 
-  streamClaude(anthropicMessages, { tools: true, startedAt: modelStartedAt });
+  const EXPLICIT_CREATE_SIGNALS = [
+    "create it", "create the project", "create the workspace", "set it up",
+    "let's build it", "lets build it", "build it", "make it", "go ahead",
+    "yes create", "please create", "trigger the project", "create a workspace",
+    "proceed", "do it"
+  ];
+  const messageLC = message.toLowerCase();
+  const isExplicitCreate = EXPLICIT_CREATE_SIGNALS.some(s => messageLC.includes(s));
+
+  streamClaude(anthropicMessages, { tools: true, startedAt: modelStartedAt, forceCreate: isExplicitCreate });
 
   return;
 
