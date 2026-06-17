@@ -1220,6 +1220,7 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
             title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' ORDER BY sub.created_at ASC LIMIT 1)`,
             createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
             messageCount: sql<number>`COUNT(*)`,
+            attached_project_id: sql<number | null>`MAX(attached_project_id)`,
           })
           .from(nexusMessagesTable)
           .where(and(
@@ -1236,6 +1237,7 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
             title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' ORDER BY sub.created_at ASC LIMIT 1)`,
             createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
             messageCount: sql<number>`COUNT(*)`,
+            attached_project_id: sql<number | null>`MAX(attached_project_id)`,
           })
           .from(nexusMessagesTable)
           .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId)))
@@ -1247,6 +1249,7 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
       title: r.title ? r.title.slice(0, 60) : "Conversation",
       createdAt: r.createdAt,
       messageCount: Number(r.messageCount),
+      attached_project_id: r.attached_project_id,
     }));
     res.json({ conversations });
   } catch (err: any) {
@@ -1254,6 +1257,28 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Failed to load conversations", detail: err?.message });
     return;
   }
+});
+
+router.patch("/nexus/thread/attach", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const { conversationId, projectId } = req.body as {
+    conversationId?: string;
+    projectId?: number;
+  };
+
+  if (!conversationId || !Number.isInteger(projectId)) {
+    res.status(400).json({ error: "conversationId and projectId are required" });
+    return;
+  }
+
+  await db.execute(sql`
+    UPDATE nexus_messages
+    SET attached_project_id = ${projectId}
+    WHERE user_id = ${userId}
+      AND conversation_id = ${conversationId}
+  `);
+
+  res.json({ ok: true, conversationId, projectId });
 });
 
 router.get("/nexus/conversation/:id", async (req, res): Promise<void> => {
