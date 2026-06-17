@@ -1132,6 +1132,49 @@ router.delete("/nexus/thread", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
+router.post("/nexus/shaping", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const { conversationId, type, content, projectName } = req.body as {
+    conversationId?: string;
+    type?: string;
+    content?: string;
+    projectName?: string;
+  };
+
+  if (!conversationId || !type || !content) {
+    res.status(400).json({ error: "conversationId, type, and content are required" });
+    return;
+  }
+
+  await db.execute(sql`
+    INSERT INTO shaping_entries (user_id, conversation_id, type, content, project_name)
+    VALUES (${userId}, ${conversationId}, ${type}, ${content}, ${projectName ?? null})
+  `);
+
+  res.json({ ok: true });
+});
+
+router.get("/nexus/shaping", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser.id as number;
+  const conversationId = req.query.conversationId as string | undefined;
+
+  if (!conversationId) {
+    res.status(400).json({ error: "conversationId is required" });
+    return;
+  }
+
+  const rows = await db.execute(sql`
+    SELECT id, user_id, conversation_id, type, content, project_name, created_at
+    FROM shaping_entries
+    WHERE user_id = ${userId}
+      AND conversation_id = ${conversationId}
+    ORDER BY created_at ASC
+  `);
+  const entries = Array.isArray(rows) ? rows : (rows as any).rows ?? [];
+
+  res.json({ entries });
+});
+
 router.post("/nexus/conversation/save", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
