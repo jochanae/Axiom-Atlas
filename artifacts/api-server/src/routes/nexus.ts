@@ -1819,6 +1819,21 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       return "";
     }).trim();
 
+    const PROJECT_READY_RE = /^PROJECT_READY:\s*(\{[^\n]+\})\s*$/gm;
+    type ProjectReadyToken = { projectName: string; reason: string };
+    let projectReadyToken: ProjectReadyToken | null = null;
+    rawContent = rawContent.replace(PROJECT_READY_RE, (_match, json: string) => {
+      if (!projectReadyToken) {
+        try {
+          const parsed = JSON.parse(json) as ProjectReadyToken;
+          if (parsed.projectName) {
+            projectReadyToken = parsed;
+          }
+        } catch { }
+      }
+      return "";
+    }).trim();
+
     // Execute image generation if Atlas emitted IMAGE_GEN token(s)
     interface NexusGeneratedImage { imageUrl: string; prompt: string; model: string; mode: "render" | "schematic"; }
     let nexusImageGenResult: { images: NexusGeneratedImage[] } | undefined;
@@ -2009,7 +2024,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
     await emitConversationTitle(visibleContent);
 
-    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...(nexusImageGenResult ? { imageGen: nexusImageGenResult } : {}), ...runMetadata })}\n\n`);
+    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...(nexusImageGenResult ? { imageGen: nexusImageGenResult } : {}), ...(projectReadyToken ? { projectReady: projectReadyToken } : {}), ...runMetadata })}\n\n`);
     res.end();
   };
 
