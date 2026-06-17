@@ -1942,6 +1942,24 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
           { role: "user", content: message },
           { role: "assistant", content: visibleContent },
         ]);
+    if (!focusProjectId && !ideaMode && handoffSignal?.readyToHandoff && handoffSignal.confidence === "high" && pendingNavProjectId === null) {
+      try {
+        const autoName = handoffSignal.projectName ?? "New Project";
+        writeStep({ verb: "Creating", target: autoName, detail: "Project workspace" });
+        const autoProject = await createProjectForUser({
+          userId,
+          authUser,
+          name: autoName,
+          description: handoffSignal.reason ?? "",
+          entityType: "project",
+          memory: buildInitialProjectMemory(handoffSignal.reason ?? autoName),
+        });
+        pendingNavProjectId = autoProject.id;
+        writeStep({ verb: "Created", target: autoProject.name, detail: `Project ${autoProject.id}` });
+      } catch (autoErr) {
+        logger.warn({ err: String(autoErr) }, "Auto project creation from handoff signal failed");
+      }
+    }
     const surface = ideaMode
       ? null
       : detectSurfaceSignal({
