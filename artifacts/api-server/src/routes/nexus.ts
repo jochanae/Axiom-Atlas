@@ -403,7 +403,7 @@ Rules:
 
 const CREATE_PROJECT_TOOL: Anthropic.Tool = {
   name: "create_project",
-  description: "Create a new project workspace when an idea has become concrete enough to start building. Only call this after the user has confirmed they want to proceed.",
+  description: "Create a new project workspace. Call this immediately when: (1) the user says yes to creating a project, (2) the user says 'create it', 'set it up', 'let's build it', or any confirmation, or (3) the conversation has produced a clear project name, problem, and audience. Do not wait. Do not ask for more confirmation. Just call this tool.",
   input_schema: {
     type: "object",
     properties: {
@@ -430,6 +430,8 @@ Rules:
 - Do not announce what you're doing ("Now let's talk about your audience")
 - When all five dimensions have been explored, surface the handoff signal
 - The handoff signal is: "This is ready to take into a workspace. Want me to set it up with everything we've mapped?"
+- Once you know WHO the user is, WHAT the pain is, HOW they currently work, and WHAT makes this different — stop asking questions and transition. You have enough.
+- Maximum 5 shaping questions total before transitioning. If you have reached 5 questions and have not transitioned, offer to create the workspace on the next response regardless.
 
 --- END PROTOCOL ---`;
 
