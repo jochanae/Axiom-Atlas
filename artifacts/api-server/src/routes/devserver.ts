@@ -294,13 +294,29 @@ router.post("/devserver/start", (req, res): void => {
       try {
         await runCommand(mgr, installArgs, repoDir);
       } catch (installErr) {
-        // Install failed — surface reason clearly
-        const msg = installErr instanceof Error ? installErr.message : "Install failed";
-        state.status = "error";
-        state.errorMsg = buildErrorSummary(`Dependency install failed: ${msg}. If the app needs env vars (DATABASE_URL, API keys), add them in the LOCAL tab env section and relaunch.`);
-        addLog(`✗ Install failed: ${msg}`);
-        logger.error({ err: installErr, repo: repoFullName }, "Dev server install failed");
-        return;
+        // If pnpm fails due to a catalog resolution error, retry with npm
+        const recentLogs = state.logs.slice(-20).join("\n");
+        if (mgr === "pnpm" && recentLogs.includes("ERR_PNPM_CATALOG_ENTRY_NOT_FOUND")) {
+          addLog("pnpm catalog error detected — retrying with npm…");
+          try {
+            await runCommand("npm", ["install", "--legacy-peer-deps"], repoDir);
+          } catch (npmErr) {
+            const msg = npmErr instanceof Error ? npmErr.message : "Install failed";
+            state.status = "error";
+            state.errorMsg = buildErrorSummary(`Dependency install failed: ${msg}. If the app needs env vars (DATABASE_URL, API keys), add them in the LOCAL tab env section and relaunch.`);
+            addLog(`✗ Install failed: ${msg}`);
+            logger.error({ err: npmErr, repo: repoFullName }, "Dev server install failed (npm fallback)");
+            return;
+          }
+        } else {
+          // Install failed — surface reason clearly
+          const msg = installErr instanceof Error ? installErr.message : "Install failed";
+          state.status = "error";
+          state.errorMsg = buildErrorSummary(`Dependency install failed: ${msg}. If the app needs env vars (DATABASE_URL, API keys), add them in the LOCAL tab env section and relaunch.`);
+          addLog(`✗ Install failed: ${msg}`);
+          logger.error({ err: installErr, repo: repoFullName }, "Dev server install failed");
+          return;
+        }
       }
 
       state.status = "starting";
