@@ -2197,6 +2197,26 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     return null;
   };
 
+  const extractNarratedToolCall = (text: string): { name: string; summary: string } | null => {
+    const match = text.match(/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/);
+    if (!match) return null;
+    try {
+      const parsed = JSON.parse(match[1]) as Record<string, unknown>;
+      if (parsed.name !== "create_project") return null;
+      const params = (parsed.parameters ?? parsed.input ?? {}) as Record<string, unknown>;
+      const name = typeof params.name === "string" && params.name.trim() ? params.name.trim() : null;
+      const summary = typeof params.summary === "string" && params.summary.trim()
+        ? params.summary.trim()
+        : typeof params.description === "string" && params.description.trim()
+          ? params.description.trim()
+          : "";
+      if (!name) return null;
+      return { name, summary };
+    } catch {
+      return null;
+    }
+  };
+
   const runCreateProjectTool = async (toolUse: Anthropic.ToolUseBlock) => {
     const parsedInput = parseCreateProjectToolInput(toolUse.input);
     if (!parsedInput) {
@@ -2357,6 +2377,27 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
           streamClaude(continuationMessages, { tools: false, startedAt: performance.now() });
           return;
         }
+
+        // Intercept narrated <tool_call> — Claude wrote the call as text instead of using the API mechanism
+        if (options.tools) {
+          const narrated = extractNarratedToolCall(fullText);
+          if (narrated) {
+            req.log.info({ name: narrated.name }, "nexus/chat: intercepted narrated tool_call — executing create_project");
+            const fakeToolUse = {
+              type: "tool_use",
+              id: "narrated-intercept",
+              name: "create_project",
+              input: { name: narrated.name, summary: narrated.summary },
+            } as unknown as Anthropic.ToolUseBlock;
+            const toolResult = await runCreateProjectTool(fakeToolUse);
+            if (toolResult.ok) {
+              res.write(`event: token\ndata: ${JSON.stringify(`\n\nNAVIGATE_TO:{"route":"/project/${toolResult.project.id}"}`)}\n\n`);
+            }
+            await finishStream(fullText);
+            return;
+          }
+        }
+
         await finishStream(fullText);
       } catch (err) {
         req.log.error({ err }, "nexus/chat stream finalization error");
