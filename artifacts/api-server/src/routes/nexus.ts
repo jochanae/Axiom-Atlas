@@ -912,6 +912,7 @@ type NexusMessageRow = {
   role: string;
   content: string;
   conversationId: string | null;
+  attached_project_id: number | null;
   messageType: string | null;
   createdAt: Date;
 };
@@ -955,6 +956,7 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     role: nexusMessagesTable.role,
     content: nexusMessagesTable.content,
     conversationId: nexusMessagesTable.conversationId,
+    attached_project_id: sql<number | null>`attached_project_id`,
     createdAt: nexusMessagesTable.createdAt,
   };
 
@@ -1090,6 +1092,7 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
         run_summary: null,
         run_actions: null,
         run_artifacts: null,
+        attached_project_id: null,
         createdAt: savedOpening.createdAt.toISOString(),
       }]);
       return;
@@ -1116,6 +1119,7 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
       run_summary: null,
       run_actions: null,
       run_artifacts: null,
+      attached_project_id: m.attached_project_id,
       createdAt: m.createdAt.toISOString(),
     })));
     return;
@@ -1261,13 +1265,12 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
 
 router.patch("/nexus/thread/attach", async (req, res): Promise<void> => {
   const userId = (req as any).authUser.id as number;
-  const { conversationId, projectId } = req.body as {
-    conversationId?: string;
+  const { projectId } = req.body as {
     projectId?: number;
   };
 
-  if (!conversationId || !Number.isInteger(projectId)) {
-    res.status(400).json({ error: "conversationId and projectId are required" });
+  if (!Number.isInteger(projectId)) {
+    res.status(400).json({ error: "projectId is required" });
     return;
   }
 
@@ -1275,10 +1278,9 @@ router.patch("/nexus/thread/attach", async (req, res): Promise<void> => {
     UPDATE nexus_messages
     SET attached_project_id = ${projectId}
     WHERE user_id = ${userId}
-      AND conversation_id = ${conversationId}
   `);
 
-  res.json({ ok: true, conversationId, projectId });
+  res.json({ ok: true, projectId });
 });
 
 router.get("/nexus/conversation/:id", async (req, res): Promise<void> => {
