@@ -12,13 +12,13 @@ interface Props {
 
 const FILE_PATH_RE = /`([^`]*\/[^`]+\.[a-z]{2,4})`|(?<!\w)((?:src|artifacts|packages|apps)\/[\w./-]+\.(?:tsx?|jsx?|css|json|md|ts))/g;
 
+// Matches the verbatim fallback phrase Atlas emits after workspace creation
+const FOLDER_CTA_RE = /tap the folder icon \(🗂\)[^.!?\n]*/gi;
+
 export function GlobalInsightRenderer({ content, projects, onNavigate, isParchment, onCreateProject }: Props) {
   if (!content) return null;
 
   void useLocation;
-  void onCreateProject;
-
-  const hasHandoffTrigger = false;
 
   // Build a regex from all project names, longest first to avoid partial matches
   const sorted = [...projects].sort((a, b) => b.name.length - a.name.length);
@@ -31,7 +31,8 @@ export function GlobalInsightRenderer({ content, projects, onNavigate, isParchme
     | { type: "text"; text: string }
     | { type: "project"; text: string; projectId: number }
     | { type: "file"; text: string }
-    | { type: "handoff"; text: string };
+    | { type: "create"; text: string };
+
   const segments: Segment[] = [];
 
   if (!namePattern) {
@@ -49,30 +50,30 @@ export function GlobalInsightRenderer({ content, projects, onNavigate, isParchme
     }
   }
 
-  // Within text segments, find handoff bold names first (if trigger present), then file paths
+  // Within text segments: find folder CTA phrase first, then file paths
   const finalSegments: Segment[] = [];
   for (const seg of segments) {
     if (seg.type !== "text") { finalSegments.push(seg); continue; }
 
-    // Pass 1: split on **bold** if trigger present
-    const boldSplit: Segment[] = [];
-    if (hasHandoffTrigger) {
-      BOLD_RE.lastIndex = 0;
+    // Pass 1: split on folder CTA phrase (only when onCreateProject is available)
+    const ctaSplit: Segment[] = [];
+    if (onCreateProject) {
+      FOLDER_CTA_RE.lastIndex = 0;
       const text = seg.text;
       let last = 0;
       let m: RegExpExecArray | null;
-      while ((m = BOLD_RE.exec(text)) !== null) {
-        if (m.index > last) boldSplit.push({ type: "text", text: text.slice(last, m.index) });
-        boldSplit.push({ type: "handoff", text: m[1].trim() });
+      while ((m = FOLDER_CTA_RE.exec(text)) !== null) {
+        if (m.index > last) ctaSplit.push({ type: "text", text: text.slice(last, m.index) });
+        ctaSplit.push({ type: "create", text: m[0] });
         last = m.index + m[0].length;
       }
-      if (last < text.length) boldSplit.push({ type: "text", text: text.slice(last) });
+      if (last < text.length) ctaSplit.push({ type: "text", text: text.slice(last) });
     } else {
-      boldSplit.push(seg);
+      ctaSplit.push(seg);
     }
 
     // Pass 2: file paths inside remaining text segments
-    for (const sub of boldSplit) {
+    for (const sub of ctaSplit) {
       if (sub.type !== "text") { finalSegments.push(sub); continue; }
       FILE_PATH_RE.lastIndex = 0;
       const text = sub.text;
@@ -115,15 +116,15 @@ export function GlobalInsightRenderer({ content, projects, onNavigate, isParchme
             </span>
           );
         }
-        if (seg.type === "handoff") {
+        if (seg.type === "create") {
           return (
             <span
               key={i}
               role="link"
               tabIndex={0}
-              onClick={() => onCreateProject?.(seg.text)}
-              onKeyDown={(e) => { if (e.key === "Enter") onCreateProject?.(seg.text); }}
-              title={`Set up “${seg.text}”`}
+              onClick={() => onCreateProject?.()}
+              onKeyDown={(e) => { if (e.key === "Enter") onCreateProject?.(); }}
+              title="Open workspace"
               style={{
                 color: linkColor,
                 textDecoration: "underline",
