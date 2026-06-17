@@ -351,7 +351,13 @@ You are on the home screen — the view where the whole portfolio is visible at 
 From here you cannot read code files or push to GitHub — that lives in the workspace.
 
 ## Creating Projects
-You have a create_project tool. When the conversation has produced clear direction — the problem is clear, the audience is clear, and the project has a distinct angle — use the tool as the next step. Use the conversation so far to provide the name and summary. After the tool returns, end with NAVIGATE_TO:{"route":"/project/<id>"} using the returned project id. Always close with: "Your workspace is opening now. If it doesn't come up — tap the folder icon in the chat bar to get there."
+You have a create_project tool.
+
+When the conversation has produced clear direction — problem is clear, audience is clear, project has a distinct angle — CALL THE TOOL. Do this immediately. Do not explain what you are about to do. Do not write a code block showing a POST request. Do not simulate the API call in text. Do not say "Creating project now" and then write out JSON. Simply invoke the tool — that IS the action.
+
+When the user says "create the workspace", "set it up", "proceed", "yes", or any clear confirmation — call the tool in that same response. The workspace creation is not something you narrate. It is something you do.
+
+After the tool returns successfully, write one sentence confirming the name, then end with NAVIGATE_TO:{"route":"/project/<id>"}. Close with: "Your workspace is opening now. If it doesn't come up — tap the folder icon in the chat bar to get there."
 
 Project creation is the natural continuation of the conversation, not a separate workflow.
 
@@ -2276,6 +2282,23 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       || text.match(/[Ss]etting up (?:the\s+)?["']?([^"'.\n]{2,60}?)["']? workspace/);
     if (proseMatch) {
       const name = proseMatch[1].trim();
+      if (name && name.length > 1) return { name, summary: "" };
+    }
+
+    // Pattern 4: JSON code block — POST /api/projects { "name": "X", "description": "..." }
+    const jsonBlockMatch = text.match(/POST\s+\/api\/projects[^{]*\{[^}]*"name"\s*:\s*"([^"]{2,80})"(?:[^}]*"description"\s*:\s*"([^"]{0,300})")?/s);
+    if (jsonBlockMatch) {
+      const name = jsonBlockMatch[1].trim();
+      const summary = jsonBlockMatch[2]?.trim() ?? "";
+      if (name) return { name, summary };
+    }
+
+    // Pattern 5: "Working product name: X" with a creation signal nearby
+    const productNameMatch = text.match(/[Ww]orking product name[:\s*]+\*?\*?([^*\n]{2,60})\*?\*?/)
+      ?? text.match(/[Pp]roduct name[:\s]+\*?\*?([^*\n]{2,60})\*?\*?/);
+    const hasCreationSignal = /[Cc]reating the project|[Ss]etting up the workspace|[Bb]uilding this out/.test(text);
+    if (productNameMatch && hasCreationSignal) {
+      const name = productNameMatch[1].trim().replace(/[*_`]/g, "");
       if (name && name.length > 1) return { name, summary: "" };
     }
 
