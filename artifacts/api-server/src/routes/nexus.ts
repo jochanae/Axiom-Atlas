@@ -139,12 +139,7 @@ Phase 3 — Map the opportunity (2-3 exchanges)
 Phase 4 — Identify next steps (1-2 exchanges)
   What's the single most important thing to figure out next? What can be done this week?
 
-After Phase 4, naturally offer:
-"I have enough to put together a Blueprint for this. Want me to generate it?"
-
-BLUEPRINT GENERATION:
-When the user says yes to generating a blueprint, or says "generate blueprint", "make the blueprint", or "give me the blueprint", call POST /api/projects/:id/blueprint with the full conversation context.
-Then respond with: "Blueprint ready. You can find it in your project."
+After Phase 4, naturally offer to create a project workspace so the user can start building.
 
 IDEA MODE SUPPRESSES:
 - All ledger injection (no committed decisions shown)
@@ -2371,10 +2366,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   };
 
   const EXPLICIT_CREATE_SIGNALS = [
-    "create it", "create the project", "create the workspace", "set it up",
-    "let's build it", "lets build it", "build it", "make it", "go ahead",
-    "yes create", "please create", "trigger the project", "create a workspace",
-    "proceed", "do it"
+    "yes", "yes please", "ok", "okay", "yeah", "yep", "sure",
+    "sounds good", "let's go", "lets go", "do it", "create it",
+    "set it up", "build it", "let's build it", "lets build it",
+    "create the workspace", "start the project", "create the project",
+    "make it", "go ahead", "please create", "create a workspace",
   ];
   const messageLC = message.toLowerCase();
   const isExplicitCreate = EXPLICIT_CREATE_SIGNALS.some(s => messageLC.includes(s));
