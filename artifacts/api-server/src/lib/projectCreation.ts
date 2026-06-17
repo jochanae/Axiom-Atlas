@@ -57,6 +57,7 @@ export async function createProjectForUser(input: CreateProjectForUserInput) {
     .values({
       name: input.name,
       description: input.description ?? null,
+      status: "active",
       entityType: input.entityType ?? "project",
       userId: input.userId,
       ...(input.memory !== undefined ? { memory: input.memory } : {}),
