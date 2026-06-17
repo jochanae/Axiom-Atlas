@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Quick Action · Mockups</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<style>
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/geist-sans@5.0.3/index.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono@5.0.13/400.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/ibm-plex-mono@5.0.13/500.css');
+
+  :root{
+    --bg:#0a0a0c;
+    --bg-2:#101014;
+    --fg:#e9e6df;
+    --muted:#7a766d;
+    --line:rgba(255,255,255,.06);
+    --line-2:rgba(255,255,255,.10);
+    --gold:#c9a24c;
+    --gold-soft:rgba(201,162,76,.16);
+    --gold-glow:rgba(201,162,76,.35);
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+    --sans:'Geist', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(201,162,76,.06), transparent 60%),
+      radial-gradient(900px 500px at 90% 110%, rgba(80,90,140,.07), transparent 60%),
+      var(--bg);
+    color:var(--fg);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  .page{max-width:1400px;margin:0 auto;padding:48px 24px 80px}
+  .page-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:32px;gap:24px;flex-wrap:wrap}
+  .page-head h1{font-size:20px;font-weight:500;letter-spacing:-.01em;margin:0}
+  .page-head p{margin:0;color:var(--muted);font-size:13px}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--muted);text-transform:uppercase}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+  @media (max-width:1100px){.grid{grid-template-columns:1fr;max-width:640px;margin:0 auto}}
+  .col{display:flex;flex-direction:column;gap:14px}
+  .col-head{display:flex;align-items:center;justify-content:space-between}
+  .col-title{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
+  .col-sub{font-size:12px;color:var(--muted)}
+  .label-eyebrow{display:flex;align-items:center;gap:10px;margin-left:4px}
+  .label-eyebrow .dot{width:4px;height:4px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold-glow)}
+
+  /* --- shared card --- */
+  .card{
+    position:relative;
+    background:linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,.012));
+    backdrop-filter: blur(18px) saturate(120%);
+    -webkit-backdrop-filter: blur(18px) saturate(120%);
+    border:1px solid var(--line-2);
+    border-radius:18px;
+    padding:14px 14px 12px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.04) inset,
+      0 30px 60px -30px rgba(0,0,0,.6);
+    transition:border-color .25s ease, box-shadow .25s ease;
+  }
+  .card.focused{
+    border-color:rgba(201,162,76,.45);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.04) inset,
+      0 0 0 1px rgba(201,162,76,.25),
+      0 30px 60px -30px rgba(0,0,0,.6),
+      0 0 40px -10px var(--gold-glow);
+  }
+
+  /* chips row */
+  .chips{display:flex;align-items:center;gap:8px;padding:2px 4px 10px;flex-wrap:wrap}
+  .intent-group{display:inline-flex;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:999px;padding:3px;position:relative}
+  .intent{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);background:transparent;border:0;cursor:pointer;
+    padding:6px 12px;border-radius:999px;transition:color .2s;
+  }
+  .intent.active{color:#0a0a0c;background:var(--gold);font-weight:500}
+  .spacer{flex:1}
+  .project-chip{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--fg);
+    background:rgba(255,255,255,.03);border:1px solid var(--line);
+    padding:6px 10px;border-radius:999px;cursor:pointer;
+  }
+  .project-chip .pname{color:var(--fg)}
+  .project-chip .caret{color:var(--muted);font-size:9px;margin-left:2px}
+  .project-chip:hover{border-color:var(--line-2)}
+
+  /* textarea */
+  .ta-wrap{position:relative}
+  textarea.ta{
+    width:100%;background:transparent;border:0;outline:0;resize:none;color:var(--fg);
+    font-family:var(--sans);font-size:15px;line-height:1.55;letter-spacing:-.005em;
+    min-height:96px;padding:10px 8px 8px;
+  }
+  textarea.ta::placeholder{color:var(--muted);opacity:.85}
+  .placeholder-rotating{
+    position:absolute;inset:10px 8px auto 8px;pointer-events:none;color:var(--muted);font-size:15px;line-height:1.55;
+  }
+  .placeholder-rotating span{position:absolute;left:0;top:0;opacity:0;animation:rot 12s infinite}
+  .placeholder-rotating span:nth-child(1){animation-delay:0s}
+  .placeholder-rotating span:nth-child(2){animation-delay:4s}
+  .placeholder-rotating span:nth-child(3){animation-delay:8s}
+  @keyframes rot{
+    0%,2%{opacity:0;transform:translateY(4px)}
+    6%,30%{opacity:1;transform:translateY(0)}
+    34%,100%{opacity:0;transform:translateY(-4px)}
+  }
+
+  /* action row */
+  .actions{display:flex;align-items:center;justify-content:space-between;padding:6px 4px 2px;border-top:1px solid var(--line);margin-top:6px;padding-top:10px}
+  .icon-btn{
+    width:30px;height:30px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;
+    background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;transition:all .2s;
+  }
+  .icon-btn:hover{color:var(--fg);background:rgba(255,255,255,.04);border-color:var(--line)}
+  .execute{
+    width:34px;height:34px;border-radius:50%;border:1px solid rgba(201,162,76,.55);
+    background:linear-gradient(180deg, rgba(201,162,76,.25), rgba(201,162,76,.10));
+    color:var(--gold);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+    transition:all .2s;
+  }
+  .execute:hover{background:var(--gold);color:#0a0a0c;box-shadow:0 0 24px -4px var(--gold-glow)}
+  .hint{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+
+  /* ---------- Variant A — Quiet Brass (chips above card) ---------- */
+  .v-a .chips{padding-left:6px;margin-bottom:-2px}
+
+  /* ---------- Variant B — Inline Edge (chips inside top of card, gold underline) ---------- */
+  .v-b .intent-group{background:transparent;border:0;padding:0;gap:14px}
+  .v-b .intent{padding:4px 0;border-radius:0;position:relative;background:transparent;color:var(--muted);font-weight:500}
+  .v-b .intent.active{color:var(--fg);background:transparent}
+  .v-b .intent.active::after{
+    content:"";position:absolute;left:0;right:0;bottom:-6px;height:1.5px;background:var(--gold);box-shadow:0 0 8px var(--gold-glow);
+  }
+  .v-b .chips{padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:4px}
+
+  /* ---------- Variant C — Floating Glow (chips floating above, soft gold glow always-on) ---------- */
+  .v-c .card{
+    border-color:rgba(201,162,76,.18);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.04) inset,
+      0 30px 60px -30px rgba(0,0,0,.6),
+      0 0 60px -20px var(--gold-glow);
+  }
+  .v-c .chips{
+    position:relative;justify-content:center;margin-bottom:14px;padding:0;
+  }
+  .v-c .intent-group{
+    background:rgba(10,10,12,.7);
+    border-color:var(--line-2);
+    backdrop-filter:blur(12px);
+  }
+  .v-c .project-chip{
+    background:rgba(10,10,12,.7);
+    backdrop-filter:blur(12px);
+  }
+  .v-c .spacer{display:none}
+  .v-c .project-chip{position:absolute;right:0;top:0}
+
+  /* footer note */
+  .note{margin-top:16px;font-size:12px;color:var(--muted);line-height:1.6}
+  .note b{color:var(--fg);font-weight:500}
+  .legend{margin-top:48px;padding-top:24px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.7}
+  .legend code{font-family:var(--mono);color:var(--gold);background:rgba(201,162,76,.08);padding:1px 6px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="page-head">
+    <div>
+      <div class="label-eyebrow"><span class="dot"></span><span class="eyebrow">Mockup · Quick Action v2</span></div>
+      <h1 style="margin-top:8px">Three directions — locked palette, locked contract, varying composition</h1>
+      <p style="margin-top:6px">Obsidian + gold · Geist + IBM Plex Mono · two chips max (Intent · Project) · zero technical primitives</p>
+    </div>
+    <p>Pick one — I'll wire it into <span style="color:var(--fg)">BelowFoldDashboard</span></p>
+  </div>
+
+  <div class="grid">
+
+    <!-- =========================== VARIANT A =========================== -->
+    <div class="col v-a">
+      <div class="col-head">
+        <span class="col-title">A · Quiet Brass</span>
+        <span class="col-sub">chips above · ring on focus</span>
+      </div>
+
+      <div class="chips">
+        <div class="intent-group" role="tablist" aria-label="Intent">
+          <button class="intent active">Decide</button>
+          <button class="intent">Build</button>
+          <button class="intent">Think</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="project-chip"><span class="pname">Axiom-Atlas</span><span class="caret">▾</span></button>
+      </div>
+
+      <div class="card">
+        <div class="ta-wrap">
+          <div class="placeholder-rotating" aria-hidden="true">
+            <span>Decide if pricing belongs above the fold…</span>
+            <span>Build the landing page hero…</span>
+            <span>Think through onboarding friction…</span>
+          </div>
+          <textarea class="ta" rows="3" placeholder=""></textarea>
+        </div>
+        <div class="actions">
+          <button class="icon-btn" title="Attach">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="hint">⏎ Execute</span>
+            <button class="execute" title="Execute">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">Chips live <b>outside</b> the card — the card is the prompt, nothing else. Gold appears only on the active intent pill + execute. Focus state lights a thin gold ring around the card.</div>
+    </div>
+
+    <!-- =========================== VARIANT B =========================== -->
+    <div class="col v-b">
+      <div class="col-head">
+        <span class="col-title">B · Inline Edge</span>
+        <span class="col-sub">chips inside · gold underline</span>
+      </div>
+
+      <div style="height:34px"></div><!-- spacer to match col-A chip row height -->
+
+      <div class="card focused">
+        <div class="chips">
+          <div class="intent-group" role="tablist" aria-label="Intent">
+            <button class="intent">Decide</button>
+            <button class="intent active">Build</button>
+            <button class="intent">Think</button>
+          </div>
+          <div class="spacer"></div>
+          <button class="project-chip"><span class="pname">Axiom-Atlas</span><span class="caret">▾</span></button>
+        </div>
+        <div class="ta-wrap">
+          <div class="placeholder-rotating" aria-hidden="true">
+            <span>Build the landing page hero…</span>
+            <span>Decide if pricing belongs above the fold…</span>
+            <span>Think through onboarding friction…</span>
+          </div>
+          <textarea class="ta" rows="3" placeholder=""></textarea>
+        </div>
+        <div class="actions">
+          <button class="icon-btn" title="Attach">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="hint">⌘ + ⏎</span>
+            <button class="execute" title="Execute">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">Chips live <b>inside</b> the top edge of the card, divided by a hairline. Intent pills are flat — gold appears as a thin underline under the active one. Card shown in <b>focused</b> state.</div>
+    </div>
+
+    <!-- =========================== VARIANT C =========================== -->
+    <div class="col v-c">
+      <div class="col-head">
+        <span class="col-title">C · Floating Glow</span>
+        <span class="col-sub">floating chips · always-on aura</span>
+      </div>
+
+      <div class="chips" style="position:relative">
+        <div class="intent-group" role="tablist" aria-label="Intent" style="margin:0 auto">
+          <button class="intent">Decide</button>
+          <button class="intent">Build</button>
+          <button class="intent active">Think</button>
+        </div>
+        <button class="project-chip"><span class="pname">Axiom-Atlas</span><span class="caret">▾</span></button>
+      </div>
+
+      <div class="card">
+        <div class="ta-wrap">
+          <div class="placeholder-rotating" aria-hidden="true">
+            <span>Think through onboarding friction…</span>
+            <span>Build the landing page hero…</span>
+            <span>Decide if pricing belongs above the fold…</span>
+          </div>
+          <textarea class="ta" rows="3" placeholder=""></textarea>
+        </div>
+        <div class="actions">
+          <button class="icon-btn" title="Attach">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </button>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="hint">Press ⏎ to send</span>
+            <button class="execute" title="Execute">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">Intent pills <b>centered above</b> the card, project chip floats top-right. The card has a soft always-on gold aura — signals "you can act from here" without needing focus.</div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <div style="margin-bottom:10px"><span class="eyebrow">contract — locked across all three</span></div>
+    <div>One glass card · one textarea · <code>Intent</code> (Decide / Build / Think) + <code>Project</code> chip only · attach (left) + execute (right) · rotating intent-driven placeholder · zero branch/path/file/model UI · submit continues a thread inline on home, no redirect.</div>
+  </div>
+
+</div>
+</body>
+</html>

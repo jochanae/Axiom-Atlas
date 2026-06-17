@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Axiom Redesign — Visual Markup</title>
+<style>
+  :root {
+    --obsidian: #0C0A09;
+    --surface:  #1C1917;
+    --canvas:   #161412;
+    --border:   #252220;
+    --text:     #E7E5E4;
+    --muted:    #78716C;
+    --gold:     #C9A24C;
+    --gold-dim: #8A6F33;
+    --ember:    #92400E;
+    --amber:    #B4651A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #050403; color: var(--text); font-family: -apple-system, "Inter", system-ui, sans-serif; }
+  body { padding: 24px 16px 80px; }
+  .doc { max-width: 880px; margin: 0 auto; }
+  h1 { font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; font-size: 14px; color: var(--gold); margin-bottom: 8px; }
+  h2 { font-weight: 500; letter-spacing: 0.22em; text-transform: uppercase; font-size: 11px; color: var(--gold); margin: 36px 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; line-height: 1.6; margin-bottom: 14px; }
+  .verdict { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+  .v-keep   { background: rgba(120,113,108,0.14); color: var(--muted); border: 1px solid rgba(120,113,108,0.3); }
+  .v-polish { background: rgba(201,162,76,0.10); color: var(--gold); border: 1px solid rgba(201,162,76,0.35); }
+  .v-rebuild{ background: rgba(146,64,14,0.18); color: #E59E5C; border: 1px solid rgba(146,64,14,0.55); }
+  .v-new    { background: rgba(180,101,26,0.18); color: #E5A86A; border: 1px solid rgba(180,101,26,0.55); }
+  .frame { background: var(--obsidian); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.5); }
+  .frame-label { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); padding: 6px 12px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02); }
+
+  /* ---------- Front Door ---------- */
+  .fd { padding: 56px 20px; text-align: center; min-height: 360px; position: relative; }
+  .fd::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 90% 60% at 50% 0%, rgba(201,162,76,0.10), transparent 65%);
+  }
+  .fd-where { font-size: 28px; font-weight: 300; letter-spacing: -0.01em; color: var(--text); margin-bottom: 28px; position: relative; }
+  .fd-input {
+    position: relative; max-width: 540px; margin: 0 auto; padding: 16px 20px;
+    background: rgba(28,25,23,0.55); backdrop-filter: blur(20px);
+    border: 1px solid rgba(201,162,76,0.45); border-radius: 14px;
+    box-shadow: 0 0 22px rgba(201,162,76,0.18), inset 0 0 0 1px rgba(201,162,76,0.10);
+    color: var(--muted); font-size: 16px; text-align: left;
+  }
+  .fd-input::after {
+    content: ""; position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--ember); box-shadow: 0 0 16px rgba(146,64,14,0.5);
+  }
+  .fd-projects { margin-top: 36px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 540px; margin-left: auto; margin-right: auto; position: relative; }
+  .fd-card { padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; text-align: left; }
+  .fd-card .name { font-size: 13px; color: var(--text); margin-bottom: 4px; }
+  .fd-card .meta { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .fd-card .meta .gold-dot { color: var(--gold); }
+
+  /* ---------- Workspace shell ---------- */
+  .ws { display: flex; height: 480px; }
+  .ws-left { width: 58%; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .ws-right { flex: 1; background: var(--canvas); display: flex; flex-direction: column; }
+  .ws-header { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); background: rgba(201,162,76,0.03); }
+  .ws-tabs { display: flex; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.015); }
+  .ws-tab { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); }
+  .ws-tab.active { color: var(--gold); border-color: var(--gold); background: rgba(201,162,76,0.06); }
+
+  /* Chat */
+  .chat { flex: 1; padding: 14px; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .bubble-u { align-self: flex-end; max-width: 78%; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px 12px 2px 12px; font-size: 13px; line-height: 1.5; }
+  .bubble-a { align-self: flex-start; max-width: 82%; padding: 10px 14px; background: rgba(201,162,76,0.04); border: 1px solid rgba(201,162,76,0.18); border-left: 2px solid var(--gold); border-radius: 12px 12px 12px 2px; font-size: 13px; line-height: 1.55; color: #D6D3D1; }
+  .input-shell { margin: 0 14px 14px; padding: 12px 14px; background: rgba(28,25,23,0.55); border: 1px solid rgba(201,162,76,0.4); border-radius: 12px; color: var(--muted); font-size: 14px; display: flex; align-items: center; }
+  .input-shell .send { margin-left: auto; width: 28px; height: 28px; border-radius: 50%; background: var(--ember); }
+
+  /* Decision Catch */
+  .catch {
+    align-self: flex-start; max-width: 88%;
+    padding: 12px 14px; background: rgba(146,64,14,0.14);
+    border: 1px solid rgba(146,64,14,0.55); border-left: 3px solid var(--ember);
+    border-radius: 10px; font-size: 13px; line-height: 1.5; color: #F4D5B5;
+  }
+  .catch .label { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: #E59E5C; margin-bottom: 6px; }
+  .catch .actions { margin-top: 10px; display: flex; gap: 8px; }
+  .btn { font-size: 11px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text); letter-spacing: 0.06em; }
+  .btn.gold { background: var(--gold); color: #14120e; border-color: var(--gold); font-weight: 700; }
+
+  /* ---------- AXIOM FLOW (canvas) ---------- */
+  .map { position: relative; flex: 1; overflow: hidden; }
+  .map::before {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% 50%, rgba(201,162,76,0.06), transparent 70%),
+      radial-gradient(circle at 50% 50%, rgba(201,162,76,0.04) 1px, transparent 1px);
+    background-size: auto, 24px 24px;
+  }
+  .map-label { position: absolute; top: 12px; left: 14px; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); }
+  .map-add { position: absolute; top: 10px; right: 14px; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); border: 1px solid rgba(201,162,76,0.45); padding: 4px 10px; border-radius: 999px; }
+  /* nodes */
+  .n { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .n .label { font-size: 10px; letter-spacing: 0.06em; color: var(--text); white-space: nowrap; }
+  .n .type  { font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  .n-goal .orb { width: 64px; height: 64px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(201,162,76,0.45), rgba(201,162,76,0.12) 60%, transparent 80%);
+    border: 1.5px solid var(--gold);
+    box-shadow: 0 0 24px rgba(201,162,76,0.45), inset 0 0 8px rgba(201,162,76,0.25);
+  }
+  .n-req .orb { width: 52px; height: 52px; border-radius: 12px; background: rgba(28,25,23,0.7);
+    border: 1px solid var(--gold); box-shadow: 0 0 14px rgba(201,162,76,0.22); display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; }
+  .n-blocker .orb { width: 50px; height: 50px; transform: rotate(45deg); background: rgba(146,64,14,0.18);
+    border: 1.5px solid var(--ember); box-shadow: 0 0 18px rgba(146,64,14,0.45); }
+  .n-decision .orb { width: 58px; height: 50px; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+    background: rgba(180,101,26,0.16); border: 1px solid var(--amber); }
+  .n-sprint .orb { width: 60px; height: 36px; border-radius: 8px; background: rgba(28,25,23,0.7);
+    border: 1px dashed rgba(201,162,76,0.6); display: flex; align-items: center; justify-content: center; color: var(--gold); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; }
+  .n-must .badge { font-size: 8px; letter-spacing: 0.18em; color: var(--gold); margin-top: -2px; }
+  /* edges */
+  svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .edge { stroke: var(--gold); stroke-width: 0.8; stroke-dasharray: 4 6; opacity: 0.45; fill: none; }
+
+  /* ---------- Intel Panel (when node tapped) ---------- */
+  .intel { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .intel .ip-head { display: flex; align-items: center; gap: 10px; }
+  .intel .ip-type { font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); padding: 2px 8px; border: 1px solid rgba(201,162,76,0.4); border-radius: 999px; }
+  .intel .ip-label { font-size: 18px; font-weight: 500; color: var(--text); }
+  .intel .ip-section { padding: 12px 14px; background: rgba(28,25,23,0.6); border: 1px solid var(--border); border-radius: 10px; }
+  .intel .ip-section h4 { font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  .intel .ip-section p { font-size: 14px; line-height: 1.6; color: #D6D3D1; }
+  .intel .ip-question { border-color: var(--amber); box-shadow: 0 0 16px rgba(180,101,26,0.35); }
+  .intel .ip-question h4 { color: #E5A86A; }
+  .intel .ip-moscow { display: flex; gap: 6px; }
+  .intel .pill { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .intel .pill.on { background: rgba(201,162,76,0.16); color: var(--gold); border-color: var(--gold); }
+
+  /* ---------- Command Dock ---------- */
+  .dock { padding: 10px 14px; display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--border); background: rgba(8,7,6,0.85); backdrop-filter: blur(20px); }
+  .slash { font-size: 10px; letter-spacing: 0.12em; padding: 5px 10px; background: rgba(201,162,76,0.06); border: 1px solid rgba(201,162,76,0.3); color: var(--gold); border-radius: 999px; }
+  .dock .field { flex: 1; padding: 8px 12px; background: rgba(28,25,23,0.7); border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 13px; }
+
+  /* ---------- Decision Ledger ---------- */
+  .ledger { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pills .pill.on { background: rgba(201,162,76,0.16); color: var(--gold); border-color: var(--gold); }
+  .lsec h3 { font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 8px; }
+  .lsec.committed h3 { color: var(--gold); }
+  .lsec.tension h3 { color: #E5A86A; }
+  .lsec.over h3 { color: var(--muted); }
+  .l-row { padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--gold); border-radius: 8px; margin-bottom: 6px; }
+  .l-row.tension { border-left-color: var(--amber); }
+  .l-row.over { border-left-color: var(--muted); opacity: 0.75; }
+  .l-row .ti { font-size: 13px; color: var(--text); margin-bottom: 3px; }
+  .l-row .me { font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+
+  /* before/after side-by-side */
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 600px) { .ba { grid-template-columns: 1fr; } }
+  .ba .col h3 { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .ba .col.now h3 { color: #6b7280; }
+  .ba .col.next h3 { color: var(--gold); }
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <h1>Axiom — Redesign Visual Markup</h1>
+  <p class="sub">Every screen / component listed once. Each marked <span class="verdict v-keep">Keep</span> <span class="verdict v-polish">Polish</span> <span class="verdict v-rebuild">Rebuild</span> or <span class="verdict v-new">New</span>. Static markup only — no logic. Open this on your Fold to judge spacing, gold weight, and panel breathing.</p>
+
+  <!-- ============== 1. FRONT DOOR ============== -->
+  <h2>1 · Front Door <code>/</code> <span class="verdict v-polish">Polish</span></h2>
+  <p class="sub">Already exists. Tightening: tighter type, breathing input border, project cards become real cards (not links). Ember send-orb sits inside the input.</p>
+  <div class="frame">
+    <div class="frame-label">Front Door — entry screen</div>
+    <div class="fd">
+      <div class="fd-where">Where were we.</div>
+      <div class="fd-input">What are you building right now?</div>
+      <div class="fd-projects">
+        <div class="fd-card"><div class="name">Axiom</div><div class="meta"><span class="gold-dot">●</span> 12 committed · 2d ago</div></div>
+        <div class="fd-card"><div class="name">Atlas Mobile</div><div class="meta"><span class="gold-dot">●</span> 4 committed · 5d ago</div></div>
+        <div class="fd-card"><div class="name">Field Notes</div><div class="meta">○ draft · 1w ago</div></div>
+        <div class="fd-card"><div class="name">+ New project</div><div class="meta">start a thread</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== 2. WORKSPACE SHELL ============== -->
+  <h2>2 · Workspace Shell <code>/project/:id</code> <span class="verdict v-rebuild">Rebuild</span></h2>
+  <p class="sub">Two-pane layout with resizable handle. Right pane gets <b>three tabs</b> (Flow / Ledger / Memory) instead of just the ledger. Left pane is chat. Header gets the gold project pill + readiness % badge.</p>
+  <div class="frame">
+    <div class="frame-label">Workspace — Flow tab open, mid-conversation</div>
+    <div class="ws">
+      <div class="ws-left">
+        <div class="ws-header">◆ AXIOM &nbsp;·&nbsp; SESSION ACTIVE</div>
+        <div class="chat">
+          <div class="bubble-u">I'm thinking of adding auth to v1 after all.</div>
+          <div class="catch">
+            <div class="label">⚡ Decision Catch</div>
+            You committed to shipping without auth in v1 to ship faster. This contradicts that.
+            <div class="actions">
+              <span class="btn">Proceed anyway</span>
+              <span class="btn gold">Adjust</span>
+            </div>
+          </div>
+        </div>
+        <div class="input-shell">What's the real reason?<span class="send"></span></div>
+      </div>
+      <div class="ws-right">
+        <div class="ws-tabs">
+          <span class="ws-tab active">Flow</span>
+          <span class="ws-tab">Ledger</span>
+          <span class="ws-tab">Memory</span>
+        </div>
+        <div class="map">
+          <div class="map-label">AXIOM FLOW</div>
+          <div class="map-add">＋ Add</div>
+          <svg class="edges" viewBox="0 0 400 360" preserveAspectRatio="none">
+            <path class="edge" d="M200,180 L200,80" />
+            <path class="edge" d="M200,180 L320,140" />
+            <path class="edge" d="M200,180 L320,240" />
+            <path class="edge" d="M200,180 L80,140" />
+            <path class="edge" d="M200,180 L80,240" />
+            <path class="edge" d="M200,180 L200,300" />
+          </svg>
+          <div class="n n-goal" style="left:50%;top:50%"><div class="orb"></div><div class="label">Ship v1</div><div class="type">Goal</div></div>
+          <div class="n n-req" style="left:50%;top:22%"><div class="orb">MUST</div><div class="label">Onboarding flow</div></div>
+          <div class="n n-blocker" style="left:80%;top:39%"><div class="orb"></div><div class="label">No auth strategy</div><div class="type">Blocker</div></div>
+          <div class="n n-decision" style="left:80%;top:67%"><div class="orb"></div><div class="label">Pricing model</div><div class="type">Decision</div></div>
+          <div class="n n-sprint" style="left:20%;top:39%"><div class="orb">Sprint 1</div></div>
+          <div class="n n-req" style="left:20%;top:67%"><div class="orb" style="border-color: var(--gold-dim); color: var(--gold-dim);">SHOULD</div><div class="label">Empty states</div></div>
+          <div class="n n-req" style="left:50%;top:84%"><div class="orb">MUST</div><div class="label">Foundation</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== 3. AXIOM FLOW — alone ============== -->
+  <h2>3 · Axiom Flow Canvas <span class="verdict v-rebuild">Rebuild</span></h2>
+  <p class="sub">Today: one circle in a purple void. Next: pre-seeded radial layout, glassmorphism orbs with type-coded shapes, dashed gold connectors. Type shapes — circle = goal · rounded rect = requirement · diamond = blocker · hexagon = decision · pill = sprint.</p>
+  <div class="ba">
+    <div class="col now">
+      <h3>Now</h3>
+      <div class="frame"><div class="frame-label">current — empty void</div>
+      <div style="height: 240px; position:relative; background: radial-gradient(ellipse at 50% 50%, rgba(60,30,90,0.35), transparent 70%);">
+        <div class="n n-goal" style="left:50%;top:50%;"><div class="orb"></div><div class="label">The Goal</div></div>
+      </div></div>
+    </div>
+    <div class="col next">
+      <h3>Next</h3>
+      <div class="frame"><div class="frame-label">populated mission map</div>
+      <div class="map" style="height: 240px;">
+        <svg class="edges" viewBox="0 0 400 240" preserveAspectRatio="none">
+          <path class="edge" d="M200,120 L200,40" />
+          <path class="edge" d="M200,120 L330,90" />
+          <path class="edge" d="M200,120 L330,170" />
+          <path class="edge" d="M200,120 L70,90" />
+          <path class="edge" d="M200,120 L70,170" />
+          <path class="edge" d="M200,120 L200,210" />
+        </svg>
+        <div class="n n-goal" style="left:50%;top:50%"><div class="orb"></div><div class="label">Ship v1</div></div>
+        <div class="n n-req" style="left:50%;top:18%"><div class="orb">MUST</div></div>
+        <div class="n n-blocker" style="left:82%;top:38%"><div class="orb"></div></div>
+        <div class="n n-decision" style="left:82%;top:71%"><div class="orb"></div></div>
+        <div class="n n-sprint" style="left:18%;top:38%"><div class="orb">Sprint 1</div></div>
+        <div class="n n-req" style="left:18%;top:71%"><div class="orb" style="border-color: var(--gold-dim); color: var(--gold-dim);">SHOULD</div></div>
+        <div class="n n-req" style="left:50%;top:88%"><div class="orb">MUST</div></div>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ============== 4. INTEL PANEL ============== -->
+  <h2>4 · Intelligence Panel <span class="verdict v-new">New</span></h2>
+  <p class="sub">When a node is tapped, the right pane swaps from canvas to <b>this</b>. Editable label, MoSCoW toggle, strategic brief, the pivot question (amber pulse if it needs founder input), blockers, dependencies. No modal — it lives in-pane.</p>
+  <div class="frame">
+    <div class="frame-label">Intel Panel — node "Onboarding flow" focused</div>
+    <div class="intel">
+      <div class="ip-head">
+        <span class="ip-type">Requirement</span>
+        <span style="font-size:10px; color:var(--muted); letter-spacing: 0.14em;">⌫ Back to map</span>
+      </div>
+      <div class="ip-label">Onboarding flow</div>
+      <div class="ip-moscow">
+        <span class="pill on">Must</span><span class="pill">Should</span><span class="pill">Could</span><span class="pill">Won't</span>
+      </div>
+      <div class="ip-section">
+        <h4>Strategic Brief</h4>
+        <p>The first 60 seconds in the app. Has to make the user feel the catch engine without explaining it. No tour, no modal. Drop them into a real conversation with seeded context.</p>
+      </div>
+      <div class="ip-section ip-question">
+        <h4>★ Strategic Question — needs founder input</h4>
+        <p>What does a user feel in their gut after 30 seconds in Axiom? Is it relief, curiosity, or unease?</p>
+      </div>
+      <div class="ip-section">
+        <h4>Blockers</h4>
+        <p>· No copy decided for the first AI message<br/>· Welcome state has no design</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== 5. THE FORGE ============== -->
+  <h2>5 · The Forge <span class="verdict v-polish">Polish</span></h2>
+  <p class="sub">Bottom sheet that takes a brain dump and returns up to 12 nodes. Existing flow keeps working — just gets glassmorphism panel + clearer empty state + nodes fly in from center to the canvas with stagger.</p>
+  <div class="frame">
+    <div class="frame-label">The Forge — sheet open</div>
+    <div style="padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size:10px;letter-spacing:0.22em;color:var(--gold);text-transform:uppercase;">◆ The Forge</span>
+        <span style="font-size:11px;color:var(--muted);">paste a brain dump · returns up to 12 strategic nodes</span>
+      </div>
+      <div style="padding: 14px; background: rgba(28,25,23,0.7); border: 1px solid rgba(201,162,76,0.3); border-radius: 10px; min-height: 80px; color: var(--muted); font-size: 14px; line-height: 1.5;">
+        Just spent 45 min on a call with two beta users. Both said the dashboard is overwhelming. One wants weekly digest, other wants Slack notifications. Need to decide before friday demo…
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:0.14em;">▾ Project context (optional)</span>
+        <span style="margin-left:auto;" class="btn gold">Forge ▸</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== 6. COMMAND DOCK ============== -->
+  <h2>6 · Command Dock <span class="verdict v-new">New</span></h2>
+  <p class="sub">Bottom-anchored slash commands when you're on the Flow tab. <code>/must</code> <code>/blocker</code> <code>/decision</code> <code>/forge</code>. Plain text routes to the Forge pipeline.</p>
+  <div class="frame">
+    <div class="frame-label">Command Dock — anchored at the bottom of the canvas</div>
+    <div style="padding: 18px; background: var(--canvas);">
+      <div class="dock">
+        <span class="slash">/must</span>
+        <span class="slash">/blocker</span>
+        <span class="slash">/decision</span>
+        <span class="slash">/forge</span>
+        <span class="field">+ add a node or paste a brain dump…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== 7. DECISION CATCH (already shown above, isolated here) ============== -->
+  <h2>7 · Decision Catch Card <span class="verdict v-keep">Keep — light polish</span></h2>
+  <p class="sub">Already correct. Ember-tinted card. Two-step: Proceed → reason textarea → Confirm logs the override. Shown above inside the Workspace mockup.</p>
+
+  <!-- ============== 8. LEDGER ============== -->
+  <h2>8 · Decision Ledger <code>/ledger</code> <span class="verdict v-polish">Polish</span></h2>
+  <p class="sub">Three sections, filter pills, gold left-borders for committed, amber for in-tension, muted for overridden.</p>
+  <div class="frame">
+    <div class="frame-label">Ledger — full view</div>
+    <div class="ledger">
+      <div class="pills">
+        <span class="pill on">All</span><span class="pill">Structure</span><span class="pill">Aesthetic</span><span class="pill">Logic</span><span class="pill">General</span>
+      </div>
+      <div class="lsec committed">
+        <h3>● Committed · 4</h3>
+        <div class="l-row"><div class="ti">Ship v1 without auth</div><div class="me">2 days ago · session #14</div></div>
+        <div class="l-row"><div class="ti">Use Postgres, not Supabase</div><div class="me">5 days ago · session #11</div></div>
+      </div>
+      <div class="lsec tension">
+        <h3>◆ In Tension · 1</h3>
+        <div class="l-row tension"><div class="ti">Pricing model — flat vs usage</div><div class="me">caught 3 times · session #16</div></div>
+      </div>
+      <div class="lsec over">
+        <h3>○ Overridden · 1</h3>
+        <div class="l-row over"><div class="ti">No analytics in v1 → added Plausible</div><div class="me">override reason logged · session #15</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== 9. PARKING LOT / PROJECTS ============== -->
+  <h2>9 · Parking Lot &amp; Projects List <span class="verdict v-keep">Keep</span></h2>
+  <p class="sub">No visual change planned for the rebuild. They work, they're not blocking, defer to v2.1.</p>
+
+  <!-- ============== 10. HEADER ============== -->
+  <h2>10 · Persistent Header <span class="verdict v-polish">Polish</span></h2>
+  <p class="sub">Tighten the hierarchy. Folder icon · Axiom logo · project pill (gold) · readiness % · avatar squircle · collab + (dashed). Same content, cleaner spacing, no emerald breathing border (it competes with the gold).</p>
+  <div class="frame">
+    <div class="frame-label">Header — at the top of every project page</div>
+    <div style="padding: 12px 14px; display: flex; align-items: center; gap: 10px; background: rgba(8,7,6,0.95); border-bottom: 1px solid var(--border);">
+      <span style="font-size: 16px; color: var(--gold);">▢</span>
+      <span style="width: 24px; height: 24px; border-radius: 22%; background: var(--surface); border: 1px solid var(--gold); display: inline-flex; align-items: center; justify-content: center; color: var(--gold); font-weight: 700; font-size: 12px;">A</span>
+      <span style="font-size: 11px; font-weight: 700; color: var(--gold); letter-spacing: 0.14em;">AXIOM</span>
+      <span style="margin-left: 8px; font-size: 10px; color: var(--gold); padding: 3px 10px; border: 1px solid rgba(201,162,76,0.4); border-radius: 999px; letter-spacing: 0.08em;">◆ Ship v1</span>
+      <span style="margin-left: auto; font-size: 11px; color: var(--gold); font-weight: 700;">68%</span>
+      <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--gold);"></span>
+      <span style="width: 28px; height: 28px; border-radius: 22%; background: var(--surface); border: 1.5px solid var(--gold);"></span>
+    </div>
+  </div>
+
+  <h2 style="margin-top: 48px;">Summary</h2>
+  <p class="sub">
+    <b style="color:var(--gold);">Rebuild (2):</b> Workspace shell · Axiom Flow canvas<br/>
+    <b style="color:var(--amber);">New (2):</b> Intelligence Panel · Command Dock<br/>
+    <b style="color:var(--gold);">Polish (4):</b> Front Door · The Forge · Ledger · Header<br/>
+    <b style="color:var(--muted);">Keep (3):</b> Decision Catch · Parking Lot · Projects List
+  </p>
+  <p class="sub" style="margin-top: 12px;">
+    Backend: <b>zero changes.</b> Every screen above wires to the existing API.
+  </p>
+
+</div>
+</body>
+</html>

@@ -15,7 +15,7 @@ paths = [ "/" ]
 localPort = 20388
 
 [services.development]
-run = "pnpm --filter @workspace/atlas run dev"
+run = "cd /home/runner/workspace/atlas-frontend && bun run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/atlas", "run", "build" ]

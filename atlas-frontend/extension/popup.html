@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 340px;
+      font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0f;
+      color: #e4e4e7;
+      padding: 0;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .header img { width: 22px; height: 22px; }
+    .header h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
+    .header span { font-size: 9px; opacity: 0.3; text-transform: uppercase; letter-spacing: 1px; margin-left: auto; }
+
+    .tab-bar {
+      display: flex;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      padding: 0 12px;
+    }
+    .tab {
+      padding: 8px 12px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.3);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: rgba(255,255,255,0.6); }
+    .tab.active { color: #c9a84c; border-bottom-color: #c9a84c; }
+
+    .tab-content { display: none; padding: 12px 16px; max-height: 350px; overflow-y: auto; }
+    .tab-content.active { display: block; }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.02);
+      color: #e4e4e7;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      margin-bottom: 6px;
+    }
+    .btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+    .btn svg { flex-shrink: 0; opacity: 0.4; }
+    .btn .label { flex: 1; text-align: left; }
+    .btn .kbd {
+      font-size: 9px;
+      opacity: 0.25;
+      font-family: monospace;
+      letter-spacing: 0.5px;
+    }
+
+    .capture-toast {
+      margin: 8px 0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: rgba(74,222,128,0.08);
+      border: 1px solid rgba(74,222,128,0.12);
+      font-size: 10px;
+      color: rgba(74,222,128,0.7);
+      display: none;
+    }
+    .capture-toast.show { display: flex; align-items: center; gap: 6px; }
+
+    .section-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      opacity: 0.25;
+      margin: 10px 0 6px;
+    }
+
+    .recent, .capture-item {
+      font-size: 11px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+    .recent:hover, .capture-item:hover { background: rgba(255,255,255,0.04); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.12); flex-shrink: 0; }
+    .dot.selection { background: rgba(99,102,241,0.5); }
+    .dot.image { background: rgba(234,179,8,0.5); }
+    .dot.link { background: rgba(59,130,246,0.5); }
+    .dot.page { background: rgba(74,222,128,0.5); }
+    .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .time { font-size: 9px; opacity: 0.2; font-family: monospace; flex-shrink: 0; }
+
+    .empty-state {
+      text-align: center;
+      padding: 20px;
+      font-size: 10px;
+      opacity: 0.2;
+    }
+
+    .footer {
+      padding: 10px 16px;
+      border-top: 1px solid rgba(255,255,255,0.04);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .footer a {
+      font-size: 10px;
+      color: rgba(255,255,255,0.25);
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .footer a:hover { color: rgba(255,255,255,0.5); }
+
+    .extract-btn {
+      margin-top: 8px;
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px dashed rgba(201,168,76,0.2);
+      background: rgba(201,168,76,0.04);
+      color: rgba(201,168,76,0.6);
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .extract-btn:hover { background: rgba(201,168,76,0.08); border-color: rgba(201,168,76,0.3); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="icon.png" alt="Atlas">
+    <h1>Atlas</h1>
+    <span>v1.2</span>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab active" data-tab="actions">Actions</div>
+    <div class="tab" data-tab="captures">Captures</div>
+    <div class="tab" data-tab="diff">Diff</div>
+    <div class="tab" data-tab="projects">Projects</div>
+  </div>
+
+  <!-- Actions Tab -->
+  <div class="tab-content active" id="tab-actions">
+    <button class="btn" id="open-atlas">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="11" rx="2"/><path d="M5 15h6"/></svg>
+      <span class="label">Open Atlas IDE</span>
+      <span class="kbd">⌘⇧A</span>
+    </button>
+
+    <button class="btn" id="capture-page">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 5V3a1 1 0 011-1h2M11 2h2a1 1 0 011 1v2M14 11v2a1 1 0 01-1 1h-2M5 14H3a1 1 0 01-1-1v-2"/></svg>
+      <span class="label">Capture Page Context</span>
+      <span class="kbd">⌘⇧C</span>
+    </button>
+
+    <button class="btn" id="extract-meta">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+      <span class="label">Extract Page Metadata</span>
+    </button>
+
+    <button class="btn" id="new-project">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M3 8h10"/></svg>
+      <span class="label">New Project</span>
+    </button>
+
+    <div class="capture-toast" id="capture-status">
+      <span>✓</span> <span id="capture-message">Captured</span>
+    </div>
+  </div>
+
+  <!-- Captures Tab -->
+  <div class="tab-content" id="tab-captures">
+    <div id="captures-list"></div>
+    <button class="btn" id="clear-captures" style="margin-top:8px;opacity:0.4">
+      <span class="label">Clear All Captures</span>
+    </button>
+  </div>
+
+  <!-- Diff Tab -->
+  <div class="tab-content" id="tab-diff">
+    <p style="font-size:10px;opacity:0.4;margin-bottom:8px;">Compare two code snippets. Accept or reject changes.</p>
+    <div style="display:flex;gap:6px;margin-bottom:8px;">
+      <div style="flex:1;">
+        <label style="font-size:9px;text-transform:uppercase;letter-spacing:1px;opacity:0.3;">Before</label>
+        <textarea id="diff-old" rows="6" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#e4e4e7;font-family:monospace;font-size:10px;padding:6px;resize:vertical;margin-top:4px;" placeholder="Paste old code…"></textarea>
+      </div>
+      <div style="flex:1;">
+        <label style="font-size:9px;text-transform:uppercase;letter-spacing:1px;opacity:0.3;">After</label>
+        <textarea id="diff-new" rows="6" style="width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:#e4e4e7;font-family:monospace;font-size:10px;padding:6px;resize:vertical;margin-top:4px;" placeholder="Paste new code…"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:8px;">
+      <button class="btn" id="run-diff" style="flex:1;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M8 3v10"/></svg>
+        <span class="label">Compare</span>
+      </button>
+      <button class="btn" id="send-diff-atlas" style="flex:1;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="11" rx="2"/><path d="M5 15h6"/></svg>
+        <span class="label">Open in Atlas</span>
+      </button>
+    </div>
+    <div id="diff-result" style="margin-top:4px;font-family:monospace;font-size:10px;max-height:200px;overflow:auto;"></div>
+    <!-- Accept / Reject buttons — shown after diff runs -->
+    <div id="diff-actions" style="display:none;margin-top:8px;gap:6px;">
+      <button class="btn" id="diff-accept" style="flex:1;border-color:rgba(74,222,128,0.2);color:rgba(74,222,128,0.8);">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l4 4 6-8"/></svg>
+        <span class="label">Accept (⌘Y)</span>
+      </button>
+      <button class="btn" id="diff-reject" style="flex:1;border-color:rgba(248,113,113,0.2);color:rgba(248,113,113,0.8);">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        <span class="label">Reject (⌘U)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Projects Tab -->
+  <div class="tab-content" id="tab-projects">
+    <div id="recents"></div>
+  </div>
+
+  <div class="footer">
+    <a id="settings-link">Settings</a>
+    <a id="help-link">Shortcuts</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
