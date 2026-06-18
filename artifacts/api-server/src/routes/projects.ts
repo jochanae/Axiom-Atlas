@@ -151,6 +151,7 @@ router.post("/projects", async (req, res): Promise<void> => {
 
   const userId = (req as any).authUser.id as number;
   const authUser = (req as any).authUser;
+  const { commit_synthesis: commitSynthesis } = parsed.data;
 
   try {
     const project = await createProjectForUser({
@@ -159,6 +160,7 @@ router.post("/projects", async (req, res): Promise<void> => {
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       entityType: parsed.data.entity_type ?? "project",
+      commitSynthesis,
     });
     res.status(201).json(serializeProject(project, true));
   } catch (error) {

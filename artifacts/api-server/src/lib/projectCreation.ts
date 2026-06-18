@@ -13,6 +13,7 @@ type CreateProjectForUserInput = {
   description?: string | null;
   entityType?: "project" | "idea";
   memory?: string | null;
+  commitSynthesis?: unknown;
 };
 
 export class ProjectLimitReachedError extends Error {
@@ -31,6 +32,7 @@ export async function ensureProjectSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "entity_type" text DEFAULT 'project' NOT NULL`);
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "last_opened_at" timestamp with time zone DEFAULT now() NOT NULL`);
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "shape" JSONB NOT NULL DEFAULT '{"identity":[],"constraints":[],"formats":[]}'::jsonb`);
+  await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "commit_synthesis" JSONB`);
   await db.execute(sql`
     DO $$ BEGIN
       ALTER TABLE "projects" ADD CONSTRAINT "projects_entity_type_check" CHECK ("entity_type" IN ('project', 'idea'));
@@ -61,6 +63,7 @@ export async function createProjectForUser(input: CreateProjectForUserInput) {
       entityType: input.entityType ?? "project",
       userId: input.userId,
       ...(input.memory !== undefined ? { memory: input.memory } : {}),
+      ...(input.commitSynthesis !== undefined ? { commitSynthesis: input.commitSynthesis } : {}),
     })
     .returning();
 

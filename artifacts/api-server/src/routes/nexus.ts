@@ -316,7 +316,9 @@ It is ready to handoff if:
 - A specific product, feature, or system has been identified
 - At least one concrete requirement or goal has been discussed
 - The conversation has moved beyond pure exploration into planning or decision-making
-- 4 or more messages have been exchanged
+- 2 or more messages have been exchanged
+
+If you can identify a clear project name from the conversation even if confidence is medium or low, always populate projectName. A working title is better than no title.
 
 Return readyToHandoff: false if it's still early exploration or casual conversation.
 

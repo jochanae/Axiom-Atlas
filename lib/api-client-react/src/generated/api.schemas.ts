@@ -45,6 +45,7 @@ export interface Project {
   linkedRepo?: string | null;
   nodeState?: ProjectNodeState;
   pushHistory?: unknown[] | null;
+  commitSynthesis?: unknown | null;
   /** @nullable */
   lastHandoverAt?: string | null;
   /** @nullable */
@@ -69,6 +70,7 @@ export interface CreateProjectBody {
   /** @nullable */
   description?: string | null;
   entity_type?: CreateProjectBodyEntityType;
+  commit_synthesis?: unknown | null;
 }
 
 export type UpdateProjectBodyStatus =

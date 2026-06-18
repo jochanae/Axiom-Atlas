@@ -171,6 +171,7 @@ export const ListProjectsResponseItem = zod.object({
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
   pushHistory: zod.array(zod.unknown()).nullish(),
+  commitSynthesis: zod.unknown().nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
   lastOpenedAt: zod.string(),
@@ -187,6 +188,7 @@ export const CreateProjectBody = zod.object({
   name: zod.string(),
   description: zod.string().nullish(),
   entity_type: zod.enum(["project", "idea"]).optional(),
+  commit_synthesis: zod.unknown().nullish(),
 });
 
 /**
@@ -240,6 +242,7 @@ export const GetProjectResponse = zod.object({
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
   pushHistory: zod.array(zod.unknown()).nullish(),
+  commitSynthesis: zod.unknown().nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
   lastOpenedAt: zod.string(),
@@ -281,6 +284,7 @@ export const UpdateProjectResponse = zod.object({
   linkedRepo: zod.string().nullish(),
   nodeState: zod.record(zod.string(), zod.unknown()).nullish(),
   pushHistory: zod.array(zod.unknown()).nullish(),
+  commitSynthesis: zod.unknown().nullish(),
   lastHandoverAt: zod.string().nullish(),
   lastHandoverHash: zod.string().nullish(),
   lastOpenedAt: zod.string(),

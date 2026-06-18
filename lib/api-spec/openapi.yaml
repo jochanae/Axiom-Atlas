@@ -708,6 +708,8 @@ components:
           type: array
           items: {}
           nullable: true
+        commitSynthesis:
+          nullable: true
         lastHandoverAt:
           type: ["string", "null"]
         lastHandoverHash:
@@ -739,6 +741,8 @@ components:
         entity_type:
           type: string
           enum: [project, idea]
+        commit_synthesis:
+          nullable: true
       required:
         - name
 
