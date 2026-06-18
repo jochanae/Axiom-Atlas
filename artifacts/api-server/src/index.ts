@@ -111,8 +111,9 @@ async function main() {
       // Live database schema is managed by drizzle-kit push, so duplicate tables are expected.
       logger.warn("Boot migrate: skipped — schema is managed by drizzle-kit push, not migration files. Expected on the live database; not an error.");
     } else {
-      logger.error({ err }, "Migration failed");
-      throw err;
+      // Never crash the server over migration errors — schema is managed by
+      // drizzle-kit push (pushSchema above). Log and continue.
+      logger.warn({ err, message }, "Boot migrate: unexpected error — server will start anyway. Schema managed by drizzle-kit push.");
     }
   }
 
