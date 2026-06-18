@@ -61,21 +61,24 @@ function createSessionCookie(token: string, res: import("express").Response) {
 }
 
 export async function getUserFromCookie(req: import("express").Request) {
-  // 1. Try cookie first
-  const token = req.cookies?.[SESSION_COOKIE];
-  // 2. Fall back to Bearer token for cross-domain auth
+  const cookieToken = req.cookies?.[SESSION_COOKIE] ?? null;
   const bearer = req.headers.authorization;
   const bearerToken = typeof bearer === "string" && bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : null;
-  const effectiveToken = token || bearerToken;
-  if (!effectiveToken) return null;
   const now = new Date();
-  const rows = await db
-    .select({ user: usersTable })
-    .from(userSessionsTable)
-    .innerJoin(usersTable, eq(userSessionsTable.userId, usersTable.id))
-    .where(and(eq(userSessionsTable.token, effectiveToken), gt(userSessionsTable.expiresAt, now)))
-    .limit(1);
-  return rows[0]?.user ?? null;
+  // Try each token in order: cookie first, then Bearer.
+  // If the cookie session is dead (e.g. after a DB rebuild), we fall through
+  // to the Bearer token rather than blocking a valid fresh login.
+  for (const token of [cookieToken, bearerToken]) {
+    if (!token) continue;
+    const rows = await db
+      .select({ user: usersTable })
+      .from(userSessionsTable)
+      .innerJoin(usersTable, eq(userSessionsTable.userId, usersTable.id))
+      .where(and(eq(userSessionsTable.token, token), gt(userSessionsTable.expiresAt, now)))
+      .limit(1);
+    if (rows[0]?.user) return rows[0].user;
+  }
+  return null;
 }
 
 // GET /api/auth/session/exchange
