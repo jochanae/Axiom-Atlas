@@ -12,6 +12,8 @@ const SESSION_COOKIE = "atlas-session";
 const SESSION_DAYS = 90;
 // Super-admin email from env only — no hardcoded fallback
 const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
+// Frontend URL — all post-OAuth redirects must go here, not to Cloud Run root
+const FRONTEND_URL = (process.env.APP_URL ?? "https://axiomsystem.app").replace(/\/$/, "");
 
 function getRedirectUri(req?: import("express").Request) {
   // Use the actual host from the incoming request so dev and prod both work
@@ -91,12 +93,12 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
   res.clearCookie("oauth_link_session", { path: "/" });
 
   if (error || !code) {
-    res.redirect("/?auth_error=" + encodeURIComponent(error ?? "no_code"));
+    res.redirect(`${FRONTEND_URL}/?auth_error=` + encodeURIComponent(error ?? "no_code"));
     return;
   }
 
   if (!state || state !== storedState) {
-    res.redirect("/?auth_error=state_mismatch");
+    res.redirect(`${FRONTEND_URL}/?auth_error=state_mismatch`);
     return;
   }
 
@@ -115,7 +117,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
 
     const tokens = await tokenRes.json() as { access_token?: string; error?: string };
     if (!tokens.access_token) {
-      res.redirect("/?auth_error=token_exchange_failed");
+      res.redirect(`${FRONTEND_URL}/?auth_error=token_exchange_failed`);
       return;
     }
 
@@ -125,7 +127,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     const profile = await profileRes.json() as { id?: string; email?: string; name?: string; picture?: string };
 
     if (!profile.id || !profile.email) {
-      res.redirect("/?auth_error=missing_profile");
+      res.redirect(`${FRONTEND_URL}/?auth_error=missing_profile`);
       return;
     }
 
@@ -143,14 +145,14 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
         // Check the Google ID isn't already on a different account
         const googleOwner = (await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.googleId, profile.id)).limit(1))[0];
         if (googleOwner && googleOwner.id !== existingUser.id) {
-          res.redirect("/home?link_error=google_used_by_another_account");
+          res.redirect(`${FRONTEND_URL}/home?link_error=google_used_by_another_account`);
           return;
         }
         await db.update(usersTable).set({
           googleId: profile.id,
           ...(existingUser.avatarUrl ? {} : { avatarUrl: profile.picture ?? null }),
         }).where(eq(usersTable.id, existingUser.id));
-        res.redirect("/home?linked=google");
+        res.redirect(`${FRONTEND_URL}/home?linked=google`);
         return;
       }
     }
@@ -193,7 +195,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     }
 
     if (!user) {
-      res.redirect("/?auth_error=user_create_failed");
+      res.redirect(`${FRONTEND_URL}/?auth_error=user_create_failed`);
       return;
     }
 
@@ -207,7 +209,7 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     res.redirect(callbackUrl.toString());
   } catch (err) {
     req.log?.error(err, "google-oauth-callback-error");
-    res.redirect("/?auth_error=server_error");
+    res.redirect(`${FRONTEND_URL}/?auth_error=server_error`);
   }
 });
 
