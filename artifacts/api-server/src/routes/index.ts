@@ -38,6 +38,7 @@ import stateRouter from "./state";
 import imagineRouter from "./imagine";
 import previewRouter from "./preview";
 import artifactsRouter from "./artifacts";
+import manifestRouter from "./manifest";
 import codegenRouter from "./codegen";
 import errorsRouter from "./errors";
 import browserRouter from "./browser";
@@ -106,6 +107,7 @@ router.use(requireAuth, terminalRouter);
 // Image generation — Imagen 3 (primary) / DALL·E 3 (fallback)
 router.use(requireAuth, imagineRouter);
 router.use(requireAuth, previewRouter);
+router.use(requireAuth, manifestRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);
