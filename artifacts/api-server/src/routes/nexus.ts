@@ -1579,23 +1579,27 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // Portfolio health snapshot — Atlas speaks to this when asked about momentum/health
   const portfolioHealth = await (async () => {
     if (projectIds.length === 0) return null;
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const [sessionsResult, violationsResult] = await Promise.all([
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(sessionsTable)
-        .where(and(inArray(sessionsTable.projectId, projectIds), gte(sessionsTable.createdAt, sevenDaysAgo))),
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(entriesTable)
-        .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.isViolation, true))),
-    ]);
-    return {
-      sessionsThisWeek: sessionsResult[0]?.count ?? 0,
-      committedDecisions: committedEntries.length,
-      violations: violationsResult[0]?.count ?? 0,
-      totalProjects: projects.length,
-    };
+    try {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const [sessionsResult, violationsResult] = await Promise.all([
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(sessionsTable)
+          .where(and(inArray(sessionsTable.projectId, projectIds), gte(sessionsTable.createdAt, sevenDaysAgo))),
+        db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(entriesTable)
+          .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.isViolation, true))),
+      ]);
+      return {
+        sessionsThisWeek: sessionsResult[0]?.count ?? 0,
+        committedDecisions: committedEntries.length,
+        violations: violationsResult[0]?.count ?? 0,
+        totalProjects: projects.length,
+      };
+    } catch {
+      return null;
+    }
   })();
 
   // Scheduled health check awareness — summarise per-project monitor status for Atlas
