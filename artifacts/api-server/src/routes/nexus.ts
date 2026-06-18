@@ -2329,6 +2329,13 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       if (name && name.length > 1) return { name, summary: "" };
     }
 
+    // Pattern 6: <invoke name="create_project"> XML (Atlas using Anthropic-style XML)
+    const invokeMatch = text.match(/<invoke\s+name=["']create_project["'][^>]*>[\s\S]*?<parameter\s+name=["']name["'][^>]*>([\s\S]*?)<\/parameter>/i);
+    if (invokeMatch) {
+      const name = invokeMatch[1].trim();
+      if (name && name.length > 1) return { name, summary: "" };
+    }
+
     return null;
   };
 
