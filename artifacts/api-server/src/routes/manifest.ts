@@ -159,7 +159,8 @@ COMPONENT_NAME: <PascalCase>
 router.post("/manifest/decide", async (req, res): Promise<void> => {
   const userId = (req as any).authUser?.id as number | undefined;
   if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
+    logger.warn("manifest/decide: authentication_required");
+    res.status(401).json({ error: "authentication_required", detail: "Authentication required" });
     return;
   }
 
@@ -169,7 +170,8 @@ router.post("/manifest/decide", async (req, res): Promise<void> => {
   };
 
   if (!projectId || !Number.isInteger(projectId)) {
-    res.status(400).json({ error: "projectId is required" });
+    logger.warn({ projectId, userId }, "manifest/decide: invalid_project_id");
+    res.status(400).json({ error: "invalid_project_id", detail: "projectId is required" });
     return;
   }
 
@@ -187,7 +189,11 @@ router.post("/manifest/decide", async (req, res): Promise<void> => {
       .limit(1);
 
     if (!project) {
-      res.status(404).json({ error: "Project not found" });
+      logger.warn({ projectId, userId }, "manifest/decide: project_not_found");
+      res.status(404).json({
+        error: "project_not_found",
+        detail: "Project not found or does not belong to this user",
+      });
       return;
     }
 
@@ -210,6 +216,7 @@ router.post("/manifest/decide", async (req, res): Promise<void> => {
         .limit(1);
       return latest?.id;
     })();
+    logger.info({ projectId, targetSessionId }, "manifest/decide: resolved session");
 
     if (targetSessionId) {
       const msgs = await db
@@ -235,6 +242,17 @@ router.post("/manifest/decide", async (req, res): Promise<void> => {
           .map((m) => `${m.role === "assistant" ? "Atlas" : "User"}: ${m.content.slice(0, 500)}`)
           .join("\n\n")
       : "(no conversation yet)";
+
+    if (conversationSnippet === "(no conversation yet)" && memoryContext === "(no project memory)") {
+      res.json({
+        ready: false,
+        manifestScore: 0,
+        scoreBreakdown: { promise: false, primaryUser: false, input: false, output: false, coreMoment: false },
+        missingCriteria: ["promise", "primaryUser", "input", "output", "coreMoment"],
+        detail: "This project has no memory or conversation yet. Have a conversation in the workspace first, then try Manifest again.",
+      });
+      return;
+    }
 
     // 5. Claude call #1 — Manifest Score + First Artifact Decision
     const scoringPrompt = `PROJECT: ${project.name}
@@ -266,7 +284,10 @@ ${conversationSnippet}`;
       scoreData = JSON.parse(cleaned) as RawScoreData;
     } catch (parseErr) {
       logger.error({ parseErr, rawScoring }, "manifest/decide: failed to parse scoring response");
-      res.status(500).json({ error: "Failed to parse manifest score" });
+      res.status(500).json({
+        error: "failed_to_parse_manifest_score",
+        detail: "Failed to parse manifest score",
+      });
       return;
     }
 
@@ -350,8 +371,8 @@ Generate the React component.`;
     });
 
   } catch (err: any) {
-    logger.error({ err }, "manifest/decide error");
-    res.status(500).json({ error: err?.message ?? "Manifest decision failed" });
+    logger.error({ err }, "manifest/decide: unexpected_error");
+    res.status(500).json({ error: "manifest_decision_failed", detail: "Manifest decision failed" });
   }
 });
 
