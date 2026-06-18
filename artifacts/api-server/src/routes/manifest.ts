@@ -158,6 +158,7 @@ COMPONENT_NAME: <PascalCase>
 
 router.post("/manifest/decide", async (req, res): Promise<void> => {
   const userId = (req as any).authUser?.id as number | undefined;
+  console.log("[manifest/decide]", { userId, userIdType: typeof userId, projectId: req.body?.projectId, projectIdType: typeof req.body?.projectId });
   if (!userId) {
     res.status(401).json({ error: "Authentication required" });
     return;
