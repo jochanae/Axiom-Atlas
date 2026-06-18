@@ -2,7 +2,8 @@
 // but the code is db-neutral (DATABASE_URL env var on Cloud Run). Override at
 // build time with VITE_API_URL when pointing at a different backend.
 const DEFAULT_API_BASE = "https://axiom-atlas-689827072865.us-east1.run.app";
-export const API_BASE = (import.meta.env.VITE_API_URL ?? import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE).replace(/\/$/, "");
+const configuredApiBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE;
+export const API_BASE = configuredApiBase.replace(/\/$/, "");
 
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;

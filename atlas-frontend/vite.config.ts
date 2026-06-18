@@ -5,6 +5,11 @@ import { defineConfig } from "vite";
   import path from "path";
 
   export default defineConfig({
+    server: {
+      port: Number(process.env.PORT) || 5173,
+      host: true,
+      allowedHosts: "all",
+    },
     resolve: {
       alias: {
         "@workspace/api-client-react": path.resolve(
@@ -20,11 +25,6 @@ import { defineConfig } from "vite";
     ],
     build: {
       outDir: "dist",
-    },
-    server: {
-      host: "0.0.0.0",
-      port: Number(process.env.PORT) || 5173,
-      allowedHosts: true,
     },
   });
   

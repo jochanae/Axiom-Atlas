@@ -20,7 +20,6 @@ export function GlobalInsightRenderer({ content, projects, onNavigate, isParchme
 
   void useLocation;
 
-  // Build a regex from all project names, longest first to avoid partial matches
   const sorted = [...projects].sort((a, b) => b.name.length - a.name.length);
   const namePattern = sorted
     .map(p => p.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))

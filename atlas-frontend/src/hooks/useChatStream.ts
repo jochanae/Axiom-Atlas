@@ -319,6 +319,17 @@ export function useChatStream(
           setLiveStep({ verb: step.verb, target: step.target, status: "ok" });
         };
         pushSketchStep(`Interpreting "${promptPreview}"`, { verb: "Interpreting", target: promptPreview });
+        const pendingId = Date.now();
+        // Insert shimmer placeholder so the user gets immediate visual
+        // feedback instead of staring at a silent bubble during gen.
+        setMessages((prev) => [...prev, {
+          id: pendingId,
+          role: "assistant",
+          content: "",
+          sentAt: new Date().toISOString(),
+          pendingSketch: true,
+          streaming: true,
+        } as ChatMessage]);
         void (async () => {
           try {
             pushSketchStep(`Sketching ${styleLabel} style…`, { verb: "Sketching", target: `${styleLabel} style` });
@@ -327,22 +338,21 @@ export function useChatStream(
               style: (sketchPreset as "concept" | "wireframe" | "moodboard" | "blueprint" | "photoreal" | undefined) ?? "concept",
             });
             pushSketchStep("Rendering image…", { verb: "Rendering", target: "image" });
-            setMessages((prev) => [...prev, {
-              id: Date.now(),
-              role: "assistant",
-              content: "",
-              sentAt: new Date().toISOString(),
+            setMessages((prev) => prev.map(m => m.id === pendingId ? {
+              ...m,
               imageB64: img.b64_json,
               imageMimeType: img.mimeType,
-            } as ChatMessage]);
+              pendingSketch: false,
+              streaming: false,
+            } as ChatMessage : m));
           } catch (err: any) {
             console.error("[useChatStream] image generate failed:", err);
-            setMessages((prev) => [...prev, {
-              id: Date.now(),
-              role: "assistant",
+            setMessages((prev) => prev.map(m => m.id === pendingId ? {
+              ...m,
               content: `Image generation failed: ${err?.message ?? "unknown error"}`,
-              sentAt: new Date().toISOString(),
-            } as ChatMessage]);
+              pendingSketch: false,
+              streaming: false,
+            } as ChatMessage : m));
           } finally {
             setChatPending(false);
             setActivityStream({ active: false, content: "" });

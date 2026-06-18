@@ -17,8 +17,13 @@ import { GenesisCard } from "./GenesisCard";
 import { GlobalInsightRenderer } from "./GlobalInsightRenderer";
 import { ComposerActions, type ComposerMenuAction } from "@/components/composer/ComposerActions";
 import InlineSketchOffer from "@/components/chat/InlineSketchOffer";
+import SketchReveal from "@/components/chat/SketchReveal";
 import { DeepDiveSheet } from "@/components/DeepDiveSheet";
 import { ListeningHUD, HudDockChip, COGNITIVE_CATEGORIES } from "@/components/workspace/ListeningHUD";
+import { useSmartAutoScroll } from "@/hooks/useSmartAutoScroll";
+import { CommitPill } from "./CommitPill";
+import { setFeeder } from "@/lib/feederStore";
+
 
 export type GlobalInsightMessage = {
   role: "user" | "assistant";
@@ -28,6 +33,7 @@ export type GlobalInsightMessage = {
   streaming?: boolean;
   createdAt?: string;
   imageUrl?: string;
+  pendingSketch?: boolean;
   attachments?: Array<{ base64: string; mediaType: string; name?: string }>;
 };
 
@@ -126,16 +132,10 @@ function extractNavigateTo(content: string): { target: NavigateTarget; cleanCont
   const match = content.match(NAVIGATE_TO_RE);
   if (!match) return { target: null, cleanContent: content };
   try {
-    const parsed = JSON.parse(match[1]) as { projectId?: unknown; projectName?: unknown; route?: unknown };
-    const cleanContent = content.replace(NAVIGATE_TO_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+    const parsed = JSON.parse(match[1]) as { projectId?: unknown; projectName?: unknown };
     if (typeof parsed.projectId === "number" && typeof parsed.projectName === "string") {
+      const cleanContent = content.replace(NAVIGATE_TO_RE, "").replace(/\n{3,}/g, "\n\n").trim();
       return { target: { projectId: parsed.projectId, projectName: parsed.projectName }, cleanContent };
-    }
-    if (typeof parsed.route === "string") {
-      const idMatch = parsed.route.match(/\/project\/(\d+)/);
-      if (idMatch) {
-        return { target: { projectId: Number(idMatch[1]), projectName: "Project" }, cleanContent };
-      }
     }
   } catch {}
   return { target: null, cleanContent: content };
@@ -239,6 +239,7 @@ export function GlobalInsightSurface({
   const [deepDiveContext, setDeepDiveContext] = useState("");
   const isParchment = useThemeMode() === "parchment";
   const filePreviewUrls = useRef<Map<File, string>>(new Map());
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   // Manage object URLs for image previews
   useEffect(() => {
@@ -256,13 +257,14 @@ export function GlobalInsightSurface({
     }
   }, [attachedFiles]);
 
-  // Auto-scroll on new messages / streaming
-  useEffect(() => {
-    if (!open) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [open, messages.length, isStreaming]);
+  // Smart Anchor auto-scroll — stick to bottom only if user is already near bottom.
+  // If they scrolled up to re-read, freeze; don't yank them back during streaming.
+  useSmartAutoScroll(scrollRef, [messages.length, isStreaming], {
+    enabled: open,
+    // Force-jump only when message count increments (new turn), not on every streaming tick.
+    forceDeps: [messages.length],
+  });
+
 
   const hasInput = input.length > 0;
   const showPlaceholder = open && !hasInput && !focused && messages.length === 0;
@@ -362,9 +364,14 @@ export function GlobalInsightSurface({
         title="Shaping"
       />
       {/* Isolated scroll container */}
+      <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div
         ref={scrollRef}
         className="atlas-global-insight-scroll"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 120);
+        }}
         style={{
           flex: 1,
           minHeight: 0,
@@ -584,17 +591,12 @@ export function GlobalInsightSurface({
                     opacity: 0.92,
                   }}
                 >
-                  {msg.imageUrl && (
-                    <img
-                      src={msg.imageUrl}
+                  {(msg.imageUrl || msg.pendingSketch) && (
+                    <SketchReveal
+                      src={msg.imageUrl ?? null}
+                      loading={!!msg.pendingSketch && !msg.imageUrl}
                       alt="Atlas sketch"
-                      style={{
-                        display: "block",
-                        maxWidth: "100%",
-                        borderRadius: 12,
-                        border: "1px solid rgba(212,175,55,0.22)",
-                        marginBottom: displayContent ? 10 : 0,
-                      }}
+                      style={{ marginTop: 0, marginBottom: displayContent ? 10 : 0 }}
                     />
                   )}
                   <GlobalInsightRenderer
@@ -607,29 +609,32 @@ export function GlobalInsightSurface({
 
                 </div>
                 {tokenTarget && (
-                  <button
-                    type="button"
-                    onClick={() => void handleProjectOpen(tokenTarget.projectId)}
-                    aria-label={`Open ${tokenTarget.projectName}`}
-                    style={{
-                      alignSelf: "flex-start",
-                      marginTop: 4,
-                      fontSize: 11,
-                      fontFamily: "var(--app-font-mono)",
-                      letterSpacing: "0.06em",
-                      opacity: 0.6,
-                      padding: "3px 8px",
-                      border: "1px solid rgba(212,175,55,0.18)",
-                      borderRadius: 6,
-                      background: "transparent",
-                      color: "var(--atlas-gold)",
-                      cursor: "pointer",
-                      lineHeight: 1.2,
-                      WebkitTapHighlightColor: "transparent",
+                  <CommitPill
+                    projectId={tokenTarget.projectId}
+                    projectTitle={tokenTarget.projectName}
+                    onArm={async () => {
+                      // Stub feeder-channel attachment (localStorage) so the
+                      // header chip + sidebar chip light up immediately.
+                      // Backend will replace this with attached_project_id.
+                      setFeeder({
+                        projectId: tokenTarget.projectId,
+                        projectTitle: tokenTarget.projectName,
+                      });
+                      // Best-effort handoff sync — never blocks navigation.
+                      try {
+                        await fetch("/api/nexus/handoff", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({
+                            messages: messages.slice(-10),
+                            projectId: tokenTarget.projectId,
+                            conversationId,
+                          }),
+                        });
+                      } catch {}
                     }}
-                  >
-                    → Open {tokenTarget.projectName}
-                  </button>
+                  />
                 )}
                 {!msg.streaming && displayContent.length > 0 && (
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
@@ -728,6 +733,55 @@ export function GlobalInsightSurface({
             </span>
           </div>
         )}
+      </div>
+      {showScrollBtn && (
+        <button
+          onPointerDown={(e) => {
+            if (e.pointerType !== "mouse") {
+              e.preventDefault();
+              const el = scrollRef.current;
+              if (!el) return;
+              el.scrollTop = el.scrollHeight - el.clientHeight;
+              requestAnimationFrame(() => {
+                if (el) el.scrollTop = el.scrollHeight - el.clientHeight;
+              });
+            }
+          }}
+          onClick={(e) => {
+            if (e.detail === 0) {
+              const el = scrollRef.current;
+              if (!el) return;
+              el.scrollTop = el.scrollHeight - el.clientHeight;
+              requestAnimationFrame(() => {
+                if (el) el.scrollTop = el.scrollHeight - el.clientHeight;
+              });
+            }
+          }}
+          aria-label="Scroll to latest"
+          style={{
+            position: "absolute",
+            bottom: 10,
+            right: 12,
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: "var(--atlas-surface)",
+            border: "1px solid var(--atlas-gold)",
+            color: "var(--atlas-gold)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+            zIndex: 50,
+            pointerEvents: "auto",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 3v10M4 9l4 4 4-4"/>
+          </svg>
+        </button>
+      )}
       </div>
 
       {/* Composer — minimal, transparent. Cursor + action row only. */}

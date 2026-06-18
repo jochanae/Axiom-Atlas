@@ -6,13 +6,24 @@ import { LoadingSpinner } from "../ui/loading-spinner";
 import { parseLinkedRepo } from "@/lib/githubRepo";
 import { useIsMobile } from "@/hooks/useBreakpoints";
 
-export function PreviewPanel({ projectId, sandboxCode, onSandboxConsumed, refreshTrigger, sessionId, onSwitchToFiles }: {
+export type ManifestDecision = {
+  firstArtifact: { name: string; description: string; steps: string[] };
+  activeEngine: string;
+  suggestedEngine: string;
+  engineReason: string;
+  complexity: "low" | "medium" | "high";
+  deploymentRequired: boolean;
+};
+
+export function PreviewPanel({ projectId, sandboxCode, onSandboxConsumed, refreshTrigger, sessionId, onSwitchToFiles, manifestDecision, manifestPreviewHtml }: {
   projectId: number;
   sandboxCode?: string | null;
   onSandboxConsumed?: () => void;
   refreshTrigger?: number;
   sessionId?: number;
   onSwitchToFiles?: () => void;
+  manifestDecision?: ManifestDecision | null;
+  manifestPreviewHtml?: string | null;
 }) {
 
   const queryClient = useQueryClient();
@@ -506,6 +517,82 @@ ${t}
     const t = window.setTimeout(() => setStatusVisible(false), 4000);
     return () => window.clearTimeout(t);
   }, [statusVisible, autoDetected, savedIndicator, detectResults.length]);
+
+  if (manifestDecision && manifestPreviewHtml) {
+    return (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "auto", padding: 12 }}>
+        <div
+          style={{
+            background: "#1C1917",
+            border: "1px solid #292524",
+            borderRadius: 10,
+            padding: 16,
+            color: "var(--atlas-fg)",
+          }}
+        >
+          <div
+            style={{
+              color: "#C9A24C",
+              fontSize: 10,
+              fontFamily: "var(--app-font-mono)",
+              fontWeight: 700,
+              letterSpacing: "0.16em",
+              textTransform: "uppercase",
+              marginBottom: 10,
+            }}
+          >
+            Manifestation Decision
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>
+            {manifestDecision.firstArtifact.name}
+          </div>
+          <div style={{ color: "var(--atlas-muted)", fontSize: 12, lineHeight: 1.6, marginBottom: 14 }}>
+            {manifestDecision.firstArtifact.description}
+          </div>
+          <div style={{ display: "grid", gap: 8, fontSize: 11.5, lineHeight: 1.5 }}>
+            <div>
+              <strong style={{ color: "var(--atlas-fg)" }}>Engine:</strong>{" "}
+              <span style={{ color: "var(--atlas-muted)" }}>{manifestDecision.activeEngine}</span>
+            </div>
+            <div>
+              <strong style={{ color: "var(--atlas-fg)" }}>Reason:</strong>{" "}
+              <span style={{ color: "var(--atlas-muted)" }}>{manifestDecision.engineReason}</span>
+            </div>
+            <div>
+              <strong style={{ color: "var(--atlas-fg)" }}>Steps:</strong>
+              <ol style={{ margin: "6px 0 0 18px", padding: 0, color: "var(--atlas-muted)" }}>
+                {manifestDecision.firstArtifact.steps.map((step, index) => (
+                  <li key={`${index}-${step}`} style={{ marginBottom: 4 }}>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div>
+              <strong style={{ color: "var(--atlas-fg)" }}>Complexity:</strong>{" "}
+              <span style={{ color: "var(--atlas-muted)", textTransform: "capitalize" }}>{manifestDecision.complexity}</span>
+            </div>
+            <div>
+              <strong style={{ color: "var(--atlas-fg)" }}>Deployment required:</strong>{" "}
+              <span style={{ color: "var(--atlas-muted)" }}>{manifestDecision.deploymentRequired ? "Yes" : "No"}</span>
+            </div>
+          </div>
+        </div>
+        <iframe
+          srcDoc={manifestPreviewHtml}
+          style={{
+            width: "100%",
+            height: "600px",
+            border: "none",
+            borderRadius: "10px",
+            marginTop: "12px",
+          }}
+          sandbox="allow-scripts"
+          title="Manifest Preview"
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>

@@ -795,6 +795,11 @@ export default function MasterMap() {
     };
 
     const warpTo = (destId: number, targetPos: THREE.Vector3, params = "") => {
+      // If we're warping into a flow view, prime the RightPanel tab flag so
+      // the workspace lands directly on the AxiomFlow map (not the ledger).
+      if (params.includes("view=flow")) {
+        try { sessionStorage.setItem("atlas-open-tab", "map"); } catch {}
+      }
       const camNow = camera.position.clone();
       const dir = targetPos.clone().sub(camNow).normalize();
       warpTarget.current = {

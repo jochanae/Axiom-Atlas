@@ -9,6 +9,8 @@ import { useSound } from "@/hooks/useSound";
 import { useProjectState } from "@/hooks/useProjectState";
 import { useComposerDraft } from "@/hooks/useComposerDraft";
 import { useChatStream } from "@/hooks/useChatStream";
+import { useSmartAutoScroll } from "@/hooks/useSmartAutoScroll";
+
 import { useChatLens } from "@/hooks/useChatLens";
 import { useComposerZip } from "@/hooks/useComposerZip";
 import { useParkingLot } from "@/hooks/useParkingLot";
@@ -30,7 +32,7 @@ import { UnifiedSubheader, type UnifiedSubheaderTab } from "../components/Unifie
 import { ProjectsDrawer } from "../components/ProjectsDrawer";
 import { UserMenuDropdown } from "../components/UserMenuDropdown";
 import { AccountHubPanel } from "../components/AccountHubPanel";
-import { PreviewPanel } from "../components/workspace/PreviewPanel";
+import { PreviewPanel, type ManifestDecision } from "../components/workspace/PreviewPanel";
 import { LedgerPanel } from "../components/workspace/LedgerPanel";
 import { FilesPanel } from "../components/workspace/FilesPanel";
 import { FlowPanel, extractPersistedFlowNodes } from "../components/workspace/FlowPanel";
@@ -132,6 +134,10 @@ type HomeHandoffMeta = {
   parkedTitles?: string[];
 };
 
+function hasHomeHandoffNodeData(meta: HomeHandoffMeta | null): boolean {
+  return Boolean((meta?.flowNodeCount ?? 0) > 0 || (meta?.nodes?.length ?? 0) > 0);
+}
+
 export interface LinePatch {
   path: string;
   find: string;
@@ -225,6 +231,7 @@ export interface ChatMessage {
   costUsd?: number | null;
   artifact?: { type: string; title: string; content: string } | null;
   imageGen?: { images: Array<{ imageUrl: string; prompt: string; model: string; mode: "render" | "schematic" }> } | null;
+  pendingSketch?: boolean;
   /** Time-travel: snapshot id linking this message to a workspace state. */
   snapshotId?: string;
   /** Time-travel: messages bypassed by a rollback. Kept in-array but filtered
@@ -239,6 +246,14 @@ export interface LinkedRepo {
   defaultBranch: string;
   name: string;
 }
+
+type ManifestDecisionResponse = {
+  ready?: boolean;
+  missingCriteria?: string[];
+  decision?: ManifestDecision;
+  generatedCode?: string;
+  componentName?: string;
+};
 
 type RightTab = "ledger" | "files" | "preview" | "memory" | "map" | "terminal" | "blueprints" | "connections" | "secrets" | "jobs" | "mcp" | "image" | "forge" | "artifacts" | "workbench";
 type WorkspaceLeftTab = "chat" | "review" | "diff" | "blueprints" | "terminal" | "artifacts";
@@ -925,6 +940,8 @@ function RightPanel({
   onSandboxConsumed,
   previewRefreshTrigger,
   sessionId,
+  manifestDecision,
+  manifestPreviewHtml,
   pendingTerminalCommand,
   onTerminalCommandConsumed,
   onCommandComplete,
@@ -943,6 +960,7 @@ function RightPanel({
   zipFileName,
   showModelPicker,
   onShowModelPickerChange,
+  messages: messagesProp,
 }: {
   projectId: number;
   projectName: string;
@@ -978,6 +996,8 @@ function RightPanel({
   onSandboxConsumed?: () => void;
   previewRefreshTrigger?: number;
   sessionId?: number;
+  manifestDecision?: ManifestDecision | null;
+  manifestPreviewHtml?: string | null;
   pendingTerminalCommand?: string | null;
   onTerminalCommandConsumed?: () => void;
   onCommandComplete?: (command: string, output: string, exitCode: number | null) => void;
@@ -996,12 +1016,17 @@ function RightPanel({
   zipFileName?: string;
   showModelPicker: boolean;
   onShowModelPickerChange: (v: boolean) => void;
+  messages?: ChatMessage[];
 }) {
   const [tab, setTab] = useState<RightTab>(() => {
     try {
       const stored = sessionStorage.getItem("atlas-open-tab");
-      if (stored === "map") {
-        sessionStorage.removeItem("atlas-open-tab");
+      const viewFlow = new URLSearchParams(window.location.search).get("view") === "flow";
+      // Either signal is sufficient to open directly on the flow map —
+      // sessionStorage flag (set by intra-app handoffs) OR ?view=flow
+      // (set by Master Map warp / "Open flow map" buttons).
+      if (stored === "map" || viewFlow) {
+        if (stored === "map") sessionStorage.removeItem("atlas-open-tab");
         return "map";
       }
     } catch {}
@@ -1330,7 +1355,7 @@ function RightPanel({
       {/* Tab content */}
       {tab === "ledger" && (
         <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
-          <LedgerPanel projectId={projectId} entries={entries} pushHistory={pushHistory} onRollbackPush={onRollbackPush} />
+          <LedgerPanel projectId={projectId} entries={entries} pushHistory={pushHistory} onRollbackPush={onRollbackPush} messages={messagesProp} />
         </div>
       )}
       {tab === "artifacts" && <ArtifactsPanel projectId={projectId} />}
@@ -1367,7 +1392,7 @@ function RightPanel({
           <ImageGenerator compact />
         </div>
       )}
-      {tab === "preview" && <PreviewPanel projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} sessionId={sessionId} onSwitchToFiles={() => setTab("files")} />}
+      {tab === "preview" && <PreviewPanel projectId={projectId} sandboxCode={sandboxCode} onSandboxConsumed={onSandboxConsumed} refreshTrigger={previewRefreshTrigger} sessionId={sessionId} onSwitchToFiles={() => setTab("files")} manifestDecision={manifestDecision} manifestPreviewHtml={manifestPreviewHtml} />}
       {tab === "memory" && <MemoryTab projectId={projectId} />}
       {tab === "map" && <FlowPanel projectId={projectId} onHomeNav={onHomeNav} onSendIntent={onSendIntent} onFillIntent={onFillIntent} onBackToChat={onBackToChat} onNavLedger={onNavLedger ?? (() => setTab("ledger"))} onNavPreview={onNavPreview ?? (() => setTab("preview"))} onMapReadinessChange={onMapReadinessChange} displayedReadinessScore={displayedReadinessScore} onSystemNodeMessage={onSystemNodeMessage} onHandover={onHandover} handoverPending={handoverPending} lastHandoverHash={lastHandoverHash} resolvedNodeIds={resolvedNodeIds} onResolvedConsumed={onResolvedConsumed} onSnapshotChange={onSnapshotChange} handoverOpen={handoverOpen} onHandoverOpenChange={onHandoverOpenChange} isMobile={isMobile} onOpenForge={onOpenForge} externalForgeNodes={externalForgeNodes} onForgeNodesConsumed={onForgeNodesConsumed} onForgeCompleted={onForgeCompleted} entryCount={entries?.length} />}
       {tab === "terminal" && <TerminalPanel pendingCommand={pendingTerminalCommand} onCommandConsumed={onTerminalCommandConsumed} onCommandComplete={onCommandComplete} scenarioLens={wsLens === "scenario"} projectId={projectId} />}
@@ -3168,6 +3193,9 @@ export default function Workspace() {
     new URLSearchParams(window.location.search).get("view") === "flow" ? "map" : undefined
   );
   const [sandboxCode, setSandboxCode] = useState<string | null>(null);
+  const [manifestLoading, setManifestLoading] = useState(false);
+  const [manifestPreviewHtml, setManifestPreviewHtml] = useState<string | null>(null);
+  const [manifestDecision, setManifestDecision] = useState<ManifestDecision | null>(null);
   const openPreviewPanel = useCallback(() => {
     if (isMobile) {
       setMobileTab("preview");
@@ -3443,6 +3471,8 @@ export default function Workspace() {
     setPlanStates(new Map());
     setPlanExecutions(new Map());
     setThinkingState(null);
+    setManifestPreviewHtml(null);
+    setManifestDecision(null);
     homePlanLoadedRef.current = false;
     // Note: abort/chatPending/activityStream reset is owned by useChatStream.
     // Reset auto-prime guards so a fresh ?source=handoff load can seed its first message.
@@ -3904,6 +3934,7 @@ export default function Workspace() {
       return raw ? JSON.parse(raw) as HomeHandoffMeta : null;
     } catch { return null; }
   });
+  const [homeHandoffDataSettled, setHomeHandoffDataSettled] = useState(() => !isHomeHandoff || hasHomeHandoffNodeData(homeHandoffMeta));
   const [showHomeHandoffBanner, setShowHomeHandoffBanner] = useState(() => {
     try { return isHomeHandoff && sessionStorage.getItem(`atlas-home-handoff-banner-${id}`) !== "1"; } catch { return isHomeHandoff; }
   });
@@ -3936,10 +3967,24 @@ export default function Workspace() {
   }, [id, isHomeHandoff]);
 
   useEffect(() => {
-    if (!showHomeHandoffBanner || showHomeHandoffDrawer) return;
+    if (!isHomeHandoff) {
+      setHomeHandoffDataSettled(true);
+      return;
+    }
+    if (hasHomeHandoffNodeData(homeHandoffMeta)) {
+      setHomeHandoffDataSettled(true);
+      return;
+    }
+    setHomeHandoffDataSettled(false);
+    const timer = setTimeout(() => setHomeHandoffDataSettled(true), 1200);
+    return () => clearTimeout(timer);
+  }, [id, isHomeHandoff, homeHandoffMeta]);
+
+  useEffect(() => {
+    if (!homeHandoffDataSettled || !showHomeHandoffBanner || showHomeHandoffDrawer) return;
     const timer = setTimeout(() => setShowHomeHandoffBanner(false), 4000);
     return () => clearTimeout(timer);
-  }, [showHomeHandoffBanner, showHomeHandoffDrawer]);
+  }, [homeHandoffDataSettled, showHomeHandoffBanner, showHomeHandoffDrawer]);
 
   useEffect(() => {
     if (!Number.isFinite(id)) return;
@@ -4161,6 +4206,16 @@ export default function Workspace() {
     query: { enabled: !!id && useProjectStateFallback, queryKey: getGetProjectQueryKey(id) },
   });
   const project = projectState.project ?? fallbackProject;
+  const addLocalMessage = useCallback((role: "user" | "assistant", content: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        role,
+        content,
+        sentAt: new Date().toISOString(),
+      },
+    ]);
+  }, [setMessages]);
   const launchPreviewUrl = project?.previewUrl ?? (() => {
     if (typeof window === "undefined") return null;
     try {
@@ -4181,6 +4236,104 @@ export default function Workspace() {
     chatPending && messages.filter((message) => message.role === "user").length === 1;
   const showProjectNameSkeleton =
     isFirstMessage && autoNameKey === 0 && DEFAULT_NAMES.has(projectName);
+
+  async function handleManifest() {
+    if (!project?.id) return;
+    setManifestLoading(true);
+    try {
+      const projectIdType = project.id === null
+        ? "null"
+        : project.id === undefined
+          ? "undefined"
+          : typeof project.id;
+      const projectIdStr = String(project.id);
+      const looksUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(projectIdStr);
+      const looksInt = /^\d+$/.test(projectIdStr);
+      const idShape = looksUuid ? "uuid" : looksInt ? "integer" : "other";
+
+      const res = await fetch("/api/manifest/decide", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        credentials: "include",
+        body: JSON.stringify({ projectId: project.id, sessionId }),
+      });
+
+      const contentType = res.headers.get("content-type") ?? "";
+      const data = contentType.includes("application/json")
+        ? await res.json() as ManifestDecisionResponse
+        : null;
+
+      if (res.status === 404) {
+        const backendError = data && "error" in data && typeof data.error === "string" ? data.error : "Project not found";
+        const diag = `Manifest 404 · ${backendError} · projectId=${projectIdStr} (type=${projectIdType}, shape=${idShape}, len=${projectIdStr.length})`;
+        toast.error(diag, { duration: 10000 });
+        console.error("[Manifest 404 diagnostic]", {
+          projectId: project.id,
+          projectIdType,
+          projectIdString: projectIdStr,
+          idShape,
+          backendError,
+        });
+        throw new Error(diag);
+      }
+
+      if (!res.ok) {
+        const errorMessage = data && "error" in data && typeof data.error === "string"
+          ? data.error
+          : `Manifest failed with status ${res.status}`;
+        throw new Error(errorMessage);
+      }
+
+      if (!data) {
+        throw new Error("Manifest returned an unreadable response");
+      }
+
+      if (!data.ready) {
+        const missing = (data.missingCriteria ?? []).join(", ");
+        addLocalMessage("assistant", `Atlas needs a bit more clarity before it can manifest this project.\n\nMissing: ${missing}\n\nContinue the conversation to fill in the gaps, then try again.`);
+        return;
+      }
+
+      if (!data.decision) {
+        throw new Error("Manifest response did not include a decision");
+      }
+
+      // V1 only supports atlas-generated.
+      if (data.decision.activeEngine !== "atlas-generated") {
+        addLocalMessage("assistant", `The manifest engine selected "${data.decision.activeEngine}" for this project. Only Atlas Generated is wired in V1 — escalation paths are coming soon.`);
+        return;
+      }
+
+      if (!data.generatedCode || !data.componentName) {
+        throw new Error("Manifest response did not include generated preview code");
+      }
+
+      setManifestDecision(data.decision);
+
+      const previewRes = await fetch("/api/preview/component", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        credentials: "include",
+        body: JSON.stringify({
+          code: data.generatedCode,
+          componentName: data.componentName,
+        }),
+      });
+      if (!previewRes.ok) {
+        throw new Error(`Preview render failed with status ${previewRes.status}`);
+      }
+      const previewHtml = await previewRes.text();
+      setManifestPreviewHtml(previewHtml);
+      openPreviewPanel();
+    } catch (err) {
+      console.error("Manifest failed:", err);
+      const message = err instanceof Error ? err.message : "Manifest failed";
+      toast.error(message);
+      addLocalMessage("assistant", `Manifest couldn't complete: ${message}`);
+    } finally {
+      setManifestLoading(false);
+    }
+  }
 
   useEffect(() => {
     const titleSpan = document.querySelector<HTMLSpanElement>(
@@ -4234,23 +4387,6 @@ export default function Workspace() {
       }));
     }
   }, [hasForgeNodes, id]);
-
-  // ── Shaping arrival toast (one-time) ───────────────────────────────────────────
-  useEffect(() => {
-    if (!project || !Number.isFinite(id)) return;
-    if (project.status !== "shaping") return;
-    if ((sessions?.length ?? 0) > 0) return;
-    if (!project.workingTitle) return;
-    const key = `atlas-shaping-arrival-${id}`;
-    try {
-      if (localStorage.getItem(key)) return;
-      toast("Picked up from your conversation", {
-        description: `"${project.workingTitle}" — rename it anytime by tapping the title.`,
-        duration: 5000,
-      });
-      localStorage.setItem(key, "1");
-    } catch { /* ignore localStorage errors */ }
-  }, [project, sessions, id]);
 
   // fallbackEntries + entries moved above (consumed by useChatStream).
   // createSession moved above (consumed by useChatStream).
@@ -4836,14 +4972,18 @@ export default function Workspace() {
     ]);
   }, []);
 
-  useEffect(() => {
-    const chatEl = chatPanelScrollRef.current;
-    if (chatEl) {
-      chatEl.scrollTop = chatEl.scrollHeight - chatEl.clientHeight;
-    } else {
-      bottomRef.current?.scrollIntoView({ behavior: "instant" });
-    }
-  }, [messages, chatPending]);
+  // Smart Anchor: stick to bottom only when user is already near it.
+  // If they scrolled up to re-read while Atlas streams, freeze instead of yanking back.
+  // A fresh user message (userMsgCount increments) bypasses the freeze.
+  const userMsgCount = useMemo(
+    () => messages.filter((m) => m.role === "user").length,
+    [messages],
+  );
+  useSmartAutoScroll(chatPanelScrollRef, [messages.length, chatPending], {
+    forceDeps: [userMsgCount],
+    behavior: "auto",
+  });
+
 
   // Close mobile panel on mobile→desktop resize
   useEffect(() => {
@@ -4908,7 +5048,8 @@ export default function Workspace() {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 180) + "px";
+    const maxH = parseFloat(getComputedStyle(el).maxHeight) || 180;
+    el.style.height = Math.min(el.scrollHeight, maxH) + "px";
   };
 
   const sendPreparingSession = !sessionId && (sessionsLoading || createSession.isPending);
@@ -4925,7 +5066,14 @@ export default function Workspace() {
     const files = attachedFiles;
     setInput("");
     setAttachedFiles([]);
-    if (textareaRef.current) { textareaRef.current.style.height = "auto"; }
+    if (textareaRef.current) {
+      // Clear inline height so the textarea collapses back to its ambient
+      // single-line size (driven by style minHeight), then blur to dismiss
+      // the expanded sheet — draft state is already cleared above.
+      textareaRef.current.style.height = "";
+      textareaRef.current.blur();
+    }
+    setInputFocused(false);
 
     const imageFiles = files.filter(f => f.type.startsWith("image/")).slice(0, 10);
     const otherFiles = files.filter(f => !f.type.startsWith("image/"));
@@ -5157,6 +5305,7 @@ export default function Workspace() {
     if (!isHomeHandoff || !Number.isFinite(id) || homeHandoffDbLoadedRef.current === id) return;
     homeHandoffDbLoadedRef.current = id;
     const controller = new AbortController();
+    let cancelled = false;
     void (async () => {
       try {
         const res = await fetch(`/api/projects/${id}`, {
@@ -5183,19 +5332,17 @@ export default function Workspace() {
             moscow: n.moscow,
           })),
         }));
-        if (isMobile) {
-          setMobileTab("map");
-          setRightOpen(true);
-        } else {
-          setDesktopForceTab("map");
-          setTimeout(() => setDesktopForceTab(undefined), 120);
-        }
       } catch {
         // Handoff details are a progressive enhancement; keep the workspace usable.
+      } finally {
+        if (!cancelled) setHomeHandoffDataSettled(true);
       }
     })();
-    return () => controller.abort();
-  }, [id, isHomeHandoff, isMobile, parkedEntries.length]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [id, isHomeHandoff, parkedEntries.length]);
   const [pendingTerminalCommand, setPendingTerminalCommand] = useState<string | null>(null);
   const handleRunCommand = useCallback((command: string) => {
     setPendingTerminalCommand(command);
@@ -5791,6 +5938,9 @@ export default function Workspace() {
         hasProject={Boolean(project)}
         isMobile={isMobile}
         showWorkspaceMenu
+        projectStatus={project?.status}
+        onManifest={handleManifest}
+        manifestLoading={manifestLoading}
         onLaunch={() => {
           // Preview-first toggle. Play ALWAYS surfaces the running app preview,
           // regardless of which tab/module is currently active. Panel maximize
@@ -5936,26 +6086,50 @@ export default function Workspace() {
             background: "rgba(201,162,76,0.07)",
             borderBottom: "1px solid rgba(201,162,76,0.18)",
             flexShrink: 0,
+            animation: "atlas-spec-banner-drop 520ms cubic-bezier(0.22, 1, 0.36, 1) both",
+            position: "relative",
+            overflow: "hidden",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, display: "inline-block" }} />
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(90deg, transparent, rgba(201,162,76,0.18), transparent)",
+              transform: "translateX(-100%)",
+              animation: "atlas-spec-banner-shimmer 1.4s ease-out 280ms 1 forwards",
+              pointerEvents: "none",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--atlas-gold)", flexShrink: 0, display: "inline-block", boxShadow: "0 0 8px rgba(201,162,76,0.7)" }} />
             <span style={{ fontSize: "var(--ts-label)", color: "var(--atlas-gold)", fontFamily: "var(--app-font-mono)", letterSpacing: "0.03em" }}>
               Spec loaded from {importSourceLabel ?? "external source"} — your architecture decisions are committed.
             </span>
           </div>
           <button
             onClick={dismissAxiomBanner}
-            style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(201,162,76,0.5)", fontSize: "var(--ts-base)", lineHeight: 1, padding: "2px 4px", flexShrink: 0 }}
+            style={{ background: "transparent", border: "none", cursor: "pointer", color: "rgba(201,162,76,0.5)", fontSize: "var(--ts-base)", lineHeight: 1, padding: "2px 4px", flexShrink: 0, position: "relative" }}
             title="Dismiss"
             aria-label="Dismiss"
           >
             ×
           </button>
+          <style>{`
+            @keyframes atlas-spec-banner-drop {
+              from { transform: translateY(-100%); opacity: 0; }
+              to   { transform: translateY(0); opacity: 1; }
+            }
+            @keyframes atlas-spec-banner-shimmer {
+              from { transform: translateX(-100%); }
+              to   { transform: translateX(100%); }
+            }
+          `}</style>
         </div>
       )}
 
-      {(showHomeHandoffBanner || showHomeHandoffDrawer) && (
+      {homeHandoffDataSettled && (showHomeHandoffBanner || showHomeHandoffDrawer) && (
         <style>{`
           @keyframes atlas-handoff-drawer-in {
             from { transform: translateY(100%); opacity: 0; }
@@ -5964,8 +6138,8 @@ export default function Workspace() {
         `}</style>
       )}
 
-      {(showHomeHandoffBanner || showHomeHandoffDrawer) && (() => {
-        const handoffNodes = homeHandoffMeta?.nodes ?? [];
+      {homeHandoffDataSettled && (showHomeHandoffBanner || showHomeHandoffDrawer) && (() => {
+        const handoffNodes = homeHandoffNodes;
         const getMo = (n: HomeHandoffNode) => n.moscow ?? n.meta ?? (n.type === "wont" ? "wont" : undefined);
         const isDefined = (n: HomeHandoffNode) => Boolean(n.resolved) || Boolean(n.details && n.details.trim() && !/^tap to /i.test(n.details));
         const mustCount = handoffNodes.filter(n => getMo(n) === "must").length;
@@ -5973,7 +6147,7 @@ export default function Workspace() {
         const openDecisionCount = handoffNodes.filter(n => n.type === "decision" && !isDefined(n)).length;
         const blockerCount = handoffNodes.filter(n => n.type === "blocker").length;
         const definedCount = handoffNodes.filter(isDefined).length;
-        const totalCount = homeHandoffMeta?.flowNodeCount ?? handoffNodes.length;
+        const totalCount = Math.max(homeHandoffMeta?.flowNodeCount ?? 0, handoffNodes.length);
         const goalLabel = homeHandoffMeta?.goalLabel?.trim() || "your first node";
         const projectLabel = project?.name ?? "this project";
         const parkedCount = homeHandoffMeta?.parkedCount ?? 0;
@@ -6024,7 +6198,7 @@ export default function Workspace() {
         );
       })()}
 
-      {showHomeHandoffDrawer && (
+      {homeHandoffDataSettled && showHomeHandoffDrawer && (
         <div
           role="region"
           aria-label="Home handoff details"
@@ -6173,10 +6347,18 @@ export default function Workspace() {
             onSandboxConsumed={() => setSandboxCode(null)}
             previewRefreshTrigger={previewRefreshTrigger}
             sessionId={sessionId ?? undefined}
+            manifestDecision={manifestDecision}
+            manifestPreviewHtml={manifestPreviewHtml}
             pendingTerminalCommand={pendingTerminalCommand}
             onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
             onCommandComplete={handleTerminalComplete}
             wsLens={wsLens}
+            onBackToChat={() => {
+              setLeftTab("chat");
+              setDesktopRightFull(false);
+              setDesktopForceTab("ledger");
+              setTimeout(() => setDesktopForceTab(undefined), 80);
+            }}
             onOpenForge={() => setShowForgeExternal(true)}
             externalForgeNodes={externalForgeNodes}
             onForgeNodesConsumed={() => setExternalForgeNodes([])}
@@ -6194,6 +6376,7 @@ export default function Workspace() {
               setShowModelPicker(val);
               try { localStorage.setItem("atlas-power-model-picker", val ? "1" : "0"); } catch {}
             }}
+            messages={messages}
           />
         ) : undefined}
         showFlow={!isMobile}
@@ -6783,6 +6966,8 @@ export default function Workspace() {
                 onSandboxConsumed={() => setSandboxCode(null)}
                 previewRefreshTrigger={previewRefreshTrigger}
                 sessionId={sessionId ?? undefined}
+                manifestDecision={manifestDecision}
+                manifestPreviewHtml={manifestPreviewHtml}
                 pendingTerminalCommand={pendingTerminalCommand}
                 onTerminalCommandConsumed={() => setPendingTerminalCommand(null)}
                 onCommandComplete={handleTerminalComplete}
@@ -6807,6 +6992,7 @@ export default function Workspace() {
                   setShowModelPicker(val);
                   try { localStorage.setItem("atlas-power-model-picker", val ? "1" : "0"); } catch {}
                 }}
+                messages={messages}
               />
             </div>
           </div>

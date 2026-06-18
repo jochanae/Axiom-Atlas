@@ -177,12 +177,18 @@ export function useAtlasStream(): UseAtlasStreamReturn {
               } else if (evtName === "data" || evtName === "") {
                 callbacks.onData?.(JSON.parse(evtData));
               } else if (evtName === "done") {
-                const meta = JSON.parse(evtData) as Record<string, unknown>;
+                const doneData = JSON.parse(evtData) as Record<string, unknown> & { content?: string };
+                const navMatch = doneData.content?.match(/NAVIGATE_TO:\{"route":"\/project\/(\d+)"\}/);
+                if (navMatch) {
+                  const projectId = navMatch[1];
+                  window.location.href = `/project/${projectId}`;
+                  return;
+                }
                 await pacer.finish();
                 // Use content from meta if available (already cleaned)
                 // otherwise use accumulated streamedText
-                const finalText = (meta.content as string | undefined) ?? streamedText;
-                callbacks.onDone(finalText, meta);
+                const finalText = doneData.content ?? streamedText;
+                callbacks.onDone(finalText, doneData);
               } else if (evtName === "error") {
                 pacer.abort();
                 const errMsg = JSON.parse(evtData) as string;

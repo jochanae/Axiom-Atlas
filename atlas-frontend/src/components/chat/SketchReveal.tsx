@@ -130,22 +130,58 @@ export default function SketchReveal({
 
         {/* Revealed image */}
         {src && loaded && !errored && (
-          <motion.img
-            src={src}
-            alt={alt}
-            initial={{ opacity: 0, scale: 1.02 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
+          <>
+            <motion.img
+              src={src}
+              alt={alt}
+              initial={{ opacity: 0, scale: 1.02 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const a = document.createElement("a");
+                a.href = src;
+                a.download = `${(alt || "sketch").replace(/\s+/g, "-").toLowerCase()}.png`;
+                a.click();
+              }}
+              aria-label="Download sketch"
+              title="Download sketch"
+              style={{
+                position: "absolute",
+                bottom: 8,
+                right: 8,
+                width: 28,
+                height: 28,
+                borderRadius: 999,
+                background: "rgba(0,0,0,0.55)",
+                border: "1px solid color-mix(in oklab, var(--atlas-gold, #c9a24c) 40%, transparent)",
+                color: "var(--atlas-gold, #c9a24c)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                backdropFilter: "blur(4px)",
+                padding: 0,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 2v9M4.5 7.5L8 11l3.5-3.5M3 13.5h10" />
+              </svg>
+            </button>
+          </>
         )}
+
 
         {errored && (
           <div

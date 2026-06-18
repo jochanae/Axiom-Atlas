@@ -219,11 +219,14 @@ export function QuickActionV2({
                   minWidth: 180,
                   maxHeight: 220,
                   overflowY: "auto",
-                  background: "var(--atlas-surface)",
+                  background: "#0b0b0e",
+                  backgroundImage:
+                    "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))",
                   border: "1px solid var(--atlas-border)",
                   borderRadius: 8,
                   padding: 4,
-                  boxShadow: "0 14px 36px rgba(0,0,0,0.5)",
+                  boxShadow:
+                    "0 14px 36px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4)",
                 }}
               >
                 {projects.map((p) => (

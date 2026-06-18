@@ -329,12 +329,84 @@ export function ChatComposer(props: ChatComposerProps) {
     };
   }, [attachedFiles]);
 
+  // Option 2 — expand-on-focus bottom sheet.
+  // While focused, lock body + html scroll so the page behind the sheet stays put.
+  useEffect(() => {
+    if (!inputFocused) return;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, [inputFocused]);
+
+  const composerActive = leftTab !== "terminal" && leftTab !== "blueprints" && leftTab !== "artifacts";
+  const sheetVisible = inputFocused && composerActive;
 
   return (
 
     <>
+      {/* Dimmed backdrop — tap to collapse the sheet. */}
+      {composerActive && (
+        <div
+          aria-hidden={!sheetVisible}
+          onPointerDown={(e) => {
+            // Tap-outside blur: collapses the sheet without clearing the draft
+            // (input state lives upstream and is untouched on blur).
+            e.preventDefault();
+            textareaRef.current?.blur();
+          }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 55,
+            background: "rgba(8,8,10,0.55)",
+            backdropFilter: "blur(6px) saturate(120%)",
+            WebkitBackdropFilter: "blur(6px) saturate(120%)",
+            opacity: sheetVisible ? 1 : 0,
+            pointerEvents: sheetVisible ? "auto" : "none",
+            transition: "opacity 280ms cubic-bezier(0.22, 1, 0.36, 1)",
+          }}
+        />
+      )}
       {/* Input — hidden when Terminal tab is active (terminal has its own input row) */}
-      {leftTab !== "terminal" && leftTab !== "blueprints" && leftTab !== "artifacts" && <div className="atlas-composer-glass" style={{ padding: "12px 14px 14px", flexShrink: 0, position: "sticky", bottom: 0, zIndex: 30 }}>
+      {composerActive && <div
+        className="atlas-composer-glass"
+        data-atlas-composer
+        data-composer-expanded={sheetVisible ? "true" : "false"}
+        style={sheetVisible ? {
+          padding: "18px 16px 20px",
+          flexShrink: 0,
+          position: "fixed",
+          left: 0, right: 0, bottom: 0,
+          height: "60vh",
+          zIndex: 60,
+          display: "flex", flexDirection: "column",
+          borderTopLeftRadius: 20, borderTopRightRadius: 20,
+          boxShadow: "0 -24px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(201,162,76,0.18)",
+          transition: "height 320ms cubic-bezier(0.22, 1, 0.36, 1), padding 320ms cubic-bezier(0.22, 1, 0.36, 1), border-radius 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+          overflow: "hidden",
+        } : {
+          padding: "12px 14px 14px",
+          flexShrink: 0,
+          position: "sticky",
+          bottom: 0,
+          zIndex: 30,
+          transition: "padding 320ms cubic-bezier(0.22, 1, 0.36, 1), border-radius 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+        }}>
+        {/* Grip handle — visible only in expanded sheet mode. */}
+        {sheetVisible && (
+          <div
+            onPointerDown={(e) => { e.preventDefault(); textareaRef.current?.blur(); }}
+            style={{
+              alignSelf: "center", width: 44, height: 4, borderRadius: 999,
+              background: "rgba(201,162,76,0.35)", marginBottom: 10, cursor: "grab",
+              flexShrink: 0,
+            }}
+            aria-label="Collapse composer"
+          />
+        )}
         {/* Hidden file input — unrestricted multi-mime; used by drag-drop/legacy callers.
             Primary picker is the unified ComposerActions sheet below. */}
         <input
@@ -556,8 +628,11 @@ export function ChatComposer(props: ChatComposerProps) {
                   color: "var(--atlas-fg)", fontSize: 14, lineHeight: 1.6,
                   resize: "none", fontFamily: "var(--app-font-sans)",
                   position: "relative", zIndex: 1,
-                  minHeight: 24, maxHeight: 180, overflowY: "hidden", display: "block",
+                  minHeight: sheetVisible ? "calc(60vh - 160px)" : 24,
+                  maxHeight: sheetVisible ? "calc(60vh - 160px)" : (isMobile ? "25vh" : 180),
+                  overflowY: "auto", overscrollBehavior: "contain", display: "block",
                   padding: "2px 2px",
+                  transition: "min-height 320ms cubic-bezier(0.22, 1, 0.36, 1), max-height 320ms cubic-bezier(0.22, 1, 0.36, 1)",
                 }}
               />
             </div>

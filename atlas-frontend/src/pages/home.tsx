@@ -45,10 +45,12 @@ import { CompactReadinessRing, computeScoreFromNodeState } from "../components/R
 import { PlanCard } from "../components/PlanCard";
 import { detectPlanFromText } from "../lib/plan";
 import type { Plan } from "../lib/plan";
-import { Briefcase, ChevronDown, FolderClosed } from "lucide-react";
+import { Briefcase, ChevronDown, Crosshair, FolderClosed } from "lucide-react";
 import type { RunStatus, RunAction, RunArtifact } from "../components/RunSummary";
 import { useShellState } from "../components/UnifiedShell";
 import { useShellStore } from "../store/shellStore";
+import { CommitPill } from "@/components/home/CommitPill";
+import { HandoffCinemaOverlay } from "@/components/home/HandoffCinemaOverlay";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { useNexusChatStream, type NexusProjectReadyDoneData } from "@/hooks/useNexusChatStream";
 import { usePortfolioFocus } from "@/hooks/usePortfolioFocus";
@@ -85,23 +87,9 @@ const THINK_OUT_LOUD_STARTER = "I've been turning something over and want to thi
 const GLOBAL_INSIGHT_PORTFOLIO_SEED =
   "Across all my projects, what should I know right now — any conflicts between decisions, which projects are active versus stalled, and the one or two things most worth doing next?";
 
-function GlobalInsightTitleCarousel({ earnedTitle }: { earnedTitle: string | null }) {
-  const resolvedEarnedTitle = earnedTitle?.trim() || null;
-  const [showEarnedTitle, setShowEarnedTitle] = useState(false);
-
-  useEffect(() => {
-    if (!resolvedEarnedTitle) {
-      setShowEarnedTitle(false);
-      return;
-    }
-
-    setShowEarnedTitle(true);
-    const id = window.setInterval(() => {
-      setShowEarnedTitle((current) => !current);
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [resolvedEarnedTitle]);
-
+function GlobalInsightTitleCarousel(_props: { earnedTitle: string | null }) {
+  // Header title rotation stripped (Pass 1). Header is permanently
+  // "Global Insight"; the project name lives in the CommitPill only.
   return (
     <div style={{ display: "inline-flex", alignItems: "center", gap: 6, maxWidth: "min(260px, 100%)", minWidth: 0 }}>
       <span
@@ -116,10 +104,8 @@ function GlobalInsightTitleCarousel({ earnedTitle }: { earnedTitle: string | nul
         }}
       />
       <span
-        title={resolvedEarnedTitle ? `Global Insight / ${resolvedEarnedTitle}` : "Global Insight"}
+        title="Global Insight"
         style={{
-          display: "inline-grid",
-          gridTemplateAreas: "'title'",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -134,41 +120,12 @@ function GlobalInsightTitleCarousel({ earnedTitle }: { earnedTitle: string | nul
           opacity: 0.92,
         }}
       >
-        <span
-          style={{
-            gridArea: "title",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            minWidth: 0,
-            opacity: showEarnedTitle ? 0 : 1,
-            transition: "opacity 650ms ease",
-          }}
-        >
-          Global Insight
-        </span>
-        {resolvedEarnedTitle && (
-          <span
-            style={{
-              gridArea: "title",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              minWidth: 0,
-              opacity: showEarnedTitle ? 1 : 0,
-              transition: "opacity 650ms ease",
-            }}
-          >
-            {resolvedEarnedTitle}{" "}
-            <span aria-hidden style={{ color: LIFECYCLE_META.shaping.color }}>
-              🌱
-            </span>
-          </span>
-        )}
+        Global Insight
       </span>
     </div>
   );
 }
+
 
 type HomeHandoffSignal = {
   readyToHandoff: boolean;
@@ -1906,8 +1863,8 @@ export default function Home() {
         : detectedPortfolioFocus.focus;
   const focusChipLabel =
     resolvedPortfolioFocus === "project"
-      ? manualFocusProject?.name ?? detectedFocusProject?.name ?? detectedPortfolioFocus.matchedProject ?? "Project"
-      : "All Projects";
+      ? `FOCUS · ${manualFocusProject?.name ?? detectedFocusProject?.name ?? detectedPortfolioFocus.matchedProject ?? "Project"}`
+      : "FOCUS · ALL";
   const homeFocusUserInitiatedRef = useRef(false);
   const [showFocusPicker, setShowFocusPicker] = useState(false);
   const [homeModel] = useState<string>("claude");
@@ -1948,6 +1905,14 @@ export default function Home() {
       decisions: homeProjectState.decisions,
     } : null,
   });
+  // Fork B: drive the global CommitPill (store-mode) from the live handoffSignal.
+  // Surface the pill the instant a project name is proposed (Pass 2 "early naming");
+  // promote to 'ready' when Atlas declares readyToHandoff OR the conversation
+  // crosses the same ≥5-user-message gate the inline card used.
+  const setShapingStatus = useShellStore((s) => s.setShapingStatus);
+  const setPendingWorkspace = useShellStore((s) => s.setPendingWorkspace);
+  const shapingStatus = useShellStore((s) => s.shapingStatus);
+  const userMsgCount = (nexusChat.messages as HomeMessage[]).filter(m => m.role === "user").length;
   useEffect(() => {
     if (nexusChat.handoffSignal?.readyToHandoff === true) {
       setIsHandoffReady(true);
@@ -1956,7 +1921,17 @@ export default function Home() {
     if (suggestedName) {
       pushHudEvent("PROJECT", suggestedName, { projectName: suggestedName });
     }
-  }, [nexusChat.handoffSignal]);
+    // Don't clobber the user-armed transition state.
+    if (shapingStatus === "transitioning") return;
+    if (suggestedName) {
+      setPendingWorkspace(null, suggestedName);
+      const ready =
+        nexusChat.handoffSignal?.readyToHandoff === true ||
+        nexusChat.handoffSignal?.explicit === true ||
+        userMsgCount >= 5;
+      setShapingStatus(ready ? "ready" : "shaping");
+    }
+  }, [nexusChat.handoffSignal, userMsgCount, shapingStatus, setShapingStatus, setPendingWorkspace]);
   const focusProjectId = homeFocus;
   useEffect(() => {
     setRecentFocusUserMessages(
@@ -2197,6 +2172,20 @@ export default function Home() {
       }
       const projectId = Number(project.id);
       if (!Number.isFinite(projectId)) throw new Error("Failed to create project");
+      const effectiveConversationId = activeConversationId;
+      void fetch("/api/nexus/handoff", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { "Authorization": `Bearer ${authToken}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          messages: nexusChat.messages.map(m => ({ role: m.role, content: m.content })),
+          projectId: projectId,
+          conversationId: effectiveConversationId ?? undefined,
+        }),
+      }).catch(() => null);
       try {
         sessionStorage.setItem(THINK_FREELY_THREAD_STORAGE_KEY, JSON.stringify(messagesToKeep));
       } catch {}
@@ -2217,6 +2206,7 @@ export default function Home() {
       }
     }
   }, [
+    activeConversationId,
     callGlobalInsightMode,
     nexusChat.messages,
     queryClient,
@@ -3462,7 +3452,8 @@ export default function Home() {
     if (el.scrollHeight < currentH) {
       el.style.height = "auto";
     }
-    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    const maxH = parseFloat(getComputedStyle(el).maxHeight) || 160;
+    el.style.height = Math.min(el.scrollHeight, maxH) + "px";
   };
 
   useEffect(() => {
@@ -3504,7 +3495,7 @@ export default function Home() {
     slot.style.maxWidth = "100%";
     slot.style.minWidth = "0";
 
-    titleRegion.appendChild(slot);
+    titleRegion.prepend(slot);
     setGlobalInsightTitleSlot(slot);
 
     return () => {
@@ -4105,21 +4096,11 @@ export default function Home() {
                               />
                             );
                           })()}
-                          {msg.handoffSignal && i === firstHandoffMessageIndex && !handoffCardDismissed && !msg.streaming && (msg.handoffSignal.explicit || nexusChat.messages.filter(m => m.role === "user").length >= 5) && (
-                            <HomeHandoffCard
-                              signal={msg.handoffSignal}
-                              projectName={handoffProjectName || msg.handoffSignal.projectName || "New Project"}
-                              projectId={msg.handoffSignal.projectId ?? null}
-                              onProjectNameChange={setHandoffProjectName}
-                              loading={handoffLoading}
-                              stage={handoffStage}
-                              onStart={() => void handleHandoff(msg.handoffSignal, handoffProjectName || msg.handoffSignal?.projectName || "New Project")}
-                              onDismiss={() => {
-                                try { sessionStorage.setItem(`atlas-home-handoff-dismissed-${activeConversationId}`, "1"); } catch {}
-                                setHandoffCardDismissed(true);
-                              }}
-                            />
-                          )}
+                          {/* Fork B: inline HomeHandoffCard replaced by the global
+                              store-driven <CommitPill /> floating above the composer.
+                              See the useEffect that syncs handoffSignal → shellStore
+                              and the <CommitPill onArm={handleCommitPillArm} /> render
+                              near the bottom of this page. */}
                           {/* Action row — Copy + Sketch this */}
                           {displayContent && (
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 2, marginTop: 3 }}>
@@ -4390,10 +4371,10 @@ export default function Home() {
             position: globalInsightOpen ? "relative" : "sticky",
             left: globalInsightOpen ? undefined : 0,
             right: globalInsightOpen ? undefined : 0,
-            bottom: globalInsightOpen ? undefined : 0,
+            bottom: globalInsightOpen ? undefined : "calc(64px + env(safe-area-inset-bottom, 0px))",
             padding: globalInsightOpen
               ? "12px 0 0"
-              : "14px 20px calc(14px + env(safe-area-inset-bottom, 0px))",
+              : "14px 20px 14px",
             flexShrink: 0,
             zIndex: globalInsightOpen ? 1 : 250,
             pointerEvents: "auto",
@@ -4427,7 +4408,7 @@ export default function Home() {
               <>
                 <div onClick={() => setShowFocusPicker(false)} style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} />
                 <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", borderRadius: "16px 16px 0 0", padding: "16px 0 32px", maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 32px rgba(0,0,0,0.4)" }}>
-                  <div style={{ padding: "4px 16px 10px", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", color: "var(--atlas-muted)", textTransform: "uppercase", opacity: 0.6 }}>Active project</div>
+                  <div style={{ padding: "4px 16px 10px", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", color: "var(--atlas-muted)", textTransform: "uppercase", opacity: 0.6 }}>Focus scope</div>
                   <button
                     type="button"
                     onClick={handleHomeFocusAllProjects}
@@ -4548,8 +4529,9 @@ export default function Home() {
                   position: "relative",
                   zIndex: 1,
                   minHeight: 52,
-                  maxHeight: 160,
-                  overflowY: "hidden",
+                  maxHeight: isMobile ? "25vh" : 160,
+                  overflowY: "auto",
+                  overscrollBehavior: "contain",
                   display: "block",
                 }}
               />
@@ -4647,8 +4629,8 @@ export default function Home() {
 
               <button
                 type="button"
-                title="Active project"
-                aria-label={`Active project: ${focusChipLabel}`}
+                title="Focus scope"
+                aria-label={`Focus scope: ${focusChipLabel}`}
                 aria-expanded={showFocusPicker}
                 onPointerDown={(e) => { e.preventDefault(); }}
                 onMouseDown={(e) => { e.preventDefault(); }}
@@ -4683,7 +4665,17 @@ export default function Home() {
                   transition: "background 160ms ease, border-color 160ms ease, color 160ms ease",
                 }}
               >
-                <FolderClosed size={13} strokeWidth={1.7} style={{ flexShrink: 0 }} />
+                <Crosshair
+                  size={13}
+                  strokeWidth={resolvedPortfolioFocus === "project" ? 2.2 : 1.6}
+                  style={{
+                    flexShrink: 0,
+                    filter: resolvedPortfolioFocus === "project"
+                      ? "drop-shadow(0 0 4px color-mix(in oklab, var(--atlas-phosphor) 60%, transparent))"
+                      : "none",
+                    transition: "stroke-width 160ms ease, filter 160ms ease",
+                  }}
+                />
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
                   {focusChipLabel}
                 </span>
@@ -5132,8 +5124,8 @@ export default function Home() {
         focusChip={
           <button
             type="button"
-            title="Active project"
-            aria-label={`Active project: ${focusChipLabel}`}
+            title="Focus scope"
+            aria-label={`Focus scope: ${focusChipLabel}`}
             aria-expanded={showFocusPicker}
             onClick={() => setShowFocusPicker((open) => !open)}
             style={{
@@ -5163,7 +5155,17 @@ export default function Home() {
               transition: "background 160ms ease, border-color 160ms ease, color 160ms ease",
             }}
           >
-            <FolderClosed size={13} strokeWidth={1.7} style={{ flexShrink: 0 }} />
+            <Crosshair
+              size={13}
+              strokeWidth={resolvedPortfolioFocus === "project" ? 2.2 : 1.6}
+              style={{
+                flexShrink: 0,
+                filter: resolvedPortfolioFocus === "project"
+                  ? "drop-shadow(0 0 4px color-mix(in oklab, var(--atlas-phosphor) 60%, transparent))"
+                  : "none",
+                transition: "stroke-width 160ms ease, filter 160ms ease",
+              }}
+            />
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
               {focusChipLabel}
             </span>
@@ -5186,7 +5188,7 @@ export default function Home() {
         <>
           <div onClick={() => setShowFocusPicker(false)} style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }} />
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9999, background: "var(--atlas-surface)", border: "1px solid var(--atlas-border)", borderRadius: "16px 16px 0 0", padding: "16px 0 32px", maxHeight: "60vh", overflowY: "auto", boxShadow: "0 -8px 32px rgba(0,0,0,0.4)" }}>
-            <div style={{ padding: "4px 16px 10px", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", color: "var(--atlas-muted)", textTransform: "uppercase", opacity: 0.6 }}>Active project</div>
+            <div style={{ padding: "4px 16px 10px", fontFamily: "var(--app-font-mono)", fontSize: 9, letterSpacing: "0.12em", color: "var(--atlas-muted)", textTransform: "uppercase", opacity: 0.6 }}>Focus scope</div>
             <button
               type="button"
               onClick={handleHomeFocusAllProjects}
@@ -5427,11 +5429,10 @@ export default function Home() {
               0 0 18px rgba(212,175,55,0.22);
           }
         }
-        .atlas-home-bg[data-handoff-ready="true"] button[aria-label="Create project from this conversation"] {
-          animation: atlasHandoffReadyPulse 2.2s ease-in-out infinite;
-          border-color: rgba(212,175,55,0.28) !important;
-          color: var(--atlas-gold) !important;
-        }
+        /* Pass 1 cleanup: removed dead selector targeting the deprecated
+           folder+ "Create project from this conversation" button — that button
+           no longer exists in the composer. */
+
         .atlas-home-chat-messages-scroll::-webkit-scrollbar {
           display: none;
         }
@@ -5560,6 +5561,34 @@ export default function Home() {
         }
 
       `}</style>
+
+      {/* Fork B: floating store-driven CommitPill — anchors above the bottom dock,
+          surfaces the instant a project name is proposed (shaping) and glows when
+          ready. Tap arms the same handleHandoff() the inline card used. */}
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
+          display: "flex",
+          justifyContent: "center",
+          pointerEvents: "none",
+          zIndex: 90,
+        }}
+      >
+        <div style={{ pointerEvents: "auto" }}>
+          <CommitPill
+            onArm={() => handleHandoff(
+              (nexusChat.handoffSignal ?? undefined) as HomeHandoffSignal | undefined,
+              nexusChat.handoffSignal?.projectName?.trim() || handoffProjectName || "New Project",
+            )}
+          />
+        </div>
+      </div>
+
+      <HandoffCinemaOverlay />
+
       <div className="atlas-home-bottom-nav">
         <UnifiedContextDock
           mode="ambient"

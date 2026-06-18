@@ -21,6 +21,14 @@ export type ThreadSource = 'home' | 'project' | null;
 // "Shaping → Committed: One Object, Two States (+ Shell Mode)".
 export type ShellMode = 'ambient' | 'active' | 'operational';
 
+// Shaping → Commit handoff state machine.
+//   idle          = no commit in flight (baseline)
+//   shaping       = commit endpoint in flight (Atlas synthesizing)
+//   ready         = pendingWorkspaceId set, CommitPill glowing, waiting for tap
+//   transitioning = user tapped, border-trace playing, header gate engaged
+// Header MUST NOT render workspace title while isHandoff() === true.
+export type ShapingStatus = 'idle' | 'shaping' | 'ready' | 'transitioning';
+
 export interface ActiveThread {
   conversationId: string | null;
   projectId: number | null;
@@ -33,6 +41,13 @@ export interface ActiveThread {
 interface ShellStore {
   shellMode: ShellMode;
   setShellMode: (mode: ShellMode) => void;
+  shapingStatus: ShapingStatus;
+  pendingWorkspaceId: number | null;
+  pendingWorkspaceTitle: string | null;
+  setShapingStatus: (status: ShapingStatus) => void;
+  setPendingWorkspace: (id: number | null, title?: string | null) => void;
+  resetHandoff: () => void;
+  isHandoff: () => boolean;
   activeThread: ActiveThread;
   setActiveThread: (thread: Partial<ActiveThread>) => void;
   setConversationId: (conversationId: string | null) => void;
@@ -52,9 +67,21 @@ const emptyThread: ActiveThread = {
   scrollPosition: 0,
 };
 
-export const useShellStore = create<ShellStore>((set) => ({
+export const useShellStore = create<ShellStore>((set, get) => ({
   shellMode: 'ambient',
   setShellMode: (shellMode) => set({ shellMode }),
+  shapingStatus: 'idle',
+  pendingWorkspaceId: null,
+  pendingWorkspaceTitle: null,
+  setShapingStatus: (shapingStatus) => set({ shapingStatus }),
+  setPendingWorkspace: (id, title = null) =>
+    set({ pendingWorkspaceId: id, pendingWorkspaceTitle: title }),
+  resetHandoff: () =>
+    set({ shapingStatus: 'idle', pendingWorkspaceId: null, pendingWorkspaceTitle: null }),
+  isHandoff: () => {
+    const s = get().shapingStatus;
+    return s === 'shaping' || s === 'ready' || s === 'transitioning';
+  },
   activeThread: emptyThread,
   setActiveThread: (thread) =>
     set((state) => ({ activeThread: { ...state.activeThread, ...thread } })),
@@ -70,3 +97,4 @@ export const useShellStore = create<ShellStore>((set) => ({
     set((state) => ({ activeThread: { ...state.activeThread, scrollPosition: pos } })),
   clearThread: () => set({ activeThread: emptyThread, shellMode: 'ambient' }),
 }));
+

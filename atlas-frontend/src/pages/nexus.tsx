@@ -16,6 +16,8 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createTextPacer } from "@/lib/textPacer";
+import { FeederBadge } from "@/components/home/FeederBadge";
+import { useFeeder, useFeederHydration } from "@/lib/feederStore";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface NexusMsg {
@@ -272,6 +274,8 @@ export default function NexusPage() {
   const [clearing, setClearing] = useState(false);
   const queryClient = useQueryClient();
   const clearThread = useClearNexusThread();
+  const feeder = useFeeder();
+  useFeederHydration();
 
   // Hydrate messages from the Living Thread when it loads
   useEffect(() => {
@@ -478,7 +482,16 @@ export default function NexusPage() {
           }}>
             Atlas
           </span>
+          {feeder && (
+            <FeederBadge
+              variant="header"
+              projectId={feeder.projectId}
+              projectTitle={feeder.projectTitle}
+              className="ml-2"
+            />
+          )}
         </div>
+
 
         {/* Toggle right panel */}
         {!isMobile && (

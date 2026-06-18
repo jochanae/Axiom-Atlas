@@ -4,8 +4,9 @@ import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { StatusGlyph } from "../StatusGlyph";
 import { CapsuleTag } from "../CapsuleTag";
-import { PushDiffCard } from "@/components/workspace/ReviewCards";
+
 import { ParkingLotEntry } from "@/components/workspace/ParkingLotEntry";
+import { SessionTimeline, type TimelineMessage } from "@/components/workspace/SessionTimeline";
 import { type PushRecord } from "../../pages/workspace";
 
 function LedgerEntry({ entry }: { entry: Entry }) {
@@ -119,11 +120,13 @@ export function LedgerPanel({
   entries,
   pushHistory,
   onRollbackPush,
+  messages = [],
 }: {
   projectId: number;
   entries: Entry[];
   pushHistory: PushRecord[];
   onRollbackPush: (record: PushRecord) => Promise<void>;
+  messages?: TimelineMessage[];
 }) {
   const parked = entries.filter((e) => e.status === "parked");
 
@@ -310,41 +313,14 @@ export function LedgerPanel({
         )}
       </div>
 
-      {/* ── Changes (push history) ── */}
-      <div style={{ padding: "0 12px 12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8, paddingTop: 12, borderTop: "1px solid var(--atlas-border)" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: pushHistory.length > 0 ? "rgba(134,239,172,0.6)" : "var(--atlas-muted)", opacity: pushHistory.length > 0 ? 1 : 0.3, flexShrink: 0 }} />
-          <span style={{ fontSize: 10.5, fontFamily: "var(--app-font-mono)", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--atlas-muted)" }}>Changes</span>
-          {pushHistory.length > 0 && (
-            <span style={{ marginLeft: "auto", fontSize: 9.5, fontFamily: "var(--app-font-mono)", background: "rgba(134,239,172,0.08)", border: "1px solid rgba(134,239,172,0.2)", color: "rgba(134,239,172,0.7)", padding: "1px 6px", borderRadius: 10 }}>
-              {pushHistory.length}
-            </span>
-          )}
-        </div>
-        {pushHistory.length > 0 ? (() => {
-          // Group records by commitUrl so multi-file commits show as one card
-          const groups: PushRecord[][] = [];
-          const seen = new Map<string, PushRecord[]>();
-          for (const r of [...pushHistory].reverse()) {
-            const key = r.commitUrl || r.id;
-            if (!seen.has(key)) { seen.set(key, []); groups.push(seen.get(key)!); }
-            seen.get(key)!.push(r);
-          }
-          return groups.map((group) => (
-            <PushDiffCard
-              key={group[0].commitUrl || group[0].id}
-              records={group}
-              onRollbackAll={async () => {
-                for (const r of group) await onRollbackPush(r);
-              }}
-            />
-          ));
-        })() : (
-          <div style={{ fontSize: 11, color: "var(--atlas-muted)", opacity: 0.35, lineHeight: 1.65 }}>
-            Code pushes will appear here. Tap <strong style={{ opacity: 0.6 }}>Rollback</strong> on any to instantly restore the original.
-          </div>
-        )}
-      </div>
+      {/* ── Changes (unified session timeline: prompts, thoughts, edits, pushes) ── */}
+      <SessionTimeline
+        messages={messages}
+        pushHistory={pushHistory}
+        onRollbackPush={onRollbackPush}
+        projectId={projectId}
+      />
+
 
       {/* Footer buttons */}
       <div style={{ padding: "8px 12px", borderTop: "1px solid var(--atlas-border)", flexShrink: 0, display: "flex", flexDirection: "column", gap: 6 }}>

@@ -256,6 +256,44 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
   const [flowInput, setFlowInput] = useState("");
   const flowScrollRef = useRef<HTMLDivElement>(null);
 
+  const handleBackToFlowChat = useCallback(() => {
+    setLensView("designer");
+    setShowChat(true);
+    setChatFullscreen(false);
+    setFlowChatTab("flow");
+  }, []);
+
+  const backToFlowChatButton = (
+    <button
+      type="button"
+      onClick={handleBackToFlowChat}
+      aria-label="Back to workspace chat"
+      title="Back to Flow Chat"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        marginBottom: 14,
+        padding: "6px 9px",
+        borderRadius: 999,
+        border: "1px solid rgba(var(--atlas-gold-rgb),0.22)",
+        background: "rgba(var(--atlas-bg-rgb),0.52)",
+        color: "rgba(var(--atlas-gold-rgb),0.82)",
+        cursor: "pointer",
+        fontFamily: "var(--app-font-mono)",
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M10 3L5 8l5 5" />
+      </svg>
+      Back to workspace
+    </button>
+  );
+
   useEffect(() => () => { if (sentFlashTimerRef.current) clearTimeout(sentFlashTimerRef.current); }, []);
 
   useEffect(() => {
@@ -676,6 +714,7 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
           )}
           {lensView === "builder" && (
             <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: "20px 18px 28px" }}>
+              {backToFlowChatButton}
               {(() => {
                 const goal = nodes.find(n => n.type === "goal") ?? null;
                 const rest = nodes.filter(n => n.type !== "goal");
@@ -783,6 +822,7 @@ export function FlowPanel({ projectId, onHomeNav, onSendIntent, onFillIntent, on
           )}
           {lensView === "storyteller" && (
             <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: "20px 22px 28px" }}>
+              {backToFlowChatButton}
               {(() => {
                 const { goal, steps } = orderNodesForStory(nodes);
                 if (!goal && steps.length === 0) {
