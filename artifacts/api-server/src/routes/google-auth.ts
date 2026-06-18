@@ -16,8 +16,15 @@ const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL?.toLowerCase() ?? "";
 const FRONTEND_URL = (process.env.APP_URL ?? "https://axiomsystem.app").replace(/\/$/, "");
 
 function getRedirectUri(req?: import("express").Request) {
-  // Use the actual host from the incoming request so dev and prod both work
-  // without needing separate Google Console entries per environment
+  // APP_URL is always set in production (Cloud Run). Use it first so the
+  // redirect_uri is identical between the initiate and callback requests,
+  // regardless of what x-forwarded-host Cloud Run's proxy injects.
+  const appUrl = process.env.APP_URL?.trim();
+  if (appUrl) {
+    const url = new URL(appUrl);
+    return `${url.protocol.replace(/:$/, "")}://${url.host}/api/auth/google/callback`;
+  }
+  // Local dev fallback — derive from request headers
   const forwardedProto = req?.headers["x-forwarded-proto"];
   const protocol =
     (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)?.split(",")[0]?.trim().replace(/:$/, "") ||
@@ -29,11 +36,6 @@ function getRedirectUri(req?: import("express").Request) {
     if (forwardedHost) return `${protocol}://${forwardedHost}/api/auth/google/callback`;
     const host = req.headers.host;
     if (host) return `${protocol}://${host}/api/auth/google/callback`;
-  }
-  const appUrl = process.env.APP_URL?.trim();
-  if (appUrl) {
-    const url = new URL(appUrl);
-    return `${url.protocol.replace(/:$/, "")}://${url.host}/api/auth/google/callback`;
   }
   return `${protocol}://localhost:80/api/auth/google/callback`;
 }
