@@ -58,13 +58,13 @@ router.get("/auth/google", (req, res): void => {
   const state = randomBytes(16).toString("hex");
   const isLink = req.query.link === "1";
 
-  res.cookie("oauth_state", state, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600_000, path: "/" });
+  res.cookie("oauth_state", state, { httpOnly: true, secure: true, sameSite: "none", maxAge: 600_000, path: "/" });
 
   // If linking, carry the existing session token so the callback can find the user
   if (isLink) {
     const existingSession = req.cookies?.[SESSION_COOKIE];
     if (existingSession) {
-      res.cookie("oauth_link_session", existingSession, { httpOnly: true, secure: true, sameSite: "lax", maxAge: 600_000, path: "/" });
+      res.cookie("oauth_link_session", existingSession, { httpOnly: true, secure: true, sameSite: "none", maxAge: 600_000, path: "/" });
     }
   }
 
