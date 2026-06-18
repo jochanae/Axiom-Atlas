@@ -30,6 +30,7 @@ let projectSchemaReady = false;
 export async function ensureProjectSchema(): Promise<void> {
   if (projectSchemaReady) return;
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "entity_type" text DEFAULT 'project' NOT NULL`);
+  await db.execute(sql`ALTER TABLE "projects" ALTER COLUMN "status" SET DEFAULT 'committed'`);
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "last_opened_at" timestamp with time zone DEFAULT now() NOT NULL`);
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "shape" JSONB NOT NULL DEFAULT '{"identity":[],"constraints":[],"formats":[]}'::jsonb`);
   await db.execute(sql`ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "commit_synthesis" JSONB`);
@@ -59,7 +60,7 @@ export async function createProjectForUser(input: CreateProjectForUserInput) {
     .values({
       name: input.name,
       description: input.description ?? null,
-      status: "active",
+      status: "committed",
       entityType: input.entityType ?? "project",
       userId: input.userId,
       ...(input.memory !== undefined ? { memory: input.memory } : {}),

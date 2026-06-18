@@ -80,6 +80,13 @@ type CreateProjectToolInput = {
   summary: string;
 };
 
+type HandoffBriefExtraction = {
+  entries: Array<{
+    tier: number;
+    text: string;
+  }>;
+};
+
 const HOME_OPENING_FALLBACKS = [
   "What are you turning over?",
   "What decision keeps coming back?",
@@ -107,6 +114,19 @@ const IDEA_MODE_EXPLICIT_SIGNALS = [
   "let's explore an idea",
   "lets explore an idea",
 ];
+
+const HANDOFF_PROJECT_BRIEF_PROMPT = `You are extracting a project brief from a founder conversation. Extract only what was explicitly stated.
+
+Return ONLY valid JSON:
+{
+  "entries": [
+    {"tier": 1, "text": "Core promise: <one sentence>"},
+    {"tier": 1, "text": "Primary user: <who uses this>"},
+    {"tier": 1, "text": "Input: <what user gives the system>"},
+    {"tier": 1, "text": "Output: <what system returns>"},
+    {"tier": 1, "text": "Core moment: <when the idea becomes real>"}
+  ]
+}`;
 
 const IDEA_MODE_POSTURE = `--- IDEA MODE ACTIVE ---
 idea_mode: true
@@ -2680,134 +2700,81 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 router.post("/nexus/handoff", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
-    const { messages, projectId, sessionId, ideaMode, conversationId, conversation_id: conversationIdSnake } = req.body as {
-      messages: { role: string; content: string }[];
+    const { messages, projectId } = req.body as {
+      messages?: Array<{ role: string; content: string }>;
       projectId?: number;
-      sessionId?: number;
-      ideaMode?: boolean;
-      conversationId?: string | null;
-      conversation_id?: string | null;
+      conversationId?: string;
     };
-    const rawConversationId = conversationId ?? conversationIdSnake;
-    const handoffConversationId = typeof rawConversationId === "string" && rawConversationId.trim().length > 0
-      ? rawConversationId.trim()
-      : null;
 
-    if (!messages?.length) {
+    if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: "No messages provided" });
       return;
     }
 
-    const briefResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      system: `You are extracting a project brief from a conversation between a founder and Atlas.
+    const normalizedMessages = messages
+      .filter((message) => typeof message?.role === "string" && typeof message?.content === "string")
+      .map((message) => ({
+        role: message.role.trim(),
+        content: message.content.trim(),
+      }))
+      .filter((message) => message.role.length > 0 && message.content.length > 0);
 
-Extract and return ONLY a JSON object with this exact shape — no markdown, no explanation:
-{
-  "projectName": "short name for the project (max 4 words)",
-  "description": "one sentence describing what this project does",
-  "blueprint": "2-3 sentences covering what was decided: what to build, key components identified, approach agreed on",
-  "firstStep": "the single most important first thing to do in the workspace"
-}
-
-If no clear project name was discussed, use "New Project".`,
-      messages: [
-        {
-          role: "user",
-          content: `Here is the conversation:\n\n${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")}\n\nExtract the project brief.`,
-        },
-      ],
-    });
-
-    const rawText = briefResponse.content[0]?.type === "text" ? briefResponse.content[0].text : "{}";
-    let brief: { projectName: string; description: string; blueprint: string; firstStep: string };
-    try {
-      brief = JSON.parse(rawText.replace(/```json|```/g, "").trim());
-    } catch {
-      brief = { projectName: "New Project", description: "", blueprint: rawText, firstStep: "" };
+    if (normalizedMessages.length === 0) {
+      res.status(400).json({ error: "No valid messages provided" });
+      return;
     }
 
-    let targetProjectId = projectId;
-    let ideaModeActive = ideaMode === true || messages.some((m) => (
-      m.role === "user" && (hasIdeaModeSignal(m.content) || hasExplicitIdeaModeSignal(m.content))
-    ));
-    if (!ideaModeActive && Number.isInteger(sessionId) && Number(sessionId) > 0) {
-      const [session] = await db
-        .select({ ideaMode: sessionsTable.ideaMode })
-        .from(sessionsTable)
-        .innerJoin(projectsTable, eq(sessionsTable.projectId, projectsTable.id))
-        .where(and(eq(sessionsTable.id, Number(sessionId)), eq(projectsTable.userId, userId)))
-        .limit(1);
-      ideaModeActive = session?.ideaMode === true;
-    }
-    if (!targetProjectId) {
-      const [newProject] = await db
-        .insert(projectsTable)
-        .values({
-          name: brief.projectName,
-          description: brief.description,
-          entityType: ideaModeActive ? "idea" : "project",
-          status: "committed",
-          userId,
-        })
-        .returning();
-      targetProjectId = newProject.id;
+    if (!Number.isInteger(projectId) || Number(projectId) <= 0) {
+      res.status(400).json({ error: "projectId is required" });
+      return;
     }
 
-    const [targetProject] = await db
-      .select({ memory: projectsTable.memory })
+    const [project] = await db
+      .select({ id: projectsTable.id })
       .from(projectsTable)
-      .where(and(eq(projectsTable.id, targetProjectId), eq(projectsTable.userId, userId)))
+      .where(and(eq(projectsTable.id, Number(projectId)), eq(projectsTable.userId, userId)))
       .limit(1);
-    if (!targetProject) {
+
+    if (!project) {
       res.status(404).json({ error: "Project not found" });
       return;
     }
 
-    const handoffTimestamp = new Date().toISOString();
-    const existingMemory = parseMemoryStore(targetProject.memory ?? null);
-    const nextEntries: MemoryEntry[] = [
-      ...existingMemory.entries,
-      {
-        tier: 1,
-        text: `Project brief from home conversation: ${brief.blueprint}`,
-        createdAt: handoffTimestamp,
-        retrievalCount: 0,
-        lastRetrievedAt: null,
-      },
-      ...(brief.firstStep ? [{
-        tier: 4 as const,
-        text: `First step: ${brief.firstStep}`,
-        createdAt: handoffTimestamp,
-        retrievalCount: 0,
-        lastRetrievedAt: null,
-      }] : []),
-    ];
+    const briefResponse = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: HANDOFF_PROJECT_BRIEF_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: `Conversation messages:\n${JSON.stringify(normalizedMessages, null, 2)}`,
+        },
+      ],
+    });
 
-    if (
-      handoffConversationId
-      && !memoryHasConversationContext(targetProject.memory ?? null, existingMemory, handoffConversationId)
-    ) {
-      const hasMessageType = await hasNexusMessageTypeColumn();
-      const recentConversationMessages = await loadRecentNexusMessagesForConversation(
-        userId,
-        handoffConversationId,
-        hasMessageType,
-      );
-      if (recentConversationMessages.length > 0) {
-        nextEntries.push({
-          tier: 3,
-          text: buildConversationContextBlock(
-            handoffConversationId,
-            handoffTimestamp,
-            recentConversationMessages,
-          ),
-          createdAt: handoffTimestamp,
-          retrievalCount: 0,
-          lastRetrievedAt: null,
-        });
-      }
+    const rawText = briefResponse.content[0]?.type === "text" ? briefResponse.content[0].text : "";
+    const brief = parseJsonObject<HandoffBriefExtraction>(rawText);
+    if (!brief || !Array.isArray(brief.entries)) {
+      res.status(502).json({ error: "Failed to extract project brief" });
+      return;
+    }
+
+    const handoffTimestamp = new Date().toISOString();
+    const nextEntries: MemoryEntry[] = brief.entries
+      .filter((entry) => typeof entry?.text === "string" && entry.text.trim().length > 0)
+      .map((entry) => ({
+        tier: entry.tier === 1 || entry.tier === 2 || entry.tier === 3 || entry.tier === 4 || entry.tier === 5
+          ? entry.tier
+          : 1,
+        text: entry.text.trim(),
+        createdAt: handoffTimestamp,
+        retrievalCount: 0,
+        lastRetrievedAt: null,
+      }));
+
+    if (nextEntries.length === 0) {
+      res.status(502).json({ error: "Failed to extract project brief" });
+      return;
     }
 
     const memoryEntry: MemoryStore = {
@@ -2818,12 +2785,14 @@ If no clear project name was discussed, use "New Project".`,
     await db
       .update(projectsTable)
       .set({ memory: JSON.stringify(memoryEntry) })
-      .where(and(eq(projectsTable.id, targetProjectId), eq(projectsTable.userId, userId)));
+      .where(and(eq(projectsTable.id, Number(projectId)), eq(projectsTable.userId, userId)));
 
-    res.json({ projectId: targetProjectId, projectName: brief.projectName, brief });
+    res.json({ ok: true, projectId: Number(projectId) });
+    return;
   } catch (err) {
     req.log?.error({ err }, "Handoff error");
     res.status(500).json({ error: "Handoff failed" });
+    return;
   }
 });
 
