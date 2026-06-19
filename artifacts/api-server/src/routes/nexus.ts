@@ -1366,7 +1366,7 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
             title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' ORDER BY sub.created_at ASC LIMIT 1)`,
             createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
             messageCount: sql<number>`COUNT(*)`,
-            attached_project_id: sql<number | null>`MAX(attached_project_id)`,
+            attached_project_id: sql<number | null>`MAX(${nexusMessagesTable.projectId})`,
           })
           .from(nexusMessagesTable)
           .where(and(
@@ -1383,7 +1383,7 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
             title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' ORDER BY sub.created_at ASC LIMIT 1)`,
             createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
             messageCount: sql<number>`COUNT(*)`,
-            attached_project_id: sql<number | null>`MAX(attached_project_id)`,
+            attached_project_id: sql<number | null>`MAX(${nexusMessagesTable.projectId})`,
           })
           .from(nexusMessagesTable)
           .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId)))
