@@ -4,11 +4,25 @@ import { z } from "zod/v4";
 import { projectsTable } from "./projects";
 import { sessionsTable } from "./sessions";
 
+export const ENTRY_TYPES = [
+  "Idea",
+  "Goal",
+  "Blocker",
+  "Decision",
+  "Audience",
+  "Feature",
+  "Risk",
+  "Insight",
+] as const;
+
+export type EntryType = typeof ENTRY_TYPES[number];
+
 export const entriesTable = pgTable("entries", {
   id: serial("id").primaryKey(),
   projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
   sessionId: integer("session_id").references(() => sessionsTable.id, { onDelete: "set null" }),
   status: text("status").notNull().default("committed"),
+  type: text("type").notNull().default("Decision"),
   title: text("title").notNull(),
   summary: text("summary"),
   details: text("details"),
