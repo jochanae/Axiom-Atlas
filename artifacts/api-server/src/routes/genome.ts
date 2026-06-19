@@ -223,25 +223,43 @@ async function applyExtraction(projectId: number, result: ExtractionResult): Pro
     genomeUpdate.confidenceScore = Math.round(result.confidenceScore);
   }
 
+  // Build a typed update object for the genome upsert
+  const genomeValues: typeof projectGenomeTable.$inferInsert = { projectId };
+  const genomeSet: Partial<typeof projectGenomeTable.$inferInsert> = {};
+
+  if (genomeUpdate.purpose !== undefined) { genomeValues.purpose = genomeUpdate.purpose as string | null; genomeSet.purpose = genomeValues.purpose; }
+  if (genomeUpdate.coreEmotion !== undefined) { genomeValues.coreEmotion = genomeUpdate.coreEmotion as string | null; genomeSet.coreEmotion = genomeValues.coreEmotion; }
+  if (genomeUpdate.audience !== undefined) { genomeValues.audience = genomeUpdate.audience as string | null; genomeSet.audience = genomeValues.audience; }
+  if (genomeUpdate.identity !== undefined) { genomeValues.identity = genomeUpdate.identity as string | null; genomeSet.identity = genomeValues.identity; }
+  if (genomeUpdate.constraints !== undefined) { genomeValues.constraints = genomeUpdate.constraints as string[]; genomeSet.constraints = genomeValues.constraints; }
+  if (genomeUpdate.openQuestions !== undefined) { genomeValues.openQuestions = genomeUpdate.openQuestions as string[]; genomeSet.openQuestions = genomeValues.openQuestions; }
+  if (genomeUpdate.stage !== undefined) { genomeValues.stage = genomeUpdate.stage as string; genomeSet.stage = genomeValues.stage; }
+  if (genomeUpdate.confidenceScore !== undefined) { genomeValues.confidenceScore = genomeUpdate.confidenceScore as number; genomeSet.confidenceScore = genomeValues.confidenceScore; }
+  genomeValues.lastEvolvedAt = new Date();
+  genomeSet.lastEvolvedAt = genomeValues.lastEvolvedAt;
+  genomeValues.updatedAt = new Date();
+  genomeSet.updatedAt = genomeValues.updatedAt;
+
   await db
     .insert(projectGenomeTable)
-    .values({ projectId, ...genomeUpdate as Parameters<typeof db.insert>[0] extends infer T ? any : any })
+    .values(genomeValues)
     .onConflictDoUpdate({
       target: projectGenomeTable.projectId,
-      set: genomeUpdate as any,
+      set: genomeSet,
     });
 
-  // Upsert typed Object entries (upsert by title + projectId — no exact type match to allow re-classification)
+  // Upsert typed Object entries — keyed on (projectId, title, type)
+  // Entries with the same title but different type are distinct objects.
   if (Array.isArray(result.objects)) {
     const VALID_TYPES = ["Idea", "Goal", "Blocker", "Decision", "Audience", "Feature", "Risk", "Insight"];
     for (const obj of result.objects) {
       if (!obj?.title?.trim() || !VALID_TYPES.includes(obj.type)) continue;
 
       const title = obj.title.trim().slice(0, 255);
-      const type = obj.type;
-      const summary = typeof obj.summary === "string" ? obj.summary.trim().slice(0, 500) : null;
+      const type = obj.type as string;
+      const summary = typeof obj.summary === "string" ? obj.summary.trim().slice(0, 500) : undefined;
 
-      // Check for existing entry with same title in this project
+      // Check for existing entry with same (projectId, title, type)
       const [existing] = await db
         .select({ id: entriesTable.id })
         .from(entriesTable)
@@ -249,16 +267,19 @@ async function applyExtraction(projectId: number, result: ExtractionResult): Pro
           and(
             eq(entriesTable.projectId, projectId),
             eq(entriesTable.title, title),
+            eq(entriesTable.type, type),
           ),
         )
         .limit(1);
 
       if (existing) {
-        // Update type and summary if we have new info
-        await db
-          .update(entriesTable)
-          .set({ type, ...(summary ? { summary } : {}), updatedAt: new Date() })
-          .where(eq(entriesTable.id, existing.id));
+        // Only update summary if we have new content
+        if (summary) {
+          await db
+            .update(entriesTable)
+            .set({ summary, updatedAt: new Date() })
+            .where(eq(entriesTable.id, existing.id));
+        }
       } else {
         await db.insert(entriesTable).values({
           projectId,
@@ -324,24 +345,26 @@ router.patch("/projects/:id/genome", async (req, res): Promise<void> => {
     const VALID_STAGES = ["Think", "Shape", "Decide", "Workspace", "Strategize", "Build", "Operate", "Evolve"];
     const body = req.body as Record<string, unknown>;
 
-    const update: Record<string, unknown> = { updatedAt: new Date() };
-    if (typeof body.purpose === "string") update.purpose = body.purpose.trim() || null;
-    if (typeof body.coreEmotion === "string") update.coreEmotion = body.coreEmotion.trim() || null;
-    if (typeof body.audience === "string") update.audience = body.audience.trim() || null;
-    if (typeof body.identity === "string") update.identity = body.identity.trim() || null;
-    if (Array.isArray(body.constraints)) update.constraints = body.constraints.map(String).filter(Boolean).slice(0, 5);
-    if (Array.isArray(body.openQuestions)) update.openQuestions = body.openQuestions.map(String).filter(Boolean).slice(0, 5);
-    if (typeof body.stage === "string" && VALID_STAGES.includes(body.stage)) update.stage = body.stage;
-    if (typeof body.confidenceScore === "number" && body.confidenceScore >= 0 && body.confidenceScore <= 100) {
-      update.confidenceScore = Math.round(body.confidenceScore);
-    }
+    // confidenceScore is extraction-only — not user-editable via PATCH
+    const patchValues: typeof projectGenomeTable.$inferInsert = { projectId };
+    const patchSet: Partial<typeof projectGenomeTable.$inferInsert> = {};
+
+    if (typeof body.purpose === "string") { patchValues.purpose = body.purpose.trim() || null; patchSet.purpose = patchValues.purpose; }
+    if (typeof body.coreEmotion === "string") { patchValues.coreEmotion = body.coreEmotion.trim() || null; patchSet.coreEmotion = patchValues.coreEmotion; }
+    if (typeof body.audience === "string") { patchValues.audience = body.audience.trim() || null; patchSet.audience = patchValues.audience; }
+    if (typeof body.identity === "string") { patchValues.identity = body.identity.trim() || null; patchSet.identity = patchValues.identity; }
+    if (Array.isArray(body.constraints)) { patchValues.constraints = body.constraints.map(String).filter(Boolean).slice(0, 5); patchSet.constraints = patchValues.constraints; }
+    if (Array.isArray(body.openQuestions)) { patchValues.openQuestions = body.openQuestions.map(String).filter(Boolean).slice(0, 5); patchSet.openQuestions = patchValues.openQuestions; }
+    if (typeof body.stage === "string" && VALID_STAGES.includes(body.stage)) { patchValues.stage = body.stage; patchSet.stage = body.stage; }
+    patchValues.updatedAt = new Date();
+    patchSet.updatedAt = patchValues.updatedAt;
 
     await db
       .insert(projectGenomeTable)
-      .values({ projectId, ...update as any })
+      .values(patchValues)
       .onConflictDoUpdate({
         target: projectGenomeTable.projectId,
-        set: update as any,
+        set: patchSet,
       });
 
     const genome = await getOrCreateGenome(projectId);
