@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, desc, and, inArray } from "drizzle-orm";
-import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable } from "@workspace/db";
+import { db, projectsTable, sessionsTable, entriesTable, readinessSnapshotsTable, blueprintsTable, projectFlowCanvasTable, projectForgeStateTable } from "@workspace/db";
 import { encryptToken, decryptToken } from "../lib/tokenCrypto";
 import { createProjectForUser, ensureProjectSchema, ProjectLimitReachedError } from "../lib/projectCreation";
 import {
@@ -407,6 +407,88 @@ router.put("/projects/:id/shape", async (req, res): Promise<void> => {
   }
 
   res.json({ shape: project.shape });
+});
+
+// GET /api/projects/:id/state — workspace bootstrap
+// Returns everything the workspace needs in a single round-trip:
+// project, activeSession, decisions, parked entries, forge state, memory summary.
+router.get("/projects/:id/state", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid project id" });
+    return;
+  }
+  const userId = (req as any).authUser.id as number;
+
+  const [project] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, id), eq(projectsTable.userId, userId)));
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  const [sessions, decisions, parked, forgeRows] = await Promise.all([
+    db
+      .select()
+      .from(sessionsTable)
+      .where(and(eq(sessionsTable.projectId, id), eq(sessionsTable.status, "active")))
+      .orderBy(desc(sessionsTable.updatedAt))
+      .limit(1),
+    db
+      .select()
+      .from(entriesTable)
+      .where(and(eq(entriesTable.projectId, id), eq(entriesTable.status, "committed")))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(50),
+    db
+      .select()
+      .from(entriesTable)
+      .where(and(eq(entriesTable.projectId, id), eq(entriesTable.status, "parked")))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(50),
+    db
+      .select()
+      .from(projectForgeStateTable)
+      .where(eq(projectForgeStateTable.projectId, id))
+      .limit(1),
+  ]);
+
+  const forgeRaw = forgeRows[0] ?? null;
+  const forgeState = forgeRaw
+    ? { forged: !!forgeRaw.forgedAt, dismissed: !!forgeRaw.dismissedAt }
+    : null;
+
+  let memorySummary: string | null = null;
+  if (project.memory) {
+    try {
+      const parsed = JSON.parse(project.memory) as any;
+      if (parsed?.v === 2 && Array.isArray(parsed.entries)) {
+        memorySummary = parsed.entries
+          .slice(0, 5)
+          .map((e: any) => e.text)
+          .filter(Boolean)
+          .join(" | ") || null;
+      } else {
+        memorySummary = project.memory.slice(0, 500) || null;
+      }
+    } catch {
+      memorySummary = null;
+    }
+  }
+
+  res.json({
+    project: serializeProject(project, false),
+    activeSession: sessions[0] ?? null,
+    decisions,
+    parked,
+    parkedCount: parked.length,
+    forgeState,
+    memorySummary,
+    recentContext: null,
+  });
 });
 
 router.get("/projects/:id", async (req, res): Promise<void> => {
