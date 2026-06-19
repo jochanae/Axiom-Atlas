@@ -1661,6 +1661,80 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     .orderBy(desc(projectsTable.updatedAt))
     .limit(20);
 
+  // Recent activity across portfolio — recent commits + sessions for Global Insight context
+  const recentActivity = await (async () => {
+    if (ideaMode || projectIds.length === 0) return null;
+    try {
+      const ghToken = process.env.GITHUB_TOKEN ?? null;
+      const linkedProjects = projects.filter(p => p.linkedRepo);
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      const [recentSessions, commitResults] = await Promise.all([
+        db.select({
+          id: sessionsTable.id,
+          projectId: sessionsTable.projectId,
+          title: sessionsTable.title,
+          messageCount: sessionsTable.messageCount,
+          createdAt: sessionsTable.createdAt,
+        })
+          .from(sessionsTable)
+          .where(and(inArray(sessionsTable.projectId, projectIds), gte(sessionsTable.createdAt, sevenDaysAgo)))
+          .orderBy(desc(sessionsTable.createdAt))
+          .limit(10),
+        ghToken && linkedProjects.length > 0
+          ? Promise.allSettled(linkedProjects.slice(0, 4).map(async (p) => {
+              const repoFull = parseRepo(p.linkedRepo ?? null);
+              if (!repoFull) return [] as { project: string; msg: string; sha: string; date: string }[];
+              const r = await fetch(`https://api.github.com/repos/${repoFull}/commits?per_page=5`, {
+                headers: { Authorization: `Bearer ${ghToken}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Atlas-Nexus/1.0" },
+                signal: AbortSignal.timeout(5000),
+              });
+              if (!r.ok) return [] as { project: string; msg: string; sha: string; date: string }[];
+              const data = await r.json() as any[];
+              return data.map((c: any) => ({
+                project: p.name,
+                msg: ((c.commit?.message ?? "") as string).split("\n")[0].slice(0, 100),
+                sha: (c.sha as string)?.slice(0, 7) ?? "",
+                date: (c.commit?.author?.date ?? "") as string,
+              }));
+            }))
+          : Promise.resolve([] as PromiseSettledResult<{ project: string; msg: string; sha: string; date: string }[]>[]),
+      ]);
+
+      const lines: string[] = [];
+
+      if (recentSessions.length > 0) {
+        lines.push("Recent conversations:");
+        for (const s of recentSessions) {
+          const name = projectNameById.get(s.projectId) ?? "Unknown";
+          const daysAgo = Math.round((Date.now() - new Date(s.createdAt).getTime()) / 86400000);
+          const when = daysAgo === 0 ? "today" : `${daysAgo}d ago`;
+          lines.push(`  • [${name}] ${s.title || "Untitled session"} (${s.messageCount ?? 0} messages, ${when})`);
+        }
+      }
+
+      const allCommits: { project: string; msg: string; sha: string; date: string }[] = [];
+      if (Array.isArray(commitResults)) {
+        for (const r of commitResults as PromiseSettledResult<{ project: string; msg: string; sha: string; date: string }[]>[]) {
+          if (r.status === "fulfilled") allCommits.push(...r.value);
+        }
+      }
+      if (allCommits.length > 0) {
+        allCommits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        lines.push("\nRecent commits (interpret narratively, not as a raw list):");
+        for (const c of allCommits.slice(0, 12)) {
+          const daysAgo = c.date ? Math.round((Date.now() - new Date(c.date).getTime()) / 86400000) : -1;
+          const when = daysAgo === 0 ? "today" : daysAgo > 0 ? `${daysAgo}d ago` : "";
+          lines.push(`  • [${c.project}] ${c.msg}${when ? ` (${when})` : ""}`);
+        }
+      }
+
+      return lines.length > 0 ? lines.join("\n") : null;
+    } catch {
+      return null;
+    }
+  })();
+
   // Build system prompt
   const userFirstName = typeof authUser?.name === "string" && authUser.name.trim()
     ? authUser.name.trim().split(/\s+/)[0]
@@ -1706,6 +1780,9 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   }
   if (aggregatedMemory) {
     systemPrompt += `\n\n--- AGGREGATED PROJECT MEMORY (Atlas knows this across all projects) ---\n${aggregatedMemory}\n--- END AGGREGATED MEMORY ---`;
+  }
+  if (recentActivity) {
+    systemPrompt += `\n\n--- RECENT ACTIVITY ACROSS PORTFOLIO ---\n${recentActivity}\nInterpret commits and sessions narratively — group by area of impact, synthesize what is changing, identify momentum and gaps. Do not enumerate SHAs or dump raw lists unless the user explicitly asks for exact history.\n--- END RECENT ACTIVITY ---`;
   }
   if (focusProjectId) {
     const focusProject = projects.find(p => p.id === focusProjectId);
