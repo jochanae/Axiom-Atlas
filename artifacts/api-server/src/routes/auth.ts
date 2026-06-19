@@ -226,7 +226,9 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     res.json({ id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, subscriptionTier: user.subscriptionTier, googleLinked: !!user.googleId, hasPassword: !!user.passwordHash });
   } catch (err: any) {
     console.error("auth/me error:", err);
-    res.status(401).json({ error: "Session invalid" });
+    // Return 503 (not 401) so the frontend does not clear the auth token
+    // or redirect to /login on a transient DB error.
+    res.status(503).json({ error: "Service temporarily unavailable" });
     return;
   }
 });
