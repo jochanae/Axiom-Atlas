@@ -1098,7 +1098,7 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     role: nexusMessagesTable.role,
     content: nexusMessagesTable.content,
     conversationId: nexusMessagesTable.conversationId,
-    attached_project_id: sql<number | null>`attached_project_id`,
+    attached_project_id: nexusMessagesTable.projectId,
     createdAt: nexusMessagesTable.createdAt,
   };
 
@@ -1418,7 +1418,7 @@ router.patch("/nexus/thread/attach", async (req, res): Promise<void> => {
 
   await db.execute(sql`
     UPDATE nexus_messages
-    SET attached_project_id = ${projectId}
+    SET project_id = ${projectId}
     WHERE user_id = ${userId}
   `);
 
