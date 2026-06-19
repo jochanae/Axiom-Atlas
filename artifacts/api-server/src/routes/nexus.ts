@@ -8,6 +8,7 @@ import { loadVaultContext } from "../lib/vaultContext";
 import { getGithubTokenForUser, bootstrapGitHubRepo } from "../lib/githubBootstrap";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { findSemanticTensionsForProject } from "./tensions";
+import { maybeAutoExtract } from "./genome";
 import { calculateModelCostUsd } from "../pricing";
 import { logger } from "../lib/logger";
 import { ATLAS_PLATFORM_KNOWLEDGE } from "../lib/atlasKnowledge";
@@ -2325,6 +2326,13 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 
     res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...(nexusImageGenResult ? { imageGen: nexusImageGenResult } : {}), ...(projectReadyToken ? { projectReady: projectReadyToken } : {}), ...runMetadata })}\n\n`);
     res.end();
+    if (focusProjectId) {
+      const projName = projectNameById.get(focusProjectId) ?? "";
+      const approxCount = conversationHistory.length + 2;
+      void maybeAutoExtract(focusProjectId, projName, approxCount).catch((err) => {
+        logger.warn({ err, focusProjectId }, "genome auto-extract failed");
+      });
+    }
   };
 
   const failStream = async (summary: string, status: RunStatus = "failed") => {
