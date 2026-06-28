@@ -44,6 +44,7 @@ import codegenRouter from "./codegen";
 import errorsRouter from "./errors";
 import browserRouter from "./browser";
 import deployRouter from "./deploy";
+import ledgerRouter from "./ledger";
 
 const router: IRouter = Router();
 
@@ -110,6 +111,9 @@ router.use(requireAuth, terminalRouter);
 router.use(requireAuth, imagineRouter);
 router.use(requireAuth, previewRouter);
 router.use(requireAuth, manifestRouter);
+
+// Obsidian Ledger — personal asset + transaction tracking
+router.use(requireAuth, ledgerRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);
