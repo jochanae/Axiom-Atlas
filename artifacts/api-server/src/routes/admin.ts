@@ -1,4 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { db } from "@workspace/db";
 import {
   usersTable,
@@ -8,6 +10,11 @@ import {
 } from "@workspace/db/schema";
 import { eq, desc, count } from "drizzle-orm";
 import { getUserFromCookie } from "./auth";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const execAsync = promisify(exec);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const router: IRouter = Router();
 
@@ -165,6 +172,27 @@ router.delete("/admin/errors/:id", requireSuperAdmin, async (req, res): Promise<
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(errorLogsTable).where(eq(errorLogsTable.id, id));
   res.json({ ok: true });
+});
+
+// POST /api/admin/sync-frontend — pull latest frontend from GitHub (super_admin only)
+router.post("/admin/sync-frontend", requireSuperAdmin, async (_req, res): Promise<void> => {
+  try {
+    // process.cwd() = artifacts/api-server; workspace root is two levels up
+    const workspaceRoot = path.resolve(process.cwd(), "../..");
+    const { stdout, stderr } = await execAsync("bash scripts/sync-frontend.sh", {
+      cwd: workspaceRoot,
+      timeout: 120_000,
+      env: { ...process.env, HOME: process.env.HOME ?? "/root" },
+    });
+    res.json({ success: true, output: stdout, errors: stderr });
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; message?: string };
+    res.status(500).json({
+      success: false,
+      output: e.stdout ?? "",
+      errors: e.stderr ?? e.message ?? "Unknown error",
+    });
+  }
 });
 
 export default router;

@@ -189,6 +189,7 @@ export const CreateProjectBody = zod.object({
   description: zod.string().nullish(),
   entity_type: zod.enum(["project", "idea"]).optional(),
   commit_synthesis: zod.unknown().nullish(),
+  status: zod.string().optional(),
 });
 
 /**
@@ -538,6 +539,7 @@ export const CreateEntryBody = zod.object({
   cardSchemaVersion: zod.number().nullish(),
   mode: zod.string().nullish(),
   sourceMessageId: zod.number().nullish(),
+  amField: zod.string().nullish(),
 });
 
 /**

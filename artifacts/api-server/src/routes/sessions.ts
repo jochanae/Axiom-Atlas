@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, sql, and, desc, isNotNull } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
+import { upsertEmbedding } from "../lib/embeddings";
 import { z } from "zod";
 import { db, sessionsTable, chatMessagesTable, projectsTable, imageVersionsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
@@ -200,6 +201,15 @@ router.post("/projects/:projectId/sessions", async (req, res): Promise<void> => 
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
   });
+
+  // Fire-and-forget: index embedding for semantic search (V4)
+  void upsertEmbedding({
+    entityType: "session",
+    entityId: session.id,
+    userId,
+    projectId: params.data.projectId,
+    content: [session.title, (session as any).buildIntent].filter(Boolean).join("\n"),
+  }).catch(() => { /* silent */ });
 });
 
 router.get("/sessions/:id", async (req, res): Promise<void> => {
@@ -318,41 +328,6 @@ router.post("/sessions/:id/idea-mode", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/projects/:projectId/runs", async (req, res): Promise<void> => {
-  const params = ListSessionsParams.safeParse({ projectId: req.params.projectId });
-  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const userId = (req as any).authUser.id as number;
-  if (!(await projectBelongsToUser(params.data.projectId, userId))) {
-    res.status(404).json({ error: "Project not found" }); return;
-  }
-  const rows = await db
-    .select({
-      id: sessionsTable.id,
-      title: sessionsTable.title,
-      runStatus: (sessionsTable as any).runStatus,
-      runSummary: (sessionsTable as any).runSummary,
-      runActions: (sessionsTable as any).runActions,
-      runArtifacts: (sessionsTable as any).runArtifacts,
-      messageCount: sessionsTable.messageCount,
-      totalInputTokens: (sessionsTable as any).totalInputTokens,
-      totalOutputTokens: (sessionsTable as any).totalOutputTokens,
-      totalCostUsd: (sessionsTable as any).totalCostUsd,
-      totalExecutionMs: (sessionsTable as any).totalExecutionMs,
-      createdAt: sessionsTable.createdAt,
-      updatedAt: sessionsTable.updatedAt,
-    })
-    .from(sessionsTable)
-    .where(eq(sessionsTable.projectId, params.data.projectId))
-    .orderBy(desc(sessionsTable.updatedAt));
-  const runs = rows.map(r => ({
-    ...r,
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-    costUsd: r.totalCostUsd == null ? null : Number(r.totalCostUsd),
-  }));
-  res.json({ runs });
-});
-
 router.get("/sessions/:sessionId/messages", async (req, res): Promise<void> => {
   const params = ListMessagesParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
@@ -366,6 +341,27 @@ router.get("/sessions/:sessionId/messages", async (req, res): Promise<void> => {
     .where(eq(chatMessagesTable.sessionId, params.data.sessionId))
     .orderBy(chatMessagesTable.createdAt);
   res.json(messages.map(serializeMessage));
+});
+
+// POST /sessions/:id/messages — persist a synthetic assistant trace message (Forge, Flow hydration, etc.)
+// This is a lightweight path for system-initiated actions that must leave a conversation record.
+router.post("/sessions/:id/messages", async (req, res): Promise<void> => {
+  const params = GetSessionParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const userId = (req as any).authUser.id as number;
+  if (!(await sessionBelongsToUser(params.data.id, userId))) {
+    res.status(404).json({ error: "Session not found" }); return;
+  }
+  const body = z.object({
+    role: z.enum(["assistant", "system"]),
+    content: z.string().min(1).max(2000),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.message }); return; }
+  const [saved] = await db
+    .insert(chatMessagesTable)
+    .values({ sessionId: params.data.id, role: body.data.role, content: body.data.content })
+    .returning();
+  res.json(serializeMessage(saved));
 });
 
 // GET /sessions/:sessionId/image-versions — list all persisted image versions for a session

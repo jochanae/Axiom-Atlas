@@ -28,7 +28,6 @@ import storageRouter from "./storage";
 import errorlogRouter from "./errorlog";
 import selfmapRouter from "./selfmap";
 import forgeStateRouter from "./forge-state";
-import serverApiRouter from "./server-api";
 import tensionsRouter from "./tensions";
 import scanRouter from "./scan";
 import blueprintRouter from "./blueprint";
@@ -37,12 +36,25 @@ import mcpRouter from "./mcp";
 import stateRouter from "./state";
 import imagineRouter from "./imagine";
 import previewRouter from "./preview";
-import artifactsRouter from "./artifacts";
 import manifestRouter from "./manifest";
+import genomeRouter from "./genome";
+import applicationModelRouter from "./applicationModel";
+import projectDnaRouter from "./projectDna";
+import designPlanRouter from "./designPlan";
+import serverApiRouter from "./server-api";
+import checkpointsRouter from "./checkpoints";
+import readinessRouter from "./readiness";
+import intelligenceRouter from "./intelligence";
+import fsRouter from "./fs";
+import artifactsRouter from "./artifacts";
+import projectArtifactsRouter from "./projectArtifacts";
 import codegenRouter from "./codegen";
 import errorsRouter from "./errors";
 import browserRouter from "./browser";
 import deployRouter from "./deploy";
+import zipRouter from "./zip";
+import searchRouter from "./search";
+import ledgerRouter from "./ledger";
 
 const router: IRouter = Router();
 
@@ -71,6 +83,7 @@ router.use(requireAuth, chatRouter);
 router.use(requireAuth, githubRouter);
 router.use(requireAuth, imageRouter);
 router.use(requireAuth, thoughtsRouter);
+router.use(requireAuth, searchRouter);
 router.use(requireAuth, vaultRouter);
 router.use(requireAuth, secretsRouter);
 router.use(requireAuth, forgeRouter);
@@ -85,9 +98,11 @@ router.use(requireAuth, connectionsRouter);
 router.use(requireAuth, mcpRouter);
 router.use(requireAuth, stateRouter);
 router.use(requireAuth, artifactsRouter);
+router.use(requireAuth, projectArtifactsRouter);
 router.use(requireAuth, codegenRouter);
 router.use(requireAuth, browserRouter);
 router.use(requireAuth, deployRouter);
+router.use(requireAuth, zipRouter);
 
 // Stats
 router.use(requireAuth, statsRouter);
@@ -108,6 +123,19 @@ router.use(requireAuth, terminalRouter);
 router.use(requireAuth, imagineRouter);
 router.use(requireAuth, previewRouter);
 router.use(requireAuth, manifestRouter);
+router.use(requireAuth, genomeRouter);
+router.use(requireAuth, applicationModelRouter);
+router.use(requireAuth, projectDnaRouter);
+router.use(requireAuth, designPlanRouter);
+router.use(requireAuth, checkpointsRouter);
+router.use(requireAuth, readinessRouter);
+router.use(requireAuth, intelligenceRouter);
+
+// Project file system — local workspace read/write
+router.use(requireAuth, fsRouter);
+
+// Obsidian Ledger — assets + transactions + summary
+router.use(requireAuth, ledgerRouter);
 
 // Self-repair routes — super_admin only
 router.use(requireAdmin, selfRouter);

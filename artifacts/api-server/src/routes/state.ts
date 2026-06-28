@@ -20,6 +20,8 @@ router.get("/projects/:id/state", async (req, res): Promise<void> => {
       memory: projectsTable.memory,
       linkedRepo: projectsTable.linkedRepo,
       nodeState: projectsTable.nodeState,
+      forgedAt: projectsTable.forgedAt,
+      dismissedAt: projectsTable.dismissedAt,
       updatedAt: projectsTable.updatedAt,
     })
     .from(projectsTable)
@@ -116,7 +118,12 @@ router.get("/projects/:id/state", async (req, res): Promise<void> => {
       createdAt: entry.createdAt.toISOString(),
     })),
     parkedCount: parkedCountRows[0]?.count ?? 0,
-    forgeState: project.nodeState ?? {},
+    forgeState: {
+      forged: !!project.forgedAt,
+      dismissed: !!project.dismissedAt,
+      forgedAt: project.forgedAt?.toISOString() ?? null,
+      dismissedAt: project.dismissedAt?.toISOString() ?? null,
+    },
     memorySummary: project.memory,
     recentContext: recentContext.map((message) => ({
       ...message,

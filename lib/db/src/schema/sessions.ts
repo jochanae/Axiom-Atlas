@@ -20,6 +20,7 @@ export const sessionsTable = pgTable("sessions", {
   runSummary: text("run_summary"),
   runActions: jsonb("run_actions"),
   runArtifacts: jsonb("run_artifacts"),
+  buildIntent: jsonb("build_intent"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

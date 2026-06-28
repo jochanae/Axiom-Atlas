@@ -1,12 +1,14 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { atlasIncidentsTable, connectionsTable, db, entriesTable, projectsTable } from "@workspace/db";
+import { getProjectDNA } from "../lib/projectDNA";
 import { eq, and, desc, isNotNull, sql } from "drizzle-orm";
 import { spawn } from "child_process";
-import { writeFile, mkdir, rm } from "fs/promises";
+import { writeFile, mkdir, rm, unlink, rename } from "fs/promises";
 import { randomBytes } from "crypto";
 import * as nodePath from "path";
 import { decryptToken } from "../lib/tokenCrypto";
+import { projectWorkspaceDir, resolveWorkspacePath, assertProjectOwner, ensureProjectWorkspaceDir } from "../lib/projectWorkspace";
 
 const router: IRouter = Router();
 
@@ -87,10 +89,10 @@ type GithubTokenRequest = {
   authUser?: { id?: number } | null;
 };
 
-/** Resolve token: use the header value unless it's the sentinel "__server__", then fall back to account/env token. */
+/** Resolve token: use the header value unless it's a frontend sentinel, then fall back to account/env token. */
 async function getToken(req: GithubTokenRequest): Promise<string | null> {
   const h = (req.headers["x-github-token"] as string | undefined ?? "").trim();
-  if (h && h !== "__server__") return h;
+  if (h && h !== "__server__" && h !== "__account__" && h !== "__oauth__") return h;
   const accountToken = await getAccountGithubToken(req.authUser?.id);
   return accountToken ?? process.env.GITHUB_TOKEN ?? null;
 }
@@ -1338,41 +1340,175 @@ router.post("/github/bootstrap-repo", async (req, res): Promise<void> => {
   const userId = (req as any).authUser?.id as number | undefined;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
 
-  const { projectId, projectName } = req.body as { projectId?: number; projectName?: string };
+  const { projectId, projectName, isCodeProject: reqIsCodeProject } = req.body as {
+    projectId?: number;
+    projectName?: string;
+    isCodeProject?: boolean;
+  };
   if (!projectId || !projectName) { res.status(400).json({ error: "projectId and projectName are required" }); return; }
 
   const { getGithubTokenForUser, bootstrapGitHubRepo } = await import("../lib/githubBootstrap");
   const token = await getGithubTokenForUser(userId);
   if (!token) { res.status(401).json({ error: "No GitHub token found. Connect GitHub in your account settings." }); return; }
 
-  const result = await bootstrapGitHubRepo({ token, projectId, projectName });
+  // Read project entity type + genome brief to seed scaffold context files
+  const [project] = await db
+    .select({ entityType: projectsTable.entityType })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
+    .limit(1);
+
+  const [genome, recentEntries] = await Promise.all([
+    getProjectDNA(projectId),
+    db.select({ title: entriesTable.title, mode: entriesTable.mode })
+      .from(entriesTable)
+      .where(eq(entriesTable.projectId, projectId))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(15),
+  ]);
+
+  // Caller can override; otherwise: idea projects → docs-only, everything else → code scaffold
+  const isCodeProject = reqIsCodeProject ?? (project?.entityType !== "idea");
+  const projectBrief = genome ?? undefined;
+  const projectMemory = genome
+    ? {
+        projectName,
+        genome: {
+          purpose: genome.purpose,
+          audience: genome.audience,
+          wedge: genome.wedge,
+          stage: genome.stage,
+          stack: genome.stack ?? [],
+          protectedAreas: genome.protectedAreas ?? [],
+          constraints: genome.constraints ?? [],
+          openQuestions: genome.openQuestions ?? [],
+        },
+        recentSessions: [] as Array<{ title: string; status: string }>,
+        recentEntries,
+      }
+    : undefined;
+
+  const result = await bootstrapGitHubRepo({ token, projectId, projectName, projectBrief, isCodeProject, projectMemory });
   if (!result.ok) { res.status(500).json({ error: result.error }); return; }
 
   res.json({ linkedRepo: result.linkedRepo, htmlUrl: result.htmlUrl, repoName: result.repoName });
 });
 
-// POST /api/github/apply-local — write proposed file(s) directly to workspace filesystem (triggers Vite HMR)
+// POST /api/github/apply-local — write proposed file(s) to the project workspace (no GitHub needed)
+// When projectId is provided and the project has no linked GitHub repo, writes to the per-project
+// workspace at /home/runner/workspace/.project-workspaces/{projectId}/.
+// Falls back to writing to the Replit workspace root for legacy callers without a projectId.
 router.post("/github/apply-local", async (req, res): Promise<void> => {
-  const { files } = req.body as { files?: Array<{ path: string; content: string }> };
-  if (!files?.length) { res.status(400).json({ error: "Missing files" }); return; }
+  const { files, fileDeletes, fileMoves, projectId: rawProjectId } = req.body as {
+    files?: Array<{ path: string; content: string }>;
+    fileDeletes?: Array<{ path: string }>;
+    fileMoves?: Array<{ from: string; to: string }>;
+    projectId?: number;
+  };
+  if (!files?.length && !fileDeletes?.length && !fileMoves?.length) {
+    res.status(400).json({ error: "Missing files, fileDeletes, or fileMoves" }); return;
+  }
 
-  const WORKSPACE_ROOT = "/home/runner/workspace";
+  const userId = (req as any).authUser?.id as number | undefined;
+  const projectId = rawProjectId ? Number(rawProjectId) : null;
+
+  // Determine write root: per-project workspace when projectId provided and no GitHub repo linked
+  let writeRoot: string;
+  let useProjectWorkspace = false;
+
+  if (projectId && userId) {
+    const isOwner = await assertProjectOwner(projectId, userId);
+    if (!isOwner) { res.status(404).json({ error: "Project not found" }); return; }
+
+    const [project] = await db
+      .select({ linkedRepo: projectsTable.linkedRepo })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, projectId))
+      .limit(1);
+
+    const hasLinkedRepo = !!(project?.linkedRepo);
+    if (!hasLinkedRepo) {
+      writeRoot = await ensureProjectWorkspaceDir(projectId);
+      useProjectWorkspace = true;
+    } else {
+      writeRoot = "/home/runner/workspace";
+    }
+  } else {
+    writeRoot = "/home/runner/workspace";
+  }
+
   const applied: string[] = [];
+  const deletedPaths: string[] = [];
+  const movedPaths: Array<{ from: string; to: string }> = [];
   const needsBuild: boolean[] = [];
 
-  for (const { path: filePath, content } of files) {
-    const resolved = nodePath.resolve(WORKSPACE_ROOT, filePath);
-    if (!resolved.startsWith(WORKSPACE_ROOT + "/")) {
+  for (const { path: filePath, content } of (files ?? [])) {
+    let resolved: string;
+    try {
+      resolved = useProjectWorkspace
+        ? resolveWorkspacePath(writeRoot, filePath)
+        : nodePath.resolve(writeRoot, filePath);
+    } catch {
       res.status(400).json({ error: `Disallowed path: ${filePath}` }); return;
     }
+
+    if (!resolved.startsWith(writeRoot + nodePath.sep) && resolved !== writeRoot) {
+      res.status(400).json({ error: `Disallowed path: ${filePath}` }); return;
+    }
+
     await mkdir(nodePath.dirname(resolved), { recursive: true });
     await writeFile(resolved, content, "utf-8");
     applied.push(filePath);
-    needsBuild.push(filePath.startsWith("artifacts/api-server/"));
+    needsBuild.push(!useProjectWorkspace && filePath.startsWith("artifacts/api-server/"));
+  }
+
+  // Process FILE_DELETE operations
+  for (const { path: filePath } of (fileDeletes ?? [])) {
+    let resolved: string;
+    try {
+      resolved = useProjectWorkspace
+        ? resolveWorkspacePath(writeRoot, filePath)
+        : nodePath.resolve(writeRoot, filePath);
+    } catch {
+      res.status(400).json({ error: `Disallowed path: ${filePath}` }); return;
+    }
+    if (!resolved.startsWith(writeRoot + nodePath.sep)) {
+      res.status(400).json({ error: `Disallowed path: ${filePath}` }); return;
+    }
+    try { await unlink(resolved); } catch { /* already gone */ }
+    deletedPaths.push(filePath);
+  }
+
+  // Process FILE_MOVE operations
+  for (const { from: fromPath, to: toPath } of (fileMoves ?? [])) {
+    let resolvedFrom: string;
+    let resolvedTo: string;
+    try {
+      resolvedFrom = useProjectWorkspace
+        ? resolveWorkspacePath(writeRoot, fromPath)
+        : nodePath.resolve(writeRoot, fromPath);
+      resolvedTo = useProjectWorkspace
+        ? resolveWorkspacePath(writeRoot, toPath)
+        : nodePath.resolve(writeRoot, toPath);
+    } catch {
+      res.status(400).json({ error: `Disallowed path in move: ${fromPath} → ${toPath}` }); return;
+    }
+    await mkdir(nodePath.dirname(resolvedTo), { recursive: true });
+    await rename(resolvedFrom, resolvedTo);
+    movedPaths.push({ from: fromPath, to: toPath });
+    needsBuild.push(
+      !useProjectWorkspace && (fromPath.startsWith("artifacts/api-server/") || toPath.startsWith("artifacts/api-server/"))
+    );
   }
 
   const requiresServerBuild = needsBuild.some(Boolean);
-  res.json({ applied, requiresServerBuild });
+  res.json({
+    applied,
+    deleted: deletedPaths,
+    moved: movedPaths,
+    requiresServerBuild,
+    projectWorkspace: useProjectWorkspace,
+  });
 });
 
 // POST /api/github/typecheck — syntax-check a proposed file before pushing
