@@ -229,6 +229,9 @@ importers:
       google-auth-library:
         specifier: ^10.6.2
         version: 10.6.2
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       openai:
         specifier: ^6.35.0
         version: 6.35.0(ws@8.21.0)(zod@3.25.76)
@@ -257,6 +260,9 @@ importers:
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
+      '@types/jszip':
+        specifier: ^3.4.1
+        version: 3.4.1
       '@types/node':
         specifier: 'catalog:'
         version: 25.3.5
@@ -951,7 +957,7 @@ importers:
     dependencies:
       '@tanstack/react-query':
         specifier: 'catalog:'
-        version: 5.90.21(react@19.2.7)
+        version: 5.90.21(react@19.1.0)
 
   lib/api-spec:
     devDependencies:
@@ -1025,7 +1031,7 @@ importers:
         version: 5.1.1(@uppy/core@5.2.0)
       '@uppy/react':
         specifier: ^5.0.0
-        version: 5.2.0(@uppy/core@5.2.0)(@uppy/dashboard@5.1.1(@uppy/core@5.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 5.2.0(@uppy/core@5.2.0)(@uppy/dashboard@5.1.1(@uppy/core@5.2.0))(react-dom@19.2.7(react@19.1.0))(react@19.1.0)
     devDependencies:
       '@types/react':
         specifier: 'catalog:'
@@ -7998,14 +8004,14 @@ snapshots:
       p-queue: 8.1.1
       preact: 10.29.1
 
-  '@uppy/react@5.2.0(@uppy/core@5.2.0)(@uppy/dashboard@5.1.1(@uppy/core@5.2.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@uppy/react@5.2.0(@uppy/core@5.2.0)(@uppy/dashboard@5.1.1(@uppy/core@5.2.0))(react-dom@19.2.7(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@uppy/components': 1.2.0(@uppy/core@5.2.0)
       '@uppy/core': 5.2.0
       preact: 10.29.1
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-      use-sync-external-store: 1.6.0(react@19.2.7)
+      react: 19.1.0
+      react-dom: 19.2.7(react@19.1.0)
+      use-sync-external-store: 1.6.0(react@19.1.0)
     optionalDependencies:
       '@uppy/dashboard': 5.1.1(@uppy/core@5.2.0)
     transitivePeerDependencies:
@@ -10103,6 +10109,11 @@ snapshots:
     dependencies:
       react: 19.1.0
       scheduler: 0.26.0
+
+  react-dom@19.2.7(react@19.1.0):
+    dependencies:
+      react: 19.1.0
+      scheduler: 0.27.0
 
   react-dom@19.2.7(react@19.2.7):
     dependencies:

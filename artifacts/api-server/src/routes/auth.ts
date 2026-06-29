@@ -285,6 +285,10 @@ export async function requireAuth(
 ): Promise<void> {
   const user = await getUserFromCookie(req);
   if (!user) { res.status(401).json({ error: "Authentication required" }); return; }
+  if (typeof user.id !== "number" || !Number.isFinite(user.id)) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
   (req as any).authUser = user;
   next();
 }

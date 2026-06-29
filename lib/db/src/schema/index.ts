@@ -26,3 +26,6 @@ export * from "./mcp_connections";
 export * from "./image_versions";
 export * from "./scheduled_checks";
 export * from "./project_genome";
+export * from "./application_model";
+export * from "./embeddings";
+export * from "./zip_imports";

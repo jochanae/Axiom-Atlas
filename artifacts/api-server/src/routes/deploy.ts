@@ -4,6 +4,7 @@ import { connectionsTable, db, projectsTable, scheduledChecksTable } from "@work
 import { decryptToken } from "../lib/tokenCrypto";
 import { logger } from "../lib/logger";
 import { assertSafeUrl } from "../lib/ssrf";
+import { createAutoCheckpointOnce } from "./checkpoints";
 
 const router: IRouter = Router();
 
@@ -302,6 +303,19 @@ router.get("/deploy/after-push", async (req, res): Promise<void> => {
         }
       } catch (err) {
         logger.warn({ err: String(err), liveUrl }, "Post-deploy visual QA failed — continuing without it");
+      }
+
+      // Release checkpoint — fire and forget (once per project)
+      if (atlasProjectId && !isNaN(atlasProjectId)) {
+        void createAutoCheckpointOnce({
+          projectId: atlasProjectId,
+          type: "release",
+          label: "First deploy live",
+          title: "Project deployed to production",
+          notes: result.alias ? `Live at https://${result.alias}` : result.url ? `Live at https://${result.url}` : undefined,
+          createdBy: "system",
+          metadata: { deploymentId: result.deploymentId ?? null, url: result.url ?? null, alias: result.alias ?? null },
+        });
       }
 
       // Auto-register a scheduled health check against the project's canonical previewUrl

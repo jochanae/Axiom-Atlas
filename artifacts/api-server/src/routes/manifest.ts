@@ -1,362 +1,304 @@
-import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
-import {
-  db,
-  projectsTable,
-  projectFlowCanvasTable,
-  sessionsTable,
-  chatMessagesTable,
-} from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
-import { logger } from "../lib/logger";
+/**
+ * POST /api/manifest/decide — Flow 3: The Builder Engine
+ *
+ * Spec: ATLAS MANIFEST (Flow 3 Specification — The Builder Engine)
+ *
+ * Sequence:
+ *   1. Load project context (name, description, memory, committed decisions)
+ *   2. Load recent session messages for conversation context
+ *   3. Claude: compute Manifest Score (5 criteria) + First Artifact decision
+ *   4. If score < 5 → return missing criteria, do not generate
+ *   5. If score ≥ 5 → Claude: generate the First Artifact component
+ *   6. Sanitize generated code for browser <script type="text/babel"> execution
+ *   7. Return decision + generatedCode + componentName
+ */
 
-const router: IRouter = Router();
+import { Router } from "express";
+import Anthropic from "@anthropic-ai/sdk";
+import { db, projectsTable, entriesTable, chatMessagesTable } from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
+
+const router = Router();
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ── Memory helpers (v2 format — mirrors nexus.ts) ──────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-interface MemoryEntry {
-  tier: 1 | 2 | 3 | 4 | 5;
-  text: string;
-  createdAt: string;
-}
-
-interface MemoryStore {
-  v: 2;
-  entries: MemoryEntry[];
-}
-
-function parseMemoryStore(raw: string | null): MemoryStore {
-  if (!raw) return { v: 2, entries: [] };
+function parseMemorySummary(memory: string | null | undefined): string {
+  if (!memory) return "";
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed?.v === 2 && Array.isArray(parsed.entries)) return parsed as MemoryStore;
-    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
-    const migrated: MemoryEntry[] = lines.map((line) => ({
-      tier: 3 as const,
-      text: line.replace(/^\[\d{4}-\d{2}-\d{2}\]\s*/, ""),
-      createdAt: new Date().toISOString(),
-    }));
-    return { v: 2, entries: migrated };
-  } catch {
-    return { v: 2, entries: [] };
-  }
-}
-
-function renderMemoryContext(store: MemoryStore): string {
-  const TIER_LABELS: Record<number, string> = {
-    1: "Decisions & Constraints",
-    2: "Identity",
-    3: "Context",
-  };
-  const relevant = store.entries.filter((e) => e.tier <= 3);
-  if (relevant.length === 0) return "(no project memory)";
-
-  const sections: Record<number, string[]> = { 1: [], 2: [], 3: [] };
-  for (const e of relevant) {
-    if (sections[e.tier]) sections[e.tier].push(`• ${e.text}`);
-  }
-
-  const lines: string[] = [];
-  for (const tier of [1, 2, 3] as const) {
-    if (sections[tier].length > 0) {
-      lines.push(`[${TIER_LABELS[tier]}]`);
-      lines.push(...sections[tier]);
+    const m = JSON.parse(memory) as Record<string, unknown>;
+    const parts: string[] = [];
+    if (typeof m?.summary === "string") parts.push(m.summary);
+    if (m?.identity) parts.push(JSON.stringify(m.identity).slice(0, 400));
+    if (m?.tiers && typeof m.tiers === "object") {
+      const allTiers = Object.values(m.tiers as Record<string, unknown[]>).flat() as Array<{ content?: string; text?: string }>;
+      parts.push(...allTiers.map((t) => t?.content ?? t?.text ?? "").filter(Boolean).slice(0, 8));
     }
+    return parts.join("\n").slice(0, 2000);
+  } catch {
+    return memory.slice(0, 1000);
   }
-  return lines.join("\n");
 }
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
-type Engine = "atlas-generated" | "sandbox" | "stackblitz" | "local-dev" | "live-url";
-
-interface ScoreBreakdown {
-  promise: boolean;
-  primaryUser: boolean;
-  input: boolean;
-  output: boolean;
-  coreMoment: boolean;
+/**
+ * Strip anything that crashes a browser <script type="text/babel">:
+ * - import / export statements (hooks are pre-destructured by the renderer)
+ * - markdown code fences
+ */
+function sanitizeForBrowser(code: string): string {
+  return code
+    .replace(/^```[a-z]*\n?/gm, "")
+    .replace(/^```$/gm, "")
+    .replace(/^import\s+[\s\S]*?(?:from\s+['"][^'"]+['"])?;?\s*$/gm, "")
+    .replace(/^export\s+default\s+\w+;?\s*$/gm, "")
+    .replace(/^export\s+\{[^}]*\};?\s*$/gm, "")
+    .replace(/^export\s+(?=const|function|class)/gm, "")
+    .trim();
 }
 
-interface FirstArtifact {
-  name: string;
-  description: string;
-  steps: string[];
-}
-
-interface RawScoreData extends ScoreBreakdown {
-  missingCriteria: string[];
-  firstArtifact: FirstArtifact | null;
-  suggestedEngine: Engine;
-  engineReason: string;
-  complexity: "low" | "medium" | "high";
-}
-
-// ── Prompts ────────────────────────────────────────────────────────────────
-
-const SCORING_SYSTEM = `You are the Axiom Manifest Engine. You evaluate whether a project is ready to manifest and, if so, decide what to build first.
-
-Score five criteria (each true/false):
-- promise: Do we know what this does for the user?
-- primaryUser: Do we know who uses it first?
-- input: Do we know what the user gives the system?
-- output: Do we know what the system returns to the user?
-- coreMoment: Do we know the single moment where the idea becomes real?
-
-If score = 5 (all criteria true), determine:
-- The FIRST ARTIFACT — the single smallest experience that proves the core moment. Not the whole app. One screen, one flow, or one interaction. Always specific, never generic ("the upload experience" not "the app").
-- The ENGINE that can render it, from this ladder (lightest first):
-  - "atlas-generated" — single screen, single workflow, UI proof, no shared state, no external deps
-  - "sandbox" — self-contained component with internal logic
-  - "stackblitz" — multiple connected screens, shared state required
-  - "local-dev" — real engineering, APIs, file system, auth
-  - "live-url" — explicit deploy request only
-
-Engineering unknowns (database choices, hosting, auth, APIs) are explicitly ignored at manifest time.
-
-Respond with ONLY valid JSON. No markdown, no explanation outside the JSON:
-{
-  "promise": boolean,
-  "primaryUser": boolean,
-  "input": boolean,
-  "output": boolean,
-  "coreMoment": boolean,
-  "missingCriteria": string[],
-  "firstArtifact": {
-    "name": string,
-    "description": string,
-    "steps": string[]
-  } | null,
-  "suggestedEngine": "atlas-generated" | "sandbox" | "stackblitz" | "local-dev" | "live-url",
-  "engineReason": string,
-  "complexity": "low" | "medium" | "high"
-}
-
-Set firstArtifact to null if score < 5. missingCriteria lists the names of false criteria.`;
-
-const ATLAS_GENERATED_SYSTEM = `You are a React component generator for the Atlas preview engine.
-
-Generate a single self-contained React component for the described experience.
-
-Rules:
-- One component. No import statements — React, useState, useEffect, useRef, useCallback, useMemo are available as globals.
-- Inline styles only. No CSS classes, no Tailwind, no external stylesheets.
-- Color palette: background #0C0A09, surface #1C1917, border #292524, text #E7E5E4, muted #A8A29E, gold accent #C9A24C.
-- Mobile-first. Max-width 390px, centered in viewport via margin auto.
-- Realistic placeholder content — names, amounts, labels that fit the product. Never "Lorem ipsum".
-- No console.log. No fetch() calls. No external dependencies.
-- Component must be a named function declaration: function ComponentName() { ... }
-- Render the full experience implied by the steps, not just a single button.
-
-Response format (no markdown, no explanation):
-COMPONENT_NAME: <PascalCase>
----
-<complete component code>`;
-
-// ── Route ──────────────────────────────────────────────────────────────────
+// ── route ─────────────────────────────────────────────────────────────────────
 
 router.post("/manifest/decide", async (req, res): Promise<void> => {
-  const userId = (req as any).authUser?.id as number | undefined;
-  console.log("[manifest/decide]", { userId, userIdType: typeof userId, projectId: req.body?.projectId, projectIdType: typeof req.body?.projectId });
-  if (!userId) {
-    res.status(401).json({ error: "Authentication required" });
+  const userId = (req as any).authUser.id as number;
+  const { projectId, sessionId } = req.body as { projectId: unknown; sessionId?: unknown };
+
+  const numericProjectId = typeof projectId === "number" ? projectId : parseInt(String(projectId), 10);
+  if (!Number.isFinite(numericProjectId)) {
+    res.status(400).json({ error: "Missing or invalid projectId" });
     return;
   }
 
-  const projectId = typeof req.body?.projectId === "string"
-    ? parseInt(req.body.projectId, 10)
-    : req.body?.projectId as number | undefined;
+  // ── 1. Load project ──────────────────────────────────────────────────────
+  const [project] = await db
+    .select({ id: projectsTable.id, name: projectsTable.name, description: projectsTable.description, memory: projectsTable.memory, status: projectsTable.status })
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, numericProjectId), eq(projectsTable.userId, userId)));
 
-  if (!projectId || !Number.isFinite(projectId)) {
-    res.status(400).json({ error: "invalid_project_id", detail: `projectId must be a number, got ${typeof req.body?.projectId}: ${req.body?.projectId}` });
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
     return;
   }
 
-  const sessionId = typeof req.body?.sessionId === "string"
-    ? parseInt(req.body.sessionId, 10)
-    : req.body?.sessionId as number | undefined;
+  // ── 2. Load committed decisions ──────────────────────────────────────────
+  const committedEntries = await db
+    .select({ title: entriesTable.title, summary: entriesTable.summary })
+    .from(entriesTable)
+    .where(and(eq(entriesTable.projectId, numericProjectId), eq(entriesTable.status, "committed")))
+    .limit(20);
 
-  try {
-    // 1. Load project — ownership check included
-    const [project] = await db
-      .select({
-        id: projectsTable.id,
-        name: projectsTable.name,
-        description: projectsTable.description,
-        memory: projectsTable.memory,
-      })
-      .from(projectsTable)
-      .where(and(eq(projectsTable.id, projectId), eq(projectsTable.userId, userId)))
-      .limit(1);
+  // ── 3. Load recent session messages ─────────────────────────────────────
+  let recentMessages: Array<{ role: string; content: string }> = [];
+  const numericSessionId = typeof sessionId === "number" ? sessionId : parseInt(String(sessionId ?? ""), 10);
+  if (Number.isFinite(numericSessionId)) {
+    recentMessages = await db
+      .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
+      .from(chatMessagesTable)
+      .where(eq(chatMessagesTable.sessionId, numericSessionId))
+      .orderBy(desc(chatMessagesTable.id))
+      .limit(30);
+    recentMessages.reverse(); // chronological order
+  }
 
-    if (!project) {
-      res.status(404).json({ error: "Project not found" });
-      return;
-    }
+  // ── 4. Build context block ───────────────────────────────────────────────
+  const memorySummary = parseMemorySummary(project.memory);
+  const decisionLines = committedEntries
+    .map((e) => `• ${e.title}${e.summary ? ` — ${e.summary.slice(0, 150)}` : ""}`)
+    .join("\n");
+  const conversationSnippet = recentMessages
+    .slice(-20)
+    .map((m) => `${m.role === "assistant" ? "ATLAS" : "USER"}: ${m.content.slice(0, 300)}`)
+    .join("\n");
 
-    // 2. Load flow canvas nodes (optional — may not exist yet)
-    const [canvas] = await db
-      .select({ nodes: projectFlowCanvasTable.nodes })
-      .from(projectFlowCanvasTable)
-      .where(eq(projectFlowCanvasTable.projectId, projectId))
-      .limit(1);
+  const contextBlock = [
+    `Project: ${project.name}`,
+    project.description ? `Description: ${project.description}` : "",
+    committedEntries.length > 0 ? `\nCommitted decisions:\n${decisionLines}` : "",
+    memorySummary ? `\nProject memory:\n${memorySummary}` : "",
+    conversationSnippet ? `\nRecent conversation:\n${conversationSnippet}` : "",
+  ].filter(Boolean).join("\n");
 
-    // 3. Load recent messages — use provided sessionId or fall back to most recent session
-    let recentMessages: Array<{ role: string; content: string }> = [];
+  // ── 5. Claude: Manifest Score + First Artifact decision ──────────────────
+  const scoreResponse = await anthropic.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: 1200,
+    messages: [
+      {
+        role: "user",
+        content: `You are the Axiom Manifest engine (Flow 3). You score a project's readiness to manifest and decide what the first artifact should be.
 
-    const targetSessionId: number | undefined = sessionId ?? await (async () => {
-      const [latest] = await db
-        .select({ id: sessionsTable.id })
-        .from(sessionsTable)
-        .where(eq(sessionsTable.projectId, projectId))
-        .orderBy(desc(sessionsTable.updatedAt))
-        .limit(1);
-      return latest?.id;
-    })();
+${contextBlock}
 
-    if (targetSessionId) {
-      const msgs = await db
-        .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
-        .from(chatMessagesTable)
-        .where(eq(chatMessagesTable.sessionId, targetSessionId))
-        .orderBy(desc(chatMessagesTable.createdAt))
-        .limit(16);
-      recentMessages = msgs.reverse();
-    }
+---
 
-    // 4. Build context strings
-    const memoryStore = parseMemoryStore(project.memory as string | null);
-    const memoryContext = renderMemoryContext(memoryStore);
+Score this project on exactly these 5 criteria (true = clearly present, false = not established):
 
-    const rawNodes = canvas?.nodes;
-    const nodeList = Array.isArray(rawNodes) && rawNodes.length > 0
-      ? (rawNodes as any[]).map((n: any) => `[${n.type ?? "node"}] ${n.data?.label ?? n.id}`).join("\n")
-      : "(no flow nodes)";
+1. Promise — Do we know what this does for the user?
+2. Primary User — Do we know who uses it first?
+3. Input — Do we know what the user gives the system?
+4. Output — Do we know what the system returns to the user?
+5. Core Moment — Do we know the single moment where the idea becomes real?
 
-    const conversationSnippet = recentMessages.length > 0
-      ? recentMessages
-          .map((m) => `${m.role === "assistant" ? "Atlas" : "User"}: ${m.content.slice(0, 500)}`)
-          .join("\n\n")
-      : "(no conversation yet)";
+If any criterion is false, name what specifically needs to be established before we can proceed.
 
-    // 5. Claude call #1 — Manifest Score + First Artifact Decision
-    const scoringPrompt = `PROJECT: ${project.name}
-${project.description ? `DESCRIPTION: ${project.description}` : ""}
+If all 5 are true, determine:
+- First Artifact: the single smallest experience that proves the core moment (one screen, one flow, one interaction — not the whole product)
+- Name it concisely and specifically for THIS project
+- Describe what it demonstrates in one sentence
+- List 3-5 building steps for generating it
+- Engine: always "atlas-generated" for a single screen
+- Engine reason: one sentence
+- Complexity: low / medium / high
+- Deployment required: always false
 
-PROJECT MEMORY:
-${memoryContext}
+Respond ONLY in this exact format — no other text:
 
-FLOW NODES:
-${nodeList}
+SCORE
+promise: true
+primaryUser: false
+input: true
+output: true
+coreMoment: false
+END_SCORE
 
-RECENT CONVERSATION:
-${conversationSnippet}`;
+MISSING
+What needs to be established before manifest can proceed (only if any score is false)
+END_MISSING
 
-    const scoringResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
-      system: SCORING_SYSTEM,
-      messages: [{ role: "user", content: scoringPrompt }],
-    });
-
-    const rawScoring = scoringResponse.content[0]?.type === "text"
-      ? scoringResponse.content[0].text
-      : "{}";
-
-    let scoreData: RawScoreData;
-    try {
-      const cleaned = rawScoring.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-      scoreData = JSON.parse(cleaned) as RawScoreData;
-    } catch (parseErr) {
-      logger.error({ parseErr, rawScoring }, "manifest/decide: failed to parse scoring response");
-      res.status(500).json({ error: "Failed to parse manifest score" });
-      return;
-    }
-
-    const manifestScore = [
-      scoreData.promise,
-      scoreData.primaryUser,
-      scoreData.input,
-      scoreData.output,
-      scoreData.coreMoment,
-    ].filter(Boolean).length;
-
-    const breakdown: ScoreBreakdown = {
-      promise: scoreData.promise,
-      primaryUser: scoreData.primaryUser,
-      input: scoreData.input,
-      output: scoreData.output,
-      coreMoment: scoreData.coreMoment,
-    };
-
-    // 6. Not ready — return missing criteria so workspace can redirect the conversation
-    if (manifestScore < 5) {
-      res.json({
-        ready: false,
-        manifestScore,
-        scoreBreakdown: breakdown,
-        missingCriteria: scoreData.missingCriteria ?? [],
-      });
-      return;
-    }
-
-    // 7. Ready — V1 always runs Atlas Generated
-    // suggestedEngine is preserved so the frontend can display it and escalation paths
-    // can be wired in future iterations without changing the response shape.
-    const firstArtifact = scoreData.firstArtifact!;
-    const activeEngine: Engine = "atlas-generated";
-
-    // 8. Claude call #2 — generate the React component for the first artifact
-    const codegenPrompt = `Project: ${project.name}
-First artifact: ${firstArtifact.name}
-Description: ${firstArtifact.description}
-Experience steps:
-${firstArtifact.steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}
-
-Project memory:
-${memoryContext}
-
-Generate the React component.`;
-
-    const codegenResponse = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      system: ATLAS_GENERATED_SYSTEM,
-      messages: [{ role: "user", content: codegenPrompt }],
-    });
-
-    const rawCode = codegenResponse.content[0]?.type === "text"
-      ? codegenResponse.content[0].text
-      : "";
-
-    const nameMatch = rawCode.match(/^COMPONENT_NAME:\s*(.+)$/m);
-    const separatorIndex = rawCode.indexOf("\n---\n");
-    const componentName = nameMatch?.[1]?.trim() ?? "ManifestPreview";
-    const generatedCode = separatorIndex >= 0
-      ? rawCode.slice(separatorIndex + 5).trim()
-      : rawCode.trim();
-
-    res.json({
-      ready: true,
-      manifestScore,
-      scoreBreakdown: breakdown,
-      decision: {
-        firstArtifact,
-        activeEngine,
-        suggestedEngine: scoreData.suggestedEngine,
-        engineReason: scoreData.engineReason,
-        complexity: scoreData.complexity,
-        deploymentRequired: false,
+DECISION
+firstArtifactName: <specific name>
+firstArtifactDescription: <one sentence>
+steps: <step 1> | <step 2> | <step 3>
+engineReason: <one sentence>
+complexity: medium
+END_DECISION`,
       },
-      generatedCode,
-      componentName,
-    });
+    ],
+  });
 
-  } catch (err: any) {
-    logger.error({ err }, "manifest/decide error");
-    res.status(500).json({ error: err?.message ?? "Manifest decision failed" });
+  const scoreRaw = scoreResponse.content[0].type === "text" ? scoreResponse.content[0].text : "";
+
+  // Parse score
+  const scoreBlock = scoreRaw.match(/SCORE\n([\s\S]*?)\nEND_SCORE/)?.[1] ?? "";
+  const parseBoolean = (key: string) => new RegExp(`^${key}:\\s*true`, "im").test(scoreBlock);
+  const scoreBreakdown = {
+    promise: parseBoolean("promise"),
+    primaryUser: parseBoolean("primaryUser"),
+    input: parseBoolean("input"),
+    output: parseBoolean("output"),
+    coreMoment: parseBoolean("coreMoment"),
+  };
+  const manifestScore = Object.values(scoreBreakdown).filter(Boolean).length;
+
+  if (manifestScore < 5) {
+    const missingBlock = scoreRaw.match(/MISSING\n([\s\S]*?)\nEND_MISSING/)?.[1]?.trim() ?? "";
+    const missingCriteria = missingBlock
+      ? missingBlock.split("\n").map((l) => l.replace(/^[-•]\s*/, "").trim()).filter(Boolean)
+      : Object.entries(scoreBreakdown)
+          .filter(([, v]) => !v)
+          .map(([k]) => {
+            const labels: Record<string, string> = {
+              promise: "What does this product do for the user?",
+              primaryUser: "Who is the first person to use this?",
+              input: "What does the user give the system?",
+              output: "What does the system return to the user?",
+              coreMoment: "What is the single moment where this idea becomes real?",
+            };
+            return labels[k] ?? k;
+          });
+
+    res.json({ ready: false, missingCriteria });
+    return;
   }
+
+  // Parse decision
+  const decisionBlock = scoreRaw.match(/DECISION\n([\s\S]*?)\nEND_DECISION/)?.[1] ?? "";
+  const parseField = (key: string) => decisionBlock.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))?.[1]?.trim() ?? "";
+
+  const firstArtifactName = parseField("firstArtifactName") || `${project.name} — First Artifact`;
+  const firstArtifactDescription = parseField("firstArtifactDescription") || "Core product experience.";
+  const stepsRaw = parseField("steps");
+  const firstArtifactSteps = stepsRaw ? stepsRaw.split("|").map((s) => s.trim()).filter(Boolean) : ["Analyzing project context", "Generating core experience", "Rendering preview"];
+  const engineReason = parseField("engineReason") || "Single screen — atlas-generated is the lightest sufficient engine.";
+  const rawComplexity = parseField("complexity");
+  const complexity: "low" | "medium" | "high" = rawComplexity === "low" ? "low" : rawComplexity === "high" ? "high" : "medium";
+
+  // ── 6. Claude: Generate the First Artifact component ────────────────────
+  const componentResponse = await anthropic.messages.create({
+    model: "claude-sonnet-4-5",
+    max_tokens: 5000,
+    messages: [
+      {
+        role: "user",
+        content: `You are generating the First Artifact for Axiom's Manifest engine.
+
+Project: ${project.name}
+First Artifact: ${firstArtifactName}
+What it demonstrates: ${firstArtifactDescription}
+Building steps: ${firstArtifactSteps.join(" → ")}
+
+Full project context:
+${contextBlock}
+
+---
+
+Generate a single self-contained React component that IS this first artifact — the specific core moment of this product.
+
+EXECUTION ENVIRONMENT — violating these rules produces a blank screen:
+• NO import statements. Hooks available: useState, useEffect, useRef, useCallback, useMemo
+• NO export statements. Do not write "export default" anywhere.
+• NO external libraries. No icons, no chart libs, no UI kits. Pure JSX with inline styles.
+• Component MUST start with: const PascalCaseName = () => {
+
+DESIGN STANDARD:
+• Dark theme: body bg #0C0A09, surface #161311, card bg #1C1917
+• Text: primary #E7E5E4, muted #78716C, gold accent #C9A24C
+• Borders: rgba(255,255,255,0.07) default, rgba(201,162,76,0.3) highlighted
+• Radius: 10-12px cards, 8px elements
+• Typography: system-ui for body, monospace for labels/codes
+• Shadows: 0 1px 3px rgba(0,0,0,0.4)
+• Make it look production-quality. Not a wireframe. Real content, real data, real interactions.
+• Use realistic sample data that fits THIS product's specific domain
+• Hover states using useState where they add polish
+• The user should look at this and say "yes, that's exactly what I meant"
+
+Respond with the component code ONLY — no explanation, no markers, no fences.
+Start directly with: const`,
+      },
+    ],
+  });
+
+  const rawCode = componentResponse.content[0].type === "text" ? componentResponse.content[0].text : "";
+
+  // Extract component name
+  const nameMatch = rawCode.match(/^const\s+([A-Z][A-Za-z0-9]+)\s*=/m);
+  const componentName = nameMatch?.[1] ?? "ManifestPreview";
+
+  // Sanitize — remove any import/export that would crash browser script execution
+  const generatedCode = sanitizeForBrowser(rawCode);
+
+  if (!generatedCode || generatedCode.length < 100) {
+    res.status(500).json({ error: "Component generation produced empty output — try again" });
+    return;
+  }
+
+  // ── 7. Return ────────────────────────────────────────────────────────────
+  res.json({
+    ready: true,
+    decision: {
+      firstArtifact: {
+        name: firstArtifactName,
+        description: firstArtifactDescription,
+        steps: firstArtifactSteps,
+      },
+      activeEngine: "atlas-generated",
+      suggestedEngine: "atlas-generated",
+      engineReason,
+      complexity,
+      deploymentRequired: false,
+    },
+    generatedCode,
+    componentName,
+  });
 });
 
 export default router;

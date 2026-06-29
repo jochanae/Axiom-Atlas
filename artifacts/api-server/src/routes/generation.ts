@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { and, asc, desc, eq } from "drizzle-orm";
 import Anthropic from "@anthropic-ai/sdk";
 import { db, generatedFiles, generationRuns, projectFlowCanvasTable, projectsTable } from "@workspace/db";
+import { createAutoCheckpointOnce } from "./checkpoints";
 
 const router: IRouter = Router();
 
@@ -302,7 +303,15 @@ router.post("/projects/:projectId/forge-sync", async (req, res): Promise<void> =
         messages: [{ role: "user", content: buildForgeSyncPrompt({ run, files, flowNodes }) }],
       });
       const raw = response.content.find((block) => block.type === "text")?.text ?? "";
-      res.status(200).json(parseForgeSyncResponse(raw, flowNodes, fallback));
+      const syncResult = parseForgeSyncResponse(raw, flowNodes, fallback);
+      res.status(200).json(syncResult);
+      // Auto-checkpoint: first verified build (fire-and-forget, non-blocking)
+      createAutoCheckpointOnce({
+        projectId,
+        type: "build",
+        title: "First Verified Build",
+        buildRef: runId,
+      }).catch(() => {});
       return;
     } catch {
       res.status(200).json(fallback);

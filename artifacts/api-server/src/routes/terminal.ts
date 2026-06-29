@@ -13,8 +13,10 @@ import {
 import {
   prepareProjectRepo,
   TerminalHttpError,
+  NO_LINKED_REPO_MESSAGE,
   type PrepareRepoOptions,
 } from "../lib/terminalSandbox";
+import { ensureProjectWorkspaceDir } from "../lib/projectWorkspace";
 
 const router: IRouter = Router();
 
@@ -116,16 +118,23 @@ Type any command above to get started.`,
   });
 
   let preparedRepo: Awaited<ReturnType<typeof prepareProjectRepo>> | null = null;
+  let workspaceCwd: string | undefined;
   if (projectId !== undefined) {
+    const userId = (req as any).authUser.id as number;
+    const repoOptions: PrepareRepoOptions = { onStatus: (msg) => send("status", msg) };
     try {
-      const userId = (req as any).authUser.id as number;
-      const repoOptions: PrepareRepoOptions = { onStatus: (msg) => send("status", msg) };
       preparedRepo = await prepareProjectRepo(projectId, userId, repoOptions);
+      workspaceCwd = preparedRepo.sandboxDir;
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to prepare GitHub repo";
-      send("error", message);
-      res.end();
-      return;
+      if (err instanceof TerminalHttpError && err.message === NO_LINKED_REPO_MESSAGE) {
+        // No GitHub repo linked — fall back to the project's plain workspace directory.
+        workspaceCwd = await ensureProjectWorkspaceDir(projectId);
+      } else {
+        const message = err instanceof Error ? err.message : "Failed to prepare GitHub repo";
+        send("error", message);
+        res.end();
+        return;
+      }
     }
   }
 
@@ -136,7 +145,7 @@ Type any command above to get started.`,
       onStderr: (text) => send("stderr", text),
       onProcess: (child) => { proc = child; },
     }, {
-      cwd: preparedRepo?.sandboxDir,
+      cwd: workspaceCwd,
       githubToken: preparedRepo?.githubToken,
     });
     send("done", JSON.stringify({ output: result.output, exitCode: result.exitCode, durationMs: result.durationMs }));

@@ -12,6 +12,7 @@ type CreateProjectForUserInput = {
   name: string;
   description?: string | null;
   entityType?: "project" | "idea";
+  status?: string;
   memory?: string | null;
   commitSynthesis?: unknown;
 };
@@ -60,7 +61,7 @@ export async function createProjectForUser(input: CreateProjectForUserInput) {
     .values({
       name: input.name,
       description: input.description ?? null,
-      status: "committed",
+      status: input.status ?? "committed",
       entityType: input.entityType ?? "project",
       userId: input.userId,
       ...(input.memory !== undefined ? { memory: input.memory } : {}),

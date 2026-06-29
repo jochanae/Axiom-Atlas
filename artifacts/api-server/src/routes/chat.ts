@@ -3,7 +3,10 @@ import crypto from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable } from "@workspace/db";
+import { atlasErrorLogsTable, atlasSelfMapTable, db, chatMessagesTable, sessionsTable, projectsTable, secretsTable, entriesTable, connectionsTable, usersTable, generationRuns, generatedFiles, imageVersionsTable, applicationModelsTable, designPlansTable, projectDnaTable } from "@workspace/db";
+import { maybeExtractGenome } from "../lib/genomeExtract";
+import { extractAndUpdateApplicationModel, extractVisualMemoryFromAttachments } from "../lib/applicationModelExtraction";
+import { checkBuildReadiness } from "../lib/buildReadiness";
 import { eq, sql, and, gte, desc, ne, isNotNull } from "drizzle-orm";
 import { decryptToken } from "../lib/tokenCrypto";
 import { loadVaultContext } from "../lib/vaultContext";
@@ -19,13 +22,16 @@ import {
 import { prepareProjectRepo } from "../lib/terminalSandbox";
 import { ATLAS_PLATFORM_KNOWLEDGE } from "../lib/atlasKnowledge";
 import { ATLAS_IDENTITY } from "../lib/atlasIdentity";
-import { runBuildCheck } from "./devserver";
+import { runBuildCheck, runWorkspaceBuildCheck } from "./devserver";
+import fsPromises from "node:fs/promises";
+import nodePath from "node:path";
+import { projectWorkspaceDir, ensureProjectWorkspaceDir, resolveWorkspacePath } from "../lib/projectWorkspace";
 
-const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
+const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY || "not-configured" });
 const MAX_VAULT_B64_SIZE = 1500000;
 
 const openaiClient = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || "not-configured",
 });
 
 const IMAGE_REQUEST_RE = /\b(sketch|draw|render|paint|illustrate)\b|\b(generate|create|make|show me|visualize|mock.?up|wireframe)\b.{0,80}\b(image|picture|visual|ui|screen|layout|logo|icon|banner|mockup|diagram|chart|graphic|illustration|what.{0,20}look)\b/i;
@@ -247,7 +253,9 @@ function cleanPollutedUserStackFacts(store: MemoryStore): { store: MemoryStore; 
 }
 
 function parseExtractorFacts(raw: string): Array<{ tier: 1 | 2 | 3 | 4 | 5; text: string }> {
-  const parsed = JSON.parse(raw.trim()) as unknown;
+  // Strip markdown code fences the model sometimes wraps around JSON output.
+  const stripped = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+  const parsed = JSON.parse(stripped) as unknown;
   if (!Array.isArray(parsed)) return [];
 
   return parsed.flatMap((item) => {
@@ -368,6 +376,40 @@ function formatCommitAge(timestamp: string, now: Date): string {
   if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.floor(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+/** Build a flat file-listing string from the local project workspace. Returns [FILE_TREE_EMPTY] or [FILE_TREE_UNAVAILABLE: reason]. */
+async function buildLocalTreeContext(projectId: number): Promise<string> {
+  const wsDir = projectWorkspaceDir(projectId);
+  try { await fsPromises.stat(wsDir); } catch {
+    return "[FILE_TREE_UNAVAILABLE: local workspace directory not found]";
+  }
+
+  const ignore = /^(node_modules|\.git|\.next|dist|build|\.DS_Store)$/;
+  const lines: string[] = [];
+
+  async function walk(dir: string, rel: string, depth: number) {
+    if (depth > 8) return;
+    let entries: import("node:fs").Dirent[];
+    try { entries = await fsPromises.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (e.name.startsWith(".") || ignore.test(e.name)) continue;
+      const rel2 = rel ? `${rel}/${e.name}` : e.name;
+      const abs = nodePath.join(dir, e.name);
+      if (e.isDirectory()) await walk(abs, rel2, depth + 1);
+      else if (e.isFile()) {
+        try {
+          const { size } = await fsPromises.stat(abs);
+          lines.push(`  ${rel2} (${size < 1024 ? size + " B" : Math.round(size / 1024) + " KB"})`);
+        } catch { lines.push(`  ${rel2}`); }
+      }
+      if (lines.length >= 300) return; // cap
+    }
+  }
+
+  await walk(wsDir, "", 0);
+  if (lines.length === 0) return "[FILE_TREE_EMPTY]";
+  return `local workspace (${lines.length} file${lines.length === 1 ? "" : "s"}):\n${lines.join("\n")}`;
 }
 
 async function fetchRecentRepoActivity(fullName: string, token: string, now = new Date()): Promise<string | null> {
@@ -592,8 +634,16 @@ Critical rules:
 - For EXISTING files: only emit when you have the FULL file in context. Never guess.
 - For NEW files: write the complete file from scratch.
 - Always output the COMPLETE file — never partial, never "// ... unchanged".
-- Explain what you're building and why BEFORE the FILE_EDIT blocks.
+- Be an editor, not a narrator. Lead with the file path and action. One sentence of context at most — then the block. Never explain what you're "about to do."
 - Do NOT emit FILE_EDIT for explanations or debugging questions.
+
+NO PLACEHOLDER CODE — ABSOLUTE:
+Never write stub code, skeleton code, or placeholder comments. This means:
+- Never write "// Mock X here", "// TODO", "// implement this", "// rest of component", "Mock diff here", "placeholder", or any similar shortcut.
+- Never write a component that renders a div with placeholder text where working code should be.
+- If you're asked to build X with mock data, write the complete component WITH the mock data fully defined — not a shell that says "add mock data here."
+- A half-built file is worse than no file. If you can't write the complete implementation, say so explicitly — do not silently write a stub and declare success.
+- "Scaffold" means complete, runnable code. It does not mean empty shells with comments.
 
 PATH RULES — never edit:
 - package.json, pnpm-workspace.yaml, any config file, node_modules, build output
@@ -611,10 +661,39 @@ LINE_PATCH_END
 
 The FIND block must match EXACTLY. Copy it directly from the code in context.
 
+FILE_DELETE (to permanently delete a file from the workspace):
+FILE_DELETE_START
+path: src/old-component.ts
+FILE_DELETE_END
+
+Only emit FILE_DELETE when the user explicitly asks to delete, remove, or clean up a specific file. Always explain what you are deleting and why before the block.
+
+FILE_MOVE (to rename or relocate a file):
+FILE_MOVE_START
+from: src/OldName.tsx
+to: src/components/NewName.tsx
+FILE_MOVE_END
+
+After a FILE_MOVE, emit FILE_EDIT blocks for any files that import the moved file so their import paths are updated. Do not emit FILE_MOVE and FILE_EDIT for the same path — move first, then update importers.
+
 FILE_READ:
-When you need a file not in context, ask at the end of your response:
+When you need a file not in context, emit at the end of your response:
 FILE_READ_REQUEST:{"paths":["src/components/Foo.tsx"]}
-Max 3 paths. Use exact paths from the file tree.
+Max 3 paths. Use exact paths from the file tree (see LOCAL WORKSPACE FILES or LINKED REPO STRUCTURE in context).
+
+File reads are fulfilled from GitHub (when a repo is linked) or from the local workspace (when initialized — see FILE SOURCE CONTEXT below). If neither is available you will receive [FILE_READ_UNAVAILABLE: <reason>] — in that case tell the user clearly why and what they need to set up. Never guess at file contents. Never emit a FILE_EDIT for a file you have not read in this session.
+
+CAPABILITY FRAMING — how to describe your own file access:
+Never frame file access as a limitation ("I don't have every file open," "I can only read files on demand"). Frame it as progressive analysis: "I have access to the project's structure, metadata, and source files and can progressively analyze deeper areas as we work." You don't load every file into memory at once — that is intentional and efficient, not a gap. You can inspect any part of the project as needed. Lead with capability, not constraint.
+
+FILE_TREE:
+To get a fresh listing of all files in the local workspace, emit on its own line at the end of your response:
+FILE_TREE_REQUEST
+You will receive the current file tree and can then emit FILE_READ_REQUEST for specific paths.
+Possible results:
+  [FILE_TREE_EMPTY] — workspace directory exists but contains no files yet; tell user "Workspace initialized: yes. File source: local. Files found: none."
+  [FILE_TREE_UNAVAILABLE: reason] — workspace directory missing or inaccessible; tell user the reason.
+The file tree is also auto-injected at session start under LOCAL WORKSPACE FILES — use FILE_TREE_REQUEST only when you need a fresh listing mid-session.
 
 ## Images — Seeing and Generating
 
@@ -664,6 +743,22 @@ RULES:
 - For "is my app broken?" / "check for errors", use mode "monitor". For "show me what it looks like", use mode "screenshot".
 - Users can also type /research <url> to trigger scrape directly — that's handled separately, no BROWSER_VISIT token needed for those.
 
+## Threshold Arrival — First Session
+When this is a fresh workspace and you have project memories from a Global shaping conversation, this is a Threshold moment — the user just crossed from discovery into execution. Your first message should:
+1. Briefly surface what was brought over: problem, audience, and key constraints as tight bullets prefixed with ✓
+2. Ask for a name if the project title looks auto-generated or generic
+
+Opening posture example:
+"Welcome. I brought over everything we shaped.
+
+✓ Problem: [what was discovered]
+✓ Audience: [who needs it]
+✓ Constraints: [key tensions or unknowns]
+
+This doesn't have a name yet — or maybe it does. What do you want to call this?"
+
+Never ask the user to re-explain anything already discovered in Global. Never repeat questions that were already answered. Carry the context forward as if you were in the room for the whole conversation.
+
 You are Atlas. Just be it.`;
 
 const FOUNDATION_SYSTEM_PROMPT = `${ATLAS_IDENTITY}
@@ -674,8 +769,43 @@ From here you see everything at once. You are not inside any single workspace �
 
 You cannot read code files or push to GitHub from here — that lives in individual workspaces. But you can see every project, every committed decision, every cross-project pattern.
 
-When the user wants to go to a specific project workspace, end your response with exactly:
+## Navigating to an existing project
+When the user wants to go to a specific project workspace that already exists, end your response with exactly:
 NAVIGATE_TO:{"route":"/project/<id>"}
+
+## Handling explicit build/create requests
+When the user says "build X", "create X", "make X", or "I want to build X", follow this decision tree — do it every time before any API call:
+
+### Readiness check — what you need to know before building:
+- What it is (type, domain, or purpose)
+- Who it's for or what problem it solves
+- Rough scope or platform (if relevant)
+
+### ENOUGH INFORMATION — all three are clear or inferable:
+→ Do not ask any questions.
+→ Call POST /api/projects/create-and-activate with:
+   { "name": "<concise project name>", "description": "<one sentence>", "buildIntent": "<the user's exact original request, verbatim>" }
+→ One sentence acknowledging what you're building, then end with:
+   NAVIGATE_TO:{"route":"/project/<returned-id>"}
+
+### SMALL AMBIGUITY — one thing is unclear or has two obvious options:
+→ Ask ONE specific, direct question. Do not create the project yet.
+→ After the user answers, treat it as ENOUGH INFORMATION and proceed above.
+→ Examples: "Mobile or web?" / "React Native or PWA?" / "Daily habits or custom schedule?"
+
+### LARGE AMBIGUITY — what it is, who it's for, or scope are genuinely unclear:
+→ Enter shaping mode. Ask one dimension at a time: problem → audience → scope. Max 3 questions.
+→ Do not create the project until shaping is complete.
+→ When you have enough, emit PROJECT_READY:{"projectName":"..."} and let the user confirm.
+
+### Example — ENOUGH INFORMATION:
+Request: "Build a simple habit tracker mobile app. Three screens: Dashboard, Habits, Progress. Keep it simple."
+→ You know: what (habit tracker), platform (mobile), scope (3 named screens, simple). Build it immediately.
+
+### Hard rules:
+- Never emit NAVIGATE_TO without first calling create-and-activate.
+- Never call create-and-activate until you've confirmed ENOUGH INFORMATION.
+- Always pass the user's exact original request as "buildIntent" — the workspace depends on it to know what to build.
 
 When she commits a decision, says "lock that in" — call POST /api/entries with a committed decision.
 When she says "park that" — call POST /api/entries with a parked item.
@@ -908,6 +1038,17 @@ function extractFileReadRequest(content: string): { paths: string[]; cleanedCont
   return { paths: [], cleanedContent: content };
 }
 
+/** Extract a bare FILE_TREE_REQUEST token from Atlas's response */
+function extractFileTreeRequest(content: string): { requested: boolean; cleanedContent: string } {
+  const marker = "FILE_TREE_REQUEST";
+  const idx = content.lastIndexOf(marker);
+  if (idx === -1) return { requested: false, cleanedContent: content };
+  // Make sure it's not FILE_TREE_REQUEST: {...} (which would be a different syntax)
+  const after = content.slice(idx + marker.length).trim();
+  if (after.startsWith(":") || after.startsWith("{")) return { requested: false, cleanedContent: content };
+  return { requested: true, cleanedContent: content.slice(0, idx).trim() };
+}
+
 function detectMemoryChips(content: string): { content: string; memoryChips: MemoryChipRich[] } {
   const marker = "MEMORY_CHIPS:";
   const idx = content.lastIndexOf(marker);
@@ -970,13 +1111,13 @@ type RunAction = {
 };
 
 type RunArtifact = {
-  type: "commit" | "file" | "url" | "pr";
+  type: "commit" | "file" | "url" | "pr" | "plan";
   label: string;
   href?: string;
   meta?: string;
 };
 
-const BLOCKED_PATH_RE = /(?:^|[\\/])(?:package\.json|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
+const BLOCKED_PATH_RE = /(?:^|[\\/])(?:pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
 const BLOCKED_DIR_RE = /^(?:node_modules|dist|build|\.next|\.cache)[\\/]/;
 const CRITICAL_PATH_RE = /(?:^|[\\/])(?:package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|pnpm-workspace\.yaml|(?:vite|tsconfig|drizzle|jest|vitest|eslint|prettier|babel|webpack|rollup|postcss)\.config\.[a-z]+|\.env[.\w]*)$/i;
 const CRITICAL_DIR_RE = /(?:^|[\\/])(?:auth|security|payments?|billing|migrations?)(?:[\\/]|$)/i;
@@ -1217,6 +1358,83 @@ interface ResponsePlan {
   confidence: "high" | "medium" | "low";
   estimatedChanges: number;
   reversible: boolean;
+}
+
+interface FileDelete {
+  path: string;
+}
+
+interface FileMove {
+  from: string;
+  to: string;
+}
+
+function extractAllFileDeletes(content: string): { visibleContent: string; fileDeletes: FileDelete[] } {
+  const startMarker = "FILE_DELETE_START";
+  const endMarker = "FILE_DELETE_END";
+  const fileDeletes: FileDelete[] = [];
+
+  let searchFrom = 0;
+  while (true) {
+    const startIdx = content.indexOf(startMarker, searchFrom);
+    if (startIdx === -1) break;
+    const endIdx = content.indexOf(endMarker, startIdx + startMarker.length);
+    if (endIdx === -1) break;
+    const block = content.slice(startIdx + startMarker.length, endIdx).trim();
+    let filePath = "";
+    for (const line of block.split("\n")) {
+      const ci = line.indexOf(":");
+      if (ci === -1) continue;
+      const key = line.slice(0, ci).trim();
+      const val = line.slice(ci + 1).trim();
+      if (key === "path") { filePath = val; break; }
+    }
+    if (filePath && !BLOCKED_PATH_RE.test(filePath) && !BLOCKED_DIR_RE.test(filePath)) {
+      fileDeletes.push({ path: filePath });
+    }
+    searchFrom = endIdx + endMarker.length;
+  }
+
+  const visibleContent = content
+    .replace(/FILE_DELETE_START[\s\S]*?FILE_DELETE_END/g, "")
+    .trim();
+
+  return { visibleContent, fileDeletes };
+}
+
+function extractAllFileMoves(content: string): { visibleContent: string; fileMoves: FileMove[] } {
+  const startMarker = "FILE_MOVE_START";
+  const endMarker = "FILE_MOVE_END";
+  const fileMoves: FileMove[] = [];
+
+  let searchFrom = 0;
+  while (true) {
+    const startIdx = content.indexOf(startMarker, searchFrom);
+    if (startIdx === -1) break;
+    const endIdx = content.indexOf(endMarker, startIdx + startMarker.length);
+    if (endIdx === -1) break;
+    const block = content.slice(startIdx + startMarker.length, endIdx).trim();
+    let from = "";
+    let to = "";
+    for (const line of block.split("\n")) {
+      const ci = line.indexOf(":");
+      if (ci === -1) continue;
+      const key = line.slice(0, ci).trim();
+      const val = line.slice(ci + 1).trim();
+      if (key === "from") from = val;
+      if (key === "to") to = val;
+    }
+    if (from && to) {
+      fileMoves.push({ from, to });
+    }
+    searchFrom = endIdx + endMarker.length;
+  }
+
+  const visibleContent = content
+    .replace(/FILE_MOVE_START[\s\S]*?FILE_MOVE_END/g, "")
+    .trim();
+
+  return { visibleContent, fileMoves };
 }
 
 function extractAllLinePatches(content: string): { visibleContent: string; linePatches: LinePatch[] } {
@@ -1642,7 +1860,12 @@ type ModelCallResult = {
   usage: ModelCallUsage;
 };
 
-function selectChatModelForMessage(message: string): ModelId {
+function selectChatModelForMessage(message: string, workspaceLens?: string): ModelId {
+  // BUILD lens is always handled by the builder (claude). gpt4o does not reliably emit
+  // FILE_EDIT blocks — routing build requests through it produces planning prose instead
+  // of actual file writes. Short-circuit before any pattern matching.
+  if (workspaceLens === "build") return "claude";
+
   if (/```[\s\S]*?```/.test(message)) return "gpt4o";
 
   const codeRequestPattern = /\b(write|fix|review|debug|implement|refactor|edit|modify|update|generate|create|build|patch)\b[\s\S]{0,80}\b(code|component|function|class|hook|api|endpoint|route|query|schema|migration|test|types?|css|html|sql|script|bug|error|file|repo|repository|pr|pull request)\b|\b(code|component|function|class|hook|api|endpoint|route|query|schema|migration|test|types?|css|html|sql|script|bug|error|file|repo|repository|pr|pull request)\b[\s\S]{0,80}\b(write|fix|review|debug|implement|refactor|edit|modify|update|generate|create|build|patch)\b/i;
@@ -1724,7 +1947,8 @@ async function callModel(
   modelId: ModelId,
   systemPrompt: string,
   messages: Array<{ role: "user" | "assistant"; content: string | Array<{ type: string; [k: string]: unknown }> }>,
-  imageData?: { base64: string; mediaType: string }
+  imageData?: { base64: string; mediaType: string },
+  onToken?: (chunk: string) => void
 ): Promise<ModelCallResult> {
   const startedAt = performance.now();
   if (modelId === "gpt4o") {
@@ -1808,6 +2032,35 @@ async function callModel(
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/gif" | "image/webp"; data: string } };
   const claudeMessages: Array<{ role: "user" | "assistant"; content: string | Array<TextBlock | ImageBlock> }> = messages as typeof claudeMessages;
+
+  if (onToken) {
+    // Streaming path — emit text deltas to the caller as they arrive from Anthropic
+    const stream = anthropic.messages.stream({
+      model,
+      max_tokens: 16000,
+      system: systemPrompt,
+      messages: claudeMessages,
+    });
+    let fullText = "";
+    stream.on("text", (textDelta: string) => {
+      fullText += textDelta;
+      try { onToken(textDelta); } catch { /* client disconnected — swallow */ }
+    });
+    const finalMsg = await stream.finalMessage();
+    const inputTokens = finalMsg.usage.input_tokens ?? null;
+    const outputTokens = finalMsg.usage.output_tokens ?? null;
+    return {
+      content: fullText,
+      model,
+      usage: {
+        executionTimeMs: Math.round(performance.now() - startedAt),
+        inputTokens,
+        outputTokens,
+        costUsd: calculateModelCostUsd(model, inputTokens, outputTokens),
+      },
+    };
+  }
+
   const response = await anthropic.messages.create({
     model,
     max_tokens: 8192,
@@ -1911,6 +2164,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     flowMode?: boolean;
     flowNodes?: Array<{ type: string; label: string; question?: string; strategicAnswer?: string }>;
     forgeContext?: string;
+    planMode?: boolean;
   };
 
   const isFlowMode = !!body.flowMode;
@@ -1943,7 +2197,7 @@ router.post("/chat", async (req, res): Promise<void> => {
     ...(body.attachments ?? []),
     ...(legacyBase64 && legacyMimeType ? [{ base64: legacyBase64, mediaType: legacyMimeType }] : []),
   ];
-  const activeModel = selectChatModelForMessage(message);
+  const activeModel = selectChatModelForMessage(message, (body.workspaceLens ?? "").toLowerCase());
   const now = new Date();
   const userId = (req as any).authUser?.id as number | undefined;
 
@@ -2103,7 +2357,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Load project memory + repo info + node state from DB, plus user memory when authenticated.
   // Also check for Vercel connection so we know whether to defer BROWSER_VISIT until after deploy.
-  const [projectRows, userRows, vercelRows] = await Promise.all([
+  const [projectRows, userRows, vercelRows, sessionRows] = await Promise.all([
     isFoundationMode
       ? Promise.resolve([] as Array<{ memory: string | null; linkedRepo: string | null; githubToken: string | null; nodeState: Record<string, unknown> | null; name: string; previewUrl: string | null; description: string | null }>)
       : db
@@ -2124,10 +2378,71 @@ router.post("/chat", async (req, res): Promise<void> => {
           .where(and(eq(connectionsTable.userId, userId), eq(connectionsTable.type, "vercel")))
           .limit(1)
       : Promise.resolve([] as Array<{ id: number }>),
+    !isFoundationMode && sessionId
+      ? db
+          .select({ buildIntent: sessionsTable.buildIntent, messageCount: sessionsTable.messageCount })
+          .from(sessionsTable)
+          .where(eq(sessionsTable.id, sessionId))
+          .limit(1)
+          .catch(() => [] as Array<{ buildIntent: string | null; messageCount: number }>)
+      : Promise.resolve([] as Array<{ buildIntent: string | null; messageCount: number }>),
   ]);
   const [project] = projectRows;
   const [user] = userRows;
   const hasVercelConnection = vercelRows.length > 0;
+  const sessionBuildIntent = sessionRows[0]?.buildIntent ?? null;
+  const sessionMessageCount = sessionRows[0]?.messageCount ?? 1;
+  // Hoisted so auto-apply and file-source logic share the same flag
+  // Keep build-handoff mode active for the first few turns so the audit/completion
+  // rounds after LOCAL_APPLY_SUCCESS still run with the BUILD_HANDOFF system prompt.
+  const isBuildHandoff = !!(sessionBuildIntent && sessionMessageCount <= 4 && projectId);
+
+  // ── Build Readiness Gate ──────────────────────────────────────────────────
+  // Advisory gate: runs before Builder starts. If gaps exist, returns a
+  // structured readiness report instead of proceeding to the AI call.
+  // Always bypassable via skipReadiness: true ("Build anyway").
+  if (buildMode && projectId && !(body as any).skipReadiness) {
+    try {
+      const readiness = await checkBuildReadiness(projectId);
+      if (!readiness.ready) {
+        const checkLines = readiness.checks
+          .map((c) => {
+            const icon = c.status === "pass" ? "✓" : c.status === "fail" ? "✗" : "⚠";
+            return `${icon} **${c.name}** — ${c.explanation}`;
+          })
+          .join("\n");
+        const content = `Before I build, a few things are worth confirming:\n\n${checkLines}\n\nWant me to proceed anyway, or should we resolve these first?`;
+        res.write(
+          `data: ${JSON.stringify({
+            type: "done",
+            content,
+            modelUsed: "system",
+            terminalCmd: null,
+            terminalResult: null,
+            surface: "system",
+            intentType: "readiness_gate",
+            catchPayload: null,
+            messageId: Date.now(),
+            model: "system",
+            readinessResult: { ...readiness, originalMessage: message },
+          })}\n\n`,
+        );
+        res.end();
+        return;
+      }
+      // Ready path: emit a compact preflight banner to the client before
+      // the Builder stream starts so the user sees the gate was checked.
+      res.write(
+        `data: ${JSON.stringify({
+          type: "readiness_preflight",
+          readinessResult: { ...readiness, originalMessage: message },
+        })}\n\n`,
+      );
+      (req as any)._readinessSummary = readiness.summary;
+    } catch (err) {
+      req.log.warn({ err, projectId }, "build readiness check failed — proceeding without gate");
+    }
+  }
 
   // Derive server-side forge foundation from persisted AxiomFlow node state
   // This is the authoritative source — client-sent forgeContext supplements but never replaces it
@@ -2186,6 +2501,7 @@ router.post("/chat", async (req, res): Promise<void> => {
   let repoTreeContext: string | null = null;
   let repoFiles: Set<string> | null = null;
   let recentRepoActivityContext: string | null = null;
+  let localTreeContext: string | null = null;
   let repoData: { fullName?: string; defaultBranch?: string } | null = null;
   const resolvedGithubToken = await resolveGithubTokenForRequest(userId, project?.githubToken);
 
@@ -2216,6 +2532,15 @@ router.post("/chat", async (req, res): Promise<void> => {
       }
     } catch {
       // Non-fatal: continue without tree context
+    }
+  }
+
+  // Local workspace tree — equivalent of repoTreeContext but for local-only projects
+  if (!repoData && projectId && needsCodeContext) {
+    try {
+      localTreeContext = await buildLocalTreeContext(projectId);
+    } catch {
+      localTreeContext = "[FILE_TREE_UNAVAILABLE: error reading workspace]";
     }
   }
 
@@ -2287,7 +2612,7 @@ router.post("/chat", async (req, res): Promise<void> => {
 
   // Run remaining DB queries in parallel — previously sequential, added 400-600ms per request
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [recentErrorsRows, selfMapRows, portfolioRows, committedRows] = await Promise.all([
+  const [recentErrorsRows, selfMapRows, portfolioRows, committedRows, parkedRows] = await Promise.all([
     db
       .select({ errorMessage: atlasErrorLogsTable.errorMessage, route: atlasErrorLogsTable.route, timestamp: atlasErrorLogsTable.timestamp })
       .from(atlasErrorLogsTable)
@@ -2313,6 +2638,13 @@ router.post("/chat", async (req, res): Promise<void> => {
       .orderBy(desc(entriesTable.createdAt))
       .limit(25)
       .catch(() => [] as Array<{ title: string; summary: string | null; createdAt: Date }>),
+    db
+      .select({ title: entriesTable.title, enrichmentJson: entriesTable.enrichmentJson, createdAt: entriesTable.createdAt })
+      .from(entriesTable)
+      .where(and(eq(entriesTable.projectId, projectId), eq(entriesTable.status, "parked")))
+      .orderBy(desc(entriesTable.createdAt))
+      .limit(12)
+      .catch(() => [] as Array<{ title: string; enrichmentJson: string | null; createdAt: Date }>),
   ]);
 
   const recentErrorContext = recentErrorsRows
@@ -2321,15 +2653,326 @@ router.post("/chat", async (req, res): Promise<void> => {
   const selfMapContext = selfMapRows[0] ? `Current codebase: ${selfMapRows[0].fileCount} files indexed. Architecture map available for reasoning.` : "";
   const DEFAULT_NAMES = new Set(["New Project", "New Idea", "My Project", ""]);
 
+  // Detect self-contained build requests — "build me X with mock data", "create a component", etc.
+  // These don't need project memory, ledger, parking lot, or portfolio — they just need to build.
+  // Stripping heavy context for these requests cuts ~30KB from the prompt and removes the
+  // strategic machinery that turns "write this component" into planning theater.
+  const SELF_CONTAINED_BUILD_RE = /\b(mock\s*data|mock\s*only|no\s*real\s*data|standalone|self[- ]?contained)\b/i;
+  const SELF_CONTAINED_VERB_RE = /^(build|create|write|generate|make|design|implement)\s+(a|an|the)\s+/i;
+  const PROJECT_REFERENCE_RE = /\b(my\s+app|my\s+project|my\s+codebase|my\s+repo|the\s+bug|the\s+error|fix\s+the|fix\s+my|update\s+my|my\s+component|my\s+page|my\s+screen)\b/i;
+  const isSelfContainedBuild = !isFoundationMode && !isBuildHandoff && (
+    SELF_CONTAINED_BUILD_RE.test(message) ||
+    (SELF_CONTAINED_VERB_RE.test(message.trim()) && !PROJECT_REFERENCE_RE.test(message))
+  );
+
+  // Fetch Project DNA (Creative Principles + Experience Intent + Visual Memory) plus
+  // AM identity/intent/buildState for continuity context, and the latest Design Plan.
+  // Non-blocking additive enrichment — never delays the response if it fails.
+  let projectDNARow: {
+    creativePrinciples: unknown;
+    experienceIntent: unknown;
+    visualSketches: unknown;
+    dnaStatus: unknown;
+    identity: unknown;
+    intent: unknown;
+    buildState: unknown;
+  } | null = null;
+  let committedDesignPlan: { body: unknown; version: number; committedAt: Date | null } | null = null;
+  let latestDesignPlanStatus: string | null = null;
+  if (projectId && !isFoundationMode) {
+    try {
+      const [[amRow], [dnaRow]] = await Promise.all([
+        db.select({ identity: applicationModelsTable.identity, intent: applicationModelsTable.intent, buildState: applicationModelsTable.buildState })
+          .from(applicationModelsTable).where(eq(applicationModelsTable.projectId, projectId)).limit(1),
+        db.select({ creativePrinciples: projectDnaTable.creativePrinciples, experienceIntent: projectDnaTable.experienceIntent, visualSketches: projectDnaTable.visualSketches, status: projectDnaTable.status })
+          .from(projectDnaTable).where(eq(projectDnaTable.projectId, projectId)).limit(1),
+      ]);
+      if (amRow) {
+        projectDNARow = {
+          identity: amRow.identity,
+          intent: amRow.intent,
+          buildState: amRow.buildState,
+          creativePrinciples: dnaRow?.creativePrinciples ?? [],
+          experienceIntent: dnaRow?.experienceIntent ?? {},
+          visualSketches: dnaRow?.visualSketches ?? [],
+          dnaStatus: dnaRow?.status ?? {},
+        };
+      }
+    } catch { /* non-fatal — DNA enrichment is additive only */ }
+
+    try {
+      // Query 1: latest COMMITTED plan — authoritative body for the CONSTRAINTS block.
+      // Uses committed-only filter so a newer draft never displaces a committed plan.
+      const [committedDPRow] = await db
+        .select({ body: designPlansTable.body, version: designPlansTable.version, committedAt: designPlansTable.committedAt })
+        .from(designPlansTable)
+        .where(and(eq(designPlansTable.projectId, projectId), eq(designPlansTable.status, "committed")))
+        .orderBy(desc(designPlansTable.version))
+        .limit(1);
+      committedDesignPlan = committedDPRow ?? null;
+
+      // Query 2: latest plan of any status — for the continuity status label only.
+      // If a committed plan exists, always report "committed" regardless of any newer draft.
+      if (!committedDesignPlan) {
+        const [latestDPRow] = await db
+          .select({ status: designPlansTable.status })
+          .from(designPlansTable)
+          .where(eq(designPlansTable.projectId, projectId))
+          .orderBy(desc(designPlansTable.version))
+          .limit(1);
+        latestDesignPlanStatus = latestDPRow?.status ?? null;
+      } else {
+        latestDesignPlanStatus = "committed";
+      }
+    } catch { /* non-fatal — design plan enrichment is additive only */ }
+  }
+
   // Build layered system prompt — use project data already fetched in the first Promise.all
   let systemPrompt = isFoundationMode ? FOUNDATION_SYSTEM_PROMPT : DEV_SYSTEM_PROMPT;
-  systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
+  // ACTIVE PROJECT is injected FIRST — before platform knowledge — so the model knows
+  // exactly which project it is in before any other context is loaded.
   if (!isFoundationMode && project) {
     const projectAlreadyNamedInstruction = !DEFAULT_NAMES.has((project.name ?? "").trim())
-      ? `\nThis project is already named ${project.name}. Do not suggest renaming it, do not ask the user for a name, and do not propose alternative names unless the user explicitly asks.`
+      ? `\nThis project is already named "${project.name}". Do not suggest renaming it, do not ask the user for a name, and do not propose alternative names unless the user explicitly asks.`
       : "";
-    systemPrompt += `\n\n--- ACTIVE PROJECT ---\nProject name: ${project.name}${project.description ? `\nDescription: ${project.description}` : ""}\nThis is the project you are currently working in. Always refer to it by name. Never ask the user what project they are working on.${projectAlreadyNamedInstruction}\n--- END ACTIVE PROJECT ---`;
+    systemPrompt += `\n\n╔══════════════════════════════════╗
+║  ACTIVE PROJECT: ${project.name.toUpperCase().slice(0, 30).padEnd(30, " ")}  ║
+╚══════════════════════════════════╝
+You are currently inside the workspace for: **${project.name}**${project.description ? `\n${project.description}` : ""}
+
+This is your locked context for this entire conversation. Every question, every answer, every suggestion refers to **${project.name}** — not to any other project in the portfolio. If the user asks "what can we do here?" or "what are we building?" the answer is always about **${project.name}**.
+
+HARD RULE: Never answer from the context of a different project unless the user explicitly names it by asking a cross-project question ("how does this compare to IntoIQ?" / "across all my projects…"). A general question like "what can we do here?" is always about the active project.${projectAlreadyNamedInstruction}
+--- END ACTIVE PROJECT ---`;
   }
+  // PROJECT CONTEXT — mandatory for all active workspace requests.
+  // Always injected when inside a project, even for brand-new ones (minimal fallback).
+  // The RESPONSE CALIBRATION clause is only appended when meaningful state exists.
+  if (!isFoundationMode && project) {
+    const amIdentity = (projectDNARow?.identity as Record<string, unknown>) ?? {};
+    const amIntent = (projectDNARow?.intent as Record<string, unknown>) ?? {};
+    const amBuildState = (projectDNARow?.buildState as Record<string, unknown>) ?? {};
+
+    const amName = (amIdentity.name as string) || null;
+    const amPurpose = (amIdentity.purpose as string) || null;
+    const amAudience = (amIdentity.audience as string) || null;
+    const amStage = (amBuildState.stage as string) || null;
+    const amLastExtracted = (amBuildState.lastExtractedAt as string) || null;
+    const amIntentSummary = (amIntent.summary as string) || null;
+    const amGenerated = !!(amBuildState.generated as boolean);
+    const amGeneratedAt = (amBuildState.generatedAt as string) || null;
+    const amGeneratedFileCount = (amBuildState.generatedFileCount as number) || 0;
+
+    const designPlanLabel = committedDesignPlan ? "committed" :
+      latestDesignPlanStatus === "proposed" ? "proposed (not yet committed)" :
+      latestDesignPlanStatus === "draft" ? "draft (in progress)" : "none";
+
+    const now = new Date();
+
+    // Last context update label
+    let lastSeenLabel = "never";
+    if (amLastExtracted) {
+      const elapsedMs = now.getTime() - new Date(amLastExtracted).getTime();
+      const hours = Math.floor(elapsedMs / (1000 * 60 * 60));
+      if (hours < 1) lastSeenLabel = "less than an hour ago";
+      else if (hours < 24) lastSeenLabel = `${hours} hour${hours === 1 ? "" : "s"} ago`;
+      else {
+        const days = Math.floor(hours / 24);
+        lastSeenLabel = `${days} day${days === 1 ? "" : "s"} ago`;
+      }
+    }
+
+    // Last build outcome label
+    let lastBuildLabel = "not yet built";
+    if (amGenerated && amGeneratedAt) {
+      const buildElapsed = now.getTime() - new Date(amGeneratedAt).getTime();
+      const buildHours = Math.floor(buildElapsed / (1000 * 60 * 60));
+      const fileNote = amGeneratedFileCount > 0 ? ` (${amGeneratedFileCount} file${amGeneratedFileCount === 1 ? "" : "s"})` : "";
+      if (buildHours < 1) lastBuildLabel = `built less than an hour ago${fileNote}`;
+      else if (buildHours < 24) lastBuildLabel = `built ${buildHours}h ago${fileNote}`;
+      else {
+        const buildDays = Math.floor(buildHours / 24);
+        lastBuildLabel = `built ${buildDays} day${buildDays === 1 ? "" : "s"} ago${fileNote}`;
+      }
+    } else if (amGenerated) {
+      const fileNote = amGeneratedFileCount > 0 ? ` (${amGeneratedFileCount} file${amGeneratedFileCount === 1 ? "" : "s"})` : "";
+      lastBuildLabel = `build exists${fileNote}`;
+    }
+
+    // Rule-based narrative — 1–2 sentences on current state
+    let narrative: string;
+    if (latestDesignPlanStatus === "committed" && amGenerated) {
+      narrative = "Design direction is locked and builds have been generated. The project is in active iteration.";
+    } else if (latestDesignPlanStatus === "committed") {
+      narrative = "Design direction is committed and ready to build. No build has been generated yet.";
+    } else if (latestDesignPlanStatus === "proposed") {
+      narrative = "A Design Plan has been proposed but not yet committed — still in the decision phase.";
+    } else if (latestDesignPlanStatus === "draft") {
+      narrative = "A Design Plan is in draft. Direction is being explored but not finalized.";
+    } else if (amPurpose) {
+      narrative = "Product identity is taking shape. No design direction has been set yet.";
+    } else {
+      narrative = "Brand new project — no context has been established yet.";
+    }
+
+    let continuityBlock = `\n\n--- PROJECT CONTEXT ---`;
+    continuityBlock += `\nWhat you already know about ${project.name}:`;
+    if (amName) continuityBlock += `\n• AM identity name: ${amName}`;
+    continuityBlock += `\n• What it does: ${amPurpose ?? "not yet established"}`;
+    continuityBlock += `\n• Who it's for: ${amAudience ?? "not yet established"}`;
+    if (amIntentSummary) continuityBlock += `\n• Core intent: ${amIntentSummary}`;
+    if (amStage) continuityBlock += `\n• Current stage: ${amStage}`;
+    continuityBlock += `\n• Design Plan: ${designPlanLabel}`;
+    continuityBlock += `\n• Last build: ${lastBuildLabel}`;
+    continuityBlock += `\n• Last context update: ${lastSeenLabel}`;
+    continuityBlock += `\n• Status: ${narrative}`;
+
+    // RESPONSE CALIBRATION — only when the project has meaningful known state.
+    // amStage alone (defaults to "Think") is excluded as it is always set.
+    const hasKnownState = !!(amPurpose || amAudience || amIntentSummary || amLastExtracted || latestDesignPlanStatus || amGenerated);
+    if (hasKnownState) {
+      continuityBlock += `\n\nRESPONSE CALIBRATION: This project has real context. Never open with "What are we building today?", "How can I help?", "What would you like to work on?", or any generic greeting that pretends you don't know this project. You have been in the room for this — respond accordingly. Reference what you know. Lead with something useful, a sharp question, or a direct continuation of the work.`;
+    }
+    continuityBlock += `\n--- END PROJECT CONTEXT ---`;
+    systemPrompt += continuityBlock;
+  }
+
+  // Project DNA: Creative Principles + Experience Intent + Visual Memory sketches
+  // Injected here so every response is shaped by the product's accumulated soul.
+  // Status precedence: committed > confirmed (strong constraints) > inferred (suggestions) > guessed (skip)
+  if (!isFoundationMode && projectDNARow) {
+    const dnaStatus = (projectDNARow.dnaStatus as Record<string, string>) ?? {};
+    // Tier helper: committed/confirmed = strong; inferred = soft; guessed/missing = skip
+    const tier = (key: string): "strong" | "soft" | "skip" => {
+      const s = dnaStatus[key];
+      if (s === "committed" || s === "confirmed") return "strong";
+      if (s === "inferred") return "soft";
+      return "skip";
+    };
+
+    const principles = (projectDNARow.creativePrinciples as string[]) ?? [];
+    const principlesTier = tier("creativePrinciples");
+    const ei = (projectDNARow.experienceIntent as Record<string, unknown>) ?? {};
+    const emotionalRegister = (ei.emotionalRegister as string[] | undefined) ?? [];
+    const interactionPosture = (ei.interactionPosture as string[] | undefined) ?? [];
+    const visualLanguage = (ei.visualLanguage as string[] | undefined) ?? [];
+    const designPrinciples = (ei.designPrinciples as string[] | undefined) ?? [];
+    const sketches = (projectDNARow.visualSketches as Array<{ description?: string; signals?: { emotionalRegister?: string[]; visualLanguage?: string[]; designPrinciples?: string[] } }>) ?? [];
+
+    // Only include fields that are at least "inferred" (skip guessed/unknown)
+    const includePrinciples = principles.length > 0 && principlesTier !== "skip";
+    const includeER = emotionalRegister.length > 0 && tier("emotionalRegister") !== "skip";
+    const includeIP = interactionPosture.length > 0 && tier("interactionPosture") !== "skip";
+    const includeVL = visualLanguage.length > 0 && tier("visualLanguage") !== "skip";
+    const includeDP = designPrinciples.length > 0 && tier("designPrinciples") !== "skip";
+    const hasEI = includeER || includeIP || includeVL || includeDP;
+    const hasAny = includePrinciples || hasEI || sketches.length > 0;
+
+    if (hasAny) {
+      let dnaBlock = `\n\n--- PROJECT DNA ---`;
+      if (includePrinciples) {
+        const strength = principlesTier === "strong" ? "CONFIRMED — must be honoured in every artifact" : "inferred from conversation — treat as directional";
+        dnaBlock += `\nCREATIVE PRINCIPLES (${strength}):\n${principles.map((p) => `• ${p}`).join("\n")}`;
+      }
+      if (hasEI) {
+        dnaBlock += `\n\nEXPERIENCE INTENT — shape every screen, layout, copy, and interaction against this brief:`;
+        if (includeER) {
+          const label = tier("emotionalRegister") === "strong" ? "[confirmed]" : "[inferred]";
+          dnaBlock += `\n• Feel ${label}: ${emotionalRegister.join(", ")}`;
+        }
+        if (includeIP) {
+          const label = tier("interactionPosture") === "strong" ? "[confirmed]" : "[inferred]";
+          dnaBlock += `\n• Usage posture ${label}: ${interactionPosture.join(", ")}`;
+        }
+        if (includeVL) {
+          const label = tier("visualLanguage") === "strong" ? "[confirmed]" : "[inferred]";
+          dnaBlock += `\n• Visual language ${label}: ${visualLanguage.join(", ")}`;
+        }
+        if (includeDP) {
+          const label = tier("designPrinciples") === "strong" ? "[confirmed]" : "[inferred]";
+          dnaBlock += `\n• Design principles ${label}: ${designPrinciples.map((p) => `"${p}"`).join(" | ")}`;
+        }
+        dnaBlock += `\n(confirmed fields are locked constraints; inferred fields are strong suggestions)`;
+      }
+      if (sketches.length > 0) {
+        dnaBlock += `\n\nVISUAL MEMORY — design signals extracted from attachments the founder shared:`;
+        for (const sketch of sketches.slice(-5)) {
+          if (sketch.description) dnaBlock += `\n• ${sketch.description}`;
+          const sigs = sketch.signals ?? {};
+          const sigParts: string[] = [];
+          if (sigs.emotionalRegister?.length) sigParts.push(`feel: ${sigs.emotionalRegister.join(", ")}`);
+          if (sigs.visualLanguage?.length) sigParts.push(`visual: ${sigs.visualLanguage.join(", ")}`);
+          if (sigs.designPrinciples?.length) sigParts.push(`principles: ${sigs.designPrinciples.join(", ")}`);
+          if (sigParts.length) dnaBlock += ` (${sigParts.join(" | ")})`;
+        }
+      }
+      dnaBlock += `\n--- END PROJECT DNA ---`;
+      systemPrompt += dnaBlock;
+    }
+  }
+
+  // Committed Design Plan: CONSTRAINTS + DESIGN INTENT
+  // Only injected when a Design Plan has been committed — represents locked decisions
+  // the founder approved. Builder must execute these, not invent alternatives.
+  if (!isFoundationMode && committedDesignPlan) {
+    const dp = (committedDesignPlan.body as Record<string, unknown>) ?? {};
+    const nav = dp.navigationPattern as string | undefined;
+    const responsive = dp.responsiveIntent as { mobile?: string; tablet?: string; desktop?: string } | undefined;
+    const hierarchy = (dp.informationHierarchy as string[]) ?? [];
+    const components = dp.componentPatterns as string | undefined;
+    const motion = dp.motionPhilosophy as string | undefined;
+    const density = dp.cardDensity as string | undefined;
+    const typography = dp.typographyScale as string | undefined;
+    const emptyStates = dp.emptyStates as string | undefined;
+    const interactions = dp.interactionPatterns as {
+      primaryAction?: string; secondaryAction?: string; editingStyle?: string;
+      confirmationBehavior?: string; gestures?: string; scrollingBehavior?: string;
+    } | undefined;
+
+    const hasConstraints = nav || (responsive && (responsive.mobile || responsive.tablet || responsive.desktop)) || hierarchy.length > 0 || components || typography || density;
+    const hasIntent = motion || emptyStates || interactions;
+
+    if (hasConstraints || hasIntent) {
+      let dpBlock = `\n\n--- COMMITTED DESIGN PLAN (v${committedDesignPlan.version}) ---`;
+      dpBlock += `\nThese decisions are locked. Execute them exactly — do not invent alternatives, ask for confirmation, or deviate unless the user explicitly overrides one.`;
+
+      if (hasConstraints) {
+        dpBlock += `\n\nCONSTRAINTS:`;
+        if (nav) dpBlock += `\n• Navigation pattern: ${nav}`;
+        if (responsive) {
+          if (responsive.mobile) dpBlock += `\n• Mobile: ${responsive.mobile}`;
+          if (responsive.tablet) dpBlock += `\n• Tablet: ${responsive.tablet}`;
+          if (responsive.desktop) dpBlock += `\n• Desktop: ${responsive.desktop}`;
+        }
+        if (hierarchy.length > 0) dpBlock += `\n• Information hierarchy: ${hierarchy.join(" → ")}`;
+        if (components) dpBlock += `\n• Component patterns: ${components}`;
+        if (typography) dpBlock += `\n• Typography scale: ${typography}`;
+        if (density) dpBlock += `\n• Card density: ${density}`;
+      }
+
+      if (hasIntent) {
+        dpBlock += `\n\nDESIGN INTENT:`;
+        if (motion) dpBlock += `\n• Motion philosophy: ${motion}`;
+        if (emptyStates) dpBlock += `\n• Empty states: ${emptyStates}`;
+        if (interactions) {
+          if (interactions.primaryAction) dpBlock += `\n• Primary action: ${interactions.primaryAction}`;
+          if (interactions.secondaryAction) dpBlock += `\n• Secondary action: ${interactions.secondaryAction}`;
+          if (interactions.editingStyle) dpBlock += `\n• Editing style: ${interactions.editingStyle}`;
+          if (interactions.confirmationBehavior) dpBlock += `\n• Confirmations: ${interactions.confirmationBehavior}`;
+          if (interactions.gestures) dpBlock += `\n• Gestures: ${interactions.gestures}`;
+          if (interactions.scrollingBehavior) dpBlock += `\n• Scrolling: ${interactions.scrollingBehavior}`;
+        }
+      }
+
+      dpBlock += `\n--- END COMMITTED DESIGN PLAN ---`;
+      systemPrompt += dpBlock;
+    }
+  } else if (!isFoundationMode && projectId && !committedDesignPlan) {
+    // No committed Design Plan — note that design decisions are unconstrained
+    systemPrompt += `\n\n[No committed Design Plan for this project — design decisions are unconstrained. Apply the Project DNA and your best judgment.]`;
+  }
+
+  systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
   if (userId && portfolioRows.length > 0) {
     const portfolioSummary = portfolioRows.map((p) => {
       const parts = [`- **${p.name}**`];
@@ -2343,8 +2986,10 @@ router.post("/chat", async (req, res): Promise<void> => {
       .join("\n");
     const portfolioLabel = isFoundationMode
       ? "YOUR FULL PORTFOLIO (all projects — use this to answer cross-portfolio questions)"
-      : "YOUR PORTFOLIO (other projects — use this for cross-project questions, prioritization, and portfolio-wide insight)";
-    systemPrompt += `\n\n--- ${portfolioLabel} ---\n${portfolioSummary}\n${portfolioMemory ? `\n### What you already know about each:\n${portfolioMemory}` : ""}\nTotal projects: ${portfolioRows.length}\n--- END PORTFOLIO ---`;
+      : "YOUR PORTFOLIO (other projects — BACKGROUND ONLY — do NOT answer from this context unless the user explicitly asks about multiple projects or their portfolio)";
+    if (!isSelfContainedBuild) {
+      systemPrompt += `\n\n--- ${portfolioLabel} ---\n${portfolioSummary}\n${portfolioMemory ? `\n### Background knowledge (do NOT surface unless cross-project question):\n${portfolioMemory}` : ""}\nTotal projects: ${portfolioRows.length}\n--- END PORTFOLIO ---`;
+    }
   }
 
   // If user is asking a portfolio-wide question from inside a workspace, pull committed
@@ -2389,43 +3034,201 @@ router.post("/chat", async (req, res): Promise<void> => {
       }
     } catch { /* non-fatal — portfolio context is additive */ }
   }
-  if (userProfile) {
-    systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
-  }
-  if (userMemoryText) {
-    systemPrompt += `\n\n--- ABOUT THIS FOUNDER (durable facts about the person you work with — use naturally, never recite) ---\n${userMemoryText}\n--- END ABOUT THIS FOUNDER ---`;
-  }
-  if (memoryText) {
-    systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
-  }
+  if (!isSelfContainedBuild) {
+    if (userProfile) {
+      systemPrompt += `\n\n--- WHO YOU'RE WORKING WITH ---\n${userProfile}`;
+    }
+    if (userMemoryText) {
+      systemPrompt += `\n\n--- ABOUT THIS FOUNDER (durable facts about the person you work with — use naturally, never recite) ---\n${userMemoryText}\n--- END ABOUT THIS FOUNDER ---`;
+    }
+    if (memoryText) {
+      systemPrompt += `\n\n--- PROJECT MEMORY (what you already know — use this) ---\n${memoryText}\n--- END PROJECT MEMORY ---`;
+    }
 
-  // Inject committed decisions from the Decision Ledger (fetched in the parallel batch above)
-  if (committedRows.length > 0) {
-    const ledgerText = committedRows
-      .map(e => `• ${e.title}${e.summary ? ` — ${e.summary}` : ""}`)
-      .join("\n");
-    systemPrompt += `\n\n--- COMMITTED DECISIONS (Decision Ledger — reference these naturally, never cite entry numbers) ---\n${ledgerText}\n--- END COMMITTED DECISIONS ---`;
-  }
+    // Inject committed decisions from the Decision Ledger (fetched in the parallel batch above)
+    if (committedRows.length > 0) {
+      const ledgerText = committedRows
+        .map(e => `• ${e.title}${e.summary ? ` — ${e.summary}` : ""}`)
+        .join("\n");
+      systemPrompt += `\n\n--- COMMITTED DECISIONS (Decision Ledger — reference these naturally, never cite entry numbers) ---\n${ledgerText}\n--- END COMMITTED DECISIONS ---`;
+    }
 
-  if (projectMap) {
-    systemPrompt += `\n\n--- PROJECT MAP (auto-scanned structure — use this to answer "what do I have?" questions without needing files) ---\n${projectMap}\n--- END PROJECT MAP ---`;
+    if (parkedRows.length > 0) {
+      const parkedText = parkedRows.map(e => {
+        let line = `• ${e.title}`;
+        if (e.enrichmentJson) {
+          try {
+            const enrichment = JSON.parse(e.enrichmentJson as unknown as string) as { atlasCategory?: string; whyItMatters?: string };
+            if (enrichment.atlasCategory) line += ` [${enrichment.atlasCategory}]`;
+            if (enrichment.whyItMatters) line += ` — ${enrichment.whyItMatters}`;
+          } catch { /* ignore */ }
+        }
+        return line;
+      }).join("\n");
+      systemPrompt += `\n\n--- DEFERRED ITEMS (Parking Lot — user intentionally set these aside for later) ---\n${parkedText}\nIf any of these are directly relevant to what the user is working on right now, surface it naturally — e.g. "You parked [item] earlier — this might be a good moment to revisit it." Be specific and timely. Don't list them all at once. Don't force it if nothing is relevant.\n--- END DEFERRED ITEMS ---`;
+    }
+
+    if (projectMap) {
+      systemPrompt += `\n\n--- PROJECT MAP (auto-scanned structure — use this to answer "what do I have?" questions without needing files) ---\n${projectMap}\n--- END PROJECT MAP ---`;
+    }
   }
   if (repoTreeContext) {
     systemPrompt += `\n\n--- LINKED REPO STRUCTURE (auto-loaded — you can reference these paths in FILE_EDIT blocks) ---\n${repoTreeContext}\n--- END REPO STRUCTURE ---`;
   }
-  if (recentRepoActivityContext) {
+  if (localTreeContext) {
+    if (localTreeContext === "[FILE_TREE_EMPTY]") {
+      systemPrompt += `\n\n--- LOCAL WORKSPACE FILES ---\n[FILE_TREE_EMPTY]\nThe local workspace directory exists and is initialized, but contains no files yet. When the user asks what files exist, respond: "Workspace initialized: yes. File source: local. Files found: none." Do NOT ask them to paste files — the workspace is ready but empty.\n--- END LOCAL WORKSPACE FILES ---`;
+    } else if (localTreeContext.startsWith("[FILE_TREE_UNAVAILABLE")) {
+      systemPrompt += `\n\n--- LOCAL WORKSPACE FILES ---\n${localTreeContext}\n--- END LOCAL WORKSPACE FILES ---`;
+    } else {
+      systemPrompt += `\n\n--- LOCAL WORKSPACE FILES (use these exact paths in FILE_READ_REQUEST and FILE_EDIT blocks) ---\n${localTreeContext}\n--- END LOCAL WORKSPACE FILES ---`;
+    }
+  }
+
+  // Inject file source context — Atlas needs to know what it can read/write without guessing
+  {
+    const hasGithub = !!(repoData?.fullName && resolvedGithubToken);
+    const localWsDir = projectId ? projectWorkspaceDir(projectId) : null;
+    const localWsExists = localWsDir
+      ? await fsPromises.stat(localWsDir).then(() => true).catch(() => false)
+      : false;
+
+    // During a BUILD_HANDOFF (fresh project from a build request, no messages yet), treat the
+    // local workspace as available even if the directory doesn't exist on disk yet.
+    // Same applies to SELF_CONTAINED_BUILD requests — they are unambiguous write intent and
+    // ensureProjectWorkspaceDir() is called lazily on the first FILE_EDIT write, so the
+    // directory will be created the moment Atlas emits its first block.
+    const effectiveLocalWsAvailable = localWsExists || isBuildHandoff || isSelfContainedBuild;
+
+    const fileSource = hasGithub ? "github" : effectiveLocalWsAvailable ? "local" : "none";
+    const applyMode = hasGithub ? "push-to-github" : effectiveLocalWsAvailable ? "local-apply" : "none";
+    const fileSourceLines: string[] = [
+      `repo linked: ${hasGithub}`,
+      `local workspace initialized: ${localWsExists || isBuildHandoff}`,
+      `available file source: ${fileSource}`,
+      `apply mode: ${applyMode}`,
+    ];
+    if (fileSource === "local") {
+      fileSourceLines.push("FILE_READ_REQUEST will be fulfilled from the local workspace. FILE_TREE_REQUEST can be used to refresh the file listing at any time. FILE_EDIT blocks apply directly — no GitHub needed. A linked GitHub repo is NOT required.");
+    } else if (fileSource === "none") {
+      fileSourceLines.push("No file source available. Do not emit FILE_READ_REQUEST, FILE_TREE_REQUEST, or FILE_EDIT — they cannot be fulfilled. If the user asks to edit files, tell them to link a GitHub repo or open the Files tab to initialize a local workspace.");
+    }
+    systemPrompt += `\n\n--- FILE SOURCE CONTEXT ---\n${fileSourceLines.join("\n")}\n--- END FILE SOURCE CONTEXT ---`;
+  }
+
+  if (!isSelfContainedBuild && recentRepoActivityContext) {
     systemPrompt += `\n\n${recentRepoActivityContext}\n\nWhen referencing recent commits in your response, interpret them narratively — group by area of impact, synthesize what's changing (e.g. "Three commits hit the auth flow this week, one fixed a session timeout, another added a retry"), don't enumerate SHA hashes. Speak like a collaborator who understands what the code changes actually mean.`;
   }
-  systemPrompt += `\n\n--- SESSION CONTINUITY ---
+  // Build handoff — fires exactly once: when the session has a buildIntent and no messages have been exchanged yet.
+  // messageCount === 0 means the session was just created by create-and-activate and this is the first message.
+  if (!isFoundationMode && sessionBuildIntent && sessionMessageCount === 0) {
+    systemPrompt += `\n\n--- BUILD HANDOFF ---
+This workspace was just created from an explicit build request. The user asked for:
+
+"${sessionBuildIntent}"
+
+This is an execution moment — the user has committed to building this and is waiting for you to start.
+
+Your first response must:
+1. One sentence: name what you're building and the approach (framework, structure, key decisions). No questions, no recap.
+2. Immediately produce FILE_EDIT blocks for the complete initial scaffold.
+
+What "complete initial scaffold" means:
+- All the screens/pages/routes the user named
+- Working navigation between them
+- Realistic placeholder content (not lorem ipsum — actual labels, buttons, structure that reflects the domain)
+- ALL config files needed to run it. For a Vite+React project this is non-negotiable:
+  • package.json (with @vitejs/plugin-react in devDependencies)
+  • vite.config.js — REQUIRED. Must include the react() plugin and exactly this server config:
+      server: { host: '0.0.0.0', allowedHosts: true, hmr: false }
+    host and allowedHosts allow the proxy to reach Vite. hmr:false disables WebSocket live-reload
+    which cannot work through the proxy and causes a console error without it.
+  • postcss.config.js — REQUIRED if Tailwind CSS is used (tailwindcss + autoprefixer plugins).
+  • tailwind.config.js — REQUIRED if Tailwind CSS is used.
+  • index.html with <div id="root"> and a <script type="module" src="/src/main.jsx"> tag.
+  Never omit config files assuming they already exist — always emit them as FILE_EDIT blocks.
+
+REACT ROUTER RULE — always use HashRouter, never BrowserRouter:
+  The app runs behind a reverse proxy at a dynamic subpath. BrowserRouter reads
+  window.location.pathname (which includes the full proxy prefix) and finds no
+  matching routes — the page renders blank.
+  HashRouter ignores the URL path entirely and only reads the hash fragment
+  (e.g. /#/dashboard), so it works correctly at any proxy path depth.
+  Every generated app with routing MUST use HashRouter:
+
+    import { HashRouter, Routes, Route } from 'react-router-dom'
+    // ...
+    <HashRouter>
+      <Routes>...</Routes>
+    </HashRouter>
+
+  Never use BrowserRouter in generated workspace apps — it will always show a blank page.
+
+FILE FORMAT RULES — these are absolute in a build handoff:
+- Use FILE_EDIT blocks for ALL code. Every file must be a FILE_EDIT block.
+- ARTIFACT blocks are for standalone HTML previews and exportable documents only. They do NOT create project files. NEVER use ARTIFACT in a build handoff — the files will not land in the workspace.
+- The local workspace is ready. FILE_EDIT blocks are applied automatically — files are written directly to the project directory. No GitHub required.
+
+Do NOT ask clarifying questions.
+Do NOT explain what you're about to do.
+Do NOT wait for confirmation.
+Make the sensible default for any unspecified choice (framework, styling, etc.) and state it in one line as you begin.
+
+Just build it.
+--- END BUILD HANDOFF ---`;
+  } else if (isSelfContainedBuild) {
+    systemPrompt += `\n\n--- SELF-CONTAINED BUILD ---
+The user has sent a build request directly in the workspace. Build it now. Do not ask questions.
+
+DEFAULT PATH — full runnable Vite + React scaffold:
+Emit FILE_EDIT blocks for a COMPLETE project. Every file needed to run must be present:
+
+  1. package.json — include @vitejs/plugin-react in devDependencies and "build": "vite build" in scripts
+  2. vite.config.js — THIS FILE IS MANDATORY. Without it vite cannot transpile JSX and the build WILL fail.
+     Use this exact template:
+       import { defineConfig } from 'vite'
+       import react from '@vitejs/plugin-react'
+       export default defineConfig({
+         plugins: [react()],
+         server: { host: '0.0.0.0', allowedHosts: true, hmr: false },
+         build: { outDir: 'dist' },
+       })
+  3. index.html — with <div id="root"> and <script type="module" src="/src/main.jsx">
+  4. src/main.jsx — ReactDOM.createRoot entry point
+  5. src/App.jsx (or split into logical component files)
+  6. Any CSS files referenced by the above
+
+If Tailwind is used — BOTH of these are required or Tailwind directives won't compile:
+  7. tailwind.config.js
+  8. postcss.config.js — THIS FILE IS MANDATORY when using Tailwind:
+       export default { plugins: { tailwindcss: {}, autoprefixer: {} } }
+
+REACT ROUTER: always HashRouter, never BrowserRouter.
+
+ALTERNATE PATH — single visual artifact (only when the request is explicitly "show me what it looks like" with no interactive or runnable intent):
+  Emit a single ARTIFACT block (standalone HTML with no build step).
+  At the END of your response, on its own line, emit:
+  BUILD_TYPE: visual-artifact
+  This tells the UI the output is a visual preview only — not a runnable Local Dev project.
+
+DEFAULT is the full scaffold. Only use the alternate path if the request is unambiguously visual-only.
+
+FILE_EDIT blocks for ALL code. No partial snippets. Every file is complete.
+--- END SELF-CONTAINED BUILD ---`;
+  } else {
+    systemPrompt += `\n\n--- SESSION CONTINUITY ---
 If this is the first assistant message in this session (no prior assistant messages exist in the session history), open naturally — like picking up a real conversation, not filing a status report. DO NOT use the format "Still here. [recap]. What's next:". Instead, read the memory and repo activity and respond the way a sharp collaborator would after being away: reference what actually matters, skip what doesn't, and lead with something useful or ask the right question. One to two sentences max. Never clinical. Never a checklist. Match the energy of someone who was already thinking about this project before the conversation started.
+
+PROHIBITED (when PROJECT CONTEXT block is present above): "What are we building today?", "How can I help you today?", "What would you like to work on?", "Hey! What are we working on?", or any variant that pretends this is a fresh start. If you know the project's purpose, audience, or current stage from PROJECT CONTEXT, reference it — don't ask for it again.
 --- END SESSION CONTINUITY ---`;
+  }
   if (recentErrorContext) {
     systemPrompt += `\n\n--- RECENT PRODUCTION ERRORS ---\n${recentErrorContext}\n--- END RECENT PRODUCTION ERRORS ---`;
   }
   if (selfMapContext) {
     systemPrompt += `\n\n--- CURRENT CODEBASE MAP ---\n${selfMapContext}\n--- END CURRENT CODEBASE MAP ---`;
   }
-  if (forgeContext) {
+  if (!isSelfContainedBuild && forgeContext) {
     systemPrompt += `\n\n--- FORGE STRATEGIC MAP (agreed foundation — treat these as committed nodes; flag any contradictions) ---\n${forgeContext}\n--- END FORGE STRATEGIC MAP ---`;
   }
   if (combinedFileContext) {
@@ -2443,6 +3246,7 @@ You are now in BUILD mode. This changes how you respond:
 • Multiple files changed? Emit multiple FILE_EDIT blocks back-to-back.
 • GitHub push is enabled — the user will push your FILE_EDIT output directly to their repo.
 • Do NOT stop short with explanations. If you can write the code, write it.
+• When you receive [LOCAL_APPLY_SUCCESS] — the file(s) were written to the local workspace (no GitHub repo). A build check runs automatically and the result appears in the same message as [BUILD_VERIFY]. Act on it exactly as you would for [FILE_COMMITTED]: fix errors immediately with FILE_EDIT blocks, stop at max_attempts_reached, acknowledge clean builds briefly. Do NOT mention GitHub, commits, or repos.
 • When you receive [FILE_COMMITTED] — the push succeeded. A build check runs automatically and the result appears in the same message as [BUILD_VERIFY]. Act on it immediately:
   - [BUILD_VERIFY: clean] — build compiled. If this is the first push with no prior errors say "Pushed. Build verified ✓" and move to the next step. If you resolved errors in prior attempts say exactly: "Feature implemented. Encountered N compilation error(s) during build, resolved automatically." (replace N with the real count from the build-verify messages).
   - [BUILD_VERIFY: errors found] — build failed. Emit FILE_EDIT blocks fixing ALL listed errors right away. No preamble, no explanation — just fix and emit. The next push will re-verify automatically.
@@ -2496,7 +3300,10 @@ Rules:
   }
 
   // Workspace lens — new four-lens system (FLOW / BUILD / LOOK / SCENARIO)
-  const workspaceLens = buildMode ? "build" : (body.workspaceLens ?? "flow").toLowerCase();
+  // Self-contained build requests ("Create a dashboard", "Build me X") always force
+  // the build lens regardless of what the client sent — these are unambiguous build
+  // intent and must emit FILE_EDIT blocks, not a FLOW thinking response.
+  const workspaceLens = (buildMode || isSelfContainedBuild) ? "build" : (body.workspaceLens ?? "flow").toLowerCase();
   const workspaceLensInstructions: Record<string, string> = {
     flow: `\n\n--- LENS: FLOW ---
 You are in FLOW lens. This means:
@@ -2511,6 +3318,7 @@ You are in BUILD lens. This means:
 • Use FILE_EDIT blocks for all code changes. No partial snippets.
 • Be surgical — know what to change and why. Explain concisely before the FILE_EDIT.
 • GitHub push is enabled — your output goes directly to the repo.
+• When you receive [LOCAL_APPLY_SUCCESS] — the file(s) were written directly to the local workspace. Confirm briefly (e.g. "Created src/App.tsx.") and offer the next step. No commit language, no repo references.
 • When you receive [FILE_COMMITTED] — the push succeeded. Say "Pushed." and continue to the next step. Deploy status surfaces automatically in the chat — you do not need to poll, ask, or check it.
 • If the user is clearly exploring concepts or asking "what if" questions with no code intent, end your response with: LENS_DRIFT: flow`,
     look: `\n\n--- LENS: LOOK ---
@@ -2675,6 +3483,44 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     }
   }
 
+  // ── Build-verify intercept for local workspace projects ──────────────────
+  // When [LOCAL_APPLY_SUCCESS] arrives and there's a workspace directory for
+  // this project, run npm run build in-place and append [BUILD_VERIFY] so
+  // Atlas can auto-fix errors exactly like it does for StackBlitz repos.
+  if (message.includes("[LOCAL_APPLY_SUCCESS]") && projectId && !buildVerifyAppend) {
+    const wsDir = projectWorkspaceDir(projectId);
+    const priorAttempts = (history as Array<{ role: string; content: string }>).filter(
+      (m) => m.role === "user" && typeof m.content === "string" && m.content.includes("[LOCAL_APPLY_SUCCESS]"),
+    ).length;
+
+    if (priorAttempts >= 3) {
+      buildVerifyAppend =
+        "\n\n[BUILD_VERIFY: max_attempts_reached]\nThe build has failed 3 consecutive times. Stop auto-fixing. Show the user the last error and ask for their direction.";
+    } else {
+      try {
+        const { existsSync } = await import("node:fs");
+        const pkgExists = existsSync(nodePath.join(wsDir, "package.json"));
+        if (pkgExists) {
+          writeStep(res, { verb: "Checking", target: "build", phase: "execute" });
+          const result = await runWorkspaceBuildCheck(wsDir);
+          if (result.clean) {
+            buildVerifyAppend =
+              `\n\n[BUILD_VERIFY: clean]\nBuild passed in ${Math.round(result.duration / 1000)}s. The app compiles without errors.` +
+              (priorAttempts > 0 ? ` You auto-resolved ${priorAttempts} error(s) across prior attempts.` : "");
+          } else {
+            const errorList = result.errors.join("\n");
+            buildVerifyAppend =
+              `\n\n[BUILD_VERIFY: errors found]\nBuild failed (attempt ${priorAttempts + 1}/3). Fix ALL errors using FILE_EDIT blocks. Do not explain — just emit the fixes. The files will be re-applied and re-verified.\n\nErrors:\n${errorList}`;
+          }
+        }
+      } catch (bvErr) {
+        logger.warn({ err: bvErr, projectId }, "workspace build-check failed — skipping verify");
+        buildVerifyAppend =
+          "\n\n[BUILD_VERIFY: check_failed]\nThe build check could not run. Acknowledge the write and continue.";
+      }
+    }
+  }
+
   // ── Build message history for multi-model dispatcher ─────────────────────
   type TextBlock = { type: "text"; text: string };
   type ImageBlock = {
@@ -2729,7 +3575,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     { role: "user", content: userContent },
   ];
 
-  if (!isFlowMode && !isScenarioMode) {
+  // Telemetry events (workspace auto-apply, file commit confirmations) are
+  // one-way signals: they inform Atlas what happened but must never be stored
+  // as permanent conversation history. Persisting them would replay them on
+  // every future request, confusing the model and triggering runaway loops.
+  const isTelemetryEvent =
+    message.startsWith("[LOCAL_APPLY_SUCCESS]") ||
+    message.startsWith("[FILE_COMMITTED]") ||
+    message.startsWith("[BUILD_VERIFY]");
+
+  if (!isFlowMode && !isScenarioMode && !isTelemetryEvent) {
     try {
       await db.insert(chatMessagesTable).values({
         sessionId,
@@ -2794,7 +3649,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   writeStep(res, { verb: "Analyzing", target: "your request", phase: "analyze" });
   let modelResult: Awaited<ReturnType<typeof callModel>>;
   try {
-    modelResult = await callModel(activeModel, systemPrompt, dispatchMessages, allAttachments[0]);
+    modelResult = await callModel(
+      activeModel,
+      systemPrompt,
+      dispatchMessages,
+      allAttachments[0],
+      // Stream tokens to the client as they arrive — eliminates the 15-60s blank wait
+      (chunk: string) => {
+        try { res.write(`data: ${JSON.stringify({ type: "token", content: chunk })}\n\n`); } catch { /* client gone */ }
+      },
+    );
   } catch (modelErr: unknown) {
     logger.error({ err: modelErr }, "callModel failed — sending error event to client");
     const isOverload = String(modelErr).includes("overloaded") || String(modelErr).includes("529");
@@ -2811,55 +3675,134 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
   let terminalCmd: ChatTerminalCommand | null = null;
   let terminalResult: ChatTerminalResult | null = null;
 
-  // FILE_READ intercept — Atlas requested specific files; fetch them and call model again
-  if (repoData?.fullName && resolvedGithubToken) {
-    const { paths: readPaths, cleanedContent: readCleanedContent } = extractFileReadRequest(rawContent);
-    if (readPaths.length > 0) {
-      try {
-        const fetchedFiles = await Promise.all(
-          readPaths.map(async (fp) => {
+  // FILE_READ intercept — loop up to FILE_READ_MAX rounds so Atlas can request multiple
+  // batches of files before emitting FILE_EDIT blocks. Previously single-shot: if the
+  // model's follow-up response contained another FILE_READ_REQUEST, it was silently
+  // dropped and no files were ever written.
+  {
+    const FILE_READ_MAX = 4;
+    const hasGithub = !!(repoData?.fullName && resolvedGithubToken);
+    const localWsDir = projectId ? projectWorkspaceDir(projectId) : null;
+    const localWsExists = localWsDir
+      ? await fsPromises.stat(localWsDir).then(() => true).catch(() => false)
+      : false;
+
+    type FetchedFile = { path: string; content: string; truncated: boolean; lineCount: number };
+
+    // Grow the conversation across file-read rounds so context accumulates correctly.
+    const fileReadConversation: Array<{ role: "user" | "assistant"; content: string }> = [
+      ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+    ];
+
+    for (let readIter = 0; readIter < FILE_READ_MAX; readIter++) {
+      const { paths: readPaths, cleanedContent: readCleanedContent } = extractFileReadRequest(rawContent);
+      if (readPaths.length === 0) break; // No (more) file reads requested — exit loop
+
+      const fetchedFiles = await Promise.all(
+        readPaths.map(async (fp): Promise<FetchedFile | { path: string; error: string } | null> => {
+          // 1. Try GitHub
+          if (hasGithub) {
             try {
               const r = await fetch(
                 `${GH_API}/repos/${repoData!.fullName}/contents/${fp}?ref=${repoData!.defaultBranch ?? "main"}`,
                 { headers: ghHeaders(resolvedGithubToken!) }
               );
-              if (!r.ok) return null;
-              const d = await r.json() as { encoding?: string; content?: string };
-              if (d.encoding !== "base64" || !d.content) return null;
-              const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
-              const lines = fileContent.split("\n");
+              if (r.ok) {
+                const d = await r.json() as { encoding?: string; content?: string };
+                if (d.encoding === "base64" && d.content) {
+                  const fileContent = Buffer.from(d.content.replace(/\n/g, ""), "base64").toString("utf-8");
+                  const lines = fileContent.split("\n");
+                  const truncated = lines.length > 600;
+                  return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : fileContent, truncated, lineCount: lines.length };
+                }
+              }
+            } catch { /* fall through to local */ }
+          }
+
+          // 2. Try local workspace
+          if (localWsExists && localWsDir) {
+            try {
+              const absPath = resolveWorkspacePath(localWsDir, fp);
+              const buf = await fsPromises.readFile(absPath, "utf-8");
+              const lines = buf.split("\n");
               const truncated = lines.length > 600;
-              return {
-                path: fp,
-                content: truncated ? lines.slice(0, 600).join("\n") : fileContent,
-                truncated,
-                lineCount: lines.length,
-              };
-            } catch { return null; }
-          })
-        );
-        const validFiles = fetchedFiles.filter(
-          (f): f is { path: string; content: string; truncated: boolean; lineCount: number } => f !== null
-        );
-        if (validFiles.length > 0) {
-          validFiles.forEach((file) => addKnownPreviousContent(previousContentByPath, file));
-          const filesSummary = validFiles
-            .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
-            .join("\n\n");
-          const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
-            ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
-            { role: "assistant", content: readCleanedContent },
-            {
-              role: "user",
-              content: `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]\n\nYou asked to read these files. Now proceed — build, fix, or answer using the content above. Do not ask for more files unless absolutely necessary.`,
-            },
-          ];
-          modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
-          rawContent = modelResult.content;
-          assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
-          modelUsed = modelResult.model;
-        }
-      } catch { /* Non-fatal — keep rawContent from first call */ }
+              return { path: fp, content: truncated ? lines.slice(0, 600).join("\n") : buf, truncated, lineCount: lines.length };
+            } catch { /* file not found in local workspace */ }
+          }
+
+          // 3. Neither source could fulfill it — return a visible reason
+          const reason = !hasGithub && !localWsExists
+            ? "no GitHub repo linked and local workspace not initialized"
+            : !hasGithub
+            ? "no GitHub repo linked — tried local workspace but file not found"
+            : "file not found in GitHub repo";
+          return { path: fp, error: reason };
+        })
+      );
+
+      const validFiles = fetchedFiles.filter((f): f is FetchedFile => f !== null && !("error" in f));
+      const failedFiles = fetchedFiles.filter((f): f is { path: string; error: string } => f !== null && "error" in f);
+
+      validFiles.forEach((file) => addKnownPreviousContent(previousContentByPath, file));
+
+      if (validFiles.length === 0 && failedFiles.length === 0) break;
+
+      const filesSummary = validFiles
+        .map(f => `=== ${f.path}${f.truncated ? ` [first 600 of ${f.lineCount} lines]` : ""} ===\n${f.content}`)
+        .join("\n\n");
+
+      const unavailableSummary = failedFiles
+        .map(f => `[FILE_READ_UNAVAILABLE: ${f.path} — ${f.error}]`)
+        .join("\n");
+
+      const userContent = [
+        validFiles.length > 0 ? `[FILES REQUESTED BY YOU]\n\n${filesSummary}\n\n[END FILES]` : null,
+        unavailableSummary || null,
+        readIter < FILE_READ_MAX - 1
+          ? "Proceed using the content above. You may emit another FILE_READ_REQUEST if you need additional files, or emit FILE_EDIT blocks to apply your changes."
+          : "Proceed using the content above. This is the final file-read round — emit your FILE_EDIT blocks now.",
+      ].filter(Boolean).join("\n\n");
+
+      // Append this round to the growing conversation
+      fileReadConversation.push(
+        { role: "assistant", content: readCleanedContent },
+        { role: "user", content: userContent }
+      );
+
+      modelResult = await callModel(activeModel, systemPrompt, fileReadConversation, undefined);
+      rawContent = modelResult.content;
+      assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
+      modelUsed = modelResult.model;
+    }
+  }
+
+  // FILE_TREE intercept — Atlas emitted FILE_TREE_REQUEST; build the current workspace tree and re-call
+  {
+    const { requested: treeRequested, cleanedContent: treeCleanedContent } = extractFileTreeRequest(rawContent);
+    if (treeRequested) {
+      let treeResult: string;
+      if (projectId) {
+        try { treeResult = await buildLocalTreeContext(projectId); }
+        catch { treeResult = "[FILE_TREE_UNAVAILABLE: error reading workspace]"; }
+      } else {
+        treeResult = "[FILE_TREE_UNAVAILABLE: no project context]";
+      }
+
+      const treeUserContent = treeResult === "[FILE_TREE_EMPTY]"
+        ? "[WORKSPACE FILE TREE]\n[FILE_TREE_EMPTY]\nThe workspace directory exists but contains no files yet.\n[END WORKSPACE FILE TREE]\n\nProceed: tell the user the workspace is initialized but empty."
+        : treeResult.startsWith("[FILE_TREE_UNAVAILABLE")
+        ? `[WORKSPACE FILE TREE]\n${treeResult}\n[END WORKSPACE FILE TREE]\n\nProceed: tell the user the workspace is not accessible and why.`
+        : `[WORKSPACE FILE TREE]\n${treeResult}\n[END WORKSPACE FILE TREE]\n\nUse the file listing above. You can now emit FILE_READ_REQUEST for any paths you need to inspect.`;
+
+      const followUpMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+        ...dispatchMessages as Array<{ role: "user" | "assistant"; content: string }>,
+        { role: "assistant", content: treeCleanedContent },
+        { role: "user", content: treeUserContent },
+      ];
+      modelResult = await callModel(activeModel, systemPrompt, followUpMessages, undefined);
+      rawContent = modelResult.content;
+      assistantUsage = mergeUsage(assistantUsage, modelResult.usage);
+      modelUsed = modelResult.model;
     }
   }
 
@@ -3009,9 +3952,11 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     } catch { /* leave malformed clarification blocks visible */ }
   }
 
-  // Parse: LINE_PATCHes → FILE_EDITs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
+  // Parse: LINE_PATCHes → FILE_EDITs → FILE_DELETEs → FILE_MOVEs → MEMORY_Tn → NODE_RESOLVED → INTENT_TYPE → MEMORY_CHIPS
   const { visibleContent: afterPatches, linePatches } = extractAllLinePatches(rawContent);
-  const { visibleContent, fileEdits } = extractAllFileEdits(afterPatches);
+  const { visibleContent: afterEdits, fileEdits } = extractAllFileEdits(afterPatches);
+  const { visibleContent: afterDeletes, fileDeletes } = extractAllFileDeletes(afterEdits);
+  const { visibleContent, fileMoves } = extractAllFileMoves(afterDeletes);
   const parsedConfidenceAssessment = extractConfidenceAssessment(visibleContent);
   const hasProposedFileChanges = fileEdits.length > 0 || linePatches.length > 0;
   const confidenceAssessment = normalizeConfidenceAssessmentForFileChanges({
@@ -3020,7 +3965,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     linePatches,
     repoFiles,
   });
-  const fileChangesAllowed = !hasProposedFileChanges || canProceedWithFileChanges({
+  const fileChangesAllowed = isBuildHandoff || !hasProposedFileChanges || canProceedWithFileChanges({
     fileEdits,
     linePatches,
     repoFiles,
@@ -3083,7 +4028,22 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     displayContent = displayContent.replace(PROACTIVE_ALERT_RE, "").trim();
   }
   // Strip LENS_DRIFT token before DB persistence (it's a client-side signal only)
-  const persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
+  let persistContent = displayContent.replace(/\n?LENS_DRIFT:\s*(flow|build|look|scenario)\s*$/i, "").trim();
+
+  // ── Builder integrity check ───────────────────────────────────────────────
+  // When the BUILD lens is active and the response is substantial but produced
+  // zero FILE_EDIT or LINE_PATCH blocks, the model described changes without
+  // making them. Append a [NO_FILES_WRITTEN] signal so the next session turn
+  // and the user can both see that the workspace was not touched.
+  const isBuildIntegrityFailure =
+    workspaceLens === "build" &&
+    !hasProposedFileChanges &&
+    persistContent.length > 200 &&
+    // Don't flag genuinely short acknowledgments or confirmations
+    !(/^(ok|done|got it|sure|yes|noted|confirmed|created|pushed)\b/i.test(persistContent.trim()));
+  if (isBuildIntegrityFailure) {
+    persistContent += "\n\n⚠️ [NO_FILES_WRITTEN] This response described code changes but emitted no FILE_EDIT blocks. The workspace was NOT modified. Please send your FILE_EDIT blocks now.";
+  }
   const surface = detectSurfaceSignal({
     content: persistContent,
     userMessage: message,
@@ -3097,11 +4057,81 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     linePatches: fileChangesAllowed ? linePatches : [],
   });
 
+  // ── Structured plan extraction — declare now, extract after displayContent is final ──
+  type StructuredPlanArtifact = {
+    type: "plan"; title: string; confidence: "high" | "medium" | "low";
+    steps: Array<{ label: string; stepType: string; moscow: string; file?: string }>;
+    estimatedChanges?: number; reversible?: boolean;
+    /** AM fields this plan proposes to change */
+    amFields?: string[];
+  };
+  let structuredPlanArtifact: StructuredPlanArtifact | null = null;
+  const isPlanMode = activeMode === "plan" || Boolean(body.planMode);
+  if (isPlanMode && displayContent && displayContent.length > 40) {
+    // Signal to the client that plan JSON extraction is starting (Haiku pass ~1-2s).
+    res.write(`data: ${JSON.stringify({ type: "plan_start" })}\n\n`);
+    try {
+      const planExtrResp = await anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 700,
+        messages: [{
+          role: "user",
+          content: `Extract a structured plan from this assistant response. Return ONLY a JSON object — no markdown fences, no explanation.\n\nJSON shape:\n{"title":"concise plan title","confidence":"high"|"medium"|"low","steps":[{"label":"short action phrase","stepType":"analysis"|"edit"|"push"|"read"|"other","moscow":"must"|"should"|"could"|"wont","file":"optional/path.ts"}],"estimatedChanges":0,"reversible":true,"amFields":["intent","pages","data","data.entities","components","logic","buildState","identity"]}\n\namFields must be an array of zero or more strings chosen from this vocabulary only: "identity", "intent", "intent.purpose", "pages", "components", "data", "data.entities", "logic", "buildState". Include only fields this plan proposes to change.\n\nAssistant response:\n${displayContent.slice(0, 3000)}`,
+        }],
+      });
+      const rawPlan = planExtrResp.content[0]?.type === "text" ? planExtrResp.content[0].text.trim() : "";
+      const jsonMatch = rawPlan.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+        if (parsed.title && Array.isArray(parsed.steps) && (parsed.steps as unknown[]).length >= 2) {
+          const { type: _t, ...planRest } = parsed as Record<string, unknown>;
+          const validAmFields = ["identity", "intent", "intent.purpose", "pages", "components", "data", "data.entities", "logic", "buildState"];
+          const rawAmFields = Array.isArray(planRest.amFields) ? planRest.amFields as unknown[] : [];
+          const amFields = rawAmFields.filter((f): f is string => typeof f === "string" && validAmFields.includes(f));
+          structuredPlanArtifact = {
+            type: "plan",
+            title: String(planRest.title ?? ""),
+            confidence: (planRest.confidence as "high" | "medium" | "low") ?? "medium",
+            steps: (planRest.steps as StructuredPlanArtifact["steps"]) ?? [],
+            ...(planRest.estimatedChanges != null ? { estimatedChanges: Number(planRest.estimatedChanges) } : {}),
+            ...(planRest.reversible != null ? { reversible: Boolean(planRest.reversible) } : {}),
+            ...(amFields.length > 0 ? { amFields } : {}),
+          };
+          // Emit the plan as a dedicated SSE event so the client renders it
+          // immediately — before the larger "done" payload arrives.
+          res.write(`data: ${JSON.stringify(structuredPlanArtifact)}\n\n`);
+        }
+      }
+    } catch (planErr) {
+      logger.warn({ err: planErr }, "plan extraction failed — non-fatal");
+    }
+  }
+
   if (generatedAutoName) {
     await db.update(projectsTable).set({ name: generatedAutoName }).where(eq(projectsTable.id, projectId));
   }
   const responseFileEdits = fileChangesAllowed ? fileEdits : [];
   const responseLinePatches = fileChangesAllowed ? linePatches : [];
+
+  // Build handoff auto-apply: first response in a build handoff writes files directly to disk
+  // so the user never needs to manually click Apply (eliminates the refresh race).
+  let autoApplied = false;
+  const autoAppliedPaths: string[] = [];
+  if (isBuildHandoff && responseFileEdits.length > 0 && projectId) {
+    try {
+      const wsDir = await ensureProjectWorkspaceDir(projectId);
+      for (const edit of responseFileEdits) {
+        const absPath = resolveWorkspacePath(wsDir, edit.path);
+        await fsPromises.mkdir(nodePath.dirname(absPath), { recursive: true });
+        await fsPromises.writeFile(absPath, edit.content, "utf-8");
+        autoAppliedPaths.push(edit.path);
+      }
+      autoApplied = true;
+      logger.info({ projectId, count: autoAppliedPaths.length }, "Build handoff: auto-applied FILE_EDIT blocks to local workspace");
+    } catch (err) {
+      logger.warn({ err, projectId }, "Build handoff: auto-apply failed — user will need to click Apply");
+    }
+  }
 
   // Dual-engine image generation — process IMAGE_GEN tokens Atlas emitted.
   // Must run BEFORE the DB insert so image data is available when we persist.
@@ -3225,7 +4255,16 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     const imageMimeTypeVal = firstImage
       ? (firstImage.imageUrl.startsWith("data:image/jpeg") ? "image/jpeg" : "image/png")
       : null;
-    const runMetadata = runMetadataInsertValues(persistContent, fileChangesAllowed ? fileEdits : []);
+    const baseRunMetadata = runMetadataInsertValues(persistContent, fileChangesAllowed ? fileEdits : []);
+    const runMetadata = structuredPlanArtifact
+      ? {
+          ...baseRunMetadata,
+          runArtifacts: [
+            ...(baseRunMetadata.runArtifacts ?? []),
+            { type: "plan" as const, label: structuredPlanArtifact.title, meta: JSON.stringify(structuredPlanArtifact) },
+          ],
+        }
+      : baseRunMetadata;
     try {
       const [savedMsg] = await db
         .insert(chatMessagesTable)
@@ -3307,6 +4346,7 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
           status: "committed",
           severity: "committed",
           mode: "decide",
+          amField: "intent",
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -3331,7 +4371,10 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     fileEdits: responseFileEdits.length > 0 ? responseFileEdits : undefined,
     fileEdit: responseFileEdits.length > 0 ? responseFileEdits[0] : undefined,
     linePatches: responseLinePatches.length > 0 ? responseLinePatches : undefined,
+    fileDeletes: fileDeletes.length > 0 ? fileDeletes : undefined,
+    fileMoves: fileMoves.length > 0 ? fileMoves : undefined,
     plan: responsePlan ?? undefined,
+    ...(structuredPlanArtifact ? { planArtifact: structuredPlanArtifact } : {}),
     resolvedNodes: resolvedNodes.length > 0 ? resolvedNodes : undefined,
     autoFetchedFiles: autoFetchedFiles.length > 0 ? autoFetchedFiles : undefined,
     ...(flowNodes.length > 0 ? { flowNodes } : {}),
@@ -3435,8 +4478,13 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
     }
     if (lines.length > 0) fullText = fullText.trimEnd() + "\n\n" + lines.join("\n");
   }
+  // Emit structured plan SSE event now that fullText is finalised (before done).
+  if (structuredPlanArtifact) {
+    const { type: _planType, ...planRest } = structuredPlanArtifact;
+    res.write(`data: ${JSON.stringify({ type: "plan", ...planRest })}\n\n`);
+  }
   const inputTokenCount = assistantUsage.inputTokens;
-  res.write(`data: ${JSON.stringify({ type: "done", ...finalPayload, content: fullText, imageGen: imageGenResult, developerLens: { routing: { activeModel: "claude-sonnet-4-6", provider: "anthropic", fallbackTriggered: false }, telemetry: { tokensPerSecond: 0, inputTokens: inputTokenCount ?? 0, executionStrategy: "standard" } } })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: "done", ...finalPayload, content: fullText, imageGen: imageGenResult, ...(autoApplied ? { autoApplied: true, autoAppliedPaths } : {}), developerLens: { routing: { activeModel: "claude-sonnet-4-6", provider: "anthropic", fallbackTriggered: false }, telemetry: { tokensPerSecond: 0, inputTokens: inputTokenCount ?? 0, executionStrategy: "standard" } } })}\n\n`);
   res.end();
   void recordGenerationRunInBackground({
     projectId,
@@ -3455,6 +4503,29 @@ You are in SCENARIO lens. This is exploratory "what if" territory. No commitment
       assistantReply: displayContent,
     }).catch((err) => {
       logger.warn({ err, userId }, "user memory extraction failed");
+    });
+  }
+  if (projectId) {
+    void maybeExtractGenome(projectId);
+  }
+  if (projectId && message && displayContent) {
+    void extractAndUpdateApplicationModel({
+      projectId,
+      userMessage: message,
+      assistantReply: displayContent,
+    }).catch((err) => {
+      logger.warn({ err, projectId }, "application model extraction failed — non-fatal");
+    });
+  }
+  // Visual Memory: when the user attached an image, extract design signals from it
+  // and persist them into the AM (experienceIntent + creativePrinciples + visualSketches).
+  if (projectId && allAttachments.length > 0) {
+    void extractVisualMemoryFromAttachments({
+      projectId,
+      attachments: allAttachments,
+      userMessage: message,
+    }).catch((err) => {
+      logger.warn({ err, projectId }, "visual memory extraction failed — non-fatal");
     });
   }
 });
@@ -3496,6 +4567,121 @@ router.post("/scenario-keep", async (req, res): Promise<void> => {
 });
 
 // ── Quick Prompt generation ───────────────────────────────────────────────────
+router.post("/specify", async (req, res) => {
+  const { change, scope, exclusions, broken, success, projectName, projectContext } = req.body as {
+    change: string;
+    scope?: string;
+    exclusions?: string;
+    broken?: string;
+    success?: string;
+    projectName?: string;
+    projectContext?: string;
+  };
+
+  if (!change?.trim()) {
+    res.status(400).json({ error: "change is required" });
+    return;
+  }
+
+  const contextParts: string[] = [];
+  if (projectName) contextParts.push(`PROJECT: ${projectName}`);
+  if (projectContext) contextParts.push(`PROJECT CONTEXT:\n${projectContext.slice(0, 2000)}`);
+
+  const userText = [
+    contextParts.length > 0 ? contextParts.join("\n") : null,
+    `CHANGE (what to build/fix): ${change.trim()}`,
+    scope ? `SCOPE & TARGET SURFACES (user-specified): ${scope}` : null,
+    exclusions ? `DO NOT CHANGE (user-specified): ${exclusions}` : null,
+    broken ? `CURRENT PROBLEM (user-specified): ${broken}` : null,
+    success ? `SUCCESS LOOKS LIKE (user-specified): ${success}` : null,
+  ].filter(Boolean).join("\n\n");
+
+  const specSystemPrompt = `You are Atlas — the strategic intelligence inside Axiom. Convert raw human intent into a precise 10-section change specification that acts as a boundary document before any AI builder touches the code.
+
+Output exactly this structure, in this order, with exactly these section headers in ALL CAPS followed by a colon on its own line:
+
+GOAL:
+One sentence: what will exist or work after this change is done.
+
+TARGET SURFACES:
+Comma-separated list of UI surfaces, pages, or API endpoints affected. If the user specified them, use those; otherwise infer from intent.
+
+TARGET BREAKPOINT / DEVICE:
+Primary breakpoint or device context. If the user specified it, use that; otherwise default to mobile-first and be specific.
+
+ALLOWED TO CHANGE:
+Bullet list (using "•") of what can be modified — components, files, styles, logic.
+
+DO NOT CHANGE:
+Bullet list (using "•") of hard constraints. Use user-specified constraints. Also add sensible defaults inferred from context.
+
+CURRENT PROBLEM:
+1-2 sentences describing what is broken, missing, or suboptimal right now.
+
+SUCCESS CRITERIA:
+Bullet list (using "•") of 3-5 testable statements that confirm the change is correct.
+
+RISK LEVEL:
+LOW / MEDIUM / HIGH — followed by one sentence explaining why.
+
+BLAST RADIUS:
+Comma-separated list of likely file paths that will need to change. Be specific.
+
+VALIDATION STEPS:
+[ ] Step 1
+[ ] Step 2
+[ ] Step 3
+
+RULES:
+- Output ONLY the spec. No preamble, no "Here is your spec:", no explanation after.
+- Every section must be present, even if you must infer from context.
+- Be precise and surgical. This is a contract, not a wish list.
+- Never use vague language like "various files" or "as needed."
+- GOAL, TARGET SURFACES, TARGET BREAKPOINT / DEVICE draw from CHANGE and SCOPE inputs.
+- DO NOT CHANGE draws from the EXCLUSIONS input; supplement with sensible defaults.
+- CURRENT PROBLEM draws from the BROKEN input.
+- SUCCESS CRITERIA: if the user supplied "SUCCESS LOOKS LIKE", use it as the seed and expand into 3-5 testable bullet points; otherwise generate from context.
+- ALLOWED TO CHANGE, RISK LEVEL, BLAST RADIUS, and VALIDATION STEPS are Atlas-generated.`;
+
+  const REQUIRED_SECTIONS = [
+    "GOAL",
+    "TARGET SURFACES",
+    "TARGET BREAKPOINT / DEVICE",
+    "ALLOWED TO CHANGE",
+    "DO NOT CHANGE",
+    "CURRENT PROBLEM",
+    "SUCCESS CRITERIA",
+    "RISK LEVEL",
+    "BLAST RADIUS",
+    "VALIDATION STEPS",
+  ];
+
+  const guardSpec = (raw: string): string => {
+    let out = raw.trim();
+    for (const section of REQUIRED_SECTIONS) {
+      const pattern = new RegExp(`(?:^|\\n)${section.replace(/\//g, "\\/")}\\s*:`, "m");
+      if (!pattern.test(out)) {
+        out += `\n\n${section}:\n—`;
+      }
+    }
+    return out;
+  };
+
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 2048,
+      system: specSystemPrompt,
+      messages: [{ role: "user", content: userText }],
+    });
+    const raw = msg.content.find((b) => b.type === "text")?.text ?? "";
+    res.send(guardSpec(raw));
+  } catch (err) {
+    req.log?.error(err, "specify failed");
+    res.status(500).json({ error: "Generation failed" });
+  }
+});
+
 router.post("/quick-prompt", async (req, res) => {
   const { description, builder, images, fileContent, filePath, projectMap } = req.body as {
     description: string;

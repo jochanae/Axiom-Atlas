@@ -20,7 +20,7 @@ router.get("/ledger/assets", async (req, res): Promise<void> => {
       ORDER BY created_at DESC
     `);
     res.json((result as any).rows ?? result);
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Failed to list assets" });
   }
 });
@@ -38,13 +38,14 @@ router.post("/ledger/assets", async (req, res): Promise<void> => {
       RETURNING id, name, category, value_cents, notes, created_at, updated_at
     `);
     const rows = (result as any).rows ?? result;
+    // Log the creation as a transaction entry
     const asset = rows[0] as { id: number; name: string; value_cents: number };
     await db.execute(sql`
       INSERT INTO ledger_transactions (user_id, asset_id, action, amount_cents, note)
       VALUES (${uid}, ${asset.id}, 'acquired', ${asset.value_cents}, ${`Added ${asset.name}`})
     `);
     res.status(201).json(asset);
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Failed to create asset" });
   }
 });
@@ -57,6 +58,7 @@ router.patch("/ledger/assets/:id", async (req, res): Promise<void> => {
     const { name, category, valueCents, notes } = req.body as {
       name?: string; category?: string; valueCents?: number; notes?: string | null;
     };
+    // Fetch current so we can compute delta for transaction log
     const current = await db.execute(sql`
       SELECT id, value_cents FROM ledger_assets WHERE id = ${assetId} AND user_id = ${uid}
     `);
@@ -65,11 +67,11 @@ router.patch("/ledger/assets/:id", async (req, res): Promise<void> => {
 
     const result = await db.execute(sql`
       UPDATE ledger_assets SET
-        name        = COALESCE(${name ?? null}, name),
-        category    = COALESCE(${category ?? null}, category),
+        name = COALESCE(${name ?? null}, name),
+        category = COALESCE(${category ?? null}, category),
         value_cents = COALESCE(${valueCents ?? null}, value_cents),
-        notes       = COALESCE(${notes !== undefined ? notes : null}, notes),
-        updated_at  = now()
+        notes = COALESCE(${notes !== undefined ? notes : null}, notes),
+        updated_at = now()
       WHERE id = ${assetId} AND user_id = ${uid}
       RETURNING id, name, category, value_cents, notes, created_at, updated_at
     `);
@@ -82,7 +84,7 @@ router.patch("/ledger/assets/:id", async (req, res): Promise<void> => {
       `);
     }
     res.json(updated);
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Failed to update asset" });
   }
 });
@@ -103,7 +105,7 @@ router.delete("/ledger/assets/:id", async (req, res): Promise<void> => {
     `);
     await db.execute(sql`DELETE FROM ledger_assets WHERE id = ${assetId} AND user_id = ${uid}`);
     res.json({ ok: true });
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Failed to delete asset" });
   }
 });
@@ -124,7 +126,7 @@ router.get("/ledger/transactions", async (req, res): Promise<void> => {
       LIMIT ${limit}
     `);
     res.json((result as any).rows ?? result);
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Failed to list transactions" });
   }
 });
@@ -142,53 +144,55 @@ router.post("/ledger/transactions", async (req, res): Promise<void> => {
       RETURNING id, asset_id, action, amount_cents, note, created_at
     `);
     res.status(201).json(((result as any).rows ?? result)[0]);
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Failed to log transaction" });
   }
 });
 
-// ── Summary (dashboard card + sparkline) ──────────────────────────────────────
+// ── Summary (dashboard card + sparkline data) ─────────────────────────────────
 
 router.get("/ledger/summary", async (req, res): Promise<void> => {
   try {
     const uid = userId(req);
 
-    const [breakdown, totalResult, sparkline] = await Promise.all([
-      db.execute(sql`
-        SELECT category, COUNT(*)::int AS count, SUM(value_cents)::bigint AS total_cents
-        FROM ledger_assets
-        WHERE user_id = ${uid}
-        GROUP BY category
-        ORDER BY total_cents DESC
-      `),
-      db.execute(sql`
-        SELECT COALESCE(SUM(value_cents), 0)::bigint AS total_cents, COUNT(*)::int AS asset_count
-        FROM ledger_assets
-        WHERE user_id = ${uid}
-      `),
-      db.execute(sql`
-        SELECT
-          date_trunc('hour', created_at) AS hour,
-          SUM(CASE WHEN action IN ('acquired','appreciated') THEN amount_cents ELSE -amount_cents END)::bigint AS delta_cents
-        FROM ledger_transactions
-        WHERE user_id = ${uid}
-          AND created_at >= now() - INTERVAL '24 hours'
-        GROUP BY hour
-        ORDER BY hour ASC
-      `),
-    ]);
+    // Total portfolio value + category breakdown
+    const breakdown = await db.execute(sql`
+      SELECT category, COUNT(*)::int AS count, SUM(value_cents)::bigint AS total_cents
+      FROM ledger_assets
+      WHERE user_id = ${uid}
+      GROUP BY category
+      ORDER BY total_cents DESC
+    `);
+
+    const totalResult = await db.execute(sql`
+      SELECT COALESCE(SUM(value_cents), 0)::bigint AS total_cents, COUNT(*)::int AS asset_count
+      FROM ledger_assets
+      WHERE user_id = ${uid}
+    `);
+
+    // Last 24h transactions for sparkline — hourly buckets
+    const sparkline = await db.execute(sql`
+      SELECT
+        date_trunc('hour', created_at) AS hour,
+        SUM(CASE WHEN action IN ('acquired','appreciated') THEN amount_cents ELSE -amount_cents END)::bigint AS delta_cents
+      FROM ledger_transactions
+      WHERE user_id = ${uid}
+        AND created_at >= now() - INTERVAL '24 hours'
+      GROUP BY hour
+      ORDER BY hour ASC
+    `);
 
     const totalRow = (((totalResult as any).rows ?? totalResult)[0] ?? { total_cents: 0, asset_count: 0 }) as {
       total_cents: number | string; asset_count: number;
     };
 
     res.json({
-      totalCents:  Number(totalRow.total_cents),
-      assetCount:  totalRow.asset_count,
-      byCategory:  (breakdown as any).rows ?? breakdown,
-      sparkline:   (sparkline as any).rows ?? sparkline,
+      totalCents: Number(totalRow.total_cents),
+      assetCount: totalRow.asset_count,
+      byCategory: (breakdown as any).rows ?? breakdown,
+      sparkline: (sparkline as any).rows ?? sparkline,
     });
-  } catch {
+  } catch (err) {
     res.status(500).json({ error: "Failed to compute summary" });
   }
 });

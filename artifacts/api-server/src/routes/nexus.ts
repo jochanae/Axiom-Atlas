@@ -1,19 +1,24 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
+import fsPromises from "fs/promises";
+import nodePath from "path";
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenAI } from "@google/genai";
-import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable, scheduledChecksTable, checkResultsTable } from "@workspace/db";
+import { db, nexusMessagesTable, projectsTable, entriesTable, sessionsTable, conversationsTable, scheduledChecksTable, checkResultsTable, readinessSnapshotsTable } from "@workspace/db";
+import { getProjectDNA, getOrCreateProjectDNA, getMultipleProjectDNA } from "../lib/projectDNA";
 import { eq, asc, and, inArray, desc, isNull, isNotNull, sql, gte, type SQL } from "drizzle-orm";
 import { loadVaultContext } from "../lib/vaultContext";
+import { vectorSearch, buildRagBlock } from "../lib/embeddings";
 import { getGithubTokenForUser, bootstrapGitHubRepo } from "../lib/githubBootstrap";
 import { extractPageUrls, screenshotUrlsToBlocks, buildUrlNote } from "../lib/urlScreenshot";
 import { findSemanticTensionsForProject } from "./tensions";
-import { maybeAutoExtract } from "./genome";
 import { calculateModelCostUsd } from "../pricing";
 import { logger } from "../lib/logger";
 import { ATLAS_PLATFORM_KNOWLEDGE } from "../lib/atlasKnowledge";
 import { ATLAS_IDENTITY } from "../lib/atlasIdentity";
 import { createProjectForUser, ProjectLimitReachedError } from "../lib/projectCreation";
+import { ensureProjectWorkspaceDir, resolveWorkspacePath, assertProjectOwner } from "../lib/projectWorkspace";
+import { maybeExtractGenome } from "../lib/genomeExtract";
 
 const router: IRouter = Router();
 
@@ -21,8 +26,23 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY! });
+const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_GEMINI_API_KEY || "not-configured" });
 const MAX_VAULT_B64_SIZE = 1500000;
+
+// ── Resume cache (per-user, 5-minute TTL) ─────────────────────────────────
+type ResumeData = {
+  whatMoved: string[];
+  whatEmerged: string;
+  waitingOnYou: string;
+  suggestedNextMove: string;
+};
+const resumeCache = new Map<number, { data: ResumeData; expiresAt: number }>();
+const RESUME_CACHE_TTL_MS = 5 * 60 * 1000;
+
+/** Call after any operation that writes new content to a project (e.g. append-thread). */
+export function bustResumeCache(userId: number): void {
+  resumeCache.delete(userId);
+}
 
 type HandoffSignal = {
   readyToHandoff: boolean;
@@ -79,13 +99,7 @@ type FlowMapNode = {
 type CreateProjectToolInput = {
   name: string;
   summary: string;
-};
-
-type HandoffBriefExtraction = {
-  entries: Array<{
-    tier: number;
-    text: string;
-  }>;
+  buildIntent?: string | null;
 };
 
 const HOME_OPENING_FALLBACKS = [
@@ -116,51 +130,50 @@ const IDEA_MODE_EXPLICIT_SIGNALS = [
   "lets explore an idea",
 ];
 
-const HANDOFF_PROJECT_BRIEF_PROMPT = `You are extracting a project brief from a founder conversation. Extract only what was explicitly stated.
-
-Return ONLY valid JSON:
-{
-  "entries": [
-    {"tier": 1, "text": "Core promise: <one sentence>"},
-    {"tier": 1, "text": "Primary user: <who uses this>"},
-    {"tier": 1, "text": "Input: <what user gives the system>"},
-    {"tier": 1, "text": "Output: <what system returns>"},
-    {"tier": 1, "text": "Core moment: <when the idea becomes real>"}
-  ]
-}`;
-
 const IDEA_MODE_POSTURE = `--- IDEA MODE ACTIVE ---
 idea_mode: true
 
-Atlas should feel like a thoughtful person sitting across from the user — not a project management system.
+Atlas should feel like a thoughtful person sitting across from the user — not a project management system. This is expansive thinking, not convergent building.
 
-BEHAVE differently:
-- Be expansive, not convergent. Open possibilities, don't narrow too fast.
-- Ask one question at a time. Never ask multiple questions at once.
-- Be genuinely curious. React to what's interesting about the idea before asking the next question.
-- Never ask about code, GitHub, tech stack, or building. This is thinking, not building.
-- Never suggest committing decisions too early. Let the idea breathe first.
-- Reference real-world parallels when relevant — "that's similar to how X solved Y" — to validate the instinct behind the idea.
+ENERGY:
+- Be genuinely curious. React to what's interesting before asking anything.
+- Open possibilities, don't narrow too fast. Let the idea breathe.
+- Reference real-world parallels when they're useful — "that's similar to how X solved Y."
 - Be honest about risks and gaps without killing momentum. "The interesting tension here is..."
+- Never ask about code, tech stack, GitHub, or building. This is thinking.
+- Never suggest committing decisions too early.
 - Never ask "what are we building?"
 
-FOLLOW THIS CONVERSATION ARC:
-Phase 1 — Understand the idea (2-3 exchanges)
-  "What is it? Walk me through it."
-  Listen. Reflect back. Ask about the core mechanism.
+INTERNAL TRACKING — gather these 5 dimensions through natural conversation (never surface this list):
+  PROBLEM   — What specifically needs solving? Whose pain?
+  AUDIENCE  — Who needs this most? What does their life look like today?
+  GAP       — What already exists and why isn't it enough?
+  VISION    — What does it look like when it's working?
+  HARD PART — What's the constraint or unknown that hasn't been solved?
+
+CONVERSATION ARC (Idea Mode spends more time in the early phases):
+Phase 1 — Understand the raw idea (2-3 exchanges)
+  Listen. Reflect back the interesting parts. Surface PROBLEM + first sense of AUDIENCE.
 
 Phase 2 — Validate the instinct (2-3 exchanges)
-  Who needs this? Why now? What exists already?
-  What does the person with this problem feel today?
+  Deepen AUDIENCE. Surface GAP. Why now? What does the person with this problem feel today?
 
 Phase 3 — Map the opportunity (2-3 exchanges)
-  Where does this go? What's the biggest version?
-  What would make it fail? What would make it win?
+  Surface VISION + HARD PART. Where does this go? What would make it fail? What would make it win?
 
-Phase 4 — Identify next steps (1-2 exchanges)
-  What's the single most important thing to figure out next? What can be done this week?
+Phase 4 — Transition (when the user commits)
+  When PROBLEM, AUDIENCE, GAP, VISION, and HARD PART are sufficiently understood AND the user has explicitly said they want to build ("let's build this", "create a workspace", "I'm ready", "set it up", "do it") — transition.
+  Information completeness alone is not enough. The user must commit.
+  Do not say "Want me to create a workspace?" Do not ask for confirmation. Do not call create_project. Do not emit NAVIGATE_TO.
+  Say something brief and declarative. Then emit at the END of your response on its own line:
+  PROJECT_READY:{"projectName":"<short memorable name inferred from the conversation>","reason":"<one sentence summary>"}
+  Never ask the user what to call it — infer the name. The workspace will surface it.
 
-After Phase 4, offer to create a workspace: "Want me to create a workspace for this?" When they confirm, call create_project.
+GATHERING RULES:
+- One question at a time. Never list questions.
+- Hard ceiling: 5 questions total across all phases. At 5, stop asking — do NOT auto-emit PROJECT_READY. Wait for commitment.
+- If a dimension is clearly inferable from what the user said, mark it gathered — do not ask about it.
+- If you have 4 of 5 dimensions and the 5th is inferable, that is enough. Move.
 
 IDEA MODE SUPPRESSES:
 - All ledger injection (no committed decisions shown)
@@ -169,7 +182,6 @@ IDEA MODE SUPPRESSES:
 - All flow map state
 - Cross-project tensions
 - Decision write protocol
-- The question "what are we building?"
 --- END IDEA MODE ---`;
 
 function parseHomeUserType(value: unknown): HomeUserType | null {
@@ -320,7 +332,7 @@ async function generateConversationTitle(messages: NexusTitleMessage[]): Promise
 async function detectHomeHandoff(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
 ): Promise<HandoffSignal | null> {
-  if (messages.length < 2) return null;
+  if (messages.length < 4) return null;
   const context = messages
     .slice(-10)
     .map((m) => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`)
@@ -333,15 +345,21 @@ async function detectHomeHandoff(
   "reason": "one sentence why this is ready to build, or null"
 }
 
-It is ready to handoff if:
-- A specific product, feature, or system has been identified
-- At least one concrete requirement or goal has been discussed
-- The conversation has moved beyond pure exploration into planning or decision-making
-- 2 or more messages have been exchanged
+It is ready to handoff ONLY if the user has explicitly said they want to build or create something — not simply because the idea is clear or the conversation has been productive.
 
-If you can identify a clear project name from the conversation even if confidence is medium or low, always populate projectName. A working title is better than no title.
+Required signal: The user must have used explicit commitment language such as:
+"let's build this", "let's build it", "create a workspace", "move this into a project", "turn this into a project", "create the project", "start the project", "create it", "please create", "build this project"
 
-Return readyToHandoff: false if it's still early exploration or casual conversation.
+Intentionally NOT sufficient (too context-free): "do it", "set it up", "make it", "build it", "go ahead", "yes", "ok", "sure", "let's go"
+
+Return readyToHandoff: false for ALL of the following, regardless of how detailed the conversation is:
+- Exploring, mapping, analyzing, or understanding an idea ("let's map out...", "break this down...", "what do you think about...")
+- Asking Atlas to create a framework, schema, or plan (asking FOR information is not the same as committing to build)
+- Any message that is interrogative, analytical, or exploratory in nature
+- When the user is thinking out loud or asking for strategic advice
+- When Atlas has recognized an existing project the idea belongs in — recognition is not commitment
+
+The idea being clear and the conversation being rich is NOT enough. The user must have explicitly committed to building.
 
 Conversation:
 ${context}`;
@@ -373,39 +391,61 @@ You are on the home screen — the view where the whole portfolio is visible at 
 
 From here you cannot read code files or push to GitHub — that lives in the workspace.
 
-## Creating Projects
-You have a create_project tool.
+**Recognition before response.** At this level you have more context than almost anywhere else — portfolio data, committed decisions, memory — but the most important signal is what the user has just demonstrated in this conversation. Before you analyze the topic, recognize who is asking it. Someone who speaks in systems isn't asking for a framework walkthrough. Someone who names their own constraint clearly doesn't need probing questions. Someone who is stress-testing their own thinking wants push-back, not validation. The portfolio context tells you what they're building. The conversation tells you how they think. Let the second calibrate the first.
 
-When the conversation has produced clear direction — problem is clear, audience is clear, project has a distinct angle — CALL THE TOOL. Do this immediately. Do not explain what you are about to do. Do not write a code block showing a POST request. Do not simulate the API call in text. Do not say "Creating project now" and then write out JSON. Simply invoke the tool — that IS the action.
+## Navigating to Existing Projects
+NAVIGATE_TO is for explicit navigation requests ONLY — never for recognition.
 
-When the user says "create the workspace", "set it up", "proceed", "yes", or any clear confirmation — call the tool in that same response. The workspace creation is not something you narrate. It is something you do.
+Emit NAVIGATE_TO:{"route":"/project/<id>"} only when the user directly asks to go somewhere:
+✓ "Take me to IntoIQ", "open that workspace", "let's go there", "switch to that project", "open it"
+✗ You recognize that an idea belongs in an existing project
+✗ You've told the user that IntoIQ is the right home for their idea
+✗ You think continuing in a specific workspace would be better
 
-After the tool returns successfully, write one short sentence confirming the project name, then end with NAVIGATE_TO:{"route":"/project/<id>"}. Always include this line verbatim at the end of your response: "Your workspace is opening now — and if it doesn't, tap the folder icon (🗂) at the bottom of this screen to get there directly."
+Recognition is not navigation consent. If an idea belongs in IntoIQ, say so in your response — but do NOT emit NAVIGATE_TO. Let the user decide when they're ready to go there. They may want to keep thinking here first.
 
-Project creation is the natural continuation of the conversation, not a separate workflow.
+## Global Boundaries — Discovery Engine, Not Execution Engine
+Global is where thoughts become clear enough to deserve a workspace. The workspace is where they become real.
 
-## Founder Momentum Principle
+Global Atlas may ask:
+- What problem needs solving?
+- Who needs it most?
+- What already exists and why isn't it enough?
+- What does it look like when it works?
+- What's the constraint or unknown?
 
-Progress is more valuable than one additional intelligent question.
+Global Atlas never asks:
+- What should we call it? (naming belongs in the workspace)
+- What should we build first, what's the architecture, what's the pricing, what are the milestones, what are the features?
 
-When enough information exists to begin building, prefer commitment over expansion.
+If the user volunteers a name, feature list, tech stack, or timeline: acknowledge it briefly, treat it as strong signal, and transition immediately. Volunteered detail lowers the threshold — do not respond with more questions.
 
-Atlas should naturally transition through three gears:
+## Intent Classification — Know the Difference Before Acting
 
-DISCOVER → SHAPE → COMMIT
+Before emitting any project signal, classify the user's intent:
 
-Do not remain in DISCOVER or SHAPE after WHO + PAIN + PROMISE + MVP are known.
+**THINK** — Exploring, questioning, analyzing, mapping, understanding
+Phrases: "let's explore", "what do you think", "help me map", "break this down", "walk me through", "let's map out a framework", "give me a breakdown"
+→ Stay in Global. Think with them. Never emit PROJECT_READY. Never emit NAVIGATE_TO for an existing project.
 
-A founder should leave a conversation feeling momentum, not homework.
+**SHAPE** — Structuring an idea, defining scope, building a framework
+Phrases: "let's flesh this out", "help me define the MVP", "structure this", "let's plan"
+→ Stay in Global. Do not emit PROJECT_READY unless they explicitly say they're ready to build.
 
-## Navigating to Projects
-When the user wants to open an existing project, end your response with:
-NAVIGATE_TO:{"route":"/project/<id>"}
+**COMMIT** — Explicit decision to build or move to a workspace
+Phrases: "let's build this", "create a workspace", "move this into a project", "I'm ready", "set it up", "do it"
+→ Now you may emit PROJECT_READY.
 
-Use this when they say "take me there", "open that", "let's go", or agree to go to a workspace.
+**Recognition ≠ Commitment.** If you recognize that an idea belongs in an existing project (e.g. IntoIQ), say so in plain text. Do not navigate, do not create. The user decides when to commit.
 
-## Addressing the User by Name
-You know the user's first name from the session context. Use it sparingly — only when making a meaningful point that warrants direct attention, or when the moment genuinely calls for it. Never in greetings. Never repetitively. Once per conversation at most, and only if it feels natural.
+## The Threshold — Workspace Transition
+Only emit PROJECT_READY when the user has explicitly committed — not simply because the conversation has been productive or the idea is clear. A rich exploration is not a commitment.
+
+When the user signals COMMIT intent AND the picture is clear enough to write a useful brief, emit at the END of your response on its own line:
+
+PROJECT_READY:{"projectName":"<short memorable name inferred from the conversation>","reason":"<one sentence: what this is and why it matters>"}
+
+Infer the name from the conversation — never ask the user what to call it. The workspace will surface the name and let them refine it. Do not use create_project. Do not emit NAVIGATE_TO for new projects. PROJECT_READY is the only workspace transition signal.
 
 ## Decisions
 When a decision should be recorded, state it clearly.
@@ -420,141 +460,86 @@ MEMORY_T4: [current state — 30 days]
 MEMORY_T5: [passing note — 7 days]
 
 Up to 3 lines per response, only when genuinely significant.
+
+## Direct Build Requests
+When the user opens with an explicit build request that already contains enough information, skip shaping entirely and call create_project immediately.
+
+**Enough information means:** what it is + rough scope (e.g. screens named, domain clear, platform mentioned). All three do not need to be explicitly stated — use common sense.
+
+**Examples that are ENOUGH INFORMATION — call create_project immediately:**
+- "Build a simple habit tracker mobile app. Three screens: Dashboard, Habits, Progress."
+- "Build a dashboard that shows my sales metrics — revenue, churn, MRR."
+- "Create a landing page for my SaaS tool."
+- "Build a todo app with React."
+
+**When calling create_project for a direct build request:**
+- Set name to a concise project name inferred from the request
+- Set summary to one sentence describing what it is
+- Set buildIntent to the user's exact original message, verbatim — do not paraphrase
+
+**Small ambiguity (one thing unclear):** Ask ONE specific question first. Do not call create_project yet.
+- "Mobile or web?" / "React Native or PWA?" / "Public or authenticated?"
+
+**Large ambiguity (what/who/scope genuinely unclear):** Enter the shaping framework. Max 3 questions.
+
+## Conversation State Signal
+At the END of EVERY response, emit your current read of the conversation's intent on its own line:
+CONV_STATE:{"state":"THINK"}    — user is exploring, analyzing, mapping, or asking for a breakdown
+CONV_STATE:{"state":"SHAPE"}    — user is structuring, defining scope, or building a plan
+CONV_STATE:{"state":"COMMIT"}   — user has explicitly said they want to build or create something
+
+This governs system behavior (CommitPill visibility, auto-creation gates). It is stripped before display — never shown to the user. Emit it on every response, after MEMORY lines and before any PROJECT_READY signal.
 `;
 
 const CREATE_PROJECT_TOOL: Anthropic.Tool = {
   name: "create_project",
-  description: "Create a new project workspace. Call this when the conversation has produced clear direction — the problem is clear, the audience is clear, and the project has a distinct angle. Use what's been discussed to fill in the name and summary.",
+  description: "Create a new project workspace. Call this when the shaping framework is satisfied — PROBLEM, AUDIENCE, GAP, VISION, and HARD PART are sufficiently understood (or at most 5 questions have been asked). Also call this immediately for direct build requests when the intent is clear enough (see Direct Build Requests section). Do not ask for confirmation before calling. Use what's been discussed to fill in the name and summary.",
   input_schema: {
     type: "object",
     properties: {
       name: { type: "string", description: "Short project name" },
       summary: { type: "string", description: "1-2 sentence summary of what this project is" },
+      buildIntent: { type: "string", description: "The user's exact original build request verbatim — only set this for direct build requests (not after a shaping conversation). The workspace uses this to start building immediately." },
     },
     required: ["name", "summary"],
   },
 };
 
-const CONVERSATIONAL_EXPANSION_PROTOCOL = `--- ATLAS FOUNDER PROTOCOL ---
+const CONVERSATIONAL_EXPANSION_PROTOCOL = `--- ATLAS SHAPING FRAMEWORK ---
+You are gathering signal, not running an interview. Your job is to understand the idea well enough to create a workspace. This framework is internal scaffolding — never surface it to the user.
 
-Your job is not to maximize intelligence. Your job is to maximize founder momentum.
+FIVE DIMENSIONS TO GATHER (in any order, through natural conversation):
+  PROBLEM   — What specifically needs solving? Whose pain is it?
+  AUDIENCE  — Who needs this most? What does their life look like today?
+  GAP       — What exists already and why isn't it enough?
+  VISION    — What does it look like when it's working?
+  HARD PART — What's the constraint, the unknown, the thing not yet solved?
 
-A founder needs clarity, confidence, and progress more than one additional intelligent question.
+GATHERING RULES:
+- One question at a time. Never list questions. Never number them.
+- React to what's interesting before pivoting to the next dimension.
+- Never ask "what are we building?"
+- If a dimension is clearly inferable from what the user said, mark it gathered — do not ask about it.
+- If you have 4 of 5 dimensions and the 5th is inferable, that is enough. Stop asking — but do NOT auto-emit PROJECT_READY.
+- Hard ceiling: 5 questions total. At 5, stop asking. Do not emit PROJECT_READY — wait for explicit commitment from the user.
 
-You operate in three gears.
+INTENT CLASSIFICATION (apply before any transition):
+THINK = user is exploring, mapping, analyzing, asking for a framework or breakdown
+→ Stay in Global. No project signals. No navigation.
 
-------------------------------------------------
+SHAPE = user is structuring or defining the idea
+→ Stay in Global. No project signals unless they explicitly commit.
 
-DISCOVER
+COMMIT = user has explicitly said they want to build ("build it", "create a workspace", "move this into a project", "I'm ready", "let's go", "set it up")
+→ Transition is now appropriate.
 
-Purpose:
-Understand the problem.
+TRANSITION RULE:
+Only emit PROJECT_READY when: (1) the user has given an explicit COMMIT signal, AND (2) the picture is clear enough to write a useful brief. Information completeness alone is not enough — wait for commitment.
 
-Questions to answer:
-- WHO experiences this?
-- What PAIN exists?
-- What workarounds already exist?
-- Why does this matter?
-
-Behavior:
-- Ask one natural question at a time
-- Never present checklists
-- Never interrogate the user
-- Never ask questions solely because you haven't asked enough yet
-
-------------------------------------------------
-
-SHAPE
-
-Purpose:
-Turn the idea into a product.
-
-Questions to answer:
-- What is the core promise?
-- What is version 1?
-- What belongs now?
-- What should wait?
-
-Behavior:
-- Narrow scope aggressively
-- Favor momentum over completeness
-- Resist introducing new categories, ecosystems, marketplaces, social networks, or platforms unless the user explicitly requests them
-- Treat version 1 as sacred
-
-------------------------------------------------
-
-COMMIT
-
-Purpose:
-Stop expanding. Start building.
-
-Immediately enter Commit mode once these are known:
-
-1. WHO — primary user
-2. PAIN — core problem
-3. PROMISE — one-sentence value proposition
-4. MVP — version 1 definition
-
-You do NOT remain in Discover or Shape once these are established.
-
-Behavior:
-- Stop asking discovery questions entirely
-- Stop opening new branches
-- Lock clearly stated decisions as provisional working assumptions unless the user revisits them
-- Unknowns become validation tasks, not conversation tasks
-- Say things like:
-  - "We have enough to begin."
-  - "Let's preserve momentum over optimization."
-  - "This is sufficient for a first version."
-- Do not introduce additional business models, roadmaps, or future-state architectures
-- If a project name already exists, use it
-- Signal that the workspace is ready
-
-------------------------------------------------
-
-WORKSPACE BIRTH RULE
-
-A new workspace is a starting line, not a finished project.
-
-Never behave as though a project is fully architected on creation.
-
-Leave room for discovery to continue naturally inside the workspace.
-
-Favor small, high-confidence artifacts over exhaustive extraction.
-
-------------------------------------------------
-
-FIRST-PASS EXTRACTION GOVERNOR
-
-Extract only what is necessary to begin building.
-
-Target: 5–8 artifacts.
-Never exceed 10.
-
-Allowed:
-
-- 1 Core Promise
-- 1 Primary User
-- 1 MVP Definition
-- 3–5 Foundational Requirements
-- 1–2 Genuine Blockers or Open Questions
-- 1 First Decision for the workspace
-
-Do NOT extract:
-
-- Business model details
-- Monetization strategies
-- Roadmaps
-- Future versions
-- Nice-to-have features
-- Market analysis
-- Competitive landscapes
-- Deep technical architecture
-- Six-month plans
-
-Projects should feel exciting, approachable, and buildable — never like a giant assignment list.
-
---- END ATLAS FOUNDER PROTOCOL ---`;
+Do not confirm. Do not say "ready to create." Do not call create_project. Do not emit NAVIGATE_TO. Say something brief and declarative. Then emit this signal at the END of your response on its own line:
+PROJECT_READY:{"projectName":"<short memorable name inferred from the conversation>","reason":"<one sentence: what this is and why it matters>"}
+Never ask the user what to call the project. Infer a name from the conversation. The workspace will surface it.
+--- END ATLAS SHAPING FRAMEWORK ---`;
 
 // ── Five-Tier Memory helpers ───────────────────────────────────────────────
 interface MemoryEntry {
@@ -611,7 +596,10 @@ function parseCreateProjectToolInput(input: unknown): CreateProjectToolInput | n
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const summary = typeof input.summary === "string" ? input.summary.trim() : "";
   if (!name || !summary) return null;
-  return { name, summary };
+  const buildIntent = typeof input.buildIntent === "string" && input.buildIntent.trim()
+    ? input.buildIntent.trim()
+    : null;
+  return { name, summary, buildIntent };
 }
 
 function mergeNullableNumbers(a: number | null | undefined, b: number | null | undefined): number | null {
@@ -1055,9 +1043,9 @@ type NexusMessageRow = {
   role: string;
   content: string;
   conversationId: string | null;
-  attached_project_id: number | null;
   messageType: string | null;
   createdAt: Date;
+  metadata?: unknown;
 };
 
 let nexusMessageTypeColumnExistsCache: boolean | null = null;
@@ -1099,8 +1087,8 @@ async function loadNexusMessages(whereClause: SQL | undefined, hasMessageType: b
     role: nexusMessagesTable.role,
     content: nexusMessagesTable.content,
     conversationId: nexusMessagesTable.conversationId,
-    attached_project_id: nexusMessagesTable.projectId,
     createdAt: nexusMessagesTable.createdAt,
+    metadata: nexusMessagesTable.metadata,
   };
 
   if (!hasMessageType) {
@@ -1235,7 +1223,6 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
         run_summary: null,
         run_actions: null,
         run_artifacts: null,
-        attached_project_id: null,
         createdAt: savedOpening.createdAt.toISOString(),
       }]);
       return;
@@ -1246,6 +1233,8 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
       role: m.role,
       content: m.content,
       isBriefing: m.messageType === "briefing",
+      // Restore persisted imageGen payload so sketches survive reload (P3)
+      imageGen: (m.metadata as any)?.imageGen ?? null,
       executionTimeMs: null,
       inputTokens: null,
       outputTokens: null,
@@ -1262,7 +1251,6 @@ router.get("/nexus/thread", async (req, res): Promise<void> => {
       run_summary: null,
       run_actions: null,
       run_artifacts: null,
-      attached_project_id: m.attached_project_id,
       createdAt: m.createdAt.toISOString(),
     })));
     return;
@@ -1286,49 +1274,6 @@ router.delete("/nexus/thread", async (req, res): Promise<void> => {
 
   await db.delete(nexusMessagesTable).where(whereClause);
   res.sendStatus(204);
-});
-
-router.post("/nexus/shaping", async (req, res): Promise<void> => {
-  const userId = (req as any).authUser.id as number;
-  const { conversationId, type, content, projectName } = req.body as {
-    conversationId?: string;
-    type?: string;
-    content?: string;
-    projectName?: string;
-  };
-
-  if (!conversationId || !type || !content) {
-    res.status(400).json({ error: "conversationId, type, and content are required" });
-    return;
-  }
-
-  await db.execute(sql`
-    INSERT INTO shaping_entries (user_id, conversation_id, type, content, project_name)
-    VALUES (${userId}, ${conversationId}, ${type}, ${content}, ${projectName ?? null})
-  `);
-
-  res.json({ ok: true });
-});
-
-router.get("/nexus/shaping", async (req, res): Promise<void> => {
-  const userId = (req as any).authUser.id as number;
-  const conversationId = req.query.conversationId as string | undefined;
-
-  if (!conversationId) {
-    res.status(400).json({ error: "conversationId is required" });
-    return;
-  }
-
-  const rows = await db.execute(sql`
-    SELECT id, user_id, conversation_id, type, content, project_name, created_at
-    FROM shaping_entries
-    WHERE user_id = ${userId}
-      AND conversation_id = ${conversationId}
-    ORDER BY created_at ASC
-  `);
-  const entries = Array.isArray(rows) ? rows : (rows as any).rows ?? [];
-
-  res.json({ entries });
 });
 
 router.post("/nexus/conversation/save", async (req, res): Promise<void> => {
@@ -1356,9 +1301,12 @@ router.post("/nexus/conversation/save", async (req, res): Promise<void> => {
 });
 
 router.get("/nexus/conversations", async (req, res): Promise<void> => {
-  console.log("nexus/conversations userId:", (req as any).session?.userId);
   try {
-    const userId = (req as any).authUser.id as number;
+    const userId = (req as any).authUser?.id as number | undefined;
+    if (typeof userId !== "number" || !Number.isFinite(userId)) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
     const hasMessageType = await hasNexusMessageTypeColumn();
     const rows = hasMessageType
       ? await db
@@ -1367,7 +1315,6 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
             title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' AND sub.message_type IS DISTINCT FROM 'briefing' ORDER BY sub.created_at ASC LIMIT 1)`,
             createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
             messageCount: sql<number>`COUNT(*)`,
-            attached_project_id: sql<number | null>`MAX(${nexusMessagesTable.projectId})`,
           })
           .from(nexusMessagesTable)
           .where(and(
@@ -1384,7 +1331,6 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
             title: sql<string>`(SELECT content FROM nexus_messages sub WHERE sub.conversation_id = nexus_messages.conversation_id AND sub.user_id = ${userId} AND sub.role = 'user' ORDER BY sub.created_at ASC LIMIT 1)`,
             createdAt: sql<Date>`MAX(${nexusMessagesTable.createdAt})`,
             messageCount: sql<number>`COUNT(*)`,
-            attached_project_id: sql<number | null>`MAX(${nexusMessagesTable.projectId})`,
           })
           .from(nexusMessagesTable)
           .where(and(eq(nexusMessagesTable.userId, userId), isNotNull(nexusMessagesTable.conversationId)))
@@ -1396,7 +1342,6 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
       title: r.title ? r.title.slice(0, 60) : "Conversation",
       createdAt: r.createdAt,
       messageCount: Number(r.messageCount),
-      attached_project_id: r.attached_project_id,
     }));
     res.json({ conversations });
   } catch (err: any) {
@@ -1404,26 +1349,6 @@ router.get("/nexus/conversations", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Failed to load conversations", detail: err?.message });
     return;
   }
-});
-
-router.patch("/nexus/thread/attach", async (req, res): Promise<void> => {
-  const userId = (req as any).authUser.id as number;
-  const { projectId } = req.body as {
-    projectId?: number;
-  };
-
-  if (!Number.isInteger(projectId)) {
-    res.status(400).json({ error: "projectId is required" });
-    return;
-  }
-
-  await db.execute(sql`
-    UPDATE nexus_messages
-    SET project_id = ${projectId}
-    WHERE user_id = ${userId}
-  `);
-
-  res.json({ ok: true, projectId });
 });
 
 router.get("/nexus/conversation/:id", async (req, res): Promise<void> => {
@@ -1510,20 +1435,33 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   const focusProjectId = requestedFocusProjectId ?? sessionContext[0]?.projectId ?? null;
   const hasMessageType = await hasNexusMessageTypeColumn();
 
-  // Load projects + Living Thread in parallel
+  // Load projects + Living Thread in parallel.
+  // When conversationId is absent the caller is starting a brand-new thread —
+  // return no DB history so stale messages from previous conversations never
+  // bleed into the fresh context (the old fallback loaded every message for
+  // the user, which caused old workspace sessions to pollute new Global Insight
+  // conversations).
   const [projects, dbMessages] = await Promise.all([
     db
       .select({ id: projectsTable.id, name: projectsTable.name, memory: projectsTable.memory, linkedRepo: projectsTable.linkedRepo, nodeState: projectsTable.nodeState })
       .from(projectsTable)
       .where(eq(projectsTable.userId, userId)),
-    loadNexusMessages(
-      conversationMessages(conversationId === "__legacy__"
-        ? and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId))
-        : conversationId
-          ? and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId))
-          : eq(nexusMessagesTable.userId, userId), hasMessageType),
-      hasMessageType,
-    ),
+    (() => {
+      if (conversationId === "__legacy__") {
+        return loadNexusMessages(
+          conversationMessages(and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.conversationId)), hasMessageType),
+          hasMessageType,
+        );
+      }
+      if (conversationId) {
+        return loadNexusMessages(
+          conversationMessages(and(eq(nexusMessagesTable.userId, userId), eq(nexusMessagesTable.conversationId, conversationId)), hasMessageType),
+          hasMessageType,
+        );
+      }
+      // No conversationId → fresh thread, no prior history to load.
+      return Promise.resolve([] as Awaited<ReturnType<typeof loadNexusMessages>>);
+    })(),
   ]);
 
   const shouldEnableIdeaMode = !ideaMode && (
@@ -1580,27 +1518,23 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   // Portfolio health snapshot — Atlas speaks to this when asked about momentum/health
   const portfolioHealth = await (async () => {
     if (projectIds.length === 0) return null;
-    try {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const [sessionsResult, violationsResult] = await Promise.all([
-        db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(sessionsTable)
-          .where(and(inArray(sessionsTable.projectId, projectIds), gte(sessionsTable.createdAt, sevenDaysAgo))),
-        db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(entriesTable)
-          .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.isViolation, true))),
-      ]);
-      return {
-        sessionsThisWeek: sessionsResult[0]?.count ?? 0,
-        committedDecisions: committedEntries.length,
-        violations: violationsResult[0]?.count ?? 0,
-        totalProjects: projects.length,
-      };
-    } catch {
-      return null;
-    }
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [sessionsResult, violationsResult] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(sessionsTable)
+        .where(and(inArray(sessionsTable.projectId, projectIds), gte(sessionsTable.createdAt, sevenDaysAgo))),
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(entriesTable)
+        .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.isViolation, true))),
+    ]);
+    return {
+      sessionsThisWeek: sessionsResult[0]?.count ?? 0,
+      committedDecisions: committedEntries.length,
+      violations: violationsResult[0]?.count ?? 0,
+      totalProjects: projects.length,
+    };
   })();
 
   // Scheduled health check awareness — summarise per-project monitor status for Atlas
@@ -1736,18 +1670,26 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
     }
   })();
 
+  // V5 RAG: fetch semantically relevant context for focused project
+  let ragContext: string | null = null;
+  if (body.focusProjectId && body.message?.trim() && process.env.OPENAI_API_KEY) {
+    try {
+      const hits = await vectorSearch(body.message, {
+        userId,
+        projectId: body.focusProjectId,
+        limit: 6,
+        minScore: 0.38,
+      });
+      ragContext = buildRagBlock(hits);
+    } catch {
+      // silent — RAG is best-effort
+    }
+  }
+
   // Build system prompt
-  const userFirstName = typeof authUser?.name === "string" && authUser.name.trim()
-    ? authUser.name.trim().split(/\s+/)[0]
-    : null;
-  const sessionContextLines = [
-    `reflection_mode: false`,
-    `idea_mode: ${ideaMode ? "true" : "false"}`,
-    ...(userFirstName ? [`user_first_name: ${userFirstName}`] : []),
-  ].join("\n");
   let systemPrompt = ideaMode
-      ? `${NEXUS_SYSTEM_PROMPT}\n\n${IDEA_MODE_POSTURE}\n\n--- SESSION CONTEXT ---\n${sessionContextLines}\n--- END SESSION CONTEXT ---`
-      : `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\n${sessionContextLines}\n--- END SESSION CONTEXT ---`;
+      ? `${NEXUS_SYSTEM_PROMPT}\n\n${IDEA_MODE_POSTURE}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: true\n--- END SESSION CONTEXT ---`
+      : `${NEXUS_SYSTEM_PROMPT}\n\n${CONVERSATIONAL_EXPANSION_PROTOCOL}\n\n--- SESSION CONTEXT ---\nreflection_mode: false\nidea_mode: false\n--- END SESSION CONTEXT ---`;
   systemPrompt += ATLAS_PLATFORM_KNOWLEDGE;
   let vault: Awaited<ReturnType<typeof loadVaultContext>> = { imageBlocks: [], systemNote: "", hasImages: false };
   let urlBlocks: Awaited<ReturnType<typeof screenshotUrlsToBlocks>> = [];
@@ -1776,14 +1718,14 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
   if (monitorContext) {
     systemPrompt += `\n\n--- LIVE APP HEALTH (scheduled monitor results) ---\n${monitorContext}\nUse this when the user asks about app health, uptime, or "how is my app doing". Report HEALTHY/ISSUE status directly from these results. If an issue is listed, surface it proactively.\n--- END LIVE APP HEALTH ---`;
   }
+  if (recentActivity) {
+    systemPrompt += `\n\n--- RECENT ACTIVITY ACROSS PORTFOLIO ---\n${recentActivity}\nInterpret this as a thinking partner who has been paying attention — not as an auditor reviewing records. Synthesize what is changing, identify momentum and gaps, group by area of impact. Never say "what the repo tells me", "based on the commit history", or "the codebase shows." Say instead: "here's the thread I'm seeing", "looking across what's been built", "from the work on this project." Do not enumerate SHAs or dump raw lists unless the user explicitly asks.\n--- END RECENT ACTIVITY ---`;
+  }
   if (committedLedger) {
     systemPrompt += `\n\n--- COMMITTED DECISIONS ACROSS PORTFOLIO (use for cross-project tension detection) ---\n${committedLedger}\n--- END COMMITTED DECISIONS ---`;
   }
   if (aggregatedMemory) {
     systemPrompt += `\n\n--- AGGREGATED PROJECT MEMORY (Atlas knows this across all projects) ---\n${aggregatedMemory}\n--- END AGGREGATED MEMORY ---`;
-  }
-  if (recentActivity) {
-    systemPrompt += `\n\n--- RECENT ACTIVITY ACROSS PORTFOLIO ---\n${recentActivity}\nInterpret commits and sessions narratively — group by area of impact, synthesize what is changing, identify momentum and gaps. Do not enumerate SHAs or dump raw lists unless the user explicitly asks for exact history.\n--- END RECENT ACTIVITY ---`;
   }
   if (focusProjectId) {
     const focusProject = projects.find(p => p.id === focusProjectId);
@@ -1900,9 +1842,64 @@ router.post("/nexus/chat", async (req, res): Promise<void> => {
       const tensionLines = projectTensions.length > 0
         ? projectTensions.map((tension) => `${tension.projectA.name} ↔ ${tension.projectB.name}: "${tension.entryA.title}" conflicts with "${tension.entryB.title}"`).join("\n")
         : "None detected.";
+
+      // Atlas State — fetch DNA to determine conversational posture
+      const focusGenomeRow = await getProjectDNA(focusProjectId);
+
+      const atlasStateLabel: string = (() => {
+        if (!focusGenomeRow) return "Discovering";
+        const stage = focusGenomeRow.stage ?? "Think";
+        const oq = (focusGenomeRow.openQuestions ?? []).length;
+        const con = (focusGenomeRow.constraints ?? []).length;
+        const conf = focusGenomeRow.confidenceScore ?? 0;
+        if (stage === "Operate" || stage === "Evolve") return "Operating";
+        if (stage === "Build") return "Building";
+        if (stage === "Workspace" || stage === "Strategize") return "Building";
+        if (stage === "Decide") return "Structuring";
+        if (stage === "Shape") return (con > 1 || oq > 2) ? "Pressure Testing" : "Structuring";
+        return (con > 0 || oq > 2) ? "Pressure Testing" : "Discovering";
+      })();
+
+      const ATLAS_STATE_GUIDANCE: Record<string, string> = {
+        "Discovering": "The project is in early exploration. Ask expansive, curious questions. Surface hidden assumptions. Help the user find the core insight they haven't articulated yet. Be generative, not prescriptive.",
+        "Pressure Testing": "The project has shape but key assumptions are unresolved. Push back gently on weak spots. Surface constraints and blockers. Ask the hard question the user is avoiding. Be precise and honest.",
+        "Structuring": "The project is crystallizing. Help the user organize thinking into decisions, priorities, and structure. Ask 'what does done look like?' and 'what's the sequence?' Be crisp and decisive.",
+        "Building": "The project is in execution mode. Focus on unblocking, clarifying implementation choices, and maintaining momentum. Ask 'what's the next shipped thing?' Be direct and action-oriented.",
+        "Operating": "The project is live and running. Focus on learning from real-world signals, improving, and identifying the next evolution. Ask 'what is the data telling you?' Be reflective and forward-looking.",
+      };
+
+      // Build shaping layer string from genome
+      const shapingLines: string[] = [];
+      if (focusGenomeRow?.purpose) shapingLines.push(`Purpose: ${focusGenomeRow.purpose}`);
+      if (focusGenomeRow?.audience) shapingLines.push(`Who: ${focusGenomeRow.audience}`);
+      if (focusGenomeRow?.wedge) shapingLines.push(`Wedge: ${focusGenomeRow.wedge}`);
+      if (focusGenomeRow?.differentiator) shapingLines.push(`Differentiator: ${focusGenomeRow.differentiator}`);
+      if ((focusGenomeRow?.openQuestions ?? []).length > 0) {
+        shapingLines.push(`Unresolved: ${(focusGenomeRow!.openQuestions ?? []).slice(0, 3).join("; ")}`);
+      }
+      const shapingBlock = shapingLines.length > 0
+        ? `\n\nSHAPING LAYER:\n${shapingLines.join("\n")}`
+        : "";
+
       systemPrompt += `\n\n--- FOCUSED PROJECT: ${focusProject.name.toUpperCase()} ---\nThe user has zoomed in on "${focusProject.name}" for this conversation. Prioritize this project's context. Open your FIRST response by explicitly naming the project — begin with "${focusProject.name} —" or "On ${focusProject.name}:" so the user knows the focus is active. After that, answer normally without repeating the label on every message.`;
+      systemPrompt += shapingBlock;
+      systemPrompt += `\n\nATLAS STATE: ${atlasStateLabel}\n${ATLAS_STATE_GUIDANCE[atlasStateLabel] ?? ""}\nLet this state shape the texture of every response — not just what you say, but how you engage.`;
+
+      // Response structure for overview/status responses
+      systemPrompt += `\n\nWHEN GIVING AN OVERVIEW OR STATUS OF THIS PROJECT, use this structure (markdown headings, concise):
+**Identity** — what it is + who it's for. If you know the wedge or differentiator, lead with that — not just the file count.
+**Technical State** — architecture, stack, key tensions (e.g. two routers coexisting).
+**Recent Momentum** — what's actually changed recently. Interpret commit patterns narratively.
+**Unresolved Tensions** — what's not locked in yet. Be direct about weak spots.
+**Portfolio Pattern** *(optional — only include if you see a cross-project pattern worth naming)* — does this project share a tendency with others in the portfolio? Name it if real.
+
+CLOSING QUESTION RULE: Never end with "What are you trying to figure out or build right now?" — that's too broad inside a project workspace. Instead, after your overview, offer a lens:
+"Which lens? Positioning / Market readiness / UX / Infrastructure / Prioritization / Portfolio patterns"
+Or ask ONE narrow question that assumes they already know what they're building and pushes one level deeper.`;
+
       if (focusEntries) systemPrompt += `\nCommitted decisions:\n${focusEntries}`;
       if (focusMemory) systemPrompt += `\nProject memory:\n${focusMemory}`;
+      if (ragContext) systemPrompt += `\n\n--- SEMANTICALLY RELEVANT CONTEXT (retrieved for this message) ---\n${ragContext}\nThese items share meaning with the user's current message. Reference them if genuinely relevant — do not force or enumerate them.\n--- END RELEVANT CONTEXT ---`;
       if (focusRecentCommits) {
         systemPrompt += `\nRecent commits (interpret narratively — group by area of impact, synthesize what's changing, don't enumerate SHAs):\n${focusRecentCommits}`;
       }
@@ -1945,6 +1942,10 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   systemPrompt += `\n\n--- BROWSER AGENT ---\nYou can visit URLs for competitor research or health checks. Emit a BROWSER_VISIT token at the END of your response when you want to visit a URL:\n\nBROWSER_VISIT:{"url":"https://example.com","mode":"scrape"}\nBROWSER_VISIT:{"url":"https://example.com","mode":"screenshot"}\nBROWSER_VISIT:{"url":"https://example.com","mode":"health"}\n\n- "scrape" — fetches page content and gives a strategic summary. Use for competitor research, product analysis, or reading any public page.\n- "screenshot" — takes a screenshot with AI visual description. Use when the user wants to SEE a page.\n- "health" — HTTP status + visual check. Use to verify a live app is rendering correctly.\n\nRULES:\n- Only emit BROWSER_VISIT when you actually have a URL to visit.\n- One BROWSER_VISIT per response, at the very end.\n- Never say "I'll check that" without emitting the token. Just emit it.\n- For competitor research ("how does X work?", "what does their pricing look like?", "compare us to X"), emit BROWSER_VISIT with mode "scrape". If you know the URL, use it directly.\n--- END BROWSER AGENT ---`;
 
   systemPrompt += `\n\n--- IMAGES ---\nYou CAN see images. When the user attaches a screenshot, photo, or mockup, you receive it and can analyze it, describe it, and reason about it. Do this naturally. If the user says "look at this" but no image is in the message, respond like a person: "I don't see an attachment — can you drop it in?" Never say "I can't see images" or "only text and code."\n\nGenerating images: An image generation service (Gemini) is connected. You do NOT generate images yourself — emit IMAGE_GEN at the END of your response and the backend handles it.\n\nWhen the user asks to sketch, draw, render, visualize, or "show me what X looks like" — write a detailed prompt and emit the token.\n\nIMAGE_GEN:{"prompt":"[detailed description]","mode":"render","size":"square"}\n\n- mode "render" → UI mockups, product visuals, logos, creative concepts, app screens\n- mode "schematic" → architecture diagrams, technical flows, wireframes\n- size "landscape" for wide, "portrait" for mobile, "square" for general\n- Proactive use: when the conversation is about how something should look or feel, emit IMAGE_GEN without being asked\n--- END IMAGES ---`;
+
+  if (focusProjectId) {
+    systemPrompt += `\n\n--- WORKSPACE FILE WRITING ---\nYou can propose writing files directly into the user's local workspace.\n\nTo propose a file write:\n1. Output the COMPLETE file content in a fenced code block (include the language tag).\n2. On the very next line after the closing fence, emit exactly:\n   WRITE_FILE:{"path":"relative/path/to/file.ext"}\n\nRules:\n- Only propose WRITE_FILE when the user explicitly asks you to create or update a file.\n- The path must be relative (no leading slash) — e.g. "src/utils.ts" or "README.md".\n- Only ONE WRITE_FILE per response, placed at the very end.\n- Do NOT emit WRITE_FILE without a preceding code block containing the complete file content.\n- Do NOT emit WRITE_FILE mid-response — always at the end.\n- If the user asks for multiple files, write the most important one with WRITE_FILE and offer to write the rest in follow-up messages.\n--- END WORKSPACE FILE WRITING ---`;
+  }
 
   // Load Visual Vault images (project-scoped if focused, otherwise skip for global)
   vault = focusProjectId
@@ -2101,6 +2102,21 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       return "";
     }).trim();
 
+    // Parse CONV_STATE — Atlas's self-reported intent classification (THINK / SHAPE / COMMIT).
+    // Must parse before PROJECT_READY so we can gate CommitPill based on the state.
+    const CONV_STATE_RE = /^CONV_STATE:\s*(\{[^\n]+\})\s*$/gm;
+    type ConvStateValue = "THINK" | "SHAPE" | "COMMIT";
+    let convState: ConvStateValue = "THINK"; // default to most conservative
+    rawContent = rawContent.replace(CONV_STATE_RE, (_match, json: string) => {
+      try {
+        const parsed = JSON.parse(json) as { state?: string };
+        if (parsed.state === "THINK" || parsed.state === "SHAPE" || parsed.state === "COMMIT") {
+          convState = parsed.state;
+        }
+      } catch { /* ignore malformed */ }
+      return "";
+    }).trim();
+
     const PROJECT_READY_RE = /^PROJECT_READY:\s*(\{[^\n]+\})\s*$/gm;
     type ProjectReadyToken = { projectName: string; reason: string };
     let projectReadyToken: ProjectReadyToken | null = null;
@@ -2116,21 +2132,34 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       return "";
     }).trim();
 
-    // Execute image generation if Atlas emitted IMAGE_GEN token(s)
+    // Gate: in THINK mode, suppress CommitPill — recognition is not commitment.
+    // PROJECT_READY only arms the pill in SHAPE or COMMIT state.
+    if (convState === "THINK") {
+      projectReadyToken = null;
+    }
+
+    // Image generation runs AFTER the done event to avoid blocking the HUD.
+    // Defined here for use below; executed after res.write(done).
     interface NexusGeneratedImage { imageUrl: string; prompt: string; model: string; mode: "render" | "schematic"; }
-    let nexusImageGenResult: { images: NexusGeneratedImage[] } | undefined;
-    if (imageGenTokens.length > 0) {
+    const runImageGen = async (): Promise<{ images: NexusGeneratedImage[] } | undefined> => {
+      if (imageGenTokens.length === 0) return undefined;
       const nexusImages: NexusGeneratedImage[] = [];
       for (const token of imageGenTokens.slice(0, 2)) {
         const enginePrompt = token.mode === "render"
           ? `${token.prompt} Ultra-premium, cinematic quality. Sleek dark-mode aesthetic with obsidian depth, luxury glassmorphism elements, subtle amber/gold accent glows. Sophisticated editorial lighting, presentation-ready professional finish. 8K resolution quality.`
           : `${token.prompt} Clean flat 2D technical diagram. High-contrast dark background, crisp connector lines, strict geometric layout, precise spatial placement, sharp labels. Pure structural accuracy.`;
         try {
-          const r = await genai.models.generateContent({
-            model: "gemini-2.5-flash-image",
-            contents: enginePrompt,
-            config: { responseModalities: ["IMAGE", "TEXT"] },
-          });
+          const timeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("image gen timeout")), 20_000)
+          );
+          const r = await Promise.race([
+            genai.models.generateContent({
+              model: "gemini-2.5-flash-image",
+              contents: enginePrompt,
+              config: { responseModalities: ["IMAGE", "TEXT"] },
+            }),
+            timeout,
+          ]);
           const parts = r.candidates?.[0]?.content?.parts ?? [];
           const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
           const textPart = parts.find((p: any) => p.text);
@@ -2143,11 +2172,11 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
             });
           }
         } catch (err) {
-          logger.warn({ err }, "Nexus image generation failed");
+          logger.warn({ err }, "Nexus image generation failed or timed out");
         }
       }
-      if (nexusImages.length > 0) nexusImageGenResult = { images: nexusImages };
-    }
+      return nexusImages.length > 0 ? { images: nexusImages } : undefined;
+    };
 
     // Strip MEMORY_Tn tags from persisted output
     const { content: rawVisibleContent, memoryUpdated: parsedMemoryUpdated } = extractMemoryLines(rawContent);
@@ -2246,14 +2275,21 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ? { projectId: projectMentions[0].id, projectName: projectMentions[0].name }
       : null;
 
-    const handoffSignal = ideaMode
+    const rawHandoffSignal = ideaMode
       ? null
       : await detectHomeHandoff([
           ...conversationHistory.slice(-8),
           { role: "user", content: message },
           { role: "assistant", content: visibleContent },
         ]);
-    if (!focusProjectId && !ideaMode && handoffSignal?.readyToHandoff && (handoffSignal.confidence === "high" || handoffSignal.confidence === "medium") && pendingNavProjectId === null) {
+    // Gate: in THINK mode, suppress the handoff signal entirely.
+    // Recognizing that a project is relevant ≠ the user consenting to navigate or commit.
+    // The CommitPill and FOCUS chip must not arm during exploration.
+    const handoffSignal = convState === "THINK" ? null : rawHandoffSignal;
+
+    // Auto-create requires all three: Atlas in COMMIT state, explicit commit phrase, AND high-confidence handoff.
+    // CommitPill tap remains the primary consent path — this only fires on unmistakable signals.
+    if (!focusProjectId && !ideaMode && (convState as string) === "COMMIT" && isExplicitCreate && handoffSignal?.readyToHandoff && handoffSignal.confidence === "high" && pendingNavProjectId === null) {
       try {
         const autoName = handoffSignal.projectName ?? "New Project";
         writeStep({ verb: "Creating", target: autoName, detail: "Project workspace" });
@@ -2266,6 +2302,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
           memory: buildInitialProjectMemory(handoffSignal.reason ?? autoName),
         });
         pendingNavProjectId = autoProject.id;
+        pendingNavProjectName = autoProject.name;
         writeStep({ verb: "Created", target: autoProject.name, detail: `Project ${autoProject.id}` });
       } catch (autoErr) {
         logger.warn({ err: String(autoErr) }, "Auto project creation from handoff signal failed");
@@ -2311,28 +2348,56 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       logger.warn({ err }, "updateSessionRunMetadata failed — continuing");
     });
 
-    // If a project was just created, inject NAVIGATE_TO so the frontend auto-navigates
-    if (pendingNavProjectId !== null) {
-      const navToken = `\nNAVIGATE_TO:{"route":"/project/${pendingNavProjectId}"}`;
-      if (!visibleContent.includes(`NAVIGATE_TO:{"route":"/project/${pendingNavProjectId}"}`)) {
-        visibleContent += navToken;
-        if (!res.writableEnded && !res.destroyed) {
-          res.write(`event: token\ndata: ${JSON.stringify(navToken)}\n\n`);
-        }
-      }
-    }
+    // Background genome extraction — non-blocking, rate-limited
+    void maybeExtractGenome(focusProjectId ?? null);
 
     await emitConversationTitle(visibleContent);
 
-    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, ...(handoffSignal ? { handoffSignal } : {}), ...(nexusImageGenResult ? { imageGen: nexusImageGenResult } : {}), ...(projectReadyToken ? { projectReady: projectReadyToken } : {}), ...runMetadata })}\n\n`);
-    res.end();
-    if (focusProjectId) {
-      const projName = projectNameById.get(focusProjectId) ?? "";
-      const approxCount = conversationHistory.length + 2;
-      void maybeAutoExtract(focusProjectId, projName, approxCount).catch((err) => {
-        logger.warn({ err, focusProjectId }, "genome auto-extract failed");
-      });
+    // Navigation intent is sent as structured data in the done event — never as a text token.
+    // The frontend renders a suggestion card; the user decides when to navigate.
+    // Send done immediately — HUD clears now regardless of image generation speed.
+    res.write(`event: done\ndata: ${JSON.stringify({ content: visibleContent, modelUsed, surface, memoryUpdated, detectedMode, focusSuggestion, conversationId: effectiveConversationId, convState, ...(pendingNavProjectId !== null ? { navigateTo: { route: `/project/${pendingNavProjectId}`, projectId: pendingNavProjectId, projectName: pendingNavProjectName } } : {}), ...(handoffSignal ? { handoffSignal } : {}), ...(projectReadyToken ? { projectReady: projectReadyToken } : {}), ...runMetadata })}\n\n`);
+
+    // Generate image AFTER done — client keeps the connection open for this event.
+    // runImageGen has a 20 s internal timeout so it can never hang the stream.
+    if (imageGenTokens.length > 0 && !res.writableEnded && !res.destroyed) {
+      // Tell the HUD exactly what's happening instead of going silent.
+      res.write(`event: step\ndata: ${JSON.stringify({ verb: "Sketching", target: "concept sketch" })}\n\n`);
+      const nexusImageGenResult = await runImageGen();
+      if (nexusImageGenResult && !res.writableEnded && !res.destroyed) {
+        res.write(`event: image\ndata: ${JSON.stringify(nexusImageGenResult)}\n\n`);
+      }
+      // Persist imageGen payload to the message so sketches survive thread reload (P3).
+      // Find the most-recently inserted assistant message for this conversation, then UPDATE it.
+      if (nexusImageGenResult && effectiveConversationId) {
+        (async () => {
+          try {
+            const [latest] = await db
+              .select({ id: nexusMessagesTable.id })
+              .from(nexusMessagesTable)
+              .where(
+                and(
+                  eq(nexusMessagesTable.conversationId, effectiveConversationId),
+                  eq(nexusMessagesTable.role, "assistant"),
+                  eq(nexusMessagesTable.userId, userId),
+                )
+              )
+              .orderBy(desc(nexusMessagesTable.createdAt))
+              .limit(1);
+            if (latest) {
+              await db
+                .update(nexusMessagesTable)
+                .set({ metadata: { imageGen: nexusImageGenResult } })
+                .where(eq(nexusMessagesTable.id, latest.id));
+            }
+          } catch (err: unknown) {
+            logger.warn({ err }, "imageGen metadata persist failed — non-fatal");
+          }
+        })();
+      }
     }
+
+    res.end();
   };
 
   const failStream = async (summary: string, status: RunStatus = "failed") => {
@@ -2369,11 +2434,14 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       ...conversationHistory.map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content}`),
       `User: ${message}`,
     ].join("\n\n");
-    const geminiModeDetail = mode === "audit" ? "Auditing for gaps and risks"
-      : mode === "deep_dive" ? "Deep-context analysis"
-      : focusProjectId ? `Strategizing ${focusLabel}`
-      : "Cross-portfolio strategy";
-    writeStep({ verb: "Thinking", target: geminiModeDetail });
+    const geminiAtlasVerb = mode === "audit" ? "Auditing"
+      : mode === "deep_dive" ? "Deep analysis"
+      : dbMessages.length === 0 ? "Capturing intent"
+      : dbMessages.length <= 3 ? "Pressure testing"
+      : dbMessages.length <= 7 ? "Structuring"
+      : "Building strategy";
+    const geminiAtlasTarget = focusProjectId ? focusLabel : "your portfolio";
+    writeStep({ verb: geminiAtlasVerb, target: geminiAtlasTarget });
     modelStartedAt = performance.now();
     const geminiContents = allAttachments.length > 0
       ? [{ role: "user" as const, parts: [{ text: combinedText }, { inlineData: { mimeType: allAttachments[0].mediaType, data: allAttachments[0].base64 } }] }]
@@ -2478,14 +2546,18 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   ];
 
   modelStartedAt = performance.now();
-  const claudeModeDetail = mode === "audit" ? "Auditing for gaps and risks"
-    : mode === "deep_dive" ? "Deep strategic analysis"
-    : focusProjectId ? `Strategizing ${focusLabel}`
-    : "Cross-portfolio strategy";
-  writeStep({ verb: "Thinking", target: claudeModeDetail });
+  const claudeAtlasVerb = mode === "audit" ? "Auditing"
+    : mode === "deep_dive" ? "Deep analysis"
+    : dbMessages.length === 0 ? "Capturing intent"
+    : dbMessages.length <= 3 ? "Pressure testing"
+    : dbMessages.length <= 7 ? "Structuring"
+    : "Building strategy";
+  const claudeAtlasTarget = focusProjectId ? focusLabel : "your portfolio";
+  writeStep({ verb: claudeAtlasVerb, target: claudeAtlasTarget });
 
   let fullText = "";
   let pendingNavProjectId: number | null = null;
+  let pendingNavProjectName: string | null = null;
 
   const appendClaudeUsage = (finalMessage: Anthropic.Message, startedAt: number) => {
     const inputTokens = nullableNumber((finalMessage as any)?.usage?.input_tokens);
@@ -2508,66 +2580,23 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
   };
 
   const extractNarratedToolCall = (text: string): { name: string; summary: string } | null => {
-    // Pattern 1: explicit <tool_call> XML
-    const xmlMatch = text.match(/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/);
-    if (xmlMatch) {
-      try {
-        const parsed = JSON.parse(xmlMatch[1]) as Record<string, unknown>;
-        if (parsed.name !== "create_project") return null;
-        const params = (parsed.parameters ?? parsed.input ?? {}) as Record<string, unknown>;
-        const name = typeof params.name === "string" && params.name.trim() ? params.name.trim() : null;
-        const summary = typeof params.summary === "string" && params.summary.trim()
-          ? params.summary.trim()
-          : typeof params.description === "string" && params.description.trim()
-            ? params.description.trim()
-            : "";
-        if (!name) return null;
-        return { name, summary };
-      } catch {
-        return null;
-      }
+    const match = text.match(/<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/);
+    if (!match) return null;
+    try {
+      const parsed = JSON.parse(match[1]) as Record<string, unknown>;
+      if (parsed.name !== "create_project") return null;
+      const params = (parsed.parameters ?? parsed.input ?? {}) as Record<string, unknown>;
+      const name = typeof params.name === "string" && params.name.trim() ? params.name.trim() : null;
+      const summary = typeof params.summary === "string" && params.summary.trim()
+        ? params.summary.trim()
+        : typeof params.description === "string" && params.description.trim()
+          ? params.description.trim()
+          : "";
+      if (!name) return null;
+      return { name, summary };
+    } catch {
+      return null;
     }
-
-    // Pattern 2: italic markdown narration — *Creating project: Name* or *Creating project "Name"*
-    const italicMatch = text.match(/\*[Cc]reating project[:\s"]+([^*\n"]{2,60}?)["*\n]/);
-    if (italicMatch) {
-      const name = italicMatch[1].trim();
-      if (name) return { name, summary: "" };
-    }
-
-    // Pattern 3: plain prose narration — "Creating project: Name" or "Setting up the Name workspace"
-    const proseMatch = text.match(/[Cc]reating project[:\s"]+([^.\n"]{2,60}?)(?:[".\n]|$)/)
-      || text.match(/[Ss]etting up (?:the\s+)?["']?([^"'.\n]{2,60}?)["']? workspace/);
-    if (proseMatch) {
-      const name = proseMatch[1].trim();
-      if (name && name.length > 1) return { name, summary: "" };
-    }
-
-    // Pattern 4: JSON code block — POST /api/projects { "name": "X", "description": "..." }
-    const jsonBlockMatch = text.match(/POST\s+\/api\/projects[^{]*\{[^}]*"name"\s*:\s*"([^"]{2,80})"(?:[^}]*"description"\s*:\s*"([^"]{0,300})")?/s);
-    if (jsonBlockMatch) {
-      const name = jsonBlockMatch[1].trim();
-      const summary = jsonBlockMatch[2]?.trim() ?? "";
-      if (name) return { name, summary };
-    }
-
-    // Pattern 5: "Working product name: X" with a creation signal nearby
-    const productNameMatch = text.match(/[Ww]orking product name[:\s*]+\*?\*?([^*\n]{2,60})\*?\*?/)
-      ?? text.match(/[Pp]roduct name[:\s]+\*?\*?([^*\n]{2,60})\*?\*?/);
-    const hasCreationSignal = /[Cc]reating the project|[Ss]etting up the workspace|[Bb]uilding this out/.test(text);
-    if (productNameMatch && hasCreationSignal) {
-      const name = productNameMatch[1].trim().replace(/[*_`]/g, "");
-      if (name && name.length > 1) return { name, summary: "" };
-    }
-
-    // Pattern 6: <invoke name="create_project"> XML (Atlas using Anthropic-style XML)
-    const invokeMatch = text.match(/<invoke\s+name=["']create_project["'][^>]*>[\s\S]*?<parameter\s+name=["']name["'][^>]*>([\s\S]*?)<\/parameter>/i);
-    if (invokeMatch) {
-      const name = invokeMatch[1].trim();
-      if (name && name.length > 1) return { name, summary: "" };
-    }
-
-    return null;
   };
 
   const runCreateProjectTool = async (toolUse: Anthropic.ToolUseBlock) => {
@@ -2589,6 +2618,39 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         entityType: "project",
         memory: buildInitialProjectMemory(parsedInput.summary),
       });
+
+      // Activate immediately: set status="committed" and seed genome + session + entry.
+      // This prevents the workspace from showing "Not yet a workspace" on arrival.
+      const effectiveBuildIntent = parsedInput.buildIntent ?? null;
+      await Promise.all([
+        db.update(projectsTable).set({ status: "committed" }).where(eq(projectsTable.id, project.id)),
+        getOrCreateProjectDNA(project.id),
+        ensureProjectWorkspaceDir(project.id),
+      ]);
+      const [newSession] = await db
+        .insert(sessionsTable)
+        .values({
+          projectId: project.id,
+          title: "Session 1",
+          status: "active",
+          buildIntent: effectiveBuildIntent,
+        })
+        .returning({ id: sessionsTable.id });
+      if (newSession?.id) {
+        await db.insert(entriesTable).values({
+          projectId: project.id,
+          sessionId: newSession.id,
+          title: "Project created.",
+          summary: effectiveBuildIntent
+            ? `Workspace initialized from build request: "${effectiveBuildIntent.slice(0, 120)}"`
+            : "Workspace initialized.",
+          status: "committed",
+          severity: "committed",
+          mode: "decide",
+          amField: "intent",
+        });
+      }
+
       const projectCreated = {
         id: project.id,
         name: project.name,
@@ -2597,6 +2659,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
       };
       writeStep({ verb: "Created", target: project.name, detail: `Project ${project.id}` });
       pendingNavProjectId = project.id;
+      pendingNavProjectName = project.name;
 
       // Attempt GitHub repo creation — graceful degradation if no token or API error
       let githubRepo: string | null = null;
@@ -2632,7 +2695,7 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
         project: projectCreated,
         githubRepo,
         githubHtmlUrl,
-        instruction: `Project "${project.name}" created with id ${project.id}.${repoNote} End your response with exactly: NAVIGATE_TO:{"route":"/project/${project.id}"}`,
+        instruction: `Project "${project.name}" created with id ${project.id}.${repoNote} Write ONE short sentence confirming the project was created (e.g. "The Obsidian Ledger is ready — opening the workspace now."). Then STOP. Do NOT write any code, HTML, CSS, files, or file contents. Do NOT start building. Do NOT include NAVIGATE_TO — navigation is handled automatically via the done event. The actual build happens inside the workspace, not here.`,
       };
     } catch (error) {
       const message = error instanceof ProjectLimitReachedError
@@ -2744,7 +2807,8 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
             } as unknown as Anthropic.ToolUseBlock;
             const toolResult = await runCreateProjectTool(fakeToolUse);
             if (toolResult.ok) {
-              res.write(`event: token\ndata: ${JSON.stringify(`\n\nNAVIGATE_TO:{"route":"/project/${toolResult.project.id}"}`)}\n\n`);
+              pendingNavProjectId = toolResult.project.id;
+              pendingNavProjectName = toolResult.project.name;
             }
             await finishStream(fullText);
             return;
@@ -2759,12 +2823,21 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
     });
   };
 
+  // Explicit commit signals — require clear project/workspace intent to avoid false positives.
+  // Intentionally excludes context-free phrases like "do it", "set it up", "make it",
+  // "go ahead", "yes", "ok", "sure" — these need object context ("set up a table" ≠ commit).
   const EXPLICIT_CREATE_SIGNALS = [
-    "yes", "yes please", "ok", "okay", "yeah", "yep", "sure",
-    "sounds good", "let's go", "lets go", "do it", "create it",
-    "set it up", "build it", "let's build it", "lets build it",
-    "create the workspace", "start the project", "create the project",
-    "make it", "go ahead", "please create", "create a workspace",
+    "let's build it", "lets build it",
+    "let's build this", "lets build this",
+    "create the workspace", "start the project",
+    "create the project", "create a workspace",
+    "move this into a project", "turn this into a project",
+    "move this to a workspace", "create it",
+    "please create", "build this project",
+    // Direct build-intent phrases (e.g. "build a habit tracker", "build me a dashboard")
+    "build a ", "build an ", "build me", "build the ",
+    "create a ", "create an ", "create me",
+    "make a ", "make an ", "make me",
   ];
   const messageLC = message.toLowerCase();
   const isExplicitCreate = EXPLICIT_CREATE_SIGNALS.some(s => messageLC.includes(s));
@@ -2789,81 +2862,133 @@ Atlas should offer to help fill unanswered nodes if the conversation provides re
 router.post("/nexus/handoff", async (req, res): Promise<void> => {
   try {
     const userId = (req as any).authUser.id as number;
-    const { messages, projectId } = req.body as {
-      messages?: Array<{ role: string; content: string }>;
+    const { messages, projectId, sessionId, ideaMode, conversationId, conversation_id: conversationIdSnake } = req.body as {
+      messages: { role: string; content: string }[];
       projectId?: number;
-      conversationId?: string;
+      sessionId?: number;
+      ideaMode?: boolean;
+      conversationId?: string | null;
+      conversation_id?: string | null;
     };
+    const rawConversationId = conversationId ?? conversationIdSnake;
+    const handoffConversationId = typeof rawConversationId === "string" && rawConversationId.trim().length > 0
+      ? rawConversationId.trim()
+      : null;
 
-    if (!Array.isArray(messages) || messages.length === 0) {
+    if (!messages?.length) {
       res.status(400).json({ error: "No messages provided" });
       return;
     }
 
-    const normalizedMessages = messages
-      .filter((message) => typeof message?.role === "string" && typeof message?.content === "string")
-      .map((message) => ({
-        role: message.role.trim(),
-        content: message.content.trim(),
-      }))
-      .filter((message) => message.role.length > 0 && message.content.length > 0);
-
-    if (normalizedMessages.length === 0) {
-      res.status(400).json({ error: "No valid messages provided" });
-      return;
-    }
-
-    if (!Number.isInteger(projectId) || Number(projectId) <= 0) {
-      res.status(400).json({ error: "projectId is required" });
-      return;
-    }
-
-    const [project] = await db
-      .select({ id: projectsTable.id })
-      .from(projectsTable)
-      .where(and(eq(projectsTable.id, Number(projectId)), eq(projectsTable.userId, userId)))
-      .limit(1);
-
-    if (!project) {
-      res.status(404).json({ error: "Project not found" });
-      return;
-    }
-
     const briefResponse = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-6",
       max_tokens: 1024,
-      system: HANDOFF_PROJECT_BRIEF_PROMPT,
+      system: `You are extracting a project brief from a conversation between a founder and Atlas.
+
+Extract and return ONLY a JSON object with this exact shape — no markdown, no explanation:
+{
+  "projectName": "short name for the project (max 4 words)",
+  "description": "one sentence describing what this project does",
+  "blueprint": "2-3 sentences covering what was decided: what to build, key components identified, approach agreed on",
+  "firstStep": "the single most important first thing to do in the workspace"
+}
+
+If no clear project name was discussed, use "New Project".`,
       messages: [
         {
           role: "user",
-          content: `Conversation messages:\n${JSON.stringify(normalizedMessages, null, 2)}`,
+          content: `Here is the conversation:\n\n${messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n")}\n\nExtract the project brief.`,
         },
       ],
     });
 
-    const rawText = briefResponse.content[0]?.type === "text" ? briefResponse.content[0].text : "";
-    const brief = parseJsonObject<HandoffBriefExtraction>(rawText);
-    if (!brief || !Array.isArray(brief.entries)) {
-      res.status(502).json({ error: "Failed to extract project brief" });
+    const rawText = briefResponse.content[0]?.type === "text" ? briefResponse.content[0].text : "{}";
+    let brief: { projectName: string; description: string; blueprint: string; firstStep: string };
+    try {
+      brief = JSON.parse(rawText.replace(/```json|```/g, "").trim());
+    } catch {
+      brief = { projectName: "New Project", description: "", blueprint: rawText, firstStep: "" };
+    }
+
+    let targetProjectId = projectId;
+    let ideaModeActive = ideaMode === true || messages.some((m) => (
+      m.role === "user" && (hasIdeaModeSignal(m.content) || hasExplicitIdeaModeSignal(m.content))
+    ));
+    if (!ideaModeActive && Number.isInteger(sessionId) && Number(sessionId) > 0) {
+      const [session] = await db
+        .select({ ideaMode: sessionsTable.ideaMode })
+        .from(sessionsTable)
+        .innerJoin(projectsTable, eq(sessionsTable.projectId, projectsTable.id))
+        .where(and(eq(sessionsTable.id, Number(sessionId)), eq(projectsTable.userId, userId)))
+        .limit(1);
+      ideaModeActive = session?.ideaMode === true;
+    }
+    if (!targetProjectId) {
+      const [newProject] = await db
+        .insert(projectsTable)
+        .values({
+          name: brief.projectName,
+          description: brief.description,
+          entityType: ideaModeActive ? "idea" : "project",
+          userId,
+        })
+        .returning();
+      targetProjectId = newProject.id;
+    }
+
+    const [targetProject] = await db
+      .select({ memory: projectsTable.memory })
+      .from(projectsTable)
+      .where(and(eq(projectsTable.id, targetProjectId), eq(projectsTable.userId, userId)))
+      .limit(1);
+    if (!targetProject) {
+      res.status(404).json({ error: "Project not found" });
       return;
     }
 
     const handoffTimestamp = new Date().toISOString();
-    const nextEntries: MemoryEntry[] = brief.entries
-      .filter((entry) => typeof entry?.text === "string" && entry.text.trim().length > 0)
-      .map((entry) => ({
-        tier: entry.tier === 1 || entry.tier === 2 || entry.tier === 3 || entry.tier === 4 || entry.tier === 5
-          ? entry.tier
-          : 1,
-        text: entry.text.trim(),
+    const existingMemory = parseMemoryStore(targetProject.memory ?? null);
+    const nextEntries: MemoryEntry[] = [
+      ...existingMemory.entries,
+      {
+        tier: 1,
+        text: `Project brief from home conversation: ${brief.blueprint}`,
         createdAt: handoffTimestamp,
         retrievalCount: 0,
         lastRetrievedAt: null,
-      }));
+      },
+      ...(brief.firstStep ? [{
+        tier: 4 as const,
+        text: `First step: ${brief.firstStep}`,
+        createdAt: handoffTimestamp,
+        retrievalCount: 0,
+        lastRetrievedAt: null,
+      }] : []),
+    ];
 
-    if (nextEntries.length === 0) {
-      res.status(502).json({ error: "Failed to extract project brief" });
-      return;
+    if (
+      handoffConversationId
+      && !memoryHasConversationContext(targetProject.memory ?? null, existingMemory, handoffConversationId)
+    ) {
+      const hasMessageType = await hasNexusMessageTypeColumn();
+      const recentConversationMessages = await loadRecentNexusMessagesForConversation(
+        userId,
+        handoffConversationId,
+        hasMessageType,
+      );
+      if (recentConversationMessages.length > 0) {
+        nextEntries.push({
+          tier: 3,
+          text: buildConversationContextBlock(
+            handoffConversationId,
+            handoffTimestamp,
+            recentConversationMessages,
+          ),
+          createdAt: handoffTimestamp,
+          retrievalCount: 0,
+          lastRetrievedAt: null,
+        });
+      }
     }
 
     const memoryEntry: MemoryStore = {
@@ -2874,14 +2999,343 @@ router.post("/nexus/handoff", async (req, res): Promise<void> => {
     await db
       .update(projectsTable)
       .set({ memory: JSON.stringify(memoryEntry) })
-      .where(and(eq(projectsTable.id, Number(projectId)), eq(projectsTable.userId, userId)));
+      .where(and(eq(projectsTable.id, targetProjectId), eq(projectsTable.userId, userId)));
 
-    res.json({ ok: true, projectId: Number(projectId) });
-    return;
+    res.json({ projectId: targetProjectId, projectName: brief.projectName, brief });
   } catch (err) {
     req.log?.error({ err }, "Handoff error");
     res.status(500).json({ error: "Handoff failed" });
-    return;
+  }
+});
+
+// ── Manifest helpers ──────────────────────────────────────────────────────
+type AnchorCompleteness = "absent" | "thin" | "sufficient" | "locked";
+
+function anchorCompleteness(value: string | null | undefined): AnchorCompleteness {
+  if (!value?.trim()) return "absent";
+  if (value.trim().length < 30) return "thin";
+  return "sufficient";
+}
+
+type DnaAnchor = {
+  label: string;
+  question: string;
+  value: string | null;
+  completeness: AnchorCompleteness;
+};
+
+type BuildTarget = {
+  id: string;
+  label: string;
+  unlocked: boolean;
+  reason: string | null;
+};
+
+function buildManifestTargets(anchors: {
+  coreIntent: AnchorCompleteness;
+  surfaceStrategy: AnchorCompleteness;
+  coreAudience: AnchorCompleteness;
+  brandPosture: AnchorCompleteness;
+}): BuildTarget[] {
+  const hasIntent = anchors.coreIntent !== "absent";
+  const intentSufficient = anchors.coreIntent === "sufficient" || anchors.coreIntent === "locked";
+  const hasSurface = anchors.surfaceStrategy !== "absent";
+  const surfaceSufficient = anchors.surfaceStrategy === "sufficient" || anchors.surfaceStrategy === "locked";
+  const hasAudience = anchors.coreAudience !== "absent";
+
+  return [
+    {
+      id: "landing-page",
+      label: "Landing Page",
+      unlocked: hasIntent && hasSurface,
+      reason: hasIntent && hasSurface ? null : "Requires Core Intent and Surface Strategy",
+    },
+    {
+      id: "web-app",
+      label: "Web App",
+      unlocked: intentSufficient && surfaceSufficient,
+      reason: intentSufficient && surfaceSufficient ? null : "Core Intent and Surface Strategy must reach sufficient detail",
+    },
+    {
+      id: "mobile-app",
+      label: "Mobile App",
+      unlocked: surfaceSufficient,
+      reason: surfaceSufficient ? null : "Requires a fully described Surface Strategy",
+    },
+    {
+      id: "database-schema",
+      label: "Database Schema",
+      unlocked: hasIntent && hasSurface,
+      reason: hasIntent && hasSurface ? null : "Requires Core Intent and Surface Strategy",
+    },
+    {
+      id: "investor-pitch",
+      label: "Investor Pitch",
+      unlocked: intentSufficient && hasAudience,
+      reason: intentSufficient && hasAudience ? null : "Requires Core Intent and Core Audience",
+    },
+    {
+      id: "api-backend",
+      label: "API / Backend",
+      unlocked: hasSurface,
+      reason: hasSurface ? null : "Requires Surface Strategy",
+    },
+  ];
+}
+
+function computeConfidenceScore(anchors: {
+  coreIntent: AnchorCompleteness;
+  surfaceStrategy: AnchorCompleteness;
+  coreAudience: AnchorCompleteness;
+  brandPosture: AnchorCompleteness;
+}): number {
+  const score = (Object.values(anchors) as AnchorCompleteness[]).reduce((sum, c) => {
+    if (c === "sufficient" || c === "locked") return sum + 25;
+    if (c === "thin") return sum + 10;
+    return sum;
+  }, 0);
+  return Math.min(100, score);
+}
+
+// GET /api/nexus/manifest/:projectId — Manifest consumption layer
+router.get("/nexus/manifest/:projectId", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+    const projectId = parseInt(req.params.projectId, 10);
+    if (isNaN(projectId)) {
+      res.status(400).json({ error: "Invalid projectId" });
+      return;
+    }
+
+    // 1. Verify project exists and belongs to this user
+    const [project] = await db
+      .select({ id: projectsTable.id, name: projectsTable.name, userId: projectsTable.userId })
+      .from(projectsTable)
+      .where(eq(projectsTable.id, projectId))
+      .limit(1);
+
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    if (project.userId !== userId) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    // 2. Fetch DNA from Application Model (canonical source of truth)
+    const genome = await getOrCreateProjectDNA(projectId);
+
+    // 3. Map genome fields → 4 anchors with completeness gradient
+    const coreIntentValue = genome.purpose;
+    const surfaceStrategyValue = genome.surfaceStrategy;
+    const coreAudienceValue = genome.audience;
+    const brandPostureValue = [genome.identity, genome.coreEmotion].filter(Boolean).join(" — ") || null;
+
+    const anchors = {
+      coreIntent: anchorCompleteness(coreIntentValue),
+      surfaceStrategy: anchorCompleteness(surfaceStrategyValue),
+      coreAudience: anchorCompleteness(coreAudienceValue),
+      brandPosture: anchorCompleteness(brandPostureValue),
+    };
+
+    const dnaAnchors: { coreIntent: DnaAnchor; surfaceStrategy: DnaAnchor; coreAudience: DnaAnchor; brandPosture: DnaAnchor } = {
+      coreIntent: {
+        label: "Core Intent",
+        question: "What is this, why does it matter, and what makes it different?",
+        value: coreIntentValue ?? null,
+        completeness: anchors.coreIntent,
+      },
+      surfaceStrategy: {
+        label: "Surface Strategy",
+        question: "What are we trying to create first, and what does the user actually do?",
+        value: surfaceStrategyValue ?? null,
+        completeness: anchors.surfaceStrategy,
+      },
+      coreAudience: {
+        label: "Core Audience",
+        question: "Who is it for, and what emotional or practical need drives them?",
+        value: coreAudienceValue ?? null,
+        completeness: anchors.coreAudience,
+      },
+      brandPosture: {
+        label: "Brand Posture",
+        question: "How should it feel, sound, and present itself?",
+        value: brandPostureValue,
+        completeness: anchors.brandPosture,
+      },
+    };
+
+    const confidenceScore = computeConfidenceScore(anchors);
+    const buildTargets = buildManifestTargets(anchors);
+
+    res.json({
+      projectId: project.id,
+      projectName: project.name,
+      stage: genome.stage,
+      confidenceScore,
+      anchors: dnaAnchors,
+      openQuestions: genome.openQuestions ?? [],
+      buildTargets,
+      lastExtractedAt: genome.lastExtractedAt?.toISOString() ?? null,
+    });
+  } catch (err) {
+    logger.error({ err }, "GET /nexus/manifest/:projectId failed");
+    res.status(500).json({ error: "Failed to load manifest" });
+  }
+});
+
+// GET /api/nexus/resume — Atlas-written structured brief (4-section continuity engine)
+router.get("/nexus/resume", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).authUser.id as number;
+
+    // Serve from cache if fresh (unless ?bust=1 forces re-generation)
+    const bustCache = req.query.bust === "1";
+    const cached = resumeCache.get(userId);
+    if (!bustCache && cached && cached.expiresAt > Date.now()) {
+      res.json(cached.data);
+      return;
+    }
+
+    // 1. Fetch user's projects
+    const projects = await db
+      .select({ id: projectsTable.id, name: projectsTable.name, status: projectsTable.status, description: projectsTable.description, updatedAt: projectsTable.updatedAt })
+      .from(projectsTable)
+      .where(eq(projectsTable.userId, userId))
+      .orderBy(desc(projectsTable.updatedAt))
+      .limit(20);
+
+    if (projects.length === 0) {
+      const empty: ResumeData = {
+        whatMoved: [],
+        whatEmerged: "",
+        waitingOnYou: "",
+        suggestedNextMove: "",
+      };
+      res.json(empty);
+      return;
+    }
+
+    const projectIds = projects.map(p => p.id);
+    const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+    // 2. Fetch context in parallel: committed decisions, genomes, recent sessions, recent home messages
+    const [committedDecisions, genomes, recentSessions, recentMessages] = await Promise.all([
+      db
+        .select({ projectId: entriesTable.projectId, title: entriesTable.title, summary: entriesTable.summary, createdAt: entriesTable.createdAt })
+        .from(entriesTable)
+        .where(and(inArray(entriesTable.projectId, projectIds), eq(entriesTable.status, "committed")))
+        .orderBy(desc(entriesTable.createdAt))
+        .limit(15),
+      getMultipleProjectDNA(projectIds),
+      db
+        .select({ projectId: sessionsTable.projectId, title: sessionsTable.title, createdAt: sessionsTable.createdAt })
+        .from(sessionsTable)
+        .where(and(inArray(sessionsTable.projectId, projectIds), gte(sessionsTable.createdAt, since48h)))
+        .orderBy(desc(sessionsTable.createdAt))
+        .limit(10),
+      db
+        .select({ role: nexusMessagesTable.role, content: nexusMessagesTable.content, createdAt: nexusMessagesTable.createdAt })
+        .from(nexusMessagesTable)
+        .where(and(eq(nexusMessagesTable.userId, userId), isNull(nexusMessagesTable.projectId)))
+        .orderBy(desc(nexusMessagesTable.createdAt))
+        .limit(10),
+    ]);
+
+    // 3. Build context string for Claude
+    const projectNameById = new Map(projects.map(p => [p.id, p.name]));
+    const genomeByProjectId = genomes; // Map<number, ProjectDNA> from getMultipleProjectDNA
+
+    const projectContext = projects.map(p => {
+      const genome = genomeByProjectId.get(p.id);
+      const parts = [`• ${p.name} (${p.status})`];
+      if (genome?.stage) parts.push(`  Stage: ${genome.stage}`);
+      if (genome?.purpose) parts.push(`  Purpose: ${genome.purpose}`);
+      if (genome?.audience) parts.push(`  Who: ${genome.audience}`);
+      if (genome?.wedge) parts.push(`  Wedge: ${genome.wedge}`);
+      if (genome?.differentiator) parts.push(`  Differentiator: ${genome.differentiator}`);
+      if (genome?.openQuestions?.length) parts.push(`  Open questions: ${genome.openQuestions.slice(0, 2).join("; ")}`);
+      return parts.join("\n");
+    }).join("\n\n");
+
+    const decisionsContext = committedDecisions.length > 0
+      ? committedDecisions.map(d => `• [${projectNameById.get(d.projectId) ?? "Unknown"}] ${d.title}${d.summary ? ` — ${d.summary}` : ""}`).join("\n")
+      : "No committed decisions yet.";
+
+    const sessionsContext = recentSessions.length > 0
+      ? recentSessions.map(s => `• [${projectNameById.get(s.projectId) ?? "Unknown"}] ${s.title} (${s.createdAt.toISOString().slice(0, 10)})`).join("\n")
+      : "No sessions in the last 48h.";
+
+    const messagesContext = recentMessages.length > 0
+      ? recentMessages
+          .slice()
+          .reverse()
+          .map(m => `${m.role === "user" ? "User" : "Atlas"}: ${m.content.slice(0, 300)}`)
+          .join("\n\n")
+      : "No recent Global Insight conversation.";
+
+    const prompt = `${ATLAS_IDENTITY}
+
+You are generating the Resume — the structured brief Atlas writes at the start of every session to orient the user across their entire portfolio. This is curated continuity, not a raw activity log.
+
+PORTFOLIO:
+${projectContext}
+
+COMMITTED DECISIONS (recent):
+${decisionsContext}
+
+SESSIONS IN LAST 48H:
+${sessionsContext}
+
+RECENT GLOBAL INSIGHT CONVERSATION:
+${messagesContext}
+
+Generate a structured JSON object with exactly these four fields:
+
+{
+  "whatMoved": [array of 2-4 short bullet strings — factual, specific things that changed across projects since last active],
+  "whatEmerged": "1-2 sentences max — one key insight or pattern you notice across the portfolio",
+  "waitingOnYou": "1 sentence — the one decision or question only the human can answer right now",
+  "suggestedNextMove": "1 sentence — exactly one concrete next action, no alternatives"
+}
+
+Rules:
+- whatMoved bullets: factual and specific, reference real project names, no speculation
+- whatEmerged: one genuine insight or tension, not a summary of facts — find the pattern
+- waitingOnYou: surface the most blocking open question; if nothing is blocking, surface the most important strategic choice
+- suggestedNextMove: be decisive, one action only
+- If there is insufficient data, use what you know and keep it honest — do not hallucinate activity
+- Respond with ONLY the JSON object. No preamble, no explanation.`;
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 600,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : null;
+    const parsed = raw ? parseJsonObject<ResumeData>(raw) : null;
+
+    if (!parsed) {
+      res.json({ whatMoved: [], whatEmerged: "", waitingOnYou: "", suggestedNextMove: "" });
+      return;
+    }
+
+    const data: ResumeData = {
+      whatMoved: Array.isArray(parsed.whatMoved) ? parsed.whatMoved.map(String).filter(Boolean) : [],
+      whatEmerged: typeof parsed.whatEmerged === "string" ? parsed.whatEmerged.trim() : "",
+      waitingOnYou: typeof parsed.waitingOnYou === "string" ? parsed.waitingOnYou.trim() : "",
+      suggestedNextMove: typeof parsed.suggestedNextMove === "string" ? parsed.suggestedNextMove.trim() : "",
+    };
+
+    // Cache for 5 minutes
+    resumeCache.set(userId, { data, expiresAt: Date.now() + RESUME_CACHE_TTL_MS });
+
+    res.json(data);
+  } catch (err) {
+    req.log?.error({ err }, "Resume generation error");
+    res.json({ whatMoved: [], whatEmerged: "", waitingOnYou: "", suggestedNextMove: "" });
   }
 });
 
@@ -3037,17 +3491,60 @@ router.get("/nexus/activity", async (req, res): Promise<void> => {
   res.json({ items: items.slice(0, 40) });
 });
 
-// POST /api/nexus/name — generate a short project name from a message
+// POST /api/nexus/visualize — generate an image from a prompt (called by useNexusChatStream)
+router.post("/nexus/visualize", async (req, res): Promise<void> => {
+  const userId = (req as any).authUser?.id as number | undefined;
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { prompt } = req.body as { prompt?: string };
+  if (!prompt?.trim()) { res.status(400).json({ error: "prompt required" }); return; }
+
+  try {
+    const enginePrompt = `${prompt.trim()} Ultra-premium, cinematic quality. Sleek dark-mode aesthetic with obsidian depth, luxury glassmorphism elements, subtle amber/gold accent glows. Sophisticated editorial lighting, presentation-ready professional finish.`;
+    const r = await genai.models.generateContent({
+      model: "gemini-2.5-flash-image",
+      contents: enginePrompt,
+      config: { responseModalities: ["IMAGE", "TEXT"] },
+    });
+    const parts = r.candidates?.[0]?.content?.parts ?? [];
+    const imagePart = parts.find((p: any) => p.inlineData?.mimeType?.startsWith("image/"));
+    if (imagePart?.inlineData?.data) {
+      res.json({ imageBase64: imagePart.inlineData.data, mimeType: imagePart.inlineData.mimeType });
+    } else {
+      res.status(502).json({ error: "Image generation returned no image" });
+    }
+  } catch (err) {
+    logger.warn({ err }, "nexus/visualize image generation failed");
+    res.status(502).json({ error: "Image generation failed" });
+  }
+});
+
+// POST /api/nexus/name — generate a short project name from a message or conversation transcript
+// Body: { message?: string } | { messages?: Array<{ role: string; content: string }> }
 router.post("/nexus/name", async (req, res): Promise<void> => {
-  const { message } = req.body as { message?: string };
-  if (!message?.trim()) { res.json({ name: "" }); return; }
+  const body = req.body as { message?: string; messages?: Array<{ role: string; content: string }> };
+
+  // Build context string — prefer full transcript over single message
+  let context = "";
+  if (Array.isArray(body.messages) && body.messages.length > 0) {
+    context = body.messages
+      .slice(-12)
+      .map((m) => `${m.role === "user" ? "User" : "Atlas"}: ${String(m.content ?? "").slice(0, 600)}`)
+      .join("\n\n")
+      .slice(0, 3000);
+  } else if (body.message?.trim()) {
+    context = body.message.slice(0, 800);
+  }
+
+  if (!context) { res.json({ name: "" }); return; }
+
   try {
     const resp = await anthropic.messages.create({
       model: "claude-haiku-4-5",
       max_tokens: 20,
       messages: [{
         role: "user",
-        content: `Based on this message, generate a project name.\nRules:\n- 3-5 words maximum\n- Title case\n- Descriptive of what's being built\n- No punctuation\n- No generic words like "Project" or "App" unless essential\n\nMessage: "${message.slice(0, 400)}"\n\nRespond with only the project name, nothing else.`,
+        content: `Read this conversation and generate a concise, memorable project name for what is being built.\n\nRules:\n- 2-5 words maximum\n- Title case\n- Evocative and specific — capture the idea, not the category\n- No punctuation\n- Avoid generic words like "Project", "App", "Platform" unless they are essential to the concept\n- Examples of good names: "Living Legacy Box", "Founder Decision Log", "Atlas Memory Layer"\n\nConversation:\n${context}\n\nRespond with only the project name, nothing else.`,
       }],
     });
     const raw = resp.content[0]?.type === "text" ? resp.content[0].text.trim() : "";
@@ -3055,6 +3552,62 @@ router.post("/nexus/name", async (req, res): Promise<void> => {
     res.json({ name: name || "" });
   } catch {
     res.json({ name: "" });
+  }
+});
+
+// POST /api/nexus/write-file — nexus-layer file write (auth + ownership validated here)
+// Body: { projectId: number, path: string, content: string }
+// Returns: { ok: true, path: string, lines: number, existed: boolean }
+router.post("/nexus/write-file", async (req, res): Promise<void> => {
+  try {
+    const userId = (req as any).authUser?.id as number | undefined;
+    if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+    const { projectId, path: userPath, content } = req.body as {
+      projectId?: unknown; path?: unknown; content?: unknown;
+    };
+
+    const numericProjectId = Number(projectId);
+    if (!numericProjectId || !Number.isFinite(numericProjectId)) {
+      res.status(400).json({ error: "Invalid project id" }); return;
+    }
+    if (typeof userPath !== "string" || !userPath.trim()) {
+      res.status(400).json({ error: "Missing path" }); return;
+    }
+    if (typeof content !== "string") {
+      res.status(400).json({ error: "Missing content" }); return;
+    }
+    if (Buffer.byteLength(content, "utf-8") > 512_000) {
+      res.status(413).json({ error: "Content too large (max 500 KB)" }); return;
+    }
+
+    if (!await assertProjectOwner(numericProjectId, userId)) {
+      res.status(404).json({ error: "Project not found" }); return;
+    }
+
+    const workspaceDir = await ensureProjectWorkspaceDir(numericProjectId);
+    let absPath: string;
+    try {
+      absPath = resolveWorkspacePath(workspaceDir, userPath);
+    } catch {
+      res.status(400).json({ error: "Invalid path" }); return;
+    }
+
+    let existed = false;
+    try {
+      await fsPromises.access(absPath);
+      existed = true;
+    } catch { /* new file */ }
+
+    await fsPromises.mkdir(nodePath.dirname(absPath), { recursive: true });
+    await fsPromises.writeFile(absPath, content, "utf-8");
+
+    const lines = content.split("\n").length;
+    logger.info({ userId, projectId: numericProjectId, path: userPath, lines, existed }, "nexus write-file");
+    res.json({ ok: true, path: userPath, lines, existed });
+  } catch (err) {
+    logger.error({ err }, "nexus write-file error");
+    res.status(500).json({ error: "Failed to write file" });
   }
 });
 

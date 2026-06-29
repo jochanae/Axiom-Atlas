@@ -41,18 +41,9 @@ router.post("/import", async (req, res): Promise<void> => {
     return;
   }
 
-  const { project_name, builder, nodes_resolved, manifest, decisions } = parsed.data;
+  const { project_name, builder, nodes_resolved, decisions } = parsed.data;
 
-  const today = new Date().toISOString().slice(0, 10);
   const userId = (req as any).authUser.id as number;
-
-  const newMemoryBlock = manifest
-    ? [
-        `[axiom_handoff] [${today}] Technical Manifest`,
-        builder ? `Builder: ${builder}` : null,
-        nodes_resolved?.length ? `Nodes resolved: ${nodes_resolved.join(", ")}` : null,
-      ].filter(Boolean).join(" | ") + `\n\n${manifest}`
-    : null;
 
   const existing = await db
     .select()
@@ -64,19 +55,8 @@ router.post("/import", async (req, res): Promise<void> => {
   let matched = false;
 
   if (existing.length > 0) {
-    const found = existing[0];
-    projectId = found.id;
+    projectId = existing[0].id;
     matched = true;
-
-    if (newMemoryBlock) {
-      const updatedMemory = found.memory
-        ? `${found.memory}\n\n---\n\n${newMemoryBlock}`
-        : newMemoryBlock;
-      await db
-        .update(projectsTable)
-        .set({ memory: updatedMemory })
-        .where(eq(projectsTable.id, projectId));
-    }
   } else {
     const [project] = await db
       .insert(projectsTable)
@@ -86,7 +66,6 @@ router.post("/import", async (req, res): Promise<void> => {
           builder ? `Builder: ${builder}` : null,
           nodes_resolved?.length ? `Nodes: ${nodes_resolved.join(", ")}` : null,
         ].filter(Boolean).join(" | ") || null,
-        memory: newMemoryBlock,
         userId,
       })
       .returning();
